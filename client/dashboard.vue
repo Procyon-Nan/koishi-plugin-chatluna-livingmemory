@@ -1,0 +1,585 @@
+<template>
+    <k-layout class="living-memory-dashboard">
+        <div class="dashboard-shell">
+            <el-card shadow="never" class="toolbar-card">
+                <template #header>
+                    <div class="toolbar-header">
+                        <span>Living Memory</span>
+                    </div>
+                </template>
+
+                <div class="toolbar-grid">
+                    <el-select
+                        v-model="presetId"
+                        filterable
+                        allow-create
+                        default-first-option
+                        clearable
+                        placeholder="选择或输入预设 ID"
+                        @change="onPresetChange"
+                    >
+                        <el-option
+                            v-for="id in presetIds"
+                            :key="id"
+                            :label="id"
+                            :value="id"
+                        />
+                    </el-select>
+
+                    <el-input
+                        v-model="memoryKeyword"
+                        placeholder="按关键词过滤记忆"
+                        clearable
+                        @keyup.enter="refreshAll"
+                        @clear="refreshAll"
+                    >
+                        <template #prepend>搜索</template>
+                    </el-input>
+
+                    <el-select v-model="memoryType" clearable placeholder="全部类型" @change="refreshAll">
+                        <el-option
+                            v-for="item in memoryTypes"
+                            :key="item"
+                            :label="item"
+                            :value="item"
+                        />
+                    </el-select>
+
+                    <div class="toolbar-actions">
+                        <el-button :loading="loading" type="primary" @click="refreshAll">
+                            刷新
+                        </el-button>
+                        <el-button :disabled="!presetId" @click="openCreateDialog">
+                            新建记忆
+                        </el-button>
+                        <el-button
+                            :disabled="!presetId"
+                            :loading="dreamPending"
+                            @click="runDreamJob"
+                        >
+                            执行 Dream
+                        </el-button>
+                        <el-button
+                            :disabled="!presetId"
+                            :loading="clearPending"
+                            type="danger"
+                            plain
+                            @click="doClearPresetData"
+                        >
+                            清空预设数据
+                        </el-button>
+                    </div>
+                </div>
+            </el-card>
+
+            <el-row :gutter="16" class="summary-row">
+                <el-col :span="8">
+                    <el-card shadow="never">
+                        <div class="summary-item">
+                            <div class="summary-label">记忆数量</div>
+                            <div class="summary-value">{{ memories.length }}</div>
+                        </div>
+                    </el-card>
+                </el-col>
+                <el-col :span="8">
+                    <el-card shadow="never">
+                        <div class="summary-item">
+                            <div class="summary-label">快照数量</div>
+                            <div class="summary-value">{{ snapshots.length }}</div>
+                        </div>
+                    </el-card>
+                </el-col>
+                <el-col :span="8">
+                    <el-card shadow="never">
+                        <div class="summary-item">
+                            <div class="summary-label">任务数量</div>
+                            <div class="summary-value">{{ jobs.length }}</div>
+                        </div>
+                    </el-card>
+                </el-col>
+            </el-row>
+
+            <el-card shadow="never" class="table-card">
+                <template #header>
+                    <div class="card-header">
+                        <span>记忆列表</span>
+                        <span class="card-tip">支持按关键词和类型过滤</span>
+                    </div>
+                </template>
+
+                <el-table :data="memories" border v-loading="loading" max-height="400">
+                    <el-table-column prop="id" label="ID" min-width="180" />
+                    <el-table-column prop="type" label="类型" width="120" />
+                    <el-table-column prop="content" label="内容" min-width="260" show-overflow-tooltip />
+                    <el-table-column prop="summary" label="摘要" min-width="200" show-overflow-tooltip />
+                    <el-table-column label="关键词" min-width="200">
+                        <template #default="scope">
+                            <el-space wrap>
+                                <el-tag
+                                    v-for="kw in scope.row.keywords"
+                                    :key="kw"
+                                    size="small"
+                                    effect="plain"
+                                >
+                                    {{ kw }}
+                                </el-tag>
+                            </el-space>
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="创建时间" min-width="160">
+                        <template #default="scope">{{ formatTime(scope.row.createdAt) }}</template>
+                    </el-table-column>
+                    <el-table-column label="更新时间" min-width="160">
+                        <template #default="scope">{{ formatTime(scope.row.updatedAt) }}</template>
+                    </el-table-column>
+                    <el-table-column label="操作" width="180" fixed="right">
+                        <template #default="scope">
+                            <el-space>
+                                <el-button size="small" @click="openEditDialog(scope.row)">
+                                    编辑
+                                </el-button>
+                                <el-button
+                                    size="small"
+                                    type="danger"
+                                    plain
+                                    @click="removeMemory(scope.row.id)"
+                                >
+                                    删除
+                                </el-button>
+                            </el-space>
+                        </template>
+                    </el-table-column>
+                </el-table>
+            </el-card>
+
+            <el-row :gutter="16" class="table-row">
+                <el-col :span="12">
+                    <el-card shadow="never" class="table-card">
+                        <template #header>
+                            <div class="card-header">
+                                <span>快照列表</span>
+                                <span class="card-tip">展示当前预设最近保留的 living_memory</span>
+                            </div>
+                        </template>
+
+                        <el-table :data="snapshots" border v-loading="loading" max-height="300">
+                            <el-table-column prop="id" label="ID" min-width="160" />
+                            <el-table-column prop="strategy" label="策略" width="140" />
+                            <el-table-column prop="query" label="查询" min-width="180" show-overflow-tooltip />
+                            <el-table-column label="创建时间" min-width="160">
+                                <template #default="scope">{{ formatTime(scope.row.createdAt) }}</template>
+                            </el-table-column>
+                        </el-table>
+                    </el-card>
+                </el-col>
+
+                <el-col :span="12">
+                    <el-card shadow="never" class="table-card">
+                        <template #header>
+                            <div class="card-header">
+                                <span>任务列表</span>
+                                <span class="card-tip">异步召回、提取与 Dream 状态</span>
+                            </div>
+                        </template>
+
+                        <el-table :data="jobs" border v-loading="loading" max-height="300">
+                            <el-table-column prop="id" label="ID" min-width="160" />
+                            <el-table-column prop="kind" label="类型" width="120" />
+                            <el-table-column prop="status" label="状态" width="120" />
+                            <el-table-column label="创建时间" min-width="160">
+                                <template #default="scope">{{ formatTime(scope.row.createdAt) }}</template>
+                            </el-table-column>
+                            <el-table-column label="更新时间" min-width="160">
+                                <template #default="scope">{{ formatTime(scope.row.updatedAt) }}</template>
+                            </el-table-column>
+                        </el-table>
+                    </el-card>
+                </el-col>
+            </el-row>
+        </div>
+    </k-layout>
+
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="720px">
+        <el-form label-width="96px">
+            <el-form-item label="类型">
+                <el-select v-model="form.type" placeholder="请选择类型">
+                    <el-option
+                        v-for="item in memoryTypes"
+                        :key="item"
+                        :label="item"
+                        :value="item"
+                    />
+                </el-select>
+            </el-form-item>
+
+            <el-form-item label="内容">
+                <el-input
+                    v-model="form.content"
+                    type="textarea"
+                    :rows="4"
+                    placeholder="请输入记忆内容"
+                />
+            </el-form-item>
+
+            <el-form-item label="摘要">
+                <el-input
+                    v-model="form.summary"
+                    type="textarea"
+                    :rows="2"
+                    placeholder="可选，简要概括该记忆"
+                />
+            </el-form-item>
+
+            <el-form-item label="关键词">
+                <el-select
+                    v-model="form.keywords"
+                    multiple
+                    filterable
+                    allow-create
+                    default-first-option
+                    placeholder="可输入多个关键词"
+                />
+            </el-form-item>
+        </el-form>
+
+        <template #footer>
+            <el-button @click="dialogVisible = false">取消</el-button>
+            <el-button :loading="submitPending" type="primary" @click="submitMemory">
+                保存
+            </el-button>
+        </template>
+    </el-dialog>
+</template>
+
+<script setup lang="ts">
+import { computed, onMounted, reactive, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import * as api from './api'
+import type { MemoryEntryRecord, MemorySnapshotRecord, MemoryJobRecord, MemoryEntryType } from './types'
+import { memoryEntryTypes } from './types'
+
+const memoryTypes = memoryEntryTypes
+
+const formatTime = (value: string | Date | null | undefined): string => {
+    if (!value) return ''
+    const d = new Date(value as string | number)
+    if (isNaN(d.getTime())) return String(value)
+    const Y = d.getFullYear()
+    const M = String(d.getMonth() + 1).padStart(2, '0')
+    const D = String(d.getDate()).padStart(2, '0')
+    const h = String(d.getHours()).padStart(2, '0')
+    const m = String(d.getMinutes()).padStart(2, '0')
+    return `${Y}-${M}-${D} ${h}:${m}`
+}
+
+const loading = ref(false)
+const dreamPending = ref(false)
+const clearPending = ref(false)
+const submitPending = ref(false)
+const dialogVisible = ref(false)
+const editingMemoryId = ref<string | null>(null)
+
+const presetId = ref('')
+const presetIds = ref<string[]>([])
+const memoryKeyword = ref('')
+const memoryType = ref<MemoryEntryType | ''>('')
+
+const memories = ref<MemoryEntryRecord[]>([])
+const snapshots = ref<MemorySnapshotRecord[]>([])
+const jobs = ref<MemoryJobRecord[]>([])
+
+const form = reactive({
+    type: 'fact' as MemoryEntryType,
+    content: '',
+    keywords: [] as string[],
+    summary: ''
+})
+
+const dialogTitle = computed(() =>
+    editingMemoryId.value == null ? '新建记忆' : '编辑记忆'
+)
+
+const ensurePreset = () => {
+    if (presetId.value.trim().length > 0) {
+        return true
+    }
+    ElMessage.warning('请先输入预设 ID')
+    return false
+}
+
+const normalizePreset = () => {
+    presetId.value = presetId.value.trim()
+}
+
+const resetForm = () => {
+    form.type = 'fact'
+    form.content = ''
+    form.keywords = []
+    form.summary = ''
+    editingMemoryId.value = null
+}
+
+const fetchPresetIds = async () => {
+    try {
+        presetIds.value = await api.listPresetIds()
+    } catch {
+        // 静默失败，用户仍可手动输入
+    }
+}
+
+const onPresetChange = () => {
+    refreshAll()
+}
+
+const refreshAll = async () => {
+    normalizePreset()
+    if (!ensurePreset()) {
+        memories.value = []
+        snapshots.value = []
+        jobs.value = []
+        return
+    }
+
+    loading.value = true
+
+    try {
+        const [memoryResult, snapshotResult, jobResult] = await Promise.all([
+            api.listMemories({
+                presetId: presetId.value,
+                keyword: memoryKeyword.value.trim() || undefined,
+                type: memoryType.value || undefined,
+                page: 1,
+                pageSize: 50
+            }),
+            api.listSnapshots({
+                presetId: presetId.value,
+                page: 1,
+                pageSize: 20
+            }),
+            api.listJobs({
+                presetId: presetId.value,
+                page: 1,
+                pageSize: 20
+            })
+        ])
+
+        memories.value = memoryResult.items
+        snapshots.value = snapshotResult.items
+        jobs.value = jobResult.items
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        ElMessage.error(`刷新失败：${message}`)
+    } finally {
+        loading.value = false
+    }
+}
+
+const openCreateDialog = () => {
+    if (!ensurePreset()) return
+    resetForm()
+    dialogVisible.value = true
+}
+
+const openEditDialog = (memory: MemoryEntryRecord) => {
+    editingMemoryId.value = memory.id
+    form.type = memory.type
+    form.content = memory.content
+    form.keywords = [...memory.keywords]
+    form.summary = memory.summary ?? ''
+    dialogVisible.value = true
+}
+
+const submitMemory = async () => {
+    normalizePreset()
+    if (!ensurePreset()) return
+
+    const content = form.content.trim()
+    if (content.length === 0) {
+        ElMessage.warning('记忆内容不能为空')
+        return
+    }
+
+    submitPending.value = true
+
+    const mutation = {
+        type: form.type,
+        content,
+        keywords: form.keywords,
+        summary: form.summary.trim() || null
+    }
+
+    try {
+        if (editingMemoryId.value == null) {
+            await api.createMemory(presetId.value, mutation)
+            ElMessage.success('记忆已创建')
+        } else {
+            await api.updateMemory(editingMemoryId.value, mutation)
+            ElMessage.success('记忆已更新')
+        }
+
+        dialogVisible.value = false
+        resetForm()
+        await refreshAll()
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        ElMessage.error(`保存失败：${message}`)
+    } finally {
+        submitPending.value = false
+    }
+}
+
+const removeMemory = async (memoryId: string) => {
+    try {
+        await ElMessageBox.confirm('删除后不可恢复，是否继续？', '危险操作', {
+            type: 'warning',
+            confirmButtonText: '确认删除',
+            cancelButtonText: '取消'
+        })
+    } catch {
+        return
+    }
+
+    try {
+        await api.deleteMemory(memoryId)
+        ElMessage.success('记忆已删除')
+        await refreshAll()
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        ElMessage.error(`删除失败：${message}`)
+    }
+}
+
+const runDreamJob = async () => {
+    normalizePreset()
+    if (!ensurePreset()) return
+
+    dreamPending.value = true
+
+    try {
+        await api.runDream(presetId.value)
+        ElMessage.success('Dream 任务已触发')
+        await refreshAll()
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        ElMessage.error(`Dream 触发失败：${message}`)
+    } finally {
+        dreamPending.value = false
+    }
+}
+
+const doClearPresetData = async () => {
+    normalizePreset()
+    if (!ensurePreset()) return
+
+    try {
+        await ElMessageBox.confirm(
+            `该操作会清空预设 ${presetId.value} 的全部记忆、快照和任务记录，且不可恢复。是否继续？`,
+            '危险操作',
+            {
+                type: 'warning',
+                confirmButtonText: '确认清空',
+                cancelButtonText: '取消'
+            }
+        )
+    } catch {
+        return
+    }
+
+    clearPending.value = true
+
+    try {
+        await api.clearPresetData(presetId.value)
+        ElMessage.success('该预设的数据已清空')
+        await refreshAll()
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        ElMessage.error(`清空失败：${message}`)
+    } finally {
+        clearPending.value = false
+    }
+}
+
+onMounted(() => {
+    fetchPresetIds()
+})
+</script>
+
+<style scoped>
+.living-memory-dashboard {
+    height: 100%;
+}
+
+.living-memory-dashboard :deep(.layout-main) {
+    overflow-y: auto;
+    background-color: transparent !important;
+}
+
+.living-memory-dashboard :deep(.layout-content) {
+    overflow-y: auto;
+}
+
+.dashboard-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 16px;
+    overflow-y: auto;
+}
+
+.toolbar-card,
+.table-card {
+    border-radius: 12px;
+}
+
+.toolbar-header,
+.card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.card-tip {
+    color: var(--el-text-color-secondary);
+    font-size: 13px;
+}
+
+.toolbar-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.toolbar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.summary-row,
+.table-row {
+    margin: 0;
+}
+
+.summary-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.summary-label {
+    color: var(--el-text-color-secondary);
+    font-size: 13px;
+}
+
+.summary-value {
+    font-size: 28px;
+    font-weight: 600;
+}
+
+@media (max-width: 1200px) {
+    .toolbar-grid {
+        grid-template-columns: 1fr;
+    }
+}
+</style>

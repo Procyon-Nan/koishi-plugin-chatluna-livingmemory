@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(yarn eslint:*)",
+      "Bash(git *)",
+      "Bash(node *)",
+      "Read(//mnt/c/Users/31899/Desktop/test/media-luna/**)",
+      "Read(//mnt/c/Users/31899/Desktop/test/media-luna/lib/**)",
+      "Bash(yarn lint *)",
+      "Bash(yarn build:server)"
+    ]
+  }
+}

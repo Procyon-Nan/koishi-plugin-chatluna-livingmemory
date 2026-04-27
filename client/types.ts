@@ -1,0 +1,114 @@
+// 客户端本地类型声明，与服务端 src/types.ts 保持同步
+// 不从 ../src/types 导入，因为服务端文件含有 koishi-plugin-chatluna 等副作用导入，
+// koishi-console build (Vite) 无法解析
+
+export const memoryEntryTypes = [
+    'identity',
+    'preference',
+    'fact',
+    'plan',
+    'context',
+    'other'
+] as const
+
+export type MemoryEntryType = (typeof memoryEntryTypes)[number]
+
+export interface MemoryEntryRecord {
+    id: string
+    presetId: string
+    type: MemoryEntryType
+    content: string
+    keywords: string[]
+    summary: string | null
+    sourceConversationId: string | null
+    createdAt: Date
+    updatedAt: Date
+}
+
+export interface MemorySnapshotRecord {
+    id: string
+    presetId: string
+    conversationId: string
+    strategy: string
+    query: string
+    createdAt: Date
+}
+
+export interface MemoryJobRecord {
+    id: string
+    presetId: string
+    conversationId: string
+    kind: string
+    status: string
+    createdAt: Date
+    updatedAt: Date
+}
+
+export interface MemoryMutationInput {
+    type: MemoryEntryType
+    content: string
+    keywords?: string[]
+    summary?: string | null
+}
+
+export interface PageResult<T> {
+    items: T[]
+    page: number
+    pageSize: number
+    total: number
+}
+
+declare module '@koishijs/client' {
+    interface Events {
+        'living-memory/listPresetIds': () => string[]
+        'living-memory/listMemories': (
+            query: {
+                presetId: string
+                type?: MemoryEntryType
+                keyword?: string
+                page?: number
+                pageSize?: number
+            }
+        ) => PageResult<MemoryEntryRecord>
+        'living-memory/getMemory': (
+            memoryId: string
+        ) => MemoryEntryRecord | undefined
+        'living-memory/createMemory': (input: {
+            conversationId: string
+            presetId: string
+            userId?: string
+            channelId?: string
+            memory: MemoryMutationInput
+        }) => MemoryEntryRecord
+        'living-memory/updateMemory': (
+            memoryId: string,
+            patch: Partial<MemoryMutationInput>
+        ) => { success: true }
+        'living-memory/deleteMemory': (
+            memoryId: string
+        ) => { success: true }
+        'living-memory/listSnapshots': (
+            query: {
+                presetId: string
+                conversationId?: string
+                page?: number
+                pageSize?: number
+            }
+        ) => PageResult<MemorySnapshotRecord>
+        'living-memory/listJobs': (
+            query: {
+                presetId: string
+                kind?: string
+                status?: string
+                page?: number
+                pageSize?: number
+            }
+        ) => PageResult<MemoryJobRecord>
+        'living-memory/runDream': (
+            presetId: string
+        ) => { success: true }
+        'living-memory/clearPresetData': (
+            presetId: string
+        ) => { success: true }
+    }
+}

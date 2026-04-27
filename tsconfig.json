@@ -14,5 +14,6 @@
         "jsx": "react-jsx",
         "jsxImportSource": "@satorijs/element"
     },
-    "include": ["src"]
+    "include": ["src"],
+    "exclude": ["src/client"]
 }

@@ -10,6 +10,8 @@ node_modules/
 # build
 dist/
 build/
+lib/
+tsconfig.tsbuildinfo
 
 # system
 .DS_Store
