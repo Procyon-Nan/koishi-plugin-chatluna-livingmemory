@@ -27,9 +27,10 @@ export class LivingMemoryExtractor {
         const prompt = this.extractionPrompt + '\n\n' + input
 
         const result = await model.value.invoke(prompt)
-        const content = typeof result.content === 'string'
-            ? result.content
-            : JSON.stringify(result.content)
+        const content =
+            typeof result.content === 'string'
+                ? result.content
+                : JSON.stringify(result.content)
 
         return this.parse(content)
     }
@@ -66,19 +67,21 @@ export class LivingMemoryExtractor {
                 }
 
                 const record = item as Record<string, unknown>
-                const content = typeof record.content === 'string'
-                    ? normalizeText(record.content)
-                    : ''
-                const type = typeof record.type === 'string'
-                    ? record.type
-                    : 'other'
-                const summary = typeof record.summary === 'string'
-                    ? normalizeText(record.summary)
-                    : null
+                const content =
+                    typeof record.content === 'string'
+                        ? normalizeText(record.content)
+                        : ''
+                const type =
+                    typeof record.type === 'string' ? record.type : 'other'
+                const summary =
+                    typeof record.summary === 'string'
+                        ? normalizeText(record.summary)
+                        : null
                 const keywords = Array.isArray(record.keywords)
                     ? record.keywords.filter(
-                        (keyword): keyword is string => typeof keyword === 'string'
-                    )
+                          (keyword): keyword is string =>
+                              typeof keyword === 'string'
+                      )
                     : undefined
 
                 if (content.length === 0) {

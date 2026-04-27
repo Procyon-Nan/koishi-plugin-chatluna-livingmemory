@@ -81,6 +81,14 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         }, Time.day)
     }
 
+    protected async start() {
+        await this.repository
+            .trimAllSnapshots(this.config.maxSnapshotsPerPreset)
+            .catch((error) => {
+                this.serviceLogger.warn(error)
+            })
+    }
+
     private registerPromptFunction() {
         this.ctx.effect(() =>
             this.ctx.chatluna.promptRenderer.registerFunctionProvider(

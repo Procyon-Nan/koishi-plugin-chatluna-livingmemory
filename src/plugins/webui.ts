@@ -1,4 +1,4 @@
-import { resolve, dirname } from 'path'
+import { dirname, resolve } from 'path'
 import { fileURLToPath } from 'url'
 import { Context } from 'koishi'
 import type {} from '@koishijs/plugin-console'
@@ -8,9 +8,10 @@ import type { ChatLunaLivingMemoryService } from '../service/memory'
 import type { MemoryMutationInput } from '../types'
 
 // ESM 兼容：__dirname 在 ESM 中不存在，需通过 import.meta.url 获取
-const currentDir = typeof __dirname !== 'undefined'
-    ? __dirname
-    : dirname(fileURLToPath(import.meta.url))
+const currentDir =
+    typeof __dirname !== 'undefined'
+        ? __dirname
+        : dirname(fileURLToPath(import.meta.url))
 
 const packageName = 'koishi-plugin-chatluna-livingmemory'
 
@@ -22,7 +23,13 @@ const packageName = 'koishi-plugin-chatluna-livingmemory'
 function resolveEntryViaNodeModules(ctx: Context) {
     const baseDir = ctx.loader?.baseDir ?? process.cwd()
     return {
-        dev: resolve(baseDir, 'node_modules', packageName, 'client', 'index.ts'),
+        dev: resolve(
+            baseDir,
+            'node_modules',
+            packageName,
+            'client',
+            'index.ts'
+        ),
         prod: resolve(baseDir, 'node_modules', packageName, 'dist')
     }
 }
@@ -31,9 +38,7 @@ const service = (ctx: Context): ChatLunaLivingMemoryService => {
     return ctx.chatluna_living_memory
 }
 
-const ok = <T extends unknown[]>(
-    fn: (...args: T) => Promise<void>
-) => {
+const ok = <T extends unknown[]>(fn: (...args: T) => Promise<void>) => {
     return async (...args: T) => {
         await fn(...args)
         return { success: true as const }
@@ -97,7 +102,8 @@ export function apply(ctx: Context, _config?: Config) {
 
     ctx.console.addListener(
         'living-memory/listSnapshots',
-        async (query: SnapshotListQuery) => await service(ctx).listSnapshots(query)
+        async (query: SnapshotListQuery) =>
+            await service(ctx).listSnapshots(query)
     )
 
     ctx.console.addListener(

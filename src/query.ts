@@ -1,4 +1,9 @@
-import type { MemoryEntryRecord, MemoryJobRecord, MemoryJobStatus, MemorySnapshotRecord } from './types'
+import type {
+    MemoryEntryRecord,
+    MemoryJobRecord,
+    MemoryJobStatus,
+    MemorySnapshotRecord
+} from './types'
 
 export interface PageRequest {
     page?: number
@@ -41,7 +46,11 @@ const clampPageSize = (value?: number) => {
     return Math.min(100, Math.floor(value))
 }
 
-const paginate = <T>(items: T[], page?: number, pageSize?: number): PageResult<T> => {
+const paginate = <T>(
+    items: T[],
+    page?: number,
+    pageSize?: number
+): PageResult<T> => {
     const normalizedPage = clampPage(page)
     const normalizedPageSize = clampPageSize(pageSize)
     const start = (normalizedPage - 1) * normalizedPageSize
@@ -76,7 +85,9 @@ export const filterMemoryList = (
         )
     })
 
-    const sorted = filtered.sort((left, right) => +right.updatedAt - +left.updatedAt)
+    const sorted = filtered.sort(
+        (left, right) => +right.updatedAt - +left.updatedAt
+    )
     return paginate(sorted, query.page, query.pageSize)
 }
 
@@ -85,14 +96,19 @@ export const filterSnapshotList = (
     query: SnapshotListQuery
 ): PageResult<MemorySnapshotRecord> => {
     const filtered = items.filter((item) => {
-        if (query.conversationId != null && item.conversationId !== query.conversationId) {
+        if (
+            query.conversationId != null &&
+            item.conversationId !== query.conversationId
+        ) {
             return false
         }
 
         return true
     })
 
-    const sorted = filtered.sort((left, right) => +right.createdAt - +left.createdAt)
+    const sorted = filtered.sort(
+        (left, right) => +right.createdAt - +left.createdAt
+    )
     return paginate(sorted, query.page, query.pageSize)
 }
 
@@ -112,6 +128,8 @@ export const filterJobList = (
         return true
     })
 
-    const sorted = filtered.sort((left, right) => +right.createdAt - +left.createdAt)
+    const sorted = filtered.sort(
+        (left, right) => +right.createdAt - +left.createdAt
+    )
     return paginate(sorted, query.page, query.pageSize)
 }

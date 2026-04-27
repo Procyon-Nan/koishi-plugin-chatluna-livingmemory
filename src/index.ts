@@ -85,10 +85,12 @@ export const Config: Schema<Config> = Schema.object({
         .description('每次召回时返回的最相关记忆条数上限。')
         .default(5),
     maxSnapshotsPerPreset: Schema.number()
-        .min(2)
-        .max(2)
+        .min(1)
+        .max(10)
         .step(1)
-        .description('每个预设保留的最大快照数量。')
+        .description(
+            '每个预设保留的最大快照数量。调小后，插件重载时会立即裁剪超出部分，仅保留最新的 N 条。'
+        )
         .default(2),
     recallStrategy: Schema.union(
         memoryRecallStrategies.map((strategy) => Schema.const(strategy))

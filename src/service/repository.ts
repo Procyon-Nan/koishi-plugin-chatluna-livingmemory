@@ -8,8 +8,8 @@ import type {
     MemoryJobKind,
     MemoryJobRecord,
     MemoryMutationInput,
-    MemoryReference,
     MemoryRecallStrategy,
+    MemoryReference,
     MemoryScope,
     MemorySnapshotRecord,
     RecallRepository,
@@ -29,7 +29,12 @@ const defaultKeywords = (content: string) => {
 }
 
 export class LivingMemoryRepository
-implements RecallRepository, SnapshotRepository, JobRepository, ExtractionRepository {
+    implements
+        RecallRepository,
+        SnapshotRepository,
+        JobRepository,
+        ExtractionRepository
+{
     constructor(private readonly ctx: Context) {}
 
     defineTables() {
@@ -120,19 +125,31 @@ implements RecallRepository, SnapshotRepository, JobRepository, ExtractionReposi
     }
 
     async getLatestSnapshotByPreset(presetId: string) {
-        const snapshots = await this.ctx.database.get('living_memory_snapshot', {
-            presetId
-        })
+        const snapshots = await this.ctx.database.get(
+            'living_memory_snapshot',
+            {
+                presetId
+            }
+        )
 
-        return snapshots.sort((left, right) => +right.createdAt - +left.createdAt)[0]
+        return snapshots.sort(
+            (left, right) => +right.createdAt - +left.createdAt
+        )[0]
     }
 
-    async listSnapshotsByPreset(presetId: string): Promise<MemorySnapshotRecord[]> {
-        const snapshots = await this.ctx.database.get('living_memory_snapshot', {
-            presetId
-        })
+    async listSnapshotsByPreset(
+        presetId: string
+    ): Promise<MemorySnapshotRecord[]> {
+        const snapshots = await this.ctx.database.get(
+            'living_memory_snapshot',
+            {
+                presetId
+            }
+        )
 
-        return snapshots.sort((left, right) => +right.createdAt - +left.createdAt)
+        return snapshots.sort(
+            (left, right) => +right.createdAt - +left.createdAt
+        )
     }
 
     async createSnapshot(
@@ -155,9 +172,12 @@ implements RecallRepository, SnapshotRepository, JobRepository, ExtractionReposi
     }
 
     async trimSnapshots(presetId: string, maxSnapshotsPerPreset: number) {
-        const snapshots = await this.ctx.database.get('living_memory_snapshot', {
-            presetId
-        })
+        const snapshots = await this.ctx.database.get(
+            'living_memory_snapshot',
+            {
+                presetId
+            }
+        )
 
         if (snapshots.length <= maxSnapshotsPerPreset) {
             return
@@ -176,6 +196,18 @@ implements RecallRepository, SnapshotRepository, JobRepository, ExtractionReposi
                 $in: staleSnapshots.map((snapshot) => snapshot.id)
             }
         })
+    }
+
+    async trimAllSnapshots(maxSnapshotsPerPreset: number) {
+        const snapshots = await this.ctx.database.get(
+            'living_memory_snapshot',
+            {},
+            ['presetId']
+        )
+        const presetIds = [...new Set(snapshots.map((s) => s.presetId))]
+        for (const presetId of presetIds) {
+            await this.trimSnapshots(presetId, maxSnapshotsPerPreset)
+        }
     }
 
     async createJob(
@@ -203,7 +235,10 @@ implements RecallRepository, SnapshotRepository, JobRepository, ExtractionReposi
         return job
     }
 
-    async updateJob(id: string, patch: Partial<MemoryJobRecord>): Promise<void> {
+    async updateJob(
+        id: string,
+        patch: Partial<MemoryJobRecord>
+    ): Promise<void> {
         await this.ctx.database.set('living_memory_job', { id }, patch)
     }
 
@@ -287,7 +322,10 @@ implements RecallRepository, SnapshotRepository, JobRepository, ExtractionReposi
                     : patch.content != null
                       ? defaultKeywords(content)
                       : current.keywords,
-                summary: patch.summary === undefined ? current.summary : patch.summary,
+                summary:
+                    patch.summary === undefined
+                        ? current.summary
+                        : patch.summary,
                 updatedAt: new Date()
             }
         )
@@ -306,7 +344,9 @@ implements RecallRepository, SnapshotRepository, JobRepository, ExtractionReposi
     }
 
     async listDistinctPresetIds(): Promise<string[]> {
-        const entries = await this.ctx.database.get('living_memory_entry', {}, ['presetId'])
+        const entries = await this.ctx.database.get('living_memory_entry', {}, [
+            'presetId'
+        ])
         return [...new Set(entries.map((e) => e.presetId))]
     }
 
