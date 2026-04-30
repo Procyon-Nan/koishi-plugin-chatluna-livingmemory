@@ -336,7 +336,38 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         try {
             await this.markJobRunning(job.id)
 
-            const extracted = await this.extractor.extract(payload.input)
+            const trace = await this.extractor.extractWithTrace(payload.input)
+            if (trace.skippedReason != null) {
+                this.debug(
+                    [
+                        `memory extraction skipped: jobId=${job.id}`,
+                        `conversationId=${scope.conversationId}`,
+                        `presetId=${scope.presetId}`,
+                        `reason=${trace.skippedReason}`
+                    ].join(' ')
+                )
+            }
+
+            if (trace.prompt != null && trace.output != null) {
+                this.debug(
+                    [
+                        `memory extraction llm input: jobId=${job.id}`,
+                        `conversationId=${scope.conversationId}`,
+                        `presetId=${scope.presetId}`,
+                        trace.prompt
+                    ].join('\n')
+                )
+                this.debug(
+                    [
+                        `memory extraction llm output: jobId=${job.id}`,
+                        `conversationId=${scope.conversationId}`,
+                        `presetId=${scope.presetId}`,
+                        trace.output
+                    ].join('\n')
+                )
+            }
+
+            const extracted = trace.extracted
             this.debug(
                 [
                     `memory extraction: jobId=${job.id}`,

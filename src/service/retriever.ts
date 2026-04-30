@@ -1,6 +1,3 @@
-import type { ComputedRef } from '@vue/reactivity'
-import type { Embeddings } from '@langchain/core/embeddings'
-import type { ChatLunaReranker } from 'koishi-plugin-chatluna/llm-core/platform/rerank'
 import { Context } from 'koishi'
 import type {
     LivingMemoryConfig,
@@ -108,7 +105,7 @@ export class LivingMemoryRetriever {
             return []
         }
 
-        const embeddings = await this.resolveEmbeddings(
+        const embeddings = await this.ctx.chatluna.createEmbeddings(
             this.config.embeddingModel
         )
         if (embeddings?.value == null) {
@@ -144,7 +141,9 @@ export class LivingMemoryRetriever {
             return candidates.slice(0, limit)
         }
 
-        const reranker = await this.resolveReranker(this.config.rerankModel)
+        const reranker = await this.ctx.chatluna.createReranker(
+            this.config.rerankModel
+        )
         if (reranker?.value == null) {
             return candidates.slice(0, limit)
         }
@@ -160,18 +159,6 @@ export class LivingMemoryRetriever {
             content: candidates[result.index].content,
             score: result.relevanceScore
         }))
-    }
-
-    private async resolveReranker(
-        model: string
-    ): Promise<ComputedRef<ChatLunaReranker | undefined>> {
-        return await this.ctx.chatluna.createReranker(model)
-    }
-
-    private async resolveEmbeddings(
-        model: string
-    ): Promise<ComputedRef<Embeddings | undefined>> {
-        return await this.ctx.chatluna.createEmbeddings(model)
     }
 
     private cosineSimilarity(left: number[], right: number[]) {

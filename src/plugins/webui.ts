@@ -1,17 +1,10 @@
-import { dirname, resolve } from 'path'
-import { fileURLToPath } from 'url'
+import { resolve } from 'path'
 import { Context } from 'koishi'
 import type {} from '@koishijs/plugin-console'
 import type { Config } from '../index'
 import type { JobListQuery, MemoryListQuery, SnapshotListQuery } from '../query'
 import type { ChatLunaLivingMemoryService } from '../service/memory'
 import type { MemoryMutationInput } from '../types'
-
-// ESM 兼容：__dirname 在 ESM 中不存在，需通过 import.meta.url 获取
-const currentDir =
-    typeof __dirname !== 'undefined'
-        ? __dirname
-        : dirname(fileURLToPath(import.meta.url))
 
 const packageName = 'koishi-plugin-chatluna-livingmemory'
 

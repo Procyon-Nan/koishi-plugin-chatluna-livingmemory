@@ -7,6 +7,25 @@ const isModelConfigured = (model: string) => {
     return model.length > 0 && model !== '无'
 }
 
+const stringifyModelContent = (content: unknown) => {
+    if (typeof content === 'string') {
+        return content
+    }
+
+    return JSON.stringify(content) ?? ''
+}
+
+export type LivingMemoryExtractionSkipReason =
+    | 'model-not-configured'
+    | 'model-unavailable'
+
+export interface LivingMemoryExtractionTrace {
+    extracted: ExtractedMemoryItem[]
+    prompt: string | null
+    output: string | null
+    skippedReason: LivingMemoryExtractionSkipReason | null
+}
+
 export class LivingMemoryExtractor {
     constructor(
         private readonly ctx: Context,
@@ -15,24 +34,43 @@ export class LivingMemoryExtractor {
     ) {}
 
     async extract(input: string): Promise<ExtractedMemoryItem[]> {
+        const trace = await this.extractWithTrace(input)
+        return trace.extracted
+    }
+
+    async extractWithTrace(
+        input: string
+    ): Promise<LivingMemoryExtractionTrace> {
         if (!isModelConfigured(this.extractModel)) {
-            return []
+            return {
+                extracted: [],
+                prompt: null,
+                output: null,
+                skippedReason: 'model-not-configured'
+            }
         }
 
         const model = await this.ctx.chatluna.createChatModel(this.extractModel)
         if (model.value == null) {
-            return []
+            return {
+                extracted: [],
+                prompt: null,
+                output: null,
+                skippedReason: 'model-unavailable'
+            }
         }
 
         const prompt = this.extractionPrompt + '\n\n' + input
 
         const result = await model.value.invoke(prompt)
-        const content =
-            typeof result.content === 'string'
-                ? result.content
-                : JSON.stringify(result.content)
+        const content = stringifyModelContent(result.content)
 
-        return this.parse(content)
+        return {
+            extracted: this.parse(content),
+            prompt,
+            output: content,
+            skippedReason: null
+        }
     }
 
     private parse(content: string): ExtractedMemoryItem[] {
