@@ -26,6 +26,11 @@ export interface LivingMemoryExtractionTrace {
     skippedReason: LivingMemoryExtractionSkipReason | null
 }
 
+export interface LivingMemoryExtractionContext {
+    conversationId: string
+    presetId: string
+}
+
 export class LivingMemoryExtractor {
     constructor(
         private readonly ctx: Context,
@@ -39,7 +44,8 @@ export class LivingMemoryExtractor {
     }
 
     async extractWithTrace(
-        input: string
+        input: string,
+        context?: LivingMemoryExtractionContext
     ): Promise<LivingMemoryExtractionTrace> {
         if (!isModelConfigured(this.extractModel)) {
             return {
@@ -60,7 +66,7 @@ export class LivingMemoryExtractor {
             }
         }
 
-        const prompt = this.extractionPrompt + '\n\n' + input
+        const prompt = this.buildPrompt(input, context)
 
         const result = await model.value.invoke(prompt)
         const content = stringifyModelContent(result.content)
@@ -134,6 +140,21 @@ export class LivingMemoryExtractor {
                 }
             })
             .filter((item): item is NonNullable<typeof item> => item != null)
+    }
+
+    private buildPrompt(input: string, context?: LivingMemoryExtractionContext) {
+        if (context == null) {
+            return this.extractionPrompt + '\n\n' + input
+        }
+
+        return [
+            `conversationId=${context.conversationId}`,
+            `presetId=${context.presetId}`,
+            '',
+            this.extractionPrompt,
+            '',
+            input
+        ].join('\n')
     }
 
     private normalizeMemoryType(type: string): ExtractedMemoryItem['type'] {

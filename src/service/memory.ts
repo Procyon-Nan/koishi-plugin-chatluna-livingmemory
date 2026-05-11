@@ -316,7 +316,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     }
 
     private async runExtraction(scope: MemoryScope, messages: BaseMessage[]) {
-        const payload = this.formatter.toExtractionPayload(messages)
+        const payload = this.formatter.toExtractionPayload(scope, messages)
         const job = await this.repository.createJob(
             scope,
             'extract',
@@ -336,7 +336,13 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         try {
             await this.markJobRunning(job.id)
 
-            const trace = await this.extractor.extractWithTrace(payload.input)
+            const trace = await this.extractor.extractWithTrace(
+                payload.input,
+                {
+                    conversationId: scope.conversationId,
+                    presetId: scope.presetId
+                }
+            )
             if (trace.skippedReason != null) {
                 this.debug(
                     [

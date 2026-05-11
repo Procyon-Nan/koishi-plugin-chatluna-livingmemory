@@ -173,7 +173,10 @@ export interface ExtractionRepository {
 
 export interface MessageFormatter {
     takeRecentRounds(messages: BaseMessage[], roundCount: number): BaseMessage[]
-    toExtractionPayload(messages: BaseMessage[]): ExtractionPayload
+    toExtractionPayload(
+        scope: MemoryScope,
+        messages: BaseMessage[]
+    ): ExtractionPayload
 }
 
 declare module 'koishi' {
