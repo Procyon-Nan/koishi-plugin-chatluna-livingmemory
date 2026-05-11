@@ -116,6 +116,9 @@ export interface ExtractionPayload {
 export interface LivingMemoryConfig {
     promptVariable: '{living_memory}'
     extractModel: string
+    enableRecallQueryRewrite: boolean
+    recallRewriteRounds: number
+    recallRewriteModel: string
     embeddingModel: string
     rerankModel: string
     extractionRounds: number

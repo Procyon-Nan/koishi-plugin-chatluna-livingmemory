@@ -1,5 +1,4 @@
 import { Context } from 'koishi'
-import { getMessageContent } from 'koishi-plugin-chatluna/utils/string'
 import type { Config } from '../index'
 
 export async function apply(ctx: Context, config: Config) {
@@ -64,22 +63,20 @@ export async function apply(ctx: Context, config: Config) {
 
             promptVariables.living_memory = snapshot
 
-            const searchText =
-                typeof message.additional_kwargs?.raw_content === 'string'
-                    ? message.additional_kwargs.raw_content
-                    : getMessageContent(message.content)
-
             debug(
                 [
                     'before-chat recall queued:',
                     `conversationId=${conversationId}`,
                     `presetId=${presetId}`,
-                    `snapshotLength=${snapshot.length}`,
-                    `inputLength=${searchText.trim().length}`
+                    `snapshotLength=${snapshot.length}`
                 ].join(' ')
             )
 
-            await ctx.chatluna_living_memory.queueRecall(scope, searchText)
+            await ctx.chatluna_living_memory.queueRecall(
+                scope,
+                message,
+                async () => await chatInterface.chatHistory.getMessages()
+            )
         }
     )
 

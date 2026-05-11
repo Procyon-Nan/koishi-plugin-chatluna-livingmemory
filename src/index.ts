@@ -54,6 +54,22 @@ export const Config: Schema<Config> = Schema.object({
     extractModel: Schema.dynamic('model')
         .description('用于从对话中提取记忆的 LLM 模型。')
         .default('无'),
+    enableRecallQueryRewrite: Schema.boolean()
+        .description('是否在召回前使用 LLM 根据历史信息改写检索的查询文本。')
+        .default(false),
+    recallRewriteRounds: Schema.number()
+        .min(1)
+        .max(12)
+        .step(1)
+        .description(
+            '召回查询改写时使用的最近对话轮数（1 轮 = 1 次用户消息 + 1 次助手回复）。'
+        )
+        .default(3),
+    recallRewriteModel: Schema.dynamic('model')
+        .description(
+            '用于记忆召回查询改写的 LLM 模型。仅在启用召回查询改写时使用。'
+        )
+        .default('无'),
     embeddingModel: Schema.dynamic('embeddings')
         .description(
             '用于记忆向量化检索的嵌入模型。仅在召回策略为 embedding-rerank 时需要。'
@@ -69,7 +85,7 @@ export const Config: Schema<Config> = Schema.object({
         .max(12)
         .step(1)
         .description(
-            '每次提取时使用的最近对话轮数（1 轮 = 1 条用户消息 + 1 条助手回复）。'
+            '每次提取时使用的最近对话轮数（1 轮 = 1 次用户消息 + 1 次助手回复）。'
         )
         .default(3),
     extractionInterval: Schema.number()

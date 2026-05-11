@@ -2,6 +2,7 @@ import { BaseMessage, HumanMessage } from '@langchain/core/messages'
 import { Context, Logger, Service, Time } from 'koishi'
 import { LivingMemoryExtractor } from './extractor'
 import { LivingMemoryMessageFormatter } from './message_formatter'
+import { LivingMemoryRecallQueryBuilder } from './recall_query'
 import { LivingMemoryRepository } from './repository'
 import { LivingMemoryRetriever } from './retriever'
 import {
@@ -57,6 +58,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     private readonly retriever: LivingMemoryRetriever
     private readonly extractor: LivingMemoryExtractor
     private readonly formatter: LivingMemoryMessageFormatter
+    private readonly recallQuery: LivingMemoryRecallQueryBuilder
 
     constructor(
         public readonly ctx: Context,
@@ -72,6 +74,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             config.extractionPrompt
         )
         this.formatter = new LivingMemoryMessageFormatter()
+        this.recallQuery = new LivingMemoryRecallQueryBuilder(ctx, config)
         this.repository.defineTables()
         this.registerPromptFunction()
         ctx.setInterval(() => {
@@ -167,19 +170,18 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         return await this.hydratePromptVariable(presetId)
     }
 
-    async queueRecall(scope: MemoryScope, input: string) {
-        const normalizedInput = normalizeText(input)
-        if (normalizedInput.length === 0) {
-            return
-        }
-
+    async queueRecall(
+        scope: MemoryScope,
+        currentMessage: HumanMessage,
+        loadHistoryMessages: () => Promise<BaseMessage[]>
+    ) {
         if (this.recallLockByConversation.has(scope.conversationId)) {
             return
         }
 
         this.recallLockByConversation.add(scope.conversationId)
 
-        this.runRecall(scope, normalizedInput)
+        this.runRecall(scope, currentMessage, loadHistoryMessages)
             .catch((error) => {
                 this.serviceLogger.warn(error)
             })
@@ -271,7 +273,92 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             })
     }
 
-    private async runRecall(scope: MemoryScope, input: string) {
+    private async runRecall(
+        scope: MemoryScope,
+        currentMessage: HumanMessage,
+        loadHistoryMessages: () => Promise<BaseMessage[]>
+    ) {
+        let historyMessages: BaseMessage[] = []
+        try {
+            historyMessages = await loadHistoryMessages()
+        } catch (error) {
+            this.debug(
+                [
+                    `memory recall history unavailable: conversationId=${scope.conversationId}`,
+                    `presetId=${scope.presetId}`,
+                    `error=${summarizeError(error)}`
+                ].join(' ')
+            )
+        }
+
+        const query = await this.recallQuery.resolve(
+            scope,
+            currentMessage,
+            historyMessages
+        )
+
+        this.debug(
+            [
+                `memory recall query prepared: conversationId=${scope.conversationId}`,
+                `presetId=${scope.presetId}`,
+                `rawInputLength=${query.rawInputLength}`,
+                'cleanedQuery:',
+                query.cleanedQuery,
+                'finalQuery:',
+                query.finalQuery
+            ].join('\n')
+        )
+
+        if (query.skippedReason != null) {
+            this.debug(
+                [
+                    `memory recall skipped: conversationId=${scope.conversationId}`,
+                    `presetId=${scope.presetId}`,
+                    `reason=${query.skippedReason}`
+                ].join(' ')
+            )
+            return
+        }
+
+        if (query.rewritePrompt != null) {
+            this.debug(
+                [
+                    `memory recall rewrite input: conversationId=${scope.conversationId}`,
+                    `presetId=${scope.presetId}`,
+                    query.rewritePrompt
+                ].join('\n')
+            )
+        }
+
+        if (query.rewriteOutput != null) {
+            this.debug(
+                [
+                    `memory recall rewrite output: conversationId=${scope.conversationId}`,
+                    `presetId=${scope.presetId}`,
+                    query.rewriteOutput
+                ].join('\n')
+            )
+        }
+
+        if (query.fallbackReason != null) {
+            this.debug(
+                [
+                    `memory recall rewrite fallback: conversationId=${scope.conversationId}`,
+                    `presetId=${scope.presetId}`,
+                    `reason=${query.fallbackReason}`,
+                    query.error == null ? '' : `error=${query.error}`,
+                    `finalQuery=${query.finalQuery}`
+                ]
+                    .filter((part) => part.length > 0)
+                    .join(' ')
+            )
+        }
+
+        const input = normalizeText(query.finalQuery)
+        if (input.length === 0) {
+            return
+        }
+
         const job = await this.repository.createJob(scope, 'recall', input)
 
         try {
