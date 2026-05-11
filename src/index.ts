@@ -35,15 +35,6 @@ export const inject = {
     optional: ['console']
 }
 
-const DEFAULT_EXTRACTION_PROMPT = [
-    '你是一个长期记忆抽取器。',
-    '请从以下对话中抽取适合长期保存的事实性记忆。',
-    '输出必须是 JSON 数组。',
-    '每个元素格式为 {"type":"identity|preference|fact|plan|context|other","content":"...","keywords":["..."],"summary":"..."}。',
-    '只保留高价值、稳定、可复用的信息。',
-    '如果没有可提取内容，输出 []。'
-].join('\n')
-
 export const Config: Schema<Config> = Schema.object({
     promptVariable: Schema.const('{living_memory}')
         .description(
@@ -123,13 +114,7 @@ export const Config: Schema<Config> = Schema.object({
         .default(true),
     debug: Schema.boolean()
         .description('输出记忆召回、记忆总结和触发诊断日志。')
-        .default(false),
-    extractionPrompt: Schema.string()
-        .role('textarea', { rows: [4, 8] })
-        .description(
-            '记忆提取时发送给 LLM 的系统提示词。对话内容会追加在提示词之后。'
-        )
-        .default(DEFAULT_EXTRACTION_PROMPT)
+        .default(false)
 })
 
 export * from './types'

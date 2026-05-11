@@ -128,7 +128,6 @@ export interface LivingMemoryConfig {
     recallStrategy: MemoryRecallStrategy
     enableKeywordFallback: boolean
     debug: boolean
-    extractionPrompt: string
 }
 
 export interface RecallRepository {

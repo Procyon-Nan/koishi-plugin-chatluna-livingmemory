@@ -149,7 +149,9 @@ export async function apply(ctx: Context, config: Config) {
             await ctx.chatluna_living_memory.queueExtraction(
                 scope,
                 chatCount,
-                messages
+                messages,
+                chatInterface.preset.value,
+                promptVariables
             )
         }
     )
