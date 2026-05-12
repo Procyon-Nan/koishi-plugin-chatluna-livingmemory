@@ -1,6 +1,7 @@
 import { Context } from 'koishi'
 import type {
     LivingMemoryConfig,
+    MemoryEntryRecord,
     RecallRepository,
     RetrievedMemoryItem
 } from '../types'
@@ -19,6 +20,16 @@ const defaultKeywords = (content: string) => {
                 .filter((part) => part.length >= 2)
         )
     ).slice(0, 12)
+}
+
+const toRetrievalText = (
+    entry: Pick<MemoryEntryRecord, 'content' | 'summary' | 'keywords'>
+) => {
+    return [
+        `摘要：${entry.summary ?? ''}`,
+        `关键词：${entry.keywords.join('、')}`,
+        `内容：${entry.content}`
+    ].join('\n')
 }
 
 export class LivingMemoryRetriever {
@@ -72,8 +83,7 @@ export class LivingMemoryRetriever {
 
         return entries
             .map((entry) => {
-                const haystack =
-                    `${entry.content}\n${entry.keywords.join(' ')}`.toLowerCase()
+                const haystack = toRetrievalText(entry).toLowerCase()
                 const score = terms.reduce((accumulator, term) => {
                     return accumulator + (haystack.includes(term) ? 1 : 0)
                 }, 0)
@@ -119,14 +129,16 @@ export class LivingMemoryRetriever {
         }
 
         const queryVector = await embeddings.value.embedQuery(input)
+        const retrievalTexts = entries.map((entry) => toRetrievalText(entry))
         const docs = await embeddings.value.embedDocuments(
-            entries.map((entry) => entry.content)
+            retrievalTexts
         )
 
         const embeddingResults = entries
             .map((entry, index) => ({
                 id: entry.id,
                 content: entry.content,
+                retrievalText: retrievalTexts[index],
                 score: this.cosineSimilarity(queryVector, docs[index] ?? [])
             }))
             .sort((left, right) => right.score - left.score)
@@ -138,18 +150,26 @@ export class LivingMemoryRetriever {
             !isModelConfigured(this.config.rerankModel) ||
             candidates.length === 0
         ) {
-            return candidates.slice(0, limit)
+            return candidates.slice(0, limit).map((candidate) => ({
+                id: candidate.id,
+                content: candidate.content,
+                score: candidate.score
+            }))
         }
 
         const reranker = await this.ctx.chatluna.createReranker(
             this.config.rerankModel
         )
         if (reranker?.value == null) {
-            return candidates.slice(0, limit)
+            return candidates.slice(0, limit).map((candidate) => ({
+                id: candidate.id,
+                content: candidate.content,
+                score: candidate.score
+            }))
         }
 
         const rerankResults = await reranker.value.rerank(
-            candidates.map((c) => c.content),
+            candidates.map((c) => c.retrievalText),
             input,
             { topN: limit }
         )

@@ -8,6 +8,7 @@ const isModelConfigured = (model: string) => {
 }
 
 const semanticTextPattern = /[\p{L}\p{N}]/u
+const prefixedSpeakerLinePattern = /^(\[[^\]]+\]说:)\s*(.*)$/u
 const prefixedSpeakerPattern = /^\[[^\]]+\]说:\s*/u
 
 const toTextParts = (message: BaseMessage) => {
@@ -45,6 +46,38 @@ const toCleanLines = (parts: string[]) => {
         .flatMap((part) => part.replace(/\r\n/g, '\n').split('\n'))
         .map((line) => line.replace(prefixedSpeakerPattern, '').trim())
         .filter((line) => line.length > 0 && semanticTextPattern.test(line))
+}
+
+const toUserFallbackLabel = (scope: MemoryScope) => {
+    if (scope.userId != null && scope.userId.length > 0) {
+        return `[${scope.userId}]说:`
+    }
+
+    return '对方说:'
+}
+
+const toTranscriptLines = (parts: string[], scope: MemoryScope) => {
+    const fallbackLabel = toUserFallbackLabel(scope)
+
+    return parts
+        .flatMap((part) => part.replace(/\r\n/g, '\n').split('\n'))
+        .map((line) => line.trim())
+        .map((line) => {
+            if (line.length === 0) {
+                return null
+            }
+
+            const matched = line.match(prefixedSpeakerLinePattern)
+            if (matched != null) {
+                const content = matched[2].trim()
+                return semanticTextPattern.test(content) ? line : null
+            }
+
+            return semanticTextPattern.test(line)
+                ? `${fallbackLabel} ${line}`
+                : null
+        })
+        .filter((line): line is string => line != null)
 }
 
 const stringifyModelContent = (content: unknown) => {
@@ -149,6 +182,7 @@ export class LivingMemoryRecallQueryBuilder {
         const rawParts = toTextParts(currentMessage)
         const rawInput = rawParts.join('\n')
         const cleanedQuery = toCleanLines(rawParts).join('\n')
+        const currentTranscript = toTranscriptLines(rawParts, scope).join('\n')
 
         if (cleanedQuery.length === 0) {
             return {
@@ -213,6 +247,7 @@ export class LivingMemoryRecallQueryBuilder {
         const rewritePrompt = this.buildRewritePrompt(
             scope,
             cleanedQuery,
+            currentTranscript,
             historyMessages
         )
 
@@ -298,6 +333,7 @@ export class LivingMemoryRecallQueryBuilder {
     private buildRewritePrompt(
         scope: MemoryScope,
         cleanedQuery: string,
+        currentTranscript: string,
         historyMessages: BaseMessage[]
     ) {
         const recentMessages = this.formatter.takeRecentRounds(
@@ -309,16 +345,19 @@ export class LivingMemoryRecallQueryBuilder {
             : '无'
 
         return [
-            '你是一个陪伴型长期记忆召回查询优化器。',
-            '你的任务是结合最近对话和当前用户消息，写出一段用于检索长期记忆的自然语言查询文本。',
-            '使用第一人称视角，其中“我”指当前 presetId 对应的角色。',
-            '使用用户在对话中的称呼或名字指代用户，不要泛称“用户”。',
+            `你是${scope.presetId}。`,
+            '【任务目标】',
+            '你要结合最近对话，重点关注当前对方说的话，写出简短的话题内容总结。',
+            '',
+            '【任务要求】',
+            `使用第一人称视角，其中'${scope.presetId}:......'是你自己说的话。`,
+            '使用对话中每一条发言的前缀指代对方，不要泛称“用户”。',
             '保留对关系、情绪、互动状态、重要事实的具体叙述。',
             '不要写成主题标签、分类词或关键词列表。',
             '不要输出“偏好、关系、互动状态”这类抽象概括。',
             '去掉寒暄、口癖、用户名前缀和无关噪声。',
-            '不要回答用户，不要解释。',
-            '只输出一行查询。',
+            '不要进行问题回答，不要进行解释说明。',
+            '只输出一行当前话题的内容。字数在40~50字以内。',
             '',
             '正确示例：',
             'Procyon说我的研究所是虚构的。Procyon说他肚子疼。Procyon让我正确使用工具',
@@ -326,17 +365,14 @@ export class LivingMemoryRecallQueryBuilder {
             '错误示例：',
             'Procyon的偏好、与某人的关系及近期互动状态',
             '',
-            `conversationId=${scope.conversationId}`,
-            `presetId=${scope.presetId}`,
-            '',
             '最近对话：',
             '"""',
             history,
             '"""',
             '',
-            '当前用户消息：',
+            '当前对方说的话：',
             '"""',
-            cleanedQuery,
+            currentTranscript.length > 0 ? currentTranscript : cleanedQuery,
             '"""',
             '',
             '输出：'
