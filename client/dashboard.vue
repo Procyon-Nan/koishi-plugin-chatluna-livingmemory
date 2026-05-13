@@ -184,9 +184,29 @@
                         </template>
 
                         <el-table :data="snapshots" border v-loading="loading" max-height="300">
+                            <el-table-column
+                                width="56"
+                                align="center"
+                                class-name="snapshot-detail-cell"
+                            >
+                                <template #default="scope">
+                                    <button
+                                        type="button"
+                                        class="snapshot-detail-button"
+                                        title="查看快照详情"
+                                        aria-label="查看快照详情"
+                                        @click="openSnapshotDialog(scope.row)"
+                                    >
+                                        <span class="snapshot-detail-icon" aria-hidden="true" />
+                                    </button>
+                                </template>
+                            </el-table-column>
                             <el-table-column prop="id" label="ID" min-width="160" />
                             <el-table-column prop="strategy" label="策略" width="140" />
                             <el-table-column prop="query" label="查询" min-width="180" show-overflow-tooltip />
+                            <el-table-column label="命中" width="80">
+                                <template #default="scope">{{ scope.row.resolvedItems.length }}</template>
+                            </el-table-column>
                             <el-table-column label="创建时间" min-width="160">
                                 <template #default="scope">{{ formatTime(scope.row.createdAt) }}</template>
                             </el-table-column>
@@ -296,6 +316,101 @@
             </el-button>
         </template>
     </el-dialog>
+
+    <el-dialog
+        v-model="snapshotDialogVisible"
+        title="快照详情"
+        width="860px"
+        class="snapshot-dialog"
+        modal-class="snapshot-dialog-overlay"
+    >
+        <template v-if="selectedSnapshot != null">
+            <div class="snapshot-dialog-meta">
+                <div>
+                    <span class="snapshot-dialog-label">快照 ID</span>
+                    <span>{{ selectedSnapshot.id }}</span>
+                </div>
+                <div>
+                    <span class="snapshot-dialog-label">策略</span>
+                    <span>{{ selectedSnapshot.strategy }}</span>
+                </div>
+                <div>
+                    <span class="snapshot-dialog-label">命中</span>
+                    <span>{{ selectedSnapshot.resolvedItems.length }}</span>
+                </div>
+                <div>
+                    <span class="snapshot-dialog-label">创建时间</span>
+                    <span>{{ formatTime(selectedSnapshot.createdAt) }}</span>
+                </div>
+                <div class="snapshot-dialog-query">
+                    <span class="snapshot-dialog-label">查询</span>
+                    <span>{{ selectedSnapshot.query }}</span>
+                </div>
+            </div>
+
+            <el-empty
+                v-if="selectedSnapshot.resolvedItems.length === 0"
+                description="该快照没有命中记忆"
+                :image-size="64"
+            />
+            <div v-else class="snapshot-memory-list">
+                <div
+                    v-for="item in selectedSnapshot.resolvedItems"
+                    :key="item.memoryId"
+                    class="snapshot-memory-item"
+                >
+                    <div class="snapshot-memory-header">
+                        <el-tag
+                            :type="snapshotItemTagType(item)"
+                            size="small"
+                            effect="plain"
+                        >
+                            {{ snapshotItemStatusLabel(item) }}
+                        </el-tag>
+                        <span class="snapshot-memory-id">{{ item.memoryId }}</span>
+                        <span class="snapshot-memory-score">
+                            score {{ formatScore(item.score) }}
+                        </span>
+                    </div>
+
+                    <template v-if="item.memory != null">
+                        <div class="snapshot-memory-content">
+                            {{ item.memory.content }}
+                        </div>
+                        <div class="snapshot-memory-meta">
+                            <span>类型：{{ item.memory.type }}</span>
+                            <span>情绪：{{ item.memory.sentiment || '-' }}</span>
+                            <span>重要度：{{ formatImportance(item.memory.importance) || '-' }}</span>
+                            <span>记录于：{{ formatTime(item.memory.createdAt) }}</span>
+                        </div>
+                        <div
+                            v-if="item.memory.summary"
+                            class="snapshot-memory-summary"
+                        >
+                            摘要：{{ item.memory.summary }}
+                        </div>
+                        <el-space
+                            v-if="item.memory.keywords.length > 0"
+                            wrap
+                            class="snapshot-memory-keywords"
+                        >
+                            <el-tag
+                                v-for="kw in item.memory.keywords"
+                                :key="kw"
+                                size="small"
+                                effect="plain"
+                            >
+                                {{ kw }}
+                            </el-tag>
+                        </el-space>
+                    </template>
+                    <div v-else class="snapshot-memory-missing">
+                        记忆已删除或不可用
+                    </div>
+                </div>
+            </div>
+        </template>
+    </el-dialog>
 </template>
 
 <script setup lang="ts">
@@ -305,6 +420,7 @@ import * as api from './api'
 import type {
     MemoryEntryRecord,
     MemorySnapshotRecord,
+    MemorySnapshotResolvedItem,
     MemoryJobRecord,
     MemoryEntryType,
     MemoryEntryStatus
@@ -330,6 +446,23 @@ const formatImportance = (value: number | null | undefined): string => {
     return Number.isFinite(value) ? value.toFixed(2) : ''
 }
 
+const formatScore = (value: number | null | undefined): string => {
+    if (value == null) return '-'
+    return Number.isFinite(value) ? value.toFixed(4) : String(value)
+}
+
+const snapshotItemStatusLabel = (item: MemorySnapshotResolvedItem): string => {
+    if (item.missing) return '缺失'
+    return item.memory?.status === 'archived' ? '历史' : '活跃'
+}
+
+const snapshotItemTagType = (
+    item: MemorySnapshotResolvedItem
+): 'success' | 'info' | 'danger' => {
+    if (item.missing) return 'danger'
+    return item.memory?.status === 'archived' ? 'info' : 'success'
+}
+
 const normalizeImportanceInput = (value: number | null): number | null => {
     if (value == null || !Number.isFinite(value)) {
         return null
@@ -344,6 +477,8 @@ const clearPending = ref(false)
 const submitPending = ref(false)
 const dialogVisible = ref(false)
 const editingMemoryId = ref<string | null>(null)
+const snapshotDialogVisible = ref(false)
+const selectedSnapshot = ref<MemorySnapshotRecord | null>(null)
 
 const presetId = ref('')
 const presetIds = ref<string[]>([])
@@ -464,6 +599,11 @@ const openEditDialog = (memory: MemoryEntryRecord) => {
     form.sentiment = memory.sentiment ?? ''
     form.importance = memory.importance ?? null
     dialogVisible.value = true
+}
+
+const openSnapshotDialog = (snapshot: MemorySnapshotRecord) => {
+    selectedSnapshot.value = snapshot
+    snapshotDialogVisible.value = true
 }
 
 const submitMemory = async () => {
@@ -655,6 +795,162 @@ onMounted(() => {
 .summary-value {
     font-size: 28px;
     font-weight: 600;
+}
+
+:deep(.snapshot-detail-cell .cell) {
+    padding: 0;
+    overflow: visible;
+    text-overflow: clip;
+}
+
+.snapshot-detail-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    flex: 0 0 28px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--el-text-color-secondary);
+    cursor: pointer;
+    font-size: 0;
+    line-height: 1;
+    overflow: hidden;
+}
+
+.snapshot-detail-button:hover,
+.snapshot-detail-button:focus {
+    color: var(--el-color-primary);
+    background: var(--el-fill-color);
+}
+
+.snapshot-detail-icon {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-top: 1.5px solid currentColor;
+    border-right: 1.5px solid currentColor;
+    transform: rotate(45deg);
+}
+
+:global(.snapshot-dialog.el-dialog),
+:global(.snapshot-dialog .el-dialog),
+:global(.snapshot-dialog-overlay .el-dialog) {
+    border: 1px solid var(--el-border-color-lighter);
+    background: var(--el-card-bg-color, var(--el-bg-color));
+    color: var(--el-text-color-primary);
+    box-shadow: var(--el-box-shadow-dark);
+}
+
+:global(.snapshot-dialog.el-dialog .el-dialog__header),
+:global(.snapshot-dialog .el-dialog__header),
+:global(.snapshot-dialog-overlay .el-dialog__header) {
+    border-bottom: 1px solid var(--el-border-color-lighter);
+    background: var(--el-card-bg-color, var(--el-bg-color));
+    margin-right: 0;
+}
+
+:global(.snapshot-dialog.el-dialog .el-dialog__title),
+:global(.snapshot-dialog .el-dialog__title),
+:global(.snapshot-dialog-overlay .el-dialog__title) {
+    color: var(--el-text-color-primary);
+}
+
+:global(.snapshot-dialog.el-dialog .el-dialog__body),
+:global(.snapshot-dialog .el-dialog__body),
+:global(.snapshot-dialog-overlay .el-dialog__body) {
+    max-height: 70vh;
+    overflow-y: auto;
+    background: var(--el-card-bg-color, var(--el-bg-color));
+    color: var(--el-text-color-primary);
+}
+
+.snapshot-dialog-meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 16px;
+    margin-bottom: 12px;
+    padding: 10px;
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 8px;
+    background: var(--el-bg-color);
+    color: var(--el-text-color-regular);
+    font-size: 13px;
+}
+
+.snapshot-dialog-meta > div {
+    display: flex;
+    gap: 8px;
+    min-width: 0;
+}
+
+.snapshot-dialog-label {
+    flex: 0 0 auto;
+    color: var(--el-text-color-secondary);
+}
+
+.snapshot-dialog-meta span:last-child {
+    color: var(--el-text-color-primary);
+}
+
+.snapshot-dialog-query {
+    grid-column: 1 / -1;
+}
+
+.snapshot-dialog-query span:last-child {
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.snapshot-memory-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.snapshot-memory-item {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 8px;
+    background: var(--el-bg-color);
+    color: var(--el-text-color-primary);
+}
+
+.snapshot-memory-header,
+.snapshot-memory-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+}
+
+.snapshot-memory-id,
+.snapshot-memory-score,
+.snapshot-memory-meta,
+.snapshot-memory-summary,
+.snapshot-memory-missing {
+    color: var(--el-text-color-regular);
+    font-size: 13px;
+}
+
+.snapshot-memory-content {
+    white-space: pre-wrap;
+    color: var(--el-text-color-primary);
+    line-height: 1.6;
+}
+
+.snapshot-memory-summary {
+    line-height: 1.5;
+}
+
+.snapshot-memory-keywords {
+    margin-top: 2px;
 }
 
 @media (max-width: 1200px) {

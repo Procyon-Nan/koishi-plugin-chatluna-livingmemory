@@ -13,13 +13,15 @@ import {
     filterSnapshotList,
     type JobListQuery,
     type MemoryListQuery,
+    type PageResult,
     type SnapshotListQuery
 } from '../query'
 import type {
     LivingMemoryConfig,
     MemoryMutationInput,
     MemoryScope,
-    MemorySnapshotRecord
+    MemorySnapshotRecord,
+    MemorySnapshotWithResolvedItems
 } from '../types'
 
 const normalizeText = (value: string) => value.trim()
@@ -97,6 +99,19 @@ const formatRenderedPresetPrompt = (messages: BaseMessage[]) => {
         '# 当前 preset prompt（仅用于理解“我”的人设，不要从此处抽取记忆）',
         ...formattedMessages
     ].join('\n\n')
+}
+
+const formatDateOnly = (value: Date | string | number) => {
+    const date = new Date(value)
+    if (!Number.isFinite(+date)) {
+        return '未知日期'
+    }
+
+    return [
+        date.getFullYear(),
+        String(date.getMonth() + 1).padStart(2, '0'),
+        String(date.getDate()).padStart(2, '0')
+    ].join('-')
 }
 
 export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
@@ -489,14 +504,12 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
                 presetTemplate,
                 promptVariables
             )
-            const trace = await this.extractor.extractWithTrace(
-                payload.input,
-                {
-                    conversationId: scope.conversationId,
-                    presetId: scope.presetId,
-                    presetPrompt
-                }
-            )
+            const trace = await this.extractor.extractWithTrace(payload.input, {
+                conversationId: scope.conversationId,
+                presetId: scope.presetId,
+                currentDate: formatDateOnly(new Date()),
+                presetPrompt
+            })
             if (trace.skippedReason != null) {
                 this.debug(
                     [
@@ -653,7 +666,12 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             )
 
         return ordered
-            .map((record, index) => `记忆${index + 1}：${record.content}`)
+            .map(
+                (record, index) =>
+                    `记忆${index + 1}（记录于 ${formatDateOnly(
+                        record.createdAt
+                    )}）：${record.content}`
+            )
             .join('\n')
     }
 
@@ -684,11 +702,37 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         await this.repository.deleteMemory(memoryId)
     }
 
-    async listSnapshots(query: SnapshotListQuery) {
+    async listSnapshots(
+        query: SnapshotListQuery
+    ): Promise<PageResult<MemorySnapshotWithResolvedItems>> {
         const items = await this.repository.listSnapshotsByPreset(
             query.presetId
         )
-        return filterSnapshotList(items, query)
+        const page = filterSnapshotList(items, query)
+        const memoryIds = [
+            ...new Set(
+                page.items.flatMap((snapshot) =>
+                    snapshot.items.map((item) => item.memoryId)
+                )
+            )
+        ]
+        const records = await this.repository.getEntriesByIds(memoryIds)
+        const recordById = new Map(records.map((record) => [record.id, record]))
+
+        return {
+            ...page,
+            items: page.items.map((snapshot) => ({
+                ...snapshot,
+                resolvedItems: snapshot.items.map((item) => {
+                    const memory = recordById.get(item.memoryId) ?? null
+                    return {
+                        ...item,
+                        memory,
+                        missing: memory == null
+                    }
+                })
+            }))
+        }
     }
 
     async listJobs(query: JobListQuery) {

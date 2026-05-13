@@ -38,7 +38,19 @@ export interface MemorySnapshotRecord {
     conversationId: string
     strategy: string
     query: string
+    items: MemoryReference[]
+    resolvedItems: MemorySnapshotResolvedItem[]
     createdAt: Date
+}
+
+export interface MemoryReference {
+    memoryId: string
+    score?: number | null
+}
+
+export interface MemorySnapshotResolvedItem extends MemoryReference {
+    memory: MemoryEntryRecord | null
+    missing: boolean
 }
 
 export interface MemoryJobRecord {

@@ -14,7 +14,13 @@ const MAX_DREAM_CLUSTERS = 32
 const EMBEDDING_SIMILARITY_THRESHOLD = 0.84
 const STRONG_KEYWORD_OVERLAP = 2
 
-const neutralSentiments = new Set(['中性', '无', '无明显情绪', 'none', 'neutral'])
+const neutralSentiments = new Set([
+    '中性',
+    '无',
+    '无明显情绪',
+    'none',
+    'neutral'
+])
 
 const isModelConfigured = (model: unknown): model is string => {
     return typeof model === 'string' && model.length > 0 && model !== '无'
@@ -90,6 +96,7 @@ const toPromptEntry = (entry: MemoryEntryRecord) => {
     return [
         `id=${entry.id}`,
         `type=${entry.type}`,
+        `status=${entry.status}`,
         `createdAt=${toIsoString(entry.createdAt)}`,
         `updatedAt=${toIsoString(entry.updatedAt)}`,
         `sentiment=${entry.sentiment ?? ''}`,
@@ -105,10 +112,7 @@ const keywordSet = (entry: MemoryEntryRecord) => {
     return new Set(entry.keywords.map(normalizeTerm).filter(Boolean))
 }
 
-const keywordOverlap = (
-    left: MemoryEntryRecord,
-    right: MemoryEntryRecord
-) => {
+const keywordOverlap = (left: MemoryEntryRecord, right: MemoryEntryRecord) => {
     const leftKeywords = keywordSet(left)
     if (leftKeywords.size === 0) {
         return 0
@@ -125,7 +129,11 @@ const keywordOverlap = (
 }
 
 const cosineSimilarity = (left: number[], right: number[]) => {
-    if (left.length === 0 || right.length === 0 || left.length !== right.length) {
+    if (
+        left.length === 0 ||
+        right.length === 0 ||
+        left.length !== right.length
+    ) {
         return 0
     }
 
@@ -162,6 +170,7 @@ interface DreamOperationStats {
     merged: number
     updated: number
     archived: number
+    deleted: number
     skipped: number
 }
 
@@ -172,7 +181,16 @@ export interface DreamRunResult extends DreamOperationStats {
     detail: string
 }
 
-type DreamAction = 'keep' | 'merge' | 'update' | 'archive'
+type DreamStage = 'active' | 'archived'
+
+type DreamAction = 'keep' | 'merge' | 'update' | 'archive' | 'deleteSource'
+
+interface DreamStageResult extends DreamOperationStats {
+    stage: DreamStage
+    entryCount: number
+    clusterCount: number
+    detail: string
+}
 
 interface DreamOperation {
     action: DreamAction
@@ -239,6 +257,29 @@ export class LivingMemoryDreamService {
             })
         }
 
+        const activeEntries = entries.filter(
+            (entry) => entry.status === 'active'
+        )
+        const archivedEntries = entries.filter(
+            (entry) => entry.status === 'archived'
+        )
+        if (activeEntries.length < 2 && archivedEntries.length < 2) {
+            const activeResult = this.createEmptyStageResult(
+                'active',
+                activeEntries.length
+            )
+            const archivedResult = this.createEmptyStageResult(
+                'archived',
+                archivedEntries.length
+            )
+            return {
+                entryCount: entries.length,
+                clusterCount: 0,
+                ...this.sumStats([activeResult, archivedResult]),
+                detail: [activeResult.detail, archivedResult.detail].join('\n')
+            }
+        }
+
         if (!isModelConfigured(this.config.dreamModel)) {
             return this.createResult(entries.length, 0, {
                 skippedReason: 'model-not-configured',
@@ -256,10 +297,58 @@ export class LivingMemoryDreamService {
             })
         }
 
+        const chatModel = model.value
+        const invokeModel = async (prompt: string) => {
+            const result = await chatModel.invoke(prompt)
+            return stringifyModelContent(result.content)
+        }
+
+        const activeResult = await this.runStage(
+            presetId,
+            'active',
+            activeEntries,
+            invokeModel
+        )
+        const archivedResult = await this.runStage(
+            presetId,
+            'archived',
+            archivedEntries,
+            invokeModel
+        )
+        const stats = this.sumStats([activeResult, archivedResult])
+        const detail = [activeResult.detail, archivedResult.detail].join('\n')
+
+        this.debug(
+            [
+                `memory dream execution summary: presetId=${presetId}`,
+                detail
+            ].join('\n')
+        )
+
+        return {
+            entryCount: entries.length,
+            clusterCount:
+                activeResult.clusterCount + archivedResult.clusterCount,
+            ...stats,
+            detail
+        }
+    }
+
+    private async runStage(
+        presetId: string,
+        stage: DreamStage,
+        entries: MemoryEntryRecord[],
+        invokeModel: (prompt: string) => Promise<string>
+    ): Promise<DreamStageResult> {
+        if (entries.length < 2) {
+            return this.createEmptyStageResult(stage, entries.length)
+        }
+
         const clusters = await this.buildClusters(entries)
         this.debug(
             [
                 `memory dream clusters: presetId=${presetId}`,
+                `stage=${stage}`,
                 `entryCount=${entries.length}`,
                 `clusterCount=${clusters.length}`,
                 clusters
@@ -273,26 +362,15 @@ export class LivingMemoryDreamService {
             ].join('\n')
         )
 
-        if (clusters.length === 0) {
-            return this.createResult(entries.length, 0, {
-                detail: `dream scanned ${entries.length} memories, no candidate clusters`
-            })
-        }
-
         const touchedMemoryIds = new Set<string>()
-        const stats: DreamOperationStats = {
-            kept: 0,
-            merged: 0,
-            updated: 0,
-            archived: 0,
-            skipped: 0
-        }
+        const stats = this.createEmptyStats()
 
         for (const cluster of clusters) {
-            const prompt = this.buildPrompt(presetId, cluster)
+            const prompt = this.buildPrompt(presetId, cluster, stage)
             this.debug(
                 [
                     `memory dream llm input: presetId=${presetId}`,
+                    `stage=${stage}`,
                     `clusterId=${cluster.id}`,
                     prompt
                 ].join('\n')
@@ -300,13 +378,13 @@ export class LivingMemoryDreamService {
 
             let output: string
             try {
-                const result = await model.value.invoke(prompt)
-                output = stringifyModelContent(result.content)
+                output = await invokeModel(prompt)
             } catch (error) {
                 stats.skipped++
                 this.debug(
                     [
                         `memory dream cluster skipped: presetId=${presetId}`,
+                        `stage=${stage}`,
                         `clusterId=${cluster.id}`,
                         'reason=invoke-failed',
                         `error=${this.summarizeError(error)}`
@@ -318,6 +396,7 @@ export class LivingMemoryDreamService {
             this.debug(
                 [
                     `memory dream llm output: presetId=${presetId}`,
+                    `stage=${stage}`,
                     `clusterId=${cluster.id}`,
                     output
                 ].join('\n')
@@ -329,6 +408,7 @@ export class LivingMemoryDreamService {
                 this.debug(
                     [
                         `memory dream cluster skipped: presetId=${presetId}`,
+                        `stage=${stage}`,
                         `clusterId=${cluster.id}`,
                         'reason=empty-or-invalid-operations'
                     ].join(' ')
@@ -337,41 +417,103 @@ export class LivingMemoryDreamService {
             }
 
             const result = await this.executeOperations(
+                stage,
                 cluster,
                 operations,
                 touchedMemoryIds
             )
-            stats.kept += result.kept
-            stats.merged += result.merged
-            stats.updated += result.updated
-            stats.archived += result.archived
-            stats.skipped += result.skipped
+            this.addStats(stats, result)
         }
 
-        const detail = [
-            `dream scanned ${entries.length} memories`,
-            `clusters ${clusters.length}`,
-            `kept ${stats.kept}`,
-            `merged ${stats.merged}`,
-            `updated ${stats.updated}`,
-            `archived ${stats.archived}`,
-            `skipped ${stats.skipped}`
-        ].join(', ')
-
-        this.debug(`memory dream execution summary: presetId=${presetId} ${detail}`)
-
         return {
+            stage,
             entryCount: entries.length,
             clusterCount: clusters.length,
             ...stats,
-            detail
+            detail: this.formatStageDetail(
+                stage,
+                entries.length,
+                clusters.length,
+                stats
+            )
         }
+    }
+
+    private createEmptyStats(): DreamOperationStats {
+        return {
+            kept: 0,
+            merged: 0,
+            updated: 0,
+            archived: 0,
+            deleted: 0,
+            skipped: 0
+        }
+    }
+
+    private createEmptyStageResult(
+        stage: DreamStage,
+        entryCount: number
+    ): DreamStageResult {
+        const stats = this.createEmptyStats()
+        return {
+            stage,
+            entryCount,
+            clusterCount: 0,
+            ...stats,
+            detail: this.formatStageDetail(stage, entryCount, 0, stats)
+        }
+    }
+
+    private addStats(target: DreamOperationStats, source: DreamOperationStats) {
+        target.kept += source.kept
+        target.merged += source.merged
+        target.updated += source.updated
+        target.archived += source.archived
+        target.deleted += source.deleted
+        target.skipped += source.skipped
+    }
+
+    private sumStats(items: DreamOperationStats[]) {
+        const stats = this.createEmptyStats()
+        for (const item of items) {
+            this.addStats(stats, item)
+        }
+        return stats
+    }
+
+    private formatStageDetail(
+        stage: DreamStage,
+        entryCount: number,
+        clusterCount: number,
+        stats: DreamOperationStats
+    ) {
+        if (stage === 'active') {
+            return [
+                `dream active: scanned ${entryCount}`,
+                `clusters ${clusterCount}`,
+                `merged ${stats.merged}`,
+                `updated ${stats.updated}`,
+                `archived ${stats.archived}`,
+                `skipped ${stats.skipped}`
+            ].join(', ')
+        }
+
+        return [
+            `dream archived: scanned ${entryCount}`,
+            `clusters ${clusterCount}`,
+            `merged ${stats.merged}`,
+            `updated ${stats.updated}`,
+            `deleted ${stats.deleted}`,
+            `skipped ${stats.skipped}`
+        ].join(', ')
     }
 
     private async buildClusters(
         entries: MemoryEntryRecord[]
     ): Promise<DreamCluster[]> {
-        const cheapGroups = this.limitCandidateGroups(this.buildCheapGroups(entries))
+        const cheapGroups = this.limitCandidateGroups(
+            this.buildCheapGroups(entries)
+        )
         const embeddingGroups = await this.tryBuildEmbeddingGroups(cheapGroups)
         return this.toDreamClusters(embeddingGroups ?? cheapGroups)
     }
@@ -441,7 +583,11 @@ export class LivingMemoryDreamService {
             return
         }
 
-        for (let index = 0; index < sorted.length - 1; index += MAX_CLUSTER_SIZE) {
+        for (
+            let index = 0;
+            index < sorted.length - 1;
+            index += MAX_CLUSTER_SIZE
+        ) {
             this.pushGroup(
                 groups,
                 reason,
@@ -515,7 +661,10 @@ export class LivingMemoryDreamService {
     private async tryBuildEmbeddingGroups(
         groups: CandidateGroup[]
     ): Promise<CandidateGroup[] | null> {
-        if (!isModelConfigured(this.config.embeddingModel) || groups.length === 0) {
+        if (
+            !isModelConfigured(this.config.embeddingModel) ||
+            groups.length === 0
+        ) {
             return null
         }
 
@@ -524,7 +673,9 @@ export class LivingMemoryDreamService {
                 this.config.embeddingModel
             )
             if (embeddings?.value == null) {
-                this.debug('memory dream embedding unavailable, fallback to keyword clusters')
+                this.debug(
+                    'memory dream embedding unavailable, fallback to keyword clusters'
+                )
                 return null
             }
 
@@ -543,7 +694,11 @@ export class LivingMemoryDreamService {
                     group.entries.map((entry) => entry.id)
                 )
 
-                for (let leftIndex = 0; leftIndex < group.entries.length; leftIndex++) {
+                for (
+                    let leftIndex = 0;
+                    leftIndex < group.entries.length;
+                    leftIndex++
+                ) {
                     for (
                         let rightIndex = leftIndex + 1;
                         rightIndex < group.entries.length;
@@ -596,7 +751,11 @@ export class LivingMemoryDreamService {
                 (left, right) =>
                     toTimestamp(right.updatedAt) - toTimestamp(left.updatedAt)
             )
-            for (let index = 0; index < sorted.length - 1; index += MAX_CLUSTER_SIZE) {
+            for (
+                let index = 0;
+                index < sorted.length - 1;
+                index += MAX_CLUSTER_SIZE
+            ) {
                 const entries = sorted.slice(index, index + MAX_CLUSTER_SIZE)
                 const key = entries
                     .map((entry) => entry.id)
@@ -621,21 +780,77 @@ export class LivingMemoryDreamService {
         return clusters
     }
 
-    private buildPrompt(presetId: string, cluster: DreamCluster) {
+    private buildPrompt(
+        presetId: string,
+        cluster: DreamCluster,
+        stage: DreamStage
+    ) {
+        const activeOperationGuide = [
+            '可执行操作：',
+            '- keep：记忆彼此不重复，保持不变。',
+            '- update：某条 active 记忆需要补充信息增量，保持同一条记忆的基本身份。',
+            '- merge：多条 active 记忆描述同一对象、同一状态或同一关系画像时，选择一条作为 target，写成更完整的新正文；其余 source 会被代码层自动改为 archived 历史记录。',
+            '- archive：某条 active 记忆已经过时或与新状态冲突，把它改写为以“历史记录：”开头的历史阶段记录。',
+            '- active 阶段禁止物理删除记忆。'
+        ]
+        const archivedOperationGuide = [
+            '可执行操作：',
+            '- keep：历史记录彼此不重复，保持不变。',
+            '- update：某条 archived 历史记录需要补充归档语义，仍然保持 archived。',
+            '- merge：多条 archived 历史记录描述同一历史阶段、同一对象或同一关系变化时，选择一条作为 target，压缩成更完整的 archived 历史档案；其余 source 会被代码层物理删除。',
+            '- deleteSource：只用于声明 merge 的 source 可以删除；代码层只会删除成功 merge 的 source，独立 deleteSource 会被跳过。',
+            '- archived 阶段禁止恢复为 active，也禁止使用 archive 操作。'
+        ]
+        const activeFormat = [
+            '{"operations":[',
+            '{"action":"keep","memoryIds":["..."],"reason":"..."},',
+            '{"action":"update","memoryId":"...","memory":',
+            '{"type":"fact","content":"...","summary":"...",',
+            '"keywords":["..."],"sentiment":"...","importance":0.5},',
+            '"reason":"..."},',
+            '{"action":"merge","targetMemoryId":"...",',
+            '"sourceMemoryIds":["..."],"memory":',
+            '{"type":"fact","content":"...","summary":"...",',
+            '"keywords":["..."],"sentiment":"...","importance":0.8},',
+            '"reason":"..."},',
+            '{"action":"archive","memoryId":"...","memory":',
+            '{"content":"历史记录：...","summary":"历史记录：...",',
+            '"keywords":["历史记录"],"sentiment":"...",',
+            '"importance":0.3},"reason":"..."}]}'
+        ].join('')
+        const archivedFormat = [
+            '{"operations":[',
+            '{"action":"keep","memoryIds":["..."],"reason":"..."},',
+            '{"action":"update","memoryId":"...","memory":',
+            '{"type":"fact","content":"历史记录：...","summary":"...",',
+            '"keywords":["..."],"sentiment":"...","importance":0.4},',
+            '"reason":"..."},',
+            '{"action":"merge","targetMemoryId":"...",',
+            '"sourceMemoryIds":["..."],"memory":',
+            '{"type":"fact","content":"历史记录：...","summary":"...",',
+            '"keywords":["..."],"sentiment":"...","importance":0.5},',
+            '"reason":"..."},',
+            '{"action":"deleteSource","targetMemoryId":"...",',
+            '"sourceMemoryIds":["..."],',
+            '"reason":"merge source 已压缩进 target"}]}'
+        ].join('')
+
         return [
             '你是长期记忆 Dream 档案员。',
             '你的任务是整理同一 preset 下已有的陪伴型长期记忆，而不是重新创作新记忆。',
             '你只能基于下面给出的记忆条目做判断，禁止引入条目之外的新事实。',
+            stage === 'active'
+                ? '当前阶段只处理 active 记忆：目标是软整理当前可召回记忆，保留关系演化痕迹。'
+                : '当前阶段只处理 archived 历史记录：目标是真正压缩历史档案，减少重复归档。',
             '',
             `presetId=${presetId}`,
+            `stage=${stage}`,
             `clusterId=${cluster.id}`,
             `clusterReason=${cluster.reason}`,
             '',
-            '可执行操作：',
-            '- keep：记忆彼此不重复，保持不变。',
-            '- update：某条记忆需要补充信息增量，保持同一条记忆的基本身份。',
-            '- merge：多条记忆描述同一对象、同一状态或同一关系画像时，选择一条作为 target，写成更完整的新正文；其余 source 会被代码层自动历史化。',
-            '- archive：某条记忆已经过时或与新状态冲突，把它改写为以“历史记录：”开头的历史阶段记录。',
+            ...(stage === 'active'
+                ? activeOperationGuide
+                : archivedOperationGuide),
             '',
             '合并判断依据：',
             '1. 事实一致性：同一对象同一状态的信息应合并。',
@@ -645,7 +860,7 @@ export class LivingMemoryDreamService {
             '',
             '输出必须是可解析 JSON，不要解释，不要 Markdown。',
             '格式：',
-            '{"operations":[{"action":"keep","memoryIds":["..."],"reason":"..."},{"action":"update","memoryId":"...","memory":{"type":"fact","content":"...","summary":"...","keywords":["..."],"sentiment":"...","importance":0.5},"reason":"..."},{"action":"merge","targetMemoryId":"...","sourceMemoryIds":["..."],"memory":{"type":"fact","content":"...","summary":"...","keywords":["..."],"sentiment":"...","importance":0.8},"reason":"..."},{"action":"archive","memoryId":"...","memory":{"content":"历史记录：...","summary":"历史记录：...","keywords":["历史记录"],"sentiment":"...","importance":0.3},"reason":"..."}]}',
+            stage === 'active' ? activeFormat : archivedFormat,
             '',
             '字段要求：',
             '- content 是最终会注入给 preset 的记忆正文，应保持第一人称关系视角。',
@@ -654,6 +869,9 @@ export class LivingMemoryDreamService {
             '- sentiment 是简短自由文本。',
             '- importance 必须是 0 到 1 的数字。',
             '- 所有 memoryId、targetMemoryId、sourceMemoryIds 必须来自下面的 id。',
+            stage === 'archived'
+                ? '- archived 阶段输出的 memory 不能包含 active 状态；即使包含也会被代码层强制保持 archived。'
+                : '- active 阶段的 update / merge target 会被代码层强制保持 active。',
             '',
             '记忆条目：',
             cluster.entries.map(toPromptEntry).join('\n\n---\n\n')
@@ -681,7 +899,8 @@ export class LivingMemoryDreamService {
                     record.action !== 'keep' &&
                     record.action !== 'merge' &&
                     record.action !== 'update' &&
-                    record.action !== 'archive'
+                    record.action !== 'archive' &&
+                    record.action !== 'deleteSource'
                 ) {
                     return null
                 }
@@ -723,26 +942,33 @@ export class LivingMemoryDreamService {
     }
 
     private async executeOperations(
+        stage: DreamStage,
         cluster: DreamCluster,
         operations: DreamOperation[],
         touchedMemoryIds: Set<string>
     ): Promise<DreamOperationStats> {
-        const stats: DreamOperationStats = {
-            kept: 0,
-            merged: 0,
-            updated: 0,
-            archived: 0,
-            skipped: 0
-        }
-        const entryById = new Map(cluster.entries.map((entry) => [entry.id, entry]))
+        const stats = this.createEmptyStats()
+        const entryById = new Map(
+            cluster.entries.map((entry) => [entry.id, entry])
+        )
+        const mergeDeletedSourceIds = new Set<string>()
 
         for (const operation of operations) {
+            if (
+                !this.isActionAllowed(stage, operation.action) ||
+                !this.operationIdsWithinCluster(operation, entryById)
+            ) {
+                stats.skipped++
+                continue
+            }
+
             switch (operation.action) {
                 case 'keep':
                     stats.kept++
                     break
                 case 'update':
                     await this.executeUpdate(
+                        stage,
                         operation,
                         entryById,
                         touchedMemoryIds,
@@ -759,9 +985,18 @@ export class LivingMemoryDreamService {
                     break
                 case 'merge':
                     await this.executeMerge(
+                        stage,
                         operation,
                         entryById,
                         touchedMemoryIds,
+                        stats,
+                        mergeDeletedSourceIds
+                    )
+                    break
+                case 'deleteSource':
+                    this.executeDeleteSource(
+                        operation,
+                        mergeDeletedSourceIds,
                         stats
                     )
                     break
@@ -771,14 +1006,76 @@ export class LivingMemoryDreamService {
         return stats
     }
 
+    private isActionAllowed(stage: DreamStage, action: DreamAction) {
+        if (stage === 'active') {
+            return (
+                action === 'keep' ||
+                action === 'update' ||
+                action === 'merge' ||
+                action === 'archive'
+            )
+        }
+
+        return (
+            action === 'keep' ||
+            action === 'update' ||
+            action === 'merge' ||
+            action === 'deleteSource'
+        )
+    }
+
+    private operationIdsWithinCluster(
+        operation: DreamOperation,
+        entryById: Map<string, MemoryEntryRecord>
+    ) {
+        return this.extractOperationIds(operation).every((id) =>
+            entryById.has(id)
+        )
+    }
+
+    private extractOperationIds(operation: DreamOperation) {
+        return unique(
+            [
+                operation.memoryId,
+                operation.targetMemoryId,
+                ...(Array.isArray(operation.memoryIds)
+                    ? operation.memoryIds
+                    : []),
+                ...(Array.isArray(operation.sourceMemoryIds)
+                    ? operation.sourceMemoryIds
+                    : [])
+            ].filter((id): id is string => typeof id === 'string')
+        )
+    }
+
+    private executeDeleteSource(
+        operation: DreamOperation,
+        mergeDeletedSourceIds: Set<string>,
+        stats: DreamOperationStats
+    ) {
+        const sourceIds = Array.isArray(operation.sourceMemoryIds)
+            ? operation.sourceMemoryIds.filter(
+                  (id): id is string => typeof id === 'string'
+              )
+            : []
+        if (
+            sourceIds.length === 0 ||
+            !sourceIds.every((id) => mergeDeletedSourceIds.has(id))
+        ) {
+            stats.skipped++
+        }
+    }
+
     private async executeUpdate(
+        stage: DreamStage,
         operation: DreamOperation,
         entryById: Map<string, MemoryEntryRecord>,
         touchedMemoryIds: Set<string>,
         stats: DreamOperationStats
     ) {
         const memoryId = operation.memoryId
-        const entry = typeof memoryId === 'string' ? entryById.get(memoryId) : null
+        const entry =
+            typeof memoryId === 'string' ? entryById.get(memoryId) : null
         if (entry == null || touchedMemoryIds.has(entry.id)) {
             stats.skipped++
             return
@@ -790,7 +1087,10 @@ export class LivingMemoryDreamService {
             return
         }
 
-        await this.repository.updateMemory(entry.id, patch)
+        await this.repository.updateMemory(
+            entry.id,
+            this.prepareStagePatch(stage, patch)
+        )
         touchedMemoryIds.add(entry.id)
         stats.updated++
     }
@@ -802,7 +1102,8 @@ export class LivingMemoryDreamService {
         stats: DreamOperationStats
     ) {
         const memoryId = operation.memoryId
-        const entry = typeof memoryId === 'string' ? entryById.get(memoryId) : null
+        const entry =
+            typeof memoryId === 'string' ? entryById.get(memoryId) : null
         if (entry == null || touchedMemoryIds.has(entry.id)) {
             stats.skipped++
             return
@@ -817,10 +1118,12 @@ export class LivingMemoryDreamService {
     }
 
     private async executeMerge(
+        stage: DreamStage,
         operation: DreamOperation,
         entryById: Map<string, MemoryEntryRecord>,
         touchedMemoryIds: Set<string>,
-        stats: DreamOperationStats
+        stats: DreamOperationStats,
+        mergeDeletedSourceIds: Set<string>
     ) {
         const targetId = operation.targetMemoryId
         const target =
@@ -863,7 +1166,10 @@ export class LivingMemoryDreamService {
             ...sources.flatMap((source) => source.keywords)
         ]).slice(0, 12)
 
-        await this.repository.updateMemory(target.id, patch)
+        await this.repository.updateMemory(
+            target.id,
+            this.prepareStagePatch(stage, patch)
+        )
         touchedMemoryIds.add(target.id)
         stats.merged++
 
@@ -872,18 +1178,26 @@ export class LivingMemoryDreamService {
                 continue
             }
 
-            await this.archiveMemory(source, touchedMemoryIds, {
-                status: 'archived',
-                content: `历史记录：这条旧记忆已经被整理进更完整的同类记忆。原内容：${source.content}`,
-                summary: `历史记录：这条旧记忆已被合并整理。${source.summary ?? ''}`,
-                keywords: unique(['历史记录', '已合并', ...source.keywords]).slice(
-                    0,
-                    12
-                ),
-                sentiment: source.sentiment,
-                importance: Math.min(source.importance ?? 0.5, 0.35)
-            })
-            stats.archived++
+            if (stage === 'archived') {
+                await this.repository.deleteMemory(source.id)
+                touchedMemoryIds.add(source.id)
+                mergeDeletedSourceIds.add(source.id)
+                stats.deleted++
+            } else {
+                await this.archiveMemory(source, touchedMemoryIds, {
+                    status: 'archived',
+                    content: `历史记录：这条旧记忆已经被整理进更完整的同类记忆。原内容：${source.content}`,
+                    summary: `历史记录：这条旧记忆已被合并整理。${source.summary ?? ''}`,
+                    keywords: unique([
+                        '历史记录',
+                        '已合并',
+                        ...source.keywords
+                    ]).slice(0, 12),
+                    sentiment: source.sentiment,
+                    importance: Math.min(source.importance ?? 0.5, 0.35)
+                })
+                stats.archived++
+            }
         }
     }
 
@@ -904,9 +1218,35 @@ export class LivingMemoryDreamService {
                 ...(patch.keywords?.length ? patch.keywords : entry.keywords)
             ]).slice(0, 12),
             sentiment: patch.sentiment ?? entry.sentiment,
-            importance: patch.importance ?? Math.min(entry.importance ?? 0.5, 0.35)
+            importance:
+                patch.importance ?? Math.min(entry.importance ?? 0.5, 0.35)
         })
         touchedMemoryIds.add(entry.id)
+    }
+
+    private prepareStagePatch(
+        stage: DreamStage,
+        patch: Partial<MemoryMutationInput>
+    ): Partial<MemoryMutationInput> {
+        if (stage === 'active') {
+            return {
+                ...patch,
+                status: 'active'
+            }
+        }
+
+        return {
+            ...patch,
+            status: 'archived',
+            content:
+                patch.content == null
+                    ? patch.content
+                    : this.ensureHistoryPrefix(patch.content),
+            summary:
+                patch.summary == null
+                    ? patch.summary
+                    : this.ensureHistoryPrefix(patch.summary)
+        }
     }
 
     private sanitizeMemoryPatch(
@@ -937,7 +1277,10 @@ export class LivingMemoryDreamService {
         if (Array.isArray(memory.keywords)) {
             const keywords = unique(
                 memory.keywords
-                    .filter((keyword): keyword is string => typeof keyword === 'string')
+                    .filter(
+                        (keyword): keyword is string =>
+                            typeof keyword === 'string'
+                    )
                     .map(normalizeText)
                     .filter(Boolean)
             ).slice(0, 12)
@@ -984,6 +1327,7 @@ export class LivingMemoryDreamService {
             merged: 0,
             updated: 0,
             archived: 0,
+            deleted: 0,
             skipped: 0,
             skippedReason: options.skippedReason,
             detail: options.detail

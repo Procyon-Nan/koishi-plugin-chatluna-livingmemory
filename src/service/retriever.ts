@@ -63,8 +63,7 @@ export class LivingMemoryRetriever {
         input: string,
         limit: number
     ): Promise<RetrievedMemoryItem[]> {
-        const entries =
-            await this.listActiveEntries(presetId)
+        const entries = await this.listActiveEntries(presetId)
         if (entries.length === 0) {
             return []
         }
@@ -122,17 +121,14 @@ export class LivingMemoryRetriever {
             return []
         }
 
-        const entries =
-            await this.listActiveEntries(presetId)
+        const entries = await this.listActiveEntries(presetId)
         if (entries.length === 0) {
             return []
         }
 
         const queryVector = await embeddings.value.embedQuery(input)
         const retrievalTexts = entries.map((entry) => toRetrievalText(entry))
-        const docs = await embeddings.value.embedDocuments(
-            retrievalTexts
-        )
+        const docs = await embeddings.value.embedDocuments(retrievalTexts)
 
         const embeddingResults = entries
             .map((entry, index) => ({

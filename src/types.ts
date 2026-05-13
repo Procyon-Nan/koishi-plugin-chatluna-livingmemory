@@ -79,6 +79,15 @@ export interface MemorySnapshotRecord {
     createdAt: Date
 }
 
+export interface MemorySnapshotResolvedItem extends MemoryReference {
+    memory: MemoryEntryRecord | null
+    missing: boolean
+}
+
+export interface MemorySnapshotWithResolvedItems extends MemorySnapshotRecord {
+    resolvedItems: MemorySnapshotResolvedItem[]
+}
+
 export interface MemoryJobRecord {
     id: string
     presetId: string
@@ -231,7 +240,7 @@ declare module '@koishijs/plugin-console' {
         ) => Promise<{ success: true }>
         'living-memory/listSnapshots': (
             query: SnapshotListQuery
-        ) => Promise<PageResult<MemorySnapshotRecord>>
+        ) => Promise<PageResult<MemorySnapshotWithResolvedItems>>
         'living-memory/listJobs': (
             query: JobListQuery
         ) => Promise<PageResult<MemoryJobRecord>>

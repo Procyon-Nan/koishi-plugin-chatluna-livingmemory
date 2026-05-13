@@ -5,6 +5,19 @@ const normalizeText = (value: string) => value.trim()
 
 const DEFAULT_IMPORTANCE = 0.5
 
+const formatDateOnly = (value: Date | string | number) => {
+    const date = new Date(value)
+    if (!Number.isFinite(+date)) {
+        return '未知日期'
+    }
+
+    return [
+        date.getFullYear(),
+        String(date.getMonth() + 1).padStart(2, '0'),
+        String(date.getDate()).padStart(2, '0')
+    ].join('-')
+}
+
 const isModelConfigured = (model: string) => {
     return model.length > 0 && model !== '无'
 }
@@ -46,6 +59,7 @@ export interface LivingMemoryExtractionTrace {
 export interface LivingMemoryExtractionContext {
     conversationId: string
     presetId: string
+    currentDate?: string
     presetPrompt?: string | null
 }
 
@@ -165,12 +179,22 @@ export class LivingMemoryExtractor {
             .filter((item): item is NonNullable<typeof item> => item != null)
     }
 
-    private buildPrompt(input: string, context?: LivingMemoryExtractionContext) {
+    private buildPrompt(
+        input: string,
+        context?: LivingMemoryExtractionContext
+    ) {
         const assistantLabel =
             context == null ? '当前 presetId 对应角色名' : context.presetId
+        const currentDate = context?.currentDate ?? formatDateOnly(new Date())
+        const outputFormat = [
+            '{"type":"identity|preference|fact|plan|context|other",',
+            '"content":"...","keywords":["..."],"summary":"...",',
+            '"sentiment":"...","importance":0.5}'
+        ].join('')
         const taskPrompt = [
             '# 任务目标：',
             '你要以第一人称回顾并总结历史对话,生成符合你人格特色的记忆',
+            `当前日期：${currentDate}`,
             '',
             '【历史对话】',
             '"""',
@@ -198,7 +222,13 @@ export class LivingMemoryExtractor {
             '不推荐的summary示例:"Procyon这孩子居然觉得眼周充血是常事,真是无可救药..."',
             '',
             '【时间处理要求】',
-            '将对话中出现的相对时间（如"今天"、"明天"、"昨天"、"下周"、"上个月"等）转换为具体日期后再写入记忆。',
+            `当前对话发生日期为 ${currentDate}。`,
+            '将对话中出现的相对时间（如"今天"、"刚才"、"现在"、"明天"、"昨天"、"下周"、"上个月"等）转换为具体日期后再写入记忆。',
+            '如果记忆涉及短期状态、身体状态、情绪状态、临时计划、当天事件或当前正在发生的事,content 中必须写明具体日期。',
+            '不要把短期状态写成永久事实；必须表达为当时状态,不暗示现在仍然如此。',
+            '例如不要写:"Procyon一天没睡觉。"',
+            `应写:"Procyon说自己在${currentDate}一天没睡觉"`,
+            '对稳定身份、长期偏好、长期关系等记忆,可以不在 content 开头强行写日期,但如果对话中出现了明确时间,仍应保留具体日期。',
             '',
             '【消息格式说明】',
             '对话历史中的每条消息都包含以下信息:',
@@ -216,7 +246,7 @@ export class LivingMemoryExtractor {
             '',
             '# 输出格式：',
             '你的输出必须是 JSON 数组，确保JSON格式正确可解析',
-            '每个元素格式为 {"type":"identity|preference|fact|plan|context|other","content":"...","keywords":["..."],"summary":"...","sentiment":"...","importance":0.5}。',
+            `每个元素格式为 ${outputFormat}。`,
             'content 应写成稳定、可复用、第一人称的长期记忆正文,不要写成主题标签或关键词列表。',
             'summary 应写成检索友好的短摘要,用于帮助之后召回这条记忆。',
             'keywords 应写成短词数组,用于补充实体、状态、动作、关系和事件锚点。',
