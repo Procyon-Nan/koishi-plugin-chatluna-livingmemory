@@ -64,7 +64,7 @@ export class LivingMemoryRetriever {
         limit: number
     ): Promise<RetrievedMemoryItem[]> {
         const entries =
-            await this.recallRepository.listEntriesByPreset(presetId)
+            await this.listActiveEntries(presetId)
         if (entries.length === 0) {
             return []
         }
@@ -123,7 +123,7 @@ export class LivingMemoryRetriever {
         }
 
         const entries =
-            await this.recallRepository.listEntriesByPreset(presetId)
+            await this.listActiveEntries(presetId)
         if (entries.length === 0) {
             return []
         }
@@ -179,6 +179,12 @@ export class LivingMemoryRetriever {
             content: candidates[result.index].content,
             score: result.relevanceScore
         }))
+    }
+
+    private async listActiveEntries(presetId: string) {
+        const entries =
+            await this.recallRepository.listEntriesByPreset(presetId)
+        return entries.filter((entry) => entry.status === 'active')
     }
 
     private cosineSimilarity(left: number[], right: number[]) {

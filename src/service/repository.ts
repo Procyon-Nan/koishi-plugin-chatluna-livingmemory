@@ -5,6 +5,7 @@ import type {
     ExtractionRepository,
     JobRepository,
     MemoryEntryRecord,
+    MemoryEntryStatus,
     MemoryJobKind,
     MemoryJobRecord,
     MemoryMutationInput,
@@ -50,10 +51,17 @@ const normalizeImportance = (
     return Math.min(1, Math.max(0, normalized))
 }
 
+const normalizeStatus = (
+    status: MemoryEntryStatus | string | null | undefined
+): MemoryEntryStatus => {
+    return status === 'archived' ? 'archived' : 'active'
+}
+
 const normalizeEntryRecord = (
     record: MemoryEntryRecord
 ): MemoryEntryRecord => ({
     ...record,
+    status: normalizeStatus(record.status),
     sentiment: normalizeSentiment(record.sentiment),
     importance: normalizeImportance(record.importance)
 })
@@ -74,6 +82,11 @@ export class LivingMemoryRepository
                 id: 'string(64)',
                 presetId: 'string(255)',
                 type: 'string(32)',
+                status: {
+                    type: 'string',
+                    length: 16,
+                    initial: 'active'
+                },
                 content: 'text',
                 keywords: 'json',
                 summary: 'text',
@@ -312,6 +325,7 @@ export class LivingMemoryRepository
                 id: randomUUID(),
                 presetId: scope.presetId,
                 type: item.type,
+                status: normalizeStatus(item.status),
                 content: item.content,
                 keywords: item.keywords?.length
                     ? item.keywords.slice(0, 12)
@@ -337,6 +351,7 @@ export class LivingMemoryRepository
             id: randomUUID(),
             presetId: scope.presetId,
             type: input.type,
+            status: normalizeStatus(input.status),
             content: input.content,
             keywords: input.keywords?.length
                 ? input.keywords.slice(0, 12)
@@ -366,6 +381,10 @@ export class LivingMemoryRepository
             { id },
             {
                 type: patch.type ?? current.type,
+                status:
+                    patch.status === undefined
+                        ? normalizeStatus(current.status)
+                        : normalizeStatus(patch.status),
                 content,
                 keywords: patch.keywords?.length
                     ? patch.keywords.slice(0, 12)

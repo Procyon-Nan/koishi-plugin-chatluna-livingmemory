@@ -45,6 +45,12 @@
                         />
                     </el-select>
 
+                    <el-select v-model="memoryStatus" placeholder="记忆状态" @change="refreshAll">
+                        <el-option label="活跃记忆" value="active" />
+                        <el-option label="历史记录" value="archived" />
+                        <el-option label="全部状态" value="all" />
+                    </el-select>
+
                     <div class="toolbar-actions">
                         <el-button :loading="loading" type="primary" @click="refreshAll">
                             刷新
@@ -110,6 +116,17 @@
                 <el-table :data="memories" border v-loading="loading" max-height="400">
                     <el-table-column prop="id" label="ID" min-width="180" />
                     <el-table-column prop="type" label="类型" width="120" />
+                    <el-table-column label="状态" width="100">
+                        <template #default="scope">
+                            <el-tag
+                                :type="scope.row.status === 'archived' ? 'info' : 'success'"
+                                size="small"
+                                effect="plain"
+                            >
+                                {{ scope.row.status === 'archived' ? '历史' : '活跃' }}
+                            </el-tag>
+                        </template>
+                    </el-table-column>
                     <el-table-column prop="content" label="内容" min-width="260" show-overflow-tooltip />
                     <el-table-column prop="summary" label="摘要" min-width="200" show-overflow-tooltip />
                     <el-table-column prop="sentiment" label="情绪" width="120" show-overflow-tooltip />
@@ -216,6 +233,13 @@
                 </el-select>
             </el-form-item>
 
+            <el-form-item label="状态">
+                <el-select v-model="form.status" placeholder="请选择状态">
+                    <el-option label="活跃记忆" value="active" />
+                    <el-option label="历史记录" value="archived" />
+                </el-select>
+            </el-form-item>
+
             <el-form-item label="内容">
                 <el-input
                     v-model="form.content"
@@ -278,7 +302,13 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as api from './api'
-import type { MemoryEntryRecord, MemorySnapshotRecord, MemoryJobRecord, MemoryEntryType } from './types'
+import type {
+    MemoryEntryRecord,
+    MemorySnapshotRecord,
+    MemoryJobRecord,
+    MemoryEntryType,
+    MemoryEntryStatus
+} from './types'
 import { memoryEntryTypes } from './types'
 
 const memoryTypes = memoryEntryTypes
@@ -319,6 +349,7 @@ const presetId = ref('')
 const presetIds = ref<string[]>([])
 const memoryKeyword = ref('')
 const memoryType = ref<MemoryEntryType | ''>('')
+const memoryStatus = ref<MemoryEntryStatus | 'all'>('active')
 
 const memories = ref<MemoryEntryRecord[]>([])
 const snapshots = ref<MemorySnapshotRecord[]>([])
@@ -326,6 +357,7 @@ const jobs = ref<MemoryJobRecord[]>([])
 
 const form = reactive({
     type: 'fact' as MemoryEntryType,
+    status: 'active' as MemoryEntryStatus,
     content: '',
     keywords: [] as string[],
     summary: '',
@@ -351,6 +383,7 @@ const normalizePreset = () => {
 
 const resetForm = () => {
     form.type = 'fact'
+    form.status = 'active'
     form.content = ''
     form.keywords = []
     form.summary = ''
@@ -388,6 +421,7 @@ const refreshAll = async () => {
                 presetId: presetId.value,
                 keyword: memoryKeyword.value.trim() || undefined,
                 type: memoryType.value || undefined,
+                status: memoryStatus.value,
                 page: 1,
                 pageSize: 50
             }),
@@ -423,6 +457,7 @@ const openCreateDialog = () => {
 const openEditDialog = (memory: MemoryEntryRecord) => {
     editingMemoryId.value = memory.id
     form.type = memory.type
+    form.status = memory.status
     form.content = memory.content
     form.keywords = [...memory.keywords]
     form.summary = memory.summary ?? ''
@@ -445,6 +480,7 @@ const submitMemory = async () => {
 
     const mutation = {
         type: form.type,
+        status: form.status,
         content,
         keywords: form.keywords,
         summary: form.summary.trim() || null,

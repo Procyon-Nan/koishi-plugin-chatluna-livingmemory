@@ -28,7 +28,10 @@ export const memoryJobStatuses = [
     'failed'
 ] as const
 
+export const memoryEntryStatuses = ['active', 'archived'] as const
+
 export type MemoryEntryType = (typeof memoryEntryTypes)[number]
+export type MemoryEntryStatus = (typeof memoryEntryStatuses)[number]
 export type MemoryRecallStrategy = (typeof memoryRecallStrategies)[number]
 export type MemoryJobKind = (typeof memoryJobKinds)[number]
 export type MemoryJobStatus = (typeof memoryJobStatuses)[number]
@@ -54,6 +57,7 @@ export interface MemoryEntryRecord {
     id: string
     presetId: string
     type: MemoryEntryType
+    status: MemoryEntryStatus
     content: string
     keywords: string[]
     summary: string | null
@@ -92,6 +96,7 @@ export interface MemoryJobRecord {
 
 export interface MemoryMutationInput {
     type: MemoryEntryType
+    status?: MemoryEntryStatus
     content: string
     keywords?: string[]
     summary?: string | null
@@ -101,6 +106,7 @@ export interface MemoryMutationInput {
 
 export interface ExtractedMemoryItem {
     type: MemoryEntryType
+    status?: MemoryEntryStatus
     content: string
     keywords?: string[]
     summary?: string | null
@@ -122,6 +128,7 @@ export interface ExtractionPayload {
 export interface LivingMemoryConfig {
     promptVariable: '{living_memory}'
     extractModel: string
+    dreamModel: string
     enableRecallQueryRewrite: boolean
     recallRewriteRounds: number
     recallRewriteModel: string

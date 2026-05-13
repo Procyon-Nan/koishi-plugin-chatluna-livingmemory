@@ -1,5 +1,6 @@
 import type {
     MemoryEntryRecord,
+    MemoryEntryStatus,
     MemoryJobRecord,
     MemoryJobStatus,
     MemorySnapshotRecord
@@ -13,6 +14,7 @@ export interface PageRequest {
 export interface MemoryListQuery extends PageRequest {
     presetId: string
     type?: MemoryEntryRecord['type']
+    status?: MemoryEntryStatus | 'all'
     keyword?: string
 }
 
@@ -71,6 +73,14 @@ export const filterMemoryList = (
 
     const filtered = items.filter((item) => {
         if (query.type != null && item.type !== query.type) {
+            return false
+        }
+
+        if (
+            query.status != null &&
+            query.status !== 'all' &&
+            item.status !== query.status
+        ) {
             return false
         }
 

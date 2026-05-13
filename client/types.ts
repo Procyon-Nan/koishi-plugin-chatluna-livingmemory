@@ -13,10 +13,15 @@ export const memoryEntryTypes = [
 
 export type MemoryEntryType = (typeof memoryEntryTypes)[number]
 
+export const memoryEntryStatuses = ['active', 'archived'] as const
+
+export type MemoryEntryStatus = (typeof memoryEntryStatuses)[number]
+
 export interface MemoryEntryRecord {
     id: string
     presetId: string
     type: MemoryEntryType
+    status: MemoryEntryStatus
     content: string
     keywords: string[]
     summary: string | null
@@ -48,6 +53,7 @@ export interface MemoryJobRecord {
 
 export interface MemoryMutationInput {
     type: MemoryEntryType
+    status?: MemoryEntryStatus
     content: string
     keywords?: string[]
     summary?: string | null
@@ -69,6 +75,7 @@ declare module '@koishijs/client' {
             query: {
                 presetId: string
                 type?: MemoryEntryType
+                status?: MemoryEntryStatus | 'all'
                 keyword?: string
                 page?: number
                 pageSize?: number

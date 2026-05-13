@@ -152,6 +152,7 @@ export type { MemoryEntryRecord } from '../src/types'
 export interface MemoryEntryRecord {
     id: string
     type: string
+    status: 'active' | 'archived'
     content: string
     sentiment: string | null
     importance: number | null

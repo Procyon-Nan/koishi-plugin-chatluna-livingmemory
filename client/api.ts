@@ -1,6 +1,7 @@
 import { send } from '@koishijs/client'
 import type {
     MemoryEntryType,
+    MemoryEntryStatus,
     MemoryEntryRecord,
     MemorySnapshotRecord,
     MemoryJobRecord,
@@ -16,6 +17,7 @@ export interface MemoryListParams {
     presetId: string
     keyword?: string
     type?: MemoryEntryType
+    status?: MemoryEntryStatus | 'all'
     page?: number
     pageSize?: number
 }

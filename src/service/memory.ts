@@ -1,6 +1,7 @@
 import { BaseMessage, HumanMessage } from '@langchain/core/messages'
 import { Context, Logger, Service, Time } from 'koishi'
 import type { PresetTemplate } from 'koishi-plugin-chatluna/llm-core/prompt'
+import { LivingMemoryDreamService } from './dream'
 import { LivingMemoryExtractor } from './extractor'
 import { LivingMemoryMessageFormatter } from './message_formatter'
 import { LivingMemoryRecallQueryBuilder } from './recall_query'
@@ -103,11 +104,13 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     private readonly snapshotVariableByPreset = new Map<string, string>()
     private readonly extractionLockByConversation = new Set<string>()
     private readonly recallLockByConversation = new Set<string>()
+    private readonly dreamLockByPreset = new Set<string>()
     private readonly repository: LivingMemoryRepository
     private readonly retriever: LivingMemoryRetriever
     private readonly extractor: LivingMemoryExtractor
     private readonly formatter: LivingMemoryMessageFormatter
     private readonly recallQuery: LivingMemoryRecallQueryBuilder
+    private readonly dream: LivingMemoryDreamService
 
     constructor(
         public readonly ctx: Context,
@@ -120,6 +123,12 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         this.extractor = new LivingMemoryExtractor(ctx, config.extractModel)
         this.formatter = new LivingMemoryMessageFormatter()
         this.recallQuery = new LivingMemoryRecallQueryBuilder(ctx, config)
+        this.dream = new LivingMemoryDreamService(
+            ctx,
+            config,
+            this.repository,
+            this.debug.bind(this)
+        )
         this.repository.defineTables()
         this.registerPromptFunction()
         ctx.setInterval(() => {
@@ -639,7 +648,8 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
                 records.find((record) => record.id === item.memoryId)
             )
             .filter(
-                (record): record is NonNullable<typeof record> => record != null
+                (record): record is NonNullable<typeof record> =>
+                    record != null && record.status === 'active'
             )
 
         return ordered
@@ -690,11 +700,38 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         const scope = this.createScope(`dream:${presetId}`, presetId)
         const job = await this.repository.createJob(scope, 'dream', presetId)
 
+        if (this.dreamLockByPreset.has(presetId)) {
+            await this.markJobCompleted(job.id, 'dream skipped: preset locked')
+            return
+        }
+
+        this.dreamLockByPreset.add(presetId)
+        this.runDreamJob(scope, job.id)
+            .catch((error) => {
+                this.serviceLogger.warn(error)
+            })
+            .finally(() => {
+                this.dreamLockByPreset.delete(presetId)
+            })
+    }
+
+    private async runDreamJob(scope: MemoryScope, jobId: string) {
         try {
-            await this.markJobRunning(job.id)
-            await this.markJobCompleted(job.id, 'dream placeholder completed')
+            await this.markJobRunning(jobId)
+            const result = await this.dream.run(scope.presetId)
+            this.debug(
+                [
+                    `memory dream completed: jobId=${jobId}`,
+                    `presetId=${scope.presetId}`,
+                    result.detail
+                ].join(' ')
+            )
+            if (result.merged + result.updated + result.archived > 0) {
+                await this.hydratePromptVariable(scope.presetId)
+            }
+            await this.markJobCompleted(jobId, result.detail)
         } catch (error) {
-            await this.markJobFailed(job.id, error)
+            await this.markJobFailed(jobId, error)
             throw error
         }
     }
