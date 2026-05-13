@@ -28,6 +28,36 @@ const defaultKeywords = (content: string) => {
     ).slice(0, 12)
 }
 
+const normalizeSentiment = (sentiment: string | null | undefined) => {
+    const normalized = sentiment?.trim()
+    return normalized?.length ? normalized : null
+}
+
+const normalizeImportance = (
+    importance: number | string | null | undefined
+) => {
+    const normalized =
+        typeof importance === 'number'
+            ? importance
+            : typeof importance === 'string' && importance.trim().length > 0
+              ? Number(importance.trim())
+              : Number.NaN
+
+    if (!Number.isFinite(normalized)) {
+        return null
+    }
+
+    return Math.min(1, Math.max(0, normalized))
+}
+
+const normalizeEntryRecord = (
+    record: MemoryEntryRecord
+): MemoryEntryRecord => ({
+    ...record,
+    sentiment: normalizeSentiment(record.sentiment),
+    importance: normalizeImportance(record.importance)
+})
+
 export class LivingMemoryRepository
     implements
         RecallRepository,
@@ -47,6 +77,16 @@ export class LivingMemoryRepository
                 content: 'text',
                 keywords: 'json',
                 summary: 'text',
+                sentiment: {
+                    type: 'text',
+                    nullable: true,
+                    initial: null
+                },
+                importance: {
+                    type: 'double',
+                    nullable: true,
+                    initial: null
+                },
                 sourceConversationId: 'string(255)',
                 sourceMessages: 'json',
                 createdAt: 'timestamp',
@@ -99,17 +139,21 @@ export class LivingMemoryRepository
     }
 
     async listEntriesByPreset(presetId: string): Promise<MemoryEntryRecord[]> {
-        return await this.ctx.database.get('living_memory_entry', {
+        const entries = await this.ctx.database.get('living_memory_entry', {
             presetId
         })
+
+        return entries.map(normalizeEntryRecord)
     }
 
     async getEntryById(id: string): Promise<MemoryEntryRecord | undefined> {
-        return (
+        const record = (
             await this.ctx.database.get('living_memory_entry', {
                 id
             })
         )[0]
+
+        return record == null ? undefined : normalizeEntryRecord(record)
     }
 
     async getEntriesByIds(ids: string[]): Promise<MemoryEntryRecord[]> {
@@ -117,11 +161,13 @@ export class LivingMemoryRepository
             return []
         }
 
-        return await this.ctx.database.get('living_memory_entry', {
+        const entries = await this.ctx.database.get('living_memory_entry', {
             id: {
                 $in: ids
             }
         })
+
+        return entries.map(normalizeEntryRecord)
     }
 
     async getLatestSnapshotByPreset(presetId: string) {
@@ -271,6 +317,8 @@ export class LivingMemoryRepository
                     ? item.keywords.slice(0, 12)
                     : defaultKeywords(item.content),
                 summary: item.summary ?? null,
+                sentiment: normalizeSentiment(item.sentiment),
+                importance: normalizeImportance(item.importance),
                 sourceConversationId: scope.conversationId,
                 sourceMessages,
                 createdAt: now,
@@ -294,6 +342,8 @@ export class LivingMemoryRepository
                 ? input.keywords.slice(0, 12)
                 : defaultKeywords(input.content),
             summary: input.summary ?? null,
+            sentiment: normalizeSentiment(input.sentiment),
+            importance: normalizeImportance(input.importance),
             sourceConversationId: scope.conversationId,
             sourceMessages,
             createdAt: now,
@@ -324,8 +374,16 @@ export class LivingMemoryRepository
                       : current.keywords,
                 summary:
                     patch.summary === undefined
-                        ? current.summary
+                        ? (current.summary ?? null)
                         : patch.summary,
+                sentiment:
+                    patch.sentiment === undefined
+                        ? normalizeSentiment(current.sentiment)
+                        : normalizeSentiment(patch.sentiment),
+                importance:
+                    patch.importance === undefined
+                        ? normalizeImportance(current.importance)
+                        : normalizeImportance(patch.importance),
                 updatedAt: new Date()
             }
         )

@@ -20,6 +20,8 @@ export interface MemoryEntryRecord {
     content: string
     keywords: string[]
     summary: string | null
+    sentiment: string | null
+    importance: number | null
     sourceConversationId: string | null
     createdAt: Date
     updatedAt: Date
@@ -49,6 +51,8 @@ export interface MemoryMutationInput {
     content: string
     keywords?: string[]
     summary?: string | null
+    sentiment?: string | null
+    importance?: number | null
 }
 
 export interface PageResult<T> {

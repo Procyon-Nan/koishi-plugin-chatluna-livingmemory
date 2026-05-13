@@ -57,6 +57,8 @@ export interface MemoryEntryRecord {
     content: string
     keywords: string[]
     summary: string | null
+    sentiment: string | null
+    importance: number | null
     sourceConversationId: string | null
     sourceMessages: MemorySourceMessage[]
     createdAt: Date
@@ -93,6 +95,8 @@ export interface MemoryMutationInput {
     content: string
     keywords?: string[]
     summary?: string | null
+    sentiment?: string | null
+    importance?: number | null
 }
 
 export interface ExtractedMemoryItem {
@@ -100,6 +104,8 @@ export interface ExtractedMemoryItem {
     content: string
     keywords?: string[]
     summary?: string | null
+    sentiment?: string | null
+    importance?: number | null
 }
 
 export interface RetrievedMemoryItem {

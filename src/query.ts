@@ -81,6 +81,7 @@ export const filterMemoryList = (
         return (
             item.content.toLowerCase().includes(keyword) ||
             item.summary?.toLowerCase().includes(keyword) === true ||
+            item.sentiment?.toLowerCase().includes(keyword) === true ||
             item.keywords.some((entry) => entry.toLowerCase().includes(keyword))
         )
     })

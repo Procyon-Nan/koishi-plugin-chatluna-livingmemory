@@ -3,6 +3,8 @@ import type { ExtractedMemoryItem } from '../types'
 
 const normalizeText = (value: string) => value.trim()
 
+const DEFAULT_IMPORTANCE = 0.5
+
 const isModelConfigured = (model: string) => {
     return model.length > 0 && model !== '无'
 }
@@ -13,6 +15,21 @@ const stringifyModelContent = (content: unknown) => {
     }
 
     return JSON.stringify(content) ?? ''
+}
+
+const parseImportance = (value: unknown) => {
+    const importance =
+        typeof value === 'number'
+            ? value
+            : typeof value === 'string' && value.trim().length > 0
+              ? Number(value.trim())
+              : Number.NaN
+
+    if (!Number.isFinite(importance)) {
+        return DEFAULT_IMPORTANCE
+    }
+
+    return Math.min(1, Math.max(0, importance))
 }
 
 export type LivingMemoryExtractionSkipReason =
@@ -121,6 +138,10 @@ export class LivingMemoryExtractor {
                     typeof record.summary === 'string'
                         ? normalizeText(record.summary)
                         : null
+                const sentiment =
+                    typeof record.sentiment === 'string'
+                        ? normalizeText(record.sentiment)
+                        : null
                 const keywords = Array.isArray(record.keywords)
                     ? record.keywords.filter(
                           (keyword): keyword is string =>
@@ -136,7 +157,9 @@ export class LivingMemoryExtractor {
                     type: this.normalizeMemoryType(type),
                     content,
                     keywords,
-                    summary: summary?.length ? summary : null
+                    summary: summary?.length ? summary : null,
+                    sentiment: sentiment?.length ? sentiment : null,
+                    importance: parseImportance(record.importance)
                 }
             })
             .filter((item): item is NonNullable<typeof item> => item != null)
@@ -166,8 +189,12 @@ export class LivingMemoryExtractor {
             'content 是最终注入给你的长期记忆正文,应体现你的人格特点、语气、关注点和关系视角，口语化描述，带有人性化特征',
             'summary 是用于检索召回的压缩语义摘要,应简短、清晰、准确,避免颜文字、口癖、过度角色语气和长句。',
             'keywords 是用于检索的关键词锚点,应保留具体昵称、状态、动作、关系和事件关键词。',
+            'sentiment 是这条记忆的简短情绪色彩,可以自由使用类似"担心"、"亲近"、"愉快"、"疲惫"、"中性"这样的词。',
+            'importance 是 0 到 1 之间的数字,表示这条记忆对长期陪伴连续性的价值,越高越应该在未来 Dream 整理时保留或优先考虑。',
             '好的content示例:"Procyon眼周充血时仍不太有危机感,我需要更主动地提醒他休息,并引导他按摩太阳穴和眉心放松眼睛。"',
             '好的summary示例:"Procyon眼周充血,需要我提醒休息并引导眼部放松"',
+            '好的sentiment示例:"担心"',
+            '好的importance示例:0.82',
             '不推荐的summary示例:"Procyon这孩子居然觉得眼周充血是常事,真是无可救药..."',
             '',
             '【时间处理要求】',
@@ -182,15 +209,19 @@ export class LivingMemoryExtractor {
             '- 如果你参与了对话,务必在content中体现你的回复内容和作用',
             '- content必须使用第一人称视角,其中"我"指当前preset角色,自然描述你与具体昵称对象之间的互动、关系、事实或偏好',
             '- summary必须服务于检索召回,不要写成角色台词、吐槽、抒情句或人格化短文',
+            '- sentiment必须简短,只描述情绪色彩,不要写成长句',
+            '- importance必须是数字,范围为0到1;日常闲聊但有关系连续性价值可给0.4到0.7,明确身份、偏好、关系、健康、计划等长期信息可给0.7到1',
             '- 必须使用具体的昵称:在content、summary和keywords中,必须使用消息前缀中的具体昵称(如"Procyon"),绝对不能用"用户"、"对方"等泛化词汇替代',
-            '- 记忆内容应符合字段职责:content用于长期注入,summary用于辅助检索,keywords用于精确锚点',
+            '- 记忆内容应符合字段职责:content用于长期注入,summary用于辅助检索,keywords用于精确锚点,sentiment用于记录情绪色彩,importance用于后续Dream整理权重',
             '',
             '# 输出格式：',
             '你的输出必须是 JSON 数组，确保JSON格式正确可解析',
-            '每个元素格式为 {"type":"identity|preference|fact|plan|context|other","content":"...","keywords":["..."],"summary":"..."}。',
+            '每个元素格式为 {"type":"identity|preference|fact|plan|context|other","content":"...","keywords":["..."],"summary":"...","sentiment":"...","importance":0.5}。',
             'content 应写成稳定、可复用、第一人称的长期记忆正文,不要写成主题标签或关键词列表。',
             'summary 应写成检索友好的短摘要,用于帮助之后召回这条记忆。',
             'keywords 应写成短词数组,用于补充实体、状态、动作、关系和事件锚点。',
+            'sentiment 应写成简短自由文本,没有明显情绪时可写"中性"。',
+            'importance 应写成 0 到 1 之间的数字。',
             '只保留高价值、稳定、可复用的信息。',
             '如果没有可提取内容，输出 []。'
         ].join('\n')

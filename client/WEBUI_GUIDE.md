@@ -153,6 +153,8 @@ export interface MemoryEntryRecord {
     id: string
     type: string
     content: string
+    sentiment: string | null
+    importance: number | null
     // ...
 }
 ```

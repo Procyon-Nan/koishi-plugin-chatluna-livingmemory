@@ -364,6 +364,7 @@ export class LivingMemoryRecallQueryBuilder {
             '',
             '错误示例：',
             'Procyon的偏好、与某人的关系及近期互动状态',
+            `${scope.presetId}觉得心情很不错。`,
             '',
             '最近对话：',
             '"""',

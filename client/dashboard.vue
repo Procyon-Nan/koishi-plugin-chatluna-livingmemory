@@ -112,6 +112,10 @@
                     <el-table-column prop="type" label="类型" width="120" />
                     <el-table-column prop="content" label="内容" min-width="260" show-overflow-tooltip />
                     <el-table-column prop="summary" label="摘要" min-width="200" show-overflow-tooltip />
+                    <el-table-column prop="sentiment" label="情绪" width="120" show-overflow-tooltip />
+                    <el-table-column label="重要度" width="100">
+                        <template #default="scope">{{ formatImportance(scope.row.importance) }}</template>
+                    </el-table-column>
                     <el-table-column label="关键词" min-width="200">
                         <template #default="scope">
                             <el-space wrap>
@@ -230,6 +234,25 @@
                 />
             </el-form-item>
 
+            <el-form-item label="情绪">
+                <el-input
+                    v-model="form.sentiment"
+                    placeholder="可选，例如：担心、亲近、愉快、中性"
+                />
+            </el-form-item>
+
+            <el-form-item label="重要度">
+                <el-input-number
+                    v-model="form.importance"
+                    :min="0"
+                    :max="1"
+                    :step="0.05"
+                    :precision="2"
+                    controls-position="right"
+                    placeholder="可选，0 到 1"
+                />
+            </el-form-item>
+
             <el-form-item label="关键词">
                 <el-select
                     v-model="form.keywords"
@@ -272,6 +295,19 @@ const formatTime = (value: string | Date | null | undefined): string => {
     return `${Y}-${M}-${D} ${h}:${m}`
 }
 
+const formatImportance = (value: number | null | undefined): string => {
+    if (value == null) return ''
+    return Number.isFinite(value) ? value.toFixed(2) : ''
+}
+
+const normalizeImportanceInput = (value: number | null): number | null => {
+    if (value == null || !Number.isFinite(value)) {
+        return null
+    }
+
+    return Math.min(1, Math.max(0, value))
+}
+
 const loading = ref(false)
 const dreamPending = ref(false)
 const clearPending = ref(false)
@@ -292,7 +328,9 @@ const form = reactive({
     type: 'fact' as MemoryEntryType,
     content: '',
     keywords: [] as string[],
-    summary: ''
+    summary: '',
+    sentiment: '',
+    importance: null as number | null
 })
 
 const dialogTitle = computed(() =>
@@ -316,6 +354,8 @@ const resetForm = () => {
     form.content = ''
     form.keywords = []
     form.summary = ''
+    form.sentiment = ''
+    form.importance = null
     editingMemoryId.value = null
 }
 
@@ -386,6 +426,8 @@ const openEditDialog = (memory: MemoryEntryRecord) => {
     form.content = memory.content
     form.keywords = [...memory.keywords]
     form.summary = memory.summary ?? ''
+    form.sentiment = memory.sentiment ?? ''
+    form.importance = memory.importance ?? null
     dialogVisible.value = true
 }
 
@@ -405,7 +447,9 @@ const submitMemory = async () => {
         type: form.type,
         content,
         keywords: form.keywords,
-        summary: form.summary.trim() || null
+        summary: form.summary.trim() || null,
+        sentiment: form.sentiment.trim() || null,
+        importance: normalizeImportanceInput(form.importance)
     }
 
     try {
