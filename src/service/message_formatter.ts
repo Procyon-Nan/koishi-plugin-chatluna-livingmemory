@@ -12,59 +12,112 @@ interface FormattedMessage {
     transcriptLines: string[]
 }
 
-const prefixedUserLinePattern = /^\[[^\]]+\]说:\s*(.*)$/s
+export const livingMemoryRawContentKey = 'living_memory_raw_content'
 
-const toTextParts = (message: BaseMessage) => {
+const legacyBracketSpeakerPattern = /^\[[^\]]+\]\s*说\s*[:：]\s*/u
+const legacyBareSpeakerPattern =
+    /^[^\s:：\[\]，。！？,.!?]{2,64}\s*说\s*[:：]\s*/u
+
+const toStringValue = (value: unknown) => {
+    return typeof value === 'string' && value.trim().length > 0
+        ? value.trim()
+        : null
+}
+
+const stripLegacySpeakerPrefix = (line: string) => {
+    return line
+        .replace(legacyBracketSpeakerPattern, '')
+        .replace(legacyBareSpeakerPattern, '')
+        .trim()
+}
+
+const resolveLivingMemoryTextParts = (message: BaseMessage) => {
+    const livingMemoryRawContent = toStringValue(
+        message.additional_kwargs?.[livingMemoryRawContentKey]
+    )
+    if (livingMemoryRawContent != null) {
+        return {
+            parts: [livingMemoryRawContent],
+            stripSpeakerPrefix: false
+        }
+    }
+
+    const rawContent = toStringValue(message.additional_kwargs?.raw_content)
+    if (rawContent != null) {
+        return {
+            parts: [rawContent],
+            stripSpeakerPrefix: false
+        }
+    }
+
     if (typeof message.content === 'string') {
-        return [message.content]
+        return {
+            parts: [message.content],
+            stripSpeakerPrefix: true
+        }
     }
 
     if (!Array.isArray(message.content)) {
-        return []
+        return {
+            parts: [],
+            stripSpeakerPrefix: false
+        }
     }
 
-    return message.content
-        .map((part) => {
-            if (
-                part != null &&
-                typeof part === 'object' &&
-                (part as Record<string, unknown>).type === 'text' &&
-                typeof (part as Record<string, unknown>).text === 'string'
-            ) {
-                return (part as { text: string }).text
-            }
+    return {
+        parts: message.content
+            .map((part) => {
+                if (
+                    part != null &&
+                    typeof part === 'object' &&
+                    (part as Record<string, unknown>).type === 'text' &&
+                    typeof (part as Record<string, unknown>).text === 'string'
+                ) {
+                    return (part as { text: string }).text
+                }
 
-            return null
-        })
-        .filter((part): part is string => part != null)
+                return null
+            })
+            .filter((part): part is string => part != null),
+        stripSpeakerPrefix: true
+    }
 }
 
-const toCleanLines = (message: BaseMessage) => {
-    return toTextParts(message)
+export const toLivingMemoryTextParts = (message: BaseMessage) => {
+    return resolveLivingMemoryTextParts(message).parts
+}
+
+export const toLivingMemoryCleanLines = (
+    message: BaseMessage,
+    options: { stripSpeakerPrefix?: boolean } = {}
+) => {
+    const resolved = resolveLivingMemoryTextParts(message)
+    const stripSpeakerPrefix =
+        options.stripSpeakerPrefix ?? resolved.stripSpeakerPrefix
+    return resolved.parts
         .flatMap((part) => part.replace(/\r\n/g, '\n').split('\n'))
-        .map((line) => line.trim())
+        .map((line) => {
+            const trimmed = line.trim()
+            return stripSpeakerPrefix
+                ? stripLegacySpeakerPrefix(trimmed)
+                : trimmed
+        })
         .filter((line) => line.length > 0)
 }
 
-const hasUsablePrefixedUserLine = (line: string) => {
-    const matched = line.match(prefixedUserLinePattern)
-    return matched != null && matched[1].trim().length > 0
-}
-
-const formatUserLine = (line: string, fallbackLabel: string) => {
-    if (line.match(prefixedUserLinePattern) != null) {
-        return hasUsablePrefixedUserLine(line) ? line : null
+const toHumanSpeakerLabel = (scope: MemoryScope, message: BaseMessage) => {
+    const name = toStringValue((message as { name?: unknown }).name)
+    if (name != null) {
+        return name
     }
 
-    return `${fallbackLabel} ${line}`
-}
-
-const toUserFallbackLabel = (scope: MemoryScope) => {
-    if (scope.userId != null && scope.userId.length > 0) {
-        return `[${scope.userId}]说:`
+    const id = toStringValue((message as { id?: unknown }).id)
+    if (id != null) {
+        return id
     }
 
-    return '用户:'
+    const scopedUserId = toStringValue(scope.userId)
+    return scopedUserId ?? '用户'
 }
 
 const toFormattedMessage = (
@@ -72,20 +125,19 @@ const toFormattedMessage = (
     message: BaseMessage
 ): FormattedMessage | null => {
     const type = message.getType()
-    const cleanLines = toCleanLines(message)
+    const cleanLines =
+        type === 'ai'
+            ? toLivingMemoryCleanLines(message, { stripSpeakerPrefix: false })
+            : toLivingMemoryCleanLines(message)
     if (cleanLines.length === 0) {
         return null
     }
 
     if (type === 'human') {
-        const fallbackLabel = toUserFallbackLabel(scope)
-        const transcriptLines = cleanLines
-            .map((line) => formatUserLine(line, fallbackLabel))
-            .filter((line): line is string => line != null)
-
-        if (transcriptLines.length === 0) {
-            return null
-        }
+        const speakerLabel = toHumanSpeakerLabel(scope, message)
+        const transcriptLines = cleanLines.map(
+            (line) => `${speakerLabel}说：${line}`
+        )
 
         return {
             role: 'user',

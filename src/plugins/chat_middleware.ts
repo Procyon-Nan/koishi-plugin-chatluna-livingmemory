@@ -1,5 +1,22 @@
 import { Context } from 'koishi'
+import type { HumanMessage } from '@langchain/core/messages'
 import type { Config } from '../index'
+import { livingMemoryRawContentKey } from '../service/message_formatter'
+
+const writeRawUserContent = (
+    message: HumanMessage,
+    promptVariables: { prompt?: unknown }
+) => {
+    const rawContent = promptVariables.prompt
+    if (typeof rawContent !== 'string' || rawContent.trim().length === 0) {
+        return
+    }
+
+    message.additional_kwargs = {
+        ...message.additional_kwargs,
+        [livingMemoryRawContentKey]: rawContent.trim()
+    }
+}
 
 export async function apply(ctx: Context, config: Config) {
     const logger = ctx.logger('chatluna-livingmemory')
@@ -46,6 +63,7 @@ export async function apply(ctx: Context, config: Config) {
                 )
                 return
             }
+            writeRawUserContent(message, promptVariables)
 
             debug(
                 `before-chat resolved: conversationId=${conversationId}, presetId=${presetId}, fallbackPresetId=${fallbackPresetId ?? ''}`

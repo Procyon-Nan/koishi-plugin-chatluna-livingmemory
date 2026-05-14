@@ -1,6 +1,10 @@
 import type { BaseMessage } from '@langchain/core/messages'
 import { Context } from 'koishi'
-import { LivingMemoryMessageFormatter } from './message_formatter'
+import {
+    LivingMemoryMessageFormatter,
+    toLivingMemoryCleanLines,
+    toLivingMemoryTextParts
+} from './message_formatter'
 import type { LivingMemoryConfig, MemoryScope } from '../types'
 
 const isModelConfigured = (model: string) => {
@@ -8,77 +12,6 @@ const isModelConfigured = (model: string) => {
 }
 
 const semanticTextPattern = /[\p{L}\p{N}]/u
-const prefixedSpeakerLinePattern = /^(\[[^\]]+\]说:)\s*(.*)$/u
-const prefixedSpeakerPattern = /^\[[^\]]+\]说:\s*/u
-
-const toTextParts = (message: BaseMessage) => {
-    const rawContent = message.additional_kwargs?.raw_content
-    if (typeof rawContent === 'string' && rawContent.length > 0) {
-        return [rawContent]
-    }
-
-    if (typeof message.content === 'string') {
-        return [message.content]
-    }
-
-    if (!Array.isArray(message.content)) {
-        return []
-    }
-
-    return message.content
-        .map((part) => {
-            if (
-                part != null &&
-                typeof part === 'object' &&
-                (part as Record<string, unknown>).type === 'text' &&
-                typeof (part as Record<string, unknown>).text === 'string'
-            ) {
-                return (part as { text: string }).text
-            }
-
-            return null
-        })
-        .filter((part): part is string => part != null)
-}
-
-const toCleanLines = (parts: string[]) => {
-    return parts
-        .flatMap((part) => part.replace(/\r\n/g, '\n').split('\n'))
-        .map((line) => line.replace(prefixedSpeakerPattern, '').trim())
-        .filter((line) => line.length > 0 && semanticTextPattern.test(line))
-}
-
-const toUserFallbackLabel = (scope: MemoryScope) => {
-    if (scope.userId != null && scope.userId.length > 0) {
-        return `[${scope.userId}]说:`
-    }
-
-    return '对方说:'
-}
-
-const toTranscriptLines = (parts: string[], scope: MemoryScope) => {
-    const fallbackLabel = toUserFallbackLabel(scope)
-
-    return parts
-        .flatMap((part) => part.replace(/\r\n/g, '\n').split('\n'))
-        .map((line) => line.trim())
-        .map((line) => {
-            if (line.length === 0) {
-                return null
-            }
-
-            const matched = line.match(prefixedSpeakerLinePattern)
-            if (matched != null) {
-                const content = matched[2].trim()
-                return semanticTextPattern.test(content) ? line : null
-            }
-
-            return semanticTextPattern.test(line)
-                ? `${fallbackLabel} ${line}`
-                : null
-        })
-        .filter((line): line is string => line != null)
-}
 
 const stringifyModelContent = (content: unknown) => {
     if (typeof content === 'string') {
@@ -179,10 +112,15 @@ export class LivingMemoryRecallQueryBuilder {
         currentMessage: BaseMessage,
         historyMessages: BaseMessage[]
     ): Promise<RecallQueryResult> {
-        const rawParts = toTextParts(currentMessage)
+        const rawParts = toLivingMemoryTextParts(currentMessage)
         const rawInput = rawParts.join('\n')
-        const cleanedQuery = toCleanLines(rawParts).join('\n')
-        const currentTranscript = toTranscriptLines(rawParts, scope).join('\n')
+        const cleanedQuery = toLivingMemoryCleanLines(currentMessage)
+            .filter((line) => semanticTextPattern.test(line))
+            .join('\n')
+        const currentTranscript = this.formatter.toExtractionPayload(
+            scope,
+            [currentMessage]
+        ).input
 
         if (cleanedQuery.length === 0) {
             return {
@@ -360,10 +298,10 @@ export class LivingMemoryRecallQueryBuilder {
             '只输出一行当前话题的内容。字数在40~50字以内，保证简洁、清晰。',
             '',
             '正确输出示例：',
-            'Procyon说我的研究所是虚构的。Procyon说他肚子疼。Procyon让我正确使用工具',
+            '张三说我的研究所是虚构的。李四说他肚子疼。王五让我正确使用工具',
             '',
             '错误输出示例：',
-            'Procyon的偏好、与某人的关系及近期互动状态',
+            '张三的偏好、与某人的关系及近期互动状态',
             `${scope.presetId}觉得心情很不错。`,
             `${scope.presetId}:我把Procyon骂了一顿。`,
             '',
