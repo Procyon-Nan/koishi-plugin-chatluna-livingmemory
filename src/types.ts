@@ -46,6 +46,10 @@ export interface MemoryScope {
     presetId: string
     userId?: string
     channelId?: string
+    guildId?: string
+    isDirect?: boolean
+    speakerId?: string
+    speakerName?: string
 }
 
 export interface MemorySourceMessage {
@@ -165,16 +169,22 @@ export interface RecallRepository {
 }
 
 export interface SnapshotRepository {
-    getLatestSnapshotByPreset(
-        presetId: string
+    getLatestSnapshotByScope(
+        scope: Pick<MemoryScope, 'presetId' | 'conversationId'>
     ): Promise<MemorySnapshotRecord | undefined>
     listSnapshotsByPreset(presetId: string): Promise<MemorySnapshotRecord[]>
-    createSnapshot(
+    upsertSnapshot(
         scope: MemoryScope,
         strategy: MemoryRecallStrategy,
         query: string,
         items: MemoryReference[]
     ): Promise<void>
+    deleteSnapshot(
+        snapshotId: string
+    ): Promise<MemorySnapshotRecord | undefined>
+    deleteSnapshotsByConversation(
+        conversationId: string
+    ): Promise<MemorySnapshotRecord[]>
 }
 
 export interface JobRepository {
@@ -249,6 +259,9 @@ declare module '@koishijs/plugin-console' {
         'living-memory/listSnapshots': (
             query: SnapshotListQuery
         ) => Promise<PageResult<MemorySnapshotWithResolvedItems>>
+        'living-memory/deleteSnapshot': (
+            snapshotId: string
+        ) => Promise<{ success: true }>
         'living-memory/listJobs': (
             query: JobListQuery
         ) => Promise<PageResult<MemoryJobRecord>>

@@ -72,6 +72,12 @@ export async function listSnapshots(params: SnapshotListParams): Promise<PageRes
     return await send('living-memory/listSnapshots', params)
 }
 
+export async function deleteSnapshot(
+    snapshotId: string
+): Promise<{ success: true }> {
+    return await send('living-memory/deleteSnapshot', snapshotId)
+}
+
 export async function listJobs(params: JobListParams): Promise<PageResult<MemoryJobRecord>> {
     return await send('living-memory/listJobs', params)
 }

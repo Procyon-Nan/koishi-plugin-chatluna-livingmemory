@@ -290,9 +290,8 @@ export class LivingMemoryDreamService {
             activeEntries,
             invokeModel
         )
-        const refreshedEntries = await this.repository.listEntriesByPreset(
-            presetId
-        )
+        const refreshedEntries =
+            await this.repository.listEntriesByPreset(presetId)
         const archivedEntries = refreshedEntries.filter(
             (entry) => entry.status === 'archived'
         )
@@ -1194,7 +1193,8 @@ export class LivingMemoryDreamService {
             ...patch,
             status: 'archived',
             content: normalizeText(patch.content ?? entry.content),
-            summary: patch.summary ?? entry.summary ?? entry.content.slice(0, 80),
+            summary:
+                patch.summary ?? entry.summary ?? entry.content.slice(0, 80),
             keywords: unique(
                 patch.keywords?.length ? patch.keywords : entry.keywords
             ).slice(0, 12),

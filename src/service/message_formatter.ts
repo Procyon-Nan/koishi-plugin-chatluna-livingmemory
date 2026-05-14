@@ -13,10 +13,21 @@ interface FormattedMessage {
 }
 
 export const livingMemoryRawContentKey = 'living_memory_raw_content'
+const rawContentByMessage = new WeakMap<BaseMessage, string>()
 
-const legacyBracketSpeakerPattern = /^\[[^\]]+\]\s*说\s*[:：]\s*/u
-const legacyBareSpeakerPattern =
-    /^[^\s:：\[\]，。！？,.!?]{2,64}\s*说\s*[:：]\s*/u
+export const setLivingMemoryRawContent = (
+    message: BaseMessage,
+    rawContent: string
+) => {
+    const normalized = rawContent.trim()
+    if (normalized.length > 0) {
+        rawContentByMessage.set(message, normalized)
+    }
+}
+
+const bracketSpeakerLinePattern = /^\[([^\]]+)\]\s*说\s*[:：]\s*(.*)$/u
+const bareSpeakerLinePattern =
+    /^([^\s:：\[\]，。！？,.!?]{1,64})\s*说\s*[:：]\s*(.*)$/u
 
 const toStringValue = (value: unknown) => {
     return typeof value === 'string' && value.trim().length > 0
@@ -24,21 +35,50 @@ const toStringValue = (value: unknown) => {
         : null
 }
 
-const stripLegacySpeakerPrefix = (line: string) => {
-    return line
-        .replace(legacyBracketSpeakerPattern, '')
-        .replace(legacyBareSpeakerPattern, '')
-        .trim()
+const normalizeBracketSpeaker = (speaker: string) => {
+    const parts = speaker
+        .split(/[,，]/u)
+        .map((part) => part.trim())
+        .filter((part) => part.length > 0)
+    return parts[parts.length - 1] ?? speaker.trim()
+}
+
+const parseSpeakerLine = (line: string) => {
+    const bracketMatched = line.match(bracketSpeakerLinePattern)
+    if (bracketMatched != null) {
+        return {
+            speaker: normalizeBracketSpeaker(bracketMatched[1]),
+            content: bracketMatched[2].trim()
+        }
+    }
+
+    const bareMatched = line.match(bareSpeakerLinePattern)
+    if (bareMatched != null) {
+        return {
+            speaker: bareMatched[1].trim(),
+            content: bareMatched[2].trim()
+        }
+    }
+
+    return null
 }
 
 const resolveLivingMemoryTextParts = (message: BaseMessage) => {
+    const cachedRawContent = rawContentByMessage.get(message)
+    if (cachedRawContent != null) {
+        return {
+            parts: [cachedRawContent],
+            stripSpeakerPrefix: true
+        }
+    }
+
     const livingMemoryRawContent = toStringValue(
         message.additional_kwargs?.[livingMemoryRawContentKey]
     )
     if (livingMemoryRawContent != null) {
         return {
             parts: [livingMemoryRawContent],
-            stripSpeakerPrefix: false
+            stripSpeakerPrefix: true
         }
     }
 
@@ -46,7 +86,7 @@ const resolveLivingMemoryTextParts = (message: BaseMessage) => {
     if (rawContent != null) {
         return {
             parts: [rawContent],
-            stripSpeakerPrefix: false
+            stripSpeakerPrefix: true
         }
     }
 
@@ -98,17 +138,35 @@ export const toLivingMemoryCleanLines = (
         .flatMap((part) => part.replace(/\r\n/g, '\n').split('\n'))
         .map((line) => {
             const trimmed = line.trim()
-            return stripSpeakerPrefix
-                ? stripLegacySpeakerPrefix(trimmed)
+            const parsed = parseSpeakerLine(trimmed)
+            return stripSpeakerPrefix && parsed != null
+                ? parsed.content
                 : trimmed
         })
         .filter((line) => line.length > 0)
 }
 
-const toHumanSpeakerLabel = (scope: MemoryScope, message: BaseMessage) => {
+const toRawLines = (message: BaseMessage) => {
+    return resolveLivingMemoryTextParts(message)
+        .parts.flatMap((part) => part.replace(/\r\n/g, '\n').split('\n'))
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0)
+}
+
+export const toLivingMemorySpeakerLabel = (
+    scope: MemoryScope,
+    message: BaseMessage
+) => {
     const name = toStringValue((message as { name?: unknown }).name)
     if (name != null) {
         return name
+    }
+
+    const prefixedSpeaker = toRawLines(message)
+        .map((line) => parseSpeakerLine(line)?.speaker)
+        .find((speaker): speaker is string => speaker != null)
+    if (prefixedSpeaker != null) {
+        return prefixedSpeaker
     }
 
     const id = toStringValue((message as { id?: unknown }).id)
@@ -116,8 +174,12 @@ const toHumanSpeakerLabel = (scope: MemoryScope, message: BaseMessage) => {
         return id
     }
 
-    const scopedUserId = toStringValue(scope.userId)
-    return scopedUserId ?? '用户'
+    return (
+        toStringValue(scope.speakerName) ??
+        toStringValue(scope.speakerId) ??
+        toStringValue(scope.userId) ??
+        '用户'
+    )
 }
 
 const toFormattedMessage = (
@@ -134,7 +196,7 @@ const toFormattedMessage = (
     }
 
     if (type === 'human') {
-        const speakerLabel = toHumanSpeakerLabel(scope, message)
+        const speakerLabel = toLivingMemorySpeakerLabel(scope, message)
         const transcriptLines = cleanLines.map(
             (line) => `${speakerLabel}说：${line}`
         )
@@ -151,7 +213,7 @@ const toFormattedMessage = (
             role: 'assistant',
             content: cleanLines.join('\n'),
             transcriptLines: cleanLines.map(
-                (line) => `${scope.presetId}: ${line}`
+                (line) => `${scope.presetId}说：${line}`
             )
         }
     }

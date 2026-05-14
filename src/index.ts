@@ -99,7 +99,7 @@ export const Config: Schema<Config> = Schema.object({
         .max(10)
         .step(1)
         .description(
-            '每个预设保留的最大快照数量。调小后，插件重载时会立即裁剪超出部分，仅保留最新的 N 条。'
+            '兼容旧配置项。当前召回快照按会话保存，每个会话只保留并更新一条最新快照。'
         )
         .default(2),
     recallStrategy: Schema.union(

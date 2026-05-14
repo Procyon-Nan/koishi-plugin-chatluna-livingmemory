@@ -183,11 +183,14 @@ export class LivingMemoryRepository
         return entries.map(normalizeEntryRecord)
     }
 
-    async getLatestSnapshotByPreset(presetId: string) {
+    async getLatestSnapshotByScope(
+        scope: Pick<MemoryScope, 'presetId' | 'conversationId'>
+    ) {
         const snapshots = await this.ctx.database.get(
             'living_memory_snapshot',
             {
-                presetId
+                presetId: scope.presetId,
+                conversationId: scope.conversationId
             }
         )
 
@@ -211,12 +214,46 @@ export class LivingMemoryRepository
         )
     }
 
-    async createSnapshot(
+    async upsertSnapshot(
         scope: MemoryScope,
         strategy: MemoryRecallStrategy,
         query: string,
         items: MemoryReference[]
     ) {
+        const createdAt = new Date()
+        const existing = await this.ctx.database.get('living_memory_snapshot', {
+            presetId: scope.presetId,
+            conversationId: scope.conversationId
+        })
+        const sorted = existing.sort(
+            (left, right) => +right.createdAt - +left.createdAt
+        )
+        const latest = sorted[0]
+
+        if (latest != null) {
+            await this.ctx.database.set(
+                'living_memory_snapshot',
+                { id: latest.id },
+                {
+                    strategy,
+                    query,
+                    items,
+                    createdAt
+                }
+            )
+
+            const staleIds = sorted.slice(1).map((snapshot) => snapshot.id)
+            if (staleIds.length > 0) {
+                await this.ctx.database.remove('living_memory_snapshot', {
+                    id: {
+                        $in: staleIds
+                    }
+                })
+            }
+
+            return
+        }
+
         const snapshot: MemorySnapshotRecord = {
             id: randomUUID(),
             presetId: scope.presetId,
@@ -224,49 +261,54 @@ export class LivingMemoryRepository
             strategy,
             query,
             items,
-            createdAt: new Date()
+            createdAt
         }
 
         await this.ctx.database.create('living_memory_snapshot', snapshot)
     }
 
-    async trimSnapshots(presetId: string, maxSnapshotsPerPreset: number) {
+    async deleteSnapshot(
+        snapshotId: string
+    ): Promise<MemorySnapshotRecord | undefined> {
+        const snapshot = (
+            await this.ctx.database.get('living_memory_snapshot', {
+                id: snapshotId
+            })
+        )[0]
+
+        if (snapshot == null) {
+            return undefined
+        }
+
+        await this.ctx.database.remove('living_memory_snapshot', {
+            presetId: snapshot.presetId,
+            conversationId: snapshot.conversationId
+        })
+
+        return snapshot
+    }
+
+    async deleteSnapshotsByConversation(
+        conversationId: string
+    ): Promise<MemorySnapshotRecord[]> {
         const snapshots = await this.ctx.database.get(
             'living_memory_snapshot',
             {
-                presetId
+                conversationId
             }
         )
 
-        if (snapshots.length <= maxSnapshotsPerPreset) {
-            return
-        }
-
-        const staleSnapshots = snapshots
-            .sort((left, right) => +right.createdAt - +left.createdAt)
-            .slice(maxSnapshotsPerPreset)
-
-        if (staleSnapshots.length === 0) {
-            return
+        if (snapshots.length === 0) {
+            return []
         }
 
         await this.ctx.database.remove('living_memory_snapshot', {
             id: {
-                $in: staleSnapshots.map((snapshot) => snapshot.id)
+                $in: snapshots.map((snapshot) => snapshot.id)
             }
         })
-    }
 
-    async trimAllSnapshots(maxSnapshotsPerPreset: number) {
-        const snapshots = await this.ctx.database.get(
-            'living_memory_snapshot',
-            {},
-            ['presetId']
-        )
-        const presetIds = [...new Set(snapshots.map((s) => s.presetId))]
-        for (const presetId of presetIds) {
-            await this.trimSnapshots(presetId, maxSnapshotsPerPreset)
-        }
+        return snapshots
     }
 
     async createJob(

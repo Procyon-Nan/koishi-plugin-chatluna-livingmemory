@@ -100,6 +100,13 @@ export function apply(ctx: Context, _config?: Config) {
     )
 
     ctx.console.addListener(
+        'living-memory/deleteSnapshot',
+        ok(async (snapshotId: string) => {
+            await service(ctx).deleteSnapshot(snapshotId)
+        })
+    )
+
+    ctx.console.addListener(
         'living-memory/listJobs',
         async (query: JobListQuery) => await service(ctx).listJobs(query)
     )

@@ -117,7 +117,7 @@ const formatDateOnly = (value: Date | string | number) => {
 
 export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     private readonly serviceLogger: Logger
-    private readonly snapshotVariableByPreset = new Map<string, string>()
+    private readonly snapshotVariableByScope = new Map<string, string>()
     private readonly extractionLockByConversation = new Set<string>()
     private readonly recallLockByConversation = new Set<string>()
     private readonly dreamLockByPreset = new Map<string, string>()
@@ -154,14 +154,6 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         }, Time.day)
     }
 
-    protected async start() {
-        await this.repository
-            .trimAllSnapshots(this.config.maxSnapshotsPerPreset)
-            .catch((error) => {
-                this.serviceLogger.warn(error)
-            })
-    }
-
     private registerPromptFunction() {
         this.ctx.effect(() =>
             this.ctx.chatluna.promptRenderer.registerFunctionProvider(
@@ -169,15 +161,29 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
                 async (_args, variables) => {
                     const built =
                         variables != null && typeof variables === 'object'
-                            ? (variables as { built?: { preset?: string } })
-                                  .built
+                            ? (
+                                  variables as {
+                                      built?: {
+                                          conversationId?: string
+                                          preset?: string
+                                      }
+                                  }
+                              ).built
                             : undefined
                     const presetId = built?.preset
                     if (typeof presetId !== 'string' || presetId.length === 0) {
                         return ''
                     }
 
-                    return await this.renderSnapshot(presetId)
+                    const conversationId = built?.conversationId
+                    if (
+                        typeof conversationId !== 'string' ||
+                        conversationId.length === 0
+                    ) {
+                        return ''
+                    }
+
+                    return await this.renderSnapshot(presetId, conversationId)
                 }
             )
         )
@@ -190,7 +196,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     }
 
     shouldHandleSession(isDirect: boolean) {
-        return isDirect
+        return typeof isDirect === 'boolean'
     }
 
     resolvePresetId(message: HumanMessage, fallbackPresetId?: string) {
@@ -213,31 +219,73 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         conversationId: string,
         presetId: string,
         userId?: string,
-        channelId?: string
+        channelId?: string,
+        options: Partial<
+            Pick<
+                MemoryScope,
+                'guildId' | 'isDirect' | 'speakerId' | 'speakerName'
+            >
+        > = {}
     ): MemoryScope {
         return {
             conversationId,
             presetId,
             userId,
-            channelId
+            channelId,
+            ...options
         }
     }
 
-    async hydratePromptVariable(presetId: string) {
-        const snapshot =
-            await this.repository.getLatestSnapshotByPreset(presetId)
+    private toSnapshotCacheKey(
+        scope: Pick<MemoryScope, 'presetId' | 'conversationId'>
+    ) {
+        return `${scope.presetId}\n${scope.conversationId}`
+    }
+
+    private clearSnapshotCacheByScope(
+        scope: Pick<MemoryScope, 'presetId' | 'conversationId'>
+    ) {
+        this.snapshotVariableByScope.delete(this.toSnapshotCacheKey(scope))
+    }
+
+    private clearSnapshotCacheByPreset(presetId: string) {
+        for (const key of this.snapshotVariableByScope.keys()) {
+            if (key.startsWith(`${presetId}\n`)) {
+                this.snapshotVariableByScope.delete(key)
+            }
+        }
+    }
+
+    private clearSnapshotCacheByConversation(conversationId: string) {
+        for (const key of this.snapshotVariableByScope.keys()) {
+            if (key.endsWith(`\n${conversationId}`)) {
+                this.snapshotVariableByScope.delete(key)
+            }
+        }
+    }
+
+    async hydratePromptVariable(
+        scope: Pick<MemoryScope, 'presetId' | 'conversationId'>
+    ) {
+        const snapshot = await this.repository.getLatestSnapshotByScope(scope)
         const rendered = await this.renderSnapshotItems(snapshot?.items ?? [])
-        this.snapshotVariableByPreset.set(presetId, rendered)
+        this.snapshotVariableByScope.set(
+            this.toSnapshotCacheKey(scope),
+            rendered
+        )
         return rendered
     }
 
-    async renderSnapshot(presetId: string) {
-        const cached = this.snapshotVariableByPreset.get(presetId)
+    async renderSnapshot(presetId: string, conversationId: string) {
+        const scope = { presetId, conversationId }
+        const cached = this.snapshotVariableByScope.get(
+            this.toSnapshotCacheKey(scope)
+        )
         if (cached != null) {
             return cached
         }
 
-        return await this.hydratePromptVariable(presetId)
+        return await this.hydratePromptVariable(scope)
     }
 
     async queueRecall(
@@ -245,18 +293,19 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         currentMessage: HumanMessage,
         loadHistoryMessages: () => Promise<BaseMessage[]>
     ) {
-        if (this.recallLockByConversation.has(scope.conversationId)) {
+        const lockKey = this.toSnapshotCacheKey(scope)
+        if (this.recallLockByConversation.has(lockKey)) {
             return
         }
 
-        this.recallLockByConversation.add(scope.conversationId)
+        this.recallLockByConversation.add(lockKey)
 
         this.runRecall(scope, currentMessage, loadHistoryMessages)
             .catch((error) => {
                 this.serviceLogger.warn(error)
             })
             .finally(() => {
-                this.recallLockByConversation.delete(scope.conversationId)
+                this.recallLockByConversation.delete(lockKey)
             })
     }
 
@@ -302,7 +351,8 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             return
         }
 
-        if (this.extractionLockByConversation.has(scope.conversationId)) {
+        const lockKey = this.toSnapshotCacheKey(scope)
+        if (this.extractionLockByConversation.has(lockKey)) {
             this.debug(
                 `queueExtraction skipped: locked, conversationId=${scope.conversationId}`
             )
@@ -334,14 +384,14 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             ].join(' ')
         )
 
-        this.extractionLockByConversation.add(scope.conversationId)
+        this.extractionLockByConversation.add(lockKey)
 
         this.runExtraction(scope, rounds, presetTemplate, promptVariables)
             .catch((error) => {
                 this.serviceLogger.warn(error)
             })
             .finally(() => {
-                this.extractionLockByConversation.delete(scope.conversationId)
+                this.extractionLockByConversation.delete(lockKey)
             })
     }
 
@@ -449,7 +499,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
                 ].join(' ')
             )
 
-            await this.repository.createSnapshot(
+            await this.repository.upsertSnapshot(
                 scope,
                 this.config.recallStrategy,
                 input,
@@ -458,11 +508,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
                     score: item.score
                 }))
             )
-            await this.repository.trimSnapshots(
-                scope.presetId,
-                this.config.maxSnapshotsPerPreset
-            )
-            await this.hydratePromptVariable(scope.presetId)
+            await this.hydratePromptVariable(scope)
 
             await this.markJobCompleted(
                 job.id,
@@ -674,7 +720,10 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             .join('\n')
     }
 
-    async cleanupConversation(_conversationId: string) {}
+    async cleanupConversation(conversationId: string) {
+        await this.repository.deleteSnapshotsByConversation(conversationId)
+        this.clearSnapshotCacheByConversation(conversationId)
+    }
 
     async listPresetIds(): Promise<string[]> {
         return await this.repository.listDistinctPresetIds()
@@ -699,6 +748,13 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
 
     async deleteMemory(memoryId: string) {
         await this.repository.deleteMemory(memoryId)
+    }
+
+    async deleteSnapshot(snapshotId: string) {
+        const deleted = await this.repository.deleteSnapshot(snapshotId)
+        if (deleted != null) {
+            this.clearSnapshotCacheByScope(deleted)
+        }
     }
 
     async listSnapshots(
@@ -756,7 +812,11 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             await this.recoverStaleDreamJobs(presetId)
 
             const scope = this.createScope(`dream:${presetId}`, presetId)
-            const job = await this.repository.createJob(scope, 'dream', presetId)
+            const job = await this.repository.createJob(
+                scope,
+                'dream',
+                presetId
+            )
 
             this.dreamLockByPreset.set(presetId, job.id)
             this.runDreamJob(scope, job.id)
@@ -803,9 +863,8 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     }
 
     private async recoverStaleDreamJobs(presetId: string) {
-        const staleJobs = await this.repository.listRunningDreamJobsByPreset(
-            presetId
-        )
+        const staleJobs =
+            await this.repository.listRunningDreamJobsByPreset(presetId)
         if (staleJobs.length === 0) {
             return
         }
@@ -825,20 +884,18 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     }
 
     private refreshDreamSnapshotCache(presetId: string, jobId: string) {
-        this.hydratePromptVariable(presetId).catch((error) => {
-            const message = [
-                `memory dream cache refresh failed: jobId=${jobId}`,
-                `presetId=${presetId}`,
-                `error=${summarizeError(error)}`
+        this.clearSnapshotCacheByPreset(presetId)
+        this.debug(
+            [
+                `memory dream cache cleared: jobId=${jobId}`,
+                `presetId=${presetId}`
             ].join(' ')
-            this.debug(message)
-            this.serviceLogger.warn(message)
-        })
+        )
     }
 
     async clearPresetData(presetId: string) {
         await this.repository.clearAllByPreset(presetId)
-        this.snapshotVariableByPreset.delete(presetId)
+        this.clearSnapshotCacheByPreset(presetId)
     }
 
     async cleanupStaleJobs(maxAge: number = Time.week) {

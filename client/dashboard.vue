@@ -210,6 +210,19 @@
                             <el-table-column label="创建时间" min-width="160">
                                 <template #default="scope">{{ formatTime(scope.row.createdAt) }}</template>
                             </el-table-column>
+                            <el-table-column label="操作" width="96" fixed="right">
+                                <template #default="scope">
+                                    <el-button
+                                        size="small"
+                                        type="danger"
+                                        plain
+                                        :loading="deletingSnapshotId === scope.row.id"
+                                        @click="removeSnapshot(scope.row)"
+                                    >
+                                        删除
+                                    </el-button>
+                                </template>
+                            </el-table-column>
                         </el-table>
                     </el-card>
                 </el-col>
@@ -479,6 +492,7 @@ const dialogVisible = ref(false)
 const editingMemoryId = ref<string | null>(null)
 const snapshotDialogVisible = ref(false)
 const selectedSnapshot = ref<MemorySnapshotRecord | null>(null)
+const deletingSnapshotId = ref<string | null>(null)
 
 const presetId = ref('')
 const presetIds = ref<string[]>([])
@@ -604,6 +618,39 @@ const openEditDialog = (memory: MemoryEntryRecord) => {
 const openSnapshotDialog = (snapshot: MemorySnapshotRecord) => {
     selectedSnapshot.value = snapshot
     snapshotDialogVisible.value = true
+}
+
+const removeSnapshot = async (snapshot: MemorySnapshotRecord) => {
+    try {
+        await ElMessageBox.confirm(
+            '删除该会话快照后，该会话下一轮将不会注入这次召回结果；新的召回会重新生成快照。是否继续？',
+            '删除快照',
+            {
+                type: 'warning',
+                confirmButtonText: '确认删除',
+                cancelButtonText: '取消'
+            }
+        )
+    } catch {
+        return
+    }
+
+    deletingSnapshotId.value = snapshot.id
+
+    try {
+        await api.deleteSnapshot(snapshot.id)
+        if (selectedSnapshot.value?.id === snapshot.id) {
+            snapshotDialogVisible.value = false
+            selectedSnapshot.value = null
+        }
+        ElMessage.success('快照已删除')
+        await refreshAll()
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        ElMessage.error(`删除失败：${message}`)
+    } finally {
+        deletingSnapshotId.value = null
+    }
 }
 
 const submitMemory = async () => {

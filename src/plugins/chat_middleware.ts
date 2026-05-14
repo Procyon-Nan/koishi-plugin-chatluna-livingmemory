@@ -1,7 +1,42 @@
-import { Context } from 'koishi'
+import { Context, type Session } from 'koishi'
 import type { HumanMessage } from '@langchain/core/messages'
 import type { Config } from '../index'
-import { livingMemoryRawContentKey } from '../service/message_formatter'
+import { setLivingMemoryRawContent } from '../service/message_formatter'
+
+const toNonEmptyString = (value: unknown) => {
+    return typeof value === 'string' && value.trim().length > 0
+        ? value.trim()
+        : undefined
+}
+
+const resolveSpeakerName = (session: Session, message: HumanMessage) => {
+    const messageName = toNonEmptyString((message as { name?: unknown }).name)
+    if (messageName != null) {
+        return messageName
+    }
+
+    return (
+        toNonEmptyString(session.author?.nick) ??
+        toNonEmptyString(session.author?.name) ??
+        toNonEmptyString(session.event?.user?.name) ??
+        toNonEmptyString(session.username) ??
+        toNonEmptyString(session.userId)
+    )
+}
+
+const prepareSpeakerName = (session: Session, message: HumanMessage) => {
+    const namedMessage = message as { name?: string }
+    const existingName = toNonEmptyString(namedMessage.name)
+    if (existingName != null) {
+        return existingName
+    }
+
+    const speakerName = resolveSpeakerName(session, message)
+    if (speakerName != null) {
+        namedMessage.name = speakerName
+    }
+    return speakerName
+}
 
 const writeRawUserContent = (
     message: HumanMessage,
@@ -12,10 +47,7 @@ const writeRawUserContent = (
         return
     }
 
-    message.additional_kwargs = {
-        ...message.additional_kwargs,
-        [livingMemoryRawContentKey]: rawContent.trim()
-    }
+    setLivingMemoryRawContent(message, rawContent)
 }
 
 export async function apply(ctx: Context, config: Config) {
@@ -63,6 +95,7 @@ export async function apply(ctx: Context, config: Config) {
                 )
                 return
             }
+            const speakerName = prepareSpeakerName(session, message)
             writeRawUserContent(message, promptVariables)
 
             debug(
@@ -73,11 +106,17 @@ export async function apply(ctx: Context, config: Config) {
                 conversationId,
                 presetId,
                 session.userId,
-                session.channelId
+                session.channelId,
+                {
+                    guildId: session.guildId ?? session.channelId,
+                    isDirect: session.isDirect,
+                    speakerId: session.userId,
+                    speakerName
+                }
             )
 
             const snapshot =
-                await ctx.chatluna_living_memory.hydratePromptVariable(presetId)
+                await ctx.chatluna_living_memory.hydratePromptVariable(scope)
 
             promptVariables.living_memory = snapshot
 
@@ -136,6 +175,8 @@ export async function apply(ctx: Context, config: Config) {
                 )
                 return
             }
+            const speakerName = prepareSpeakerName(session, sourceMessage)
+            writeRawUserContent(sourceMessage, promptVariables)
 
             debug(
                 `after-chat resolved: conversationId=${conversationId}, presetId=${presetId}, fallbackPresetId=${fallbackPresetId ?? ''}`
@@ -145,7 +186,13 @@ export async function apply(ctx: Context, config: Config) {
                 conversationId,
                 presetId,
                 session.userId,
-                session.channelId
+                session.channelId,
+                {
+                    guildId: session.guildId ?? session.channelId,
+                    isDirect: session.isDirect,
+                    speakerId: session.userId,
+                    speakerName
+                }
             )
 
             const messages = await chatInterface.chatHistory.getMessages()

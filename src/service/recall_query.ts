@@ -3,6 +3,7 @@ import { Context } from 'koishi'
 import {
     LivingMemoryMessageFormatter,
     toLivingMemoryCleanLines,
+    toLivingMemorySpeakerLabel,
     toLivingMemoryTextParts
 } from './message_formatter'
 import type { LivingMemoryConfig, MemoryScope } from '../types'
@@ -78,6 +79,19 @@ const isSkipQuery = (query: string) => {
     return query.trim().toLowerCase() === '[skip]'
 }
 
+const buildFallbackQuery = (
+    scope: MemoryScope,
+    currentMessage: BaseMessage,
+    cleanedQuery: string
+) => {
+    const speaker = toLivingMemorySpeakerLabel(scope, currentMessage)
+    if (speaker === '用户') {
+        return cleanedQuery
+    }
+
+    return `${speaker} ${cleanedQuery}`.trim()
+}
+
 export type RecallQueryFallbackReason =
     | 'rewrite-disabled'
     | 'model-not-configured'
@@ -117,10 +131,14 @@ export class LivingMemoryRecallQueryBuilder {
         const cleanedQuery = toLivingMemoryCleanLines(currentMessage)
             .filter((line) => semanticTextPattern.test(line))
             .join('\n')
-        const currentTranscript = this.formatter.toExtractionPayload(
+        const fallbackQuery = buildFallbackQuery(
             scope,
-            [currentMessage]
-        ).input
+            currentMessage,
+            cleanedQuery
+        )
+        const currentTranscript = this.formatter.toExtractionPayload(scope, [
+            currentMessage
+        ]).input
 
         if (cleanedQuery.length === 0) {
             return {
@@ -140,6 +158,7 @@ export class LivingMemoryRecallQueryBuilder {
             return this.fallbackResult(
                 rawInput,
                 cleanedQuery,
+                fallbackQuery,
                 null,
                 null,
                 'rewrite-disabled'
@@ -150,6 +169,7 @@ export class LivingMemoryRecallQueryBuilder {
             return this.fallbackResult(
                 rawInput,
                 cleanedQuery,
+                fallbackQuery,
                 null,
                 null,
                 'model-not-configured'
@@ -165,6 +185,7 @@ export class LivingMemoryRecallQueryBuilder {
             return this.fallbackResult(
                 rawInput,
                 cleanedQuery,
+                fallbackQuery,
                 null,
                 null,
                 'model-unavailable',
@@ -176,6 +197,7 @@ export class LivingMemoryRecallQueryBuilder {
             return this.fallbackResult(
                 rawInput,
                 cleanedQuery,
+                fallbackQuery,
                 null,
                 null,
                 'model-unavailable'
@@ -198,6 +220,7 @@ export class LivingMemoryRecallQueryBuilder {
                 return this.fallbackResult(
                     rawInput,
                     cleanedQuery,
+                    fallbackQuery,
                     rewritePrompt,
                     rewriteOutput,
                     'model-skip'
@@ -208,6 +231,7 @@ export class LivingMemoryRecallQueryBuilder {
                 return this.fallbackResult(
                     rawInput,
                     cleanedQuery,
+                    fallbackQuery,
                     rewritePrompt,
                     rewriteOutput,
                     'empty-output'
@@ -218,6 +242,7 @@ export class LivingMemoryRecallQueryBuilder {
                 return this.fallbackResult(
                     rawInput,
                     cleanedQuery,
+                    fallbackQuery,
                     rewritePrompt,
                     rewriteOutput,
                     'invalid-output'
@@ -239,6 +264,7 @@ export class LivingMemoryRecallQueryBuilder {
             return this.fallbackResult(
                 rawInput,
                 cleanedQuery,
+                fallbackQuery,
                 rewritePrompt,
                 null,
                 'invoke-failed',
@@ -250,6 +276,7 @@ export class LivingMemoryRecallQueryBuilder {
     private fallbackResult(
         rawInput: string,
         cleanedQuery: string,
+        finalQuery: string,
         rewritePrompt: string | null,
         rewriteOutput: string | null,
         fallbackReason: RecallQueryFallbackReason,
@@ -259,7 +286,7 @@ export class LivingMemoryRecallQueryBuilder {
             rawInput,
             rawInputLength: rawInput.length,
             cleanedQuery,
-            finalQuery: cleanedQuery,
+            finalQuery,
             rewritePrompt,
             rewriteOutput,
             fallbackReason,
@@ -283,13 +310,13 @@ export class LivingMemoryRecallQueryBuilder {
             : '无'
 
         return [
-            `你是${scope.presetId}，对话历史中以'${scope.presetId}:......'为前缀的是你自己的发言。`,
+            `你是${scope.presetId}，对话历史中以“${scope.presetId}说：...”开头的是你自己的发言。`,
             '【任务目标】',
-            '你要结合对话历史，重点关注当前对方的最后一条信息，叙述你们当前的话题内容。',
+            '你要结合对话历史，重点关注当前发言者的最后一条信息，叙述你们当前的话题内容。',
             '',
             '【任务要求】',
             `使用第一人称口吻来叙述，保留你自己的说话语气和风格。`,
-            '使用对话中每一条发言的前缀指代对方，不要泛称“用户”。',
+            '使用对话中每一条发言的前缀指代具体发言者，不要泛称“用户”。',
             '保留对关系、情绪、互动状态、重要事实的具体叙述。',
             '不要写成主题标签、分类词或关键词列表。',
             '不要输出“偏好、关系、互动状态”这类抽象概括。',
@@ -303,18 +330,18 @@ export class LivingMemoryRecallQueryBuilder {
             '错误输出示例：',
             '张三的偏好、与某人的关系及近期互动状态',
             `${scope.presetId}觉得心情很不错。`,
-            `${scope.presetId}:我把Procyon骂了一顿。`,
+            `${scope.presetId}说：我把Procyon骂了一顿。`,
             '',
             '【对话历史】',
             '"""',
             history,
             '"""',
             '',
-            '【对方的最后一条信息】',
+            '【当前发言者的最后一条信息】',
             '"""',
             currentTranscript.length > 0 ? currentTranscript : cleanedQuery,
             '"""',
-            '',
+            ''
         ].join('\n')
     }
 }

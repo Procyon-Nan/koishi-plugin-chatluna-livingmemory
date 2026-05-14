@@ -125,6 +125,9 @@ declare module '@koishijs/client' {
                 pageSize?: number
             }
         ) => PageResult<MemorySnapshotRecord>
+        'living-memory/deleteSnapshot': (
+            snapshotId: string
+        ) => { success: true }
         'living-memory/listJobs': (
             query: {
                 presetId: string
