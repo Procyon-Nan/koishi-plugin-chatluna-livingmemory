@@ -106,9 +106,7 @@ export function apply(ctx: Context, _config?: Config) {
 
     ctx.console.addListener(
         'living-memory/runDream',
-        ok(async (presetId: string) => {
-            await service(ctx).runDream(presetId)
-        })
+        async (presetId: string) => await service(ctx).runDream(presetId)
     )
 
     ctx.console.addListener(

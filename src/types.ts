@@ -103,6 +103,13 @@ export interface MemoryJobRecord {
     updatedAt: Date
 }
 
+export interface DreamTriggerResult {
+    success: true
+    started: boolean
+    reason?: 'preset-locked'
+    runningJobId?: string
+}
+
 export interface MemoryMutationInput {
     type: MemoryEntryType
     status?: MemoryEntryStatus
@@ -178,6 +185,7 @@ export interface JobRepository {
     ): Promise<MemoryJobRecord>
     updateJob(id: string, patch: Partial<MemoryJobRecord>): Promise<void>
     listJobsByPreset(presetId: string): Promise<MemoryJobRecord[]>
+    listRunningDreamJobsByPreset(presetId: string): Promise<MemoryJobRecord[]>
 }
 
 export interface ExtractionRepository {
@@ -246,7 +254,7 @@ declare module '@koishijs/plugin-console' {
         ) => Promise<PageResult<MemoryJobRecord>>
         'living-memory/runDream': (
             presetId: string
-        ) => Promise<{ success: true }>
+        ) => Promise<DreamTriggerResult>
         'living-memory/clearPresetData': (
             presetId: string
         ) => Promise<{ success: true }>

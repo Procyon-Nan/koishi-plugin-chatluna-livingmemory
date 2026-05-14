@@ -309,6 +309,18 @@ export class LivingMemoryRepository
         return jobs.sort((left, right) => +right.createdAt - +left.createdAt)
     }
 
+    async listRunningDreamJobsByPreset(
+        presetId: string
+    ): Promise<MemoryJobRecord[]> {
+        const jobs = await this.ctx.database.get('living_memory_job', {
+            presetId,
+            kind: 'dream',
+            status: 'running'
+        })
+
+        return jobs.sort((left, right) => +right.createdAt - +left.createdAt)
+    }
+
     async appendMemories(
         scope: MemoryScope,
         sourceMessages: MemoryEntryRecord['sourceMessages'],

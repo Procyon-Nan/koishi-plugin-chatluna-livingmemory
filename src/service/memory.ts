@@ -17,6 +17,7 @@ import {
     type SnapshotListQuery
 } from '../query'
 import type {
+    DreamTriggerResult,
     LivingMemoryConfig,
     MemoryMutationInput,
     MemoryScope,
@@ -119,7 +120,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     private readonly snapshotVariableByPreset = new Map<string, string>()
     private readonly extractionLockByConversation = new Set<string>()
     private readonly recallLockByConversation = new Set<string>()
-    private readonly dreamLockByPreset = new Set<string>()
+    private readonly dreamLockByPreset = new Map<string, string>()
     private readonly repository: LivingMemoryRepository
     private readonly retriever: LivingMemoryRetriever
     private readonly extractor: LivingMemoryExtractor
@@ -667,10 +668,8 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
 
         return ordered
             .map(
-                (record, index) =>
-                    `记忆${index + 1}（记录于 ${formatDateOnly(
-                        record.createdAt
-                    )}）：${record.content}`
+                (record) =>
+                    `记录于 ${formatDateOnly(record.createdAt)}：${record.content}`
             )
             .join('\n')
     }
@@ -740,23 +739,46 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         return filterJobList(items, query)
     }
 
-    async runDream(presetId: string) {
-        const scope = this.createScope(`dream:${presetId}`, presetId)
-        const job = await this.repository.createJob(scope, 'dream', presetId)
-
+    async runDream(presetId: string): Promise<DreamTriggerResult> {
         if (this.dreamLockByPreset.has(presetId)) {
-            await this.markJobCompleted(job.id, 'dream skipped: preset locked')
-            return
+            const runningJobId = this.dreamLockByPreset.get(presetId)
+            return {
+                success: true,
+                started: false,
+                reason: 'preset-locked',
+                runningJobId: runningJobId?.length ? runningJobId : undefined
+            }
         }
 
-        this.dreamLockByPreset.add(presetId)
-        this.runDreamJob(scope, job.id)
-            .catch((error) => {
-                this.serviceLogger.warn(error)
-            })
-            .finally(() => {
+        this.dreamLockByPreset.set(presetId, '')
+
+        try {
+            await this.recoverStaleDreamJobs(presetId)
+
+            const scope = this.createScope(`dream:${presetId}`, presetId)
+            const job = await this.repository.createJob(scope, 'dream', presetId)
+
+            this.dreamLockByPreset.set(presetId, job.id)
+            this.runDreamJob(scope, job.id)
+                .catch((error) => {
+                    this.serviceLogger.warn(error)
+                })
+                .finally(() => {
+                    if (this.dreamLockByPreset.get(presetId) === job.id) {
+                        this.dreamLockByPreset.delete(presetId)
+                    }
+                })
+
+            return {
+                success: true,
+                started: true
+            }
+        } catch (error) {
+            if (this.dreamLockByPreset.get(presetId) === '') {
                 this.dreamLockByPreset.delete(presetId)
-            })
+            }
+            throw error
+        }
     }
 
     private async runDreamJob(scope: MemoryScope, jobId: string) {
@@ -770,14 +792,48 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
                     result.detail
                 ].join(' ')
             )
-            if (result.merged + result.updated + result.archived > 0) {
-                await this.hydratePromptVariable(scope.presetId)
-            }
             await this.markJobCompleted(jobId, result.detail)
+            if (result.merged + result.updated + result.archived > 0) {
+                this.refreshDreamSnapshotCache(scope.presetId, jobId)
+            }
         } catch (error) {
             await this.markJobFailed(jobId, error)
             throw error
         }
+    }
+
+    private async recoverStaleDreamJobs(presetId: string) {
+        const staleJobs = await this.repository.listRunningDreamJobsByPreset(
+            presetId
+        )
+        if (staleJobs.length === 0) {
+            return
+        }
+
+        const now = new Date()
+        await Promise.all(
+            staleJobs.map((job) =>
+                this.repository.updateJob(job.id, {
+                    status: 'failed',
+                    detail: 'dream recovered: stale running job',
+                    error: 'dream recovered: stale running job',
+                    finishedAt: now,
+                    updatedAt: now
+                })
+            )
+        )
+    }
+
+    private refreshDreamSnapshotCache(presetId: string, jobId: string) {
+        this.hydratePromptVariable(presetId).catch((error) => {
+            const message = [
+                `memory dream cache refresh failed: jobId=${jobId}`,
+                `presetId=${presetId}`,
+                `error=${summarizeError(error)}`
+            ].join(' ')
+            this.debug(message)
+            this.serviceLogger.warn(message)
+        })
     }
 
     async clearPresetData(presetId: string) {

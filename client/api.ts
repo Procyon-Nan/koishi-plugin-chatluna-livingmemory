@@ -1,5 +1,6 @@
 import { send } from '@koishijs/client'
 import type {
+    DreamTriggerResult,
     MemoryEntryType,
     MemoryEntryStatus,
     MemoryEntryRecord,
@@ -75,7 +76,7 @@ export async function listJobs(params: JobListParams): Promise<PageResult<Memory
     return await send('living-memory/listJobs', params)
 }
 
-export async function runDream(presetId: string): Promise<{ success: true }> {
+export async function runDream(presetId: string): Promise<DreamTriggerResult> {
     return await send('living-memory/runDream', presetId)
 }
 

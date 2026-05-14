@@ -676,8 +676,12 @@ const runDreamJob = async () => {
     dreamPending.value = true
 
     try {
-        await api.runDream(presetId.value)
-        ElMessage.success('Dream 任务已触发')
+        const result = await api.runDream(presetId.value)
+        if (result.started) {
+            ElMessage.success('Dream 任务已触发')
+        } else if (result.reason === 'preset-locked') {
+            ElMessage.info('Dream 任务正在运行')
+        }
         await refreshAll()
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error)

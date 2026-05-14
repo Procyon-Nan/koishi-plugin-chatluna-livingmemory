@@ -63,6 +63,13 @@ export interface MemoryJobRecord {
     updatedAt: Date
 }
 
+export interface DreamTriggerResult {
+    success: true
+    started: boolean
+    reason?: 'preset-locked'
+    runningJobId?: string
+}
+
 export interface MemoryMutationInput {
     type: MemoryEntryType
     status?: MemoryEntryStatus
@@ -129,7 +136,7 @@ declare module '@koishijs/client' {
         ) => PageResult<MemoryJobRecord>
         'living-memory/runDream': (
             presetId: string
-        ) => { success: true }
+        ) => DreamTriggerResult
         'living-memory/clearPresetData': (
             presetId: string
         ) => { success: true }

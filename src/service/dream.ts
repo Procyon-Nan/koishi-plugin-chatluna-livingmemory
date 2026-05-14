@@ -260,25 +260,6 @@ export class LivingMemoryDreamService {
         const activeEntries = entries.filter(
             (entry) => entry.status === 'active'
         )
-        const archivedEntries = entries.filter(
-            (entry) => entry.status === 'archived'
-        )
-        if (activeEntries.length < 2 && archivedEntries.length < 2) {
-            const activeResult = this.createEmptyStageResult(
-                'active',
-                activeEntries.length
-            )
-            const archivedResult = this.createEmptyStageResult(
-                'archived',
-                archivedEntries.length
-            )
-            return {
-                entryCount: entries.length,
-                clusterCount: 0,
-                ...this.sumStats([activeResult, archivedResult]),
-                detail: [activeResult.detail, archivedResult.detail].join('\n')
-            }
-        }
 
         if (!isModelConfigured(this.config.dreamModel)) {
             return this.createResult(entries.length, 0, {
@@ -308,6 +289,12 @@ export class LivingMemoryDreamService {
             'active',
             activeEntries,
             invokeModel
+        )
+        const refreshedEntries = await this.repository.listEntriesByPreset(
+            presetId
+        )
+        const archivedEntries = refreshedEntries.filter(
+            (entry) => entry.status === 'archived'
         )
         const archivedResult = await this.runStage(
             presetId,
@@ -790,7 +777,7 @@ export class LivingMemoryDreamService {
             '- keep：记忆彼此不重复，保持不变。',
             '- update：某条 active 记忆需要补充信息增量，保持同一条记忆的基本身份。',
             '- merge：多条 active 记忆描述同一对象、同一状态或同一关系画像时，选择一条作为 target，写成更完整的新正文；其余 source 会被代码层自动改为 archived 历史记录。',
-            '- archive：某条 active 记忆已经过时或与新状态冲突，把它改写为以“历史记录：”开头的历史阶段记录。',
+            '- archive：某条 active 记忆已经过时或与新状态冲突，把它改写为历史阶段记录。',
             '- active 阶段禁止物理删除记忆。'
         ]
         const archivedOperationGuide = [
@@ -814,20 +801,20 @@ export class LivingMemoryDreamService {
             '"keywords":["..."],"sentiment":"...","importance":0.8},',
             '"reason":"..."},',
             '{"action":"archive","memoryId":"...","memory":',
-            '{"content":"历史记录：...","summary":"历史记录：...",',
-            '"keywords":["历史记录"],"sentiment":"...",',
+            '{"content":"...","summary":"...",',
+            '"keywords":["..."],"sentiment":"...",',
             '"importance":0.3},"reason":"..."}]}'
         ].join('')
         const archivedFormat = [
             '{"operations":[',
             '{"action":"keep","memoryIds":["..."],"reason":"..."},',
             '{"action":"update","memoryId":"...","memory":',
-            '{"type":"fact","content":"历史记录：...","summary":"...",',
+            '{"type":"fact","content":"...","summary":"...",',
             '"keywords":["..."],"sentiment":"...","importance":0.4},',
             '"reason":"..."},',
             '{"action":"merge","targetMemoryId":"...",',
             '"sourceMemoryIds":["..."],"memory":',
-            '{"type":"fact","content":"历史记录：...","summary":"...",',
+            '{"type":"fact","content":"...","summary":"...",',
             '"keywords":["..."],"sentiment":"...","importance":0.5},',
             '"reason":"..."},',
             '{"action":"deleteSource","targetMemoryId":"...",',
@@ -855,7 +842,7 @@ export class LivingMemoryDreamService {
             '合并判断依据：',
             '1. 事实一致性：同一对象同一状态的信息应合并。',
             '2. 信息增量：新记忆提供旧记忆没有的维度时，应补充而不是丢弃。',
-            '3. 时间权重与冲突：出现矛盾时以较新的状态为有效值，旧状态应 archive 为历史记录。',
+            '3. 时间权重与冲突：出现矛盾时以较新的状态为有效值，旧状态应 archive 为 archived。',
             '4. importance 越高越应保留为 target 或被认真整合；sentiment 用于判断情绪和关系阶段。',
             '',
             '输出必须是可解析 JSON，不要解释，不要 Markdown。',
@@ -866,6 +853,7 @@ export class LivingMemoryDreamService {
             '- content 是最终会注入给 preset 的记忆正文，应保持第一人称关系视角。',
             '- summary 是检索友好的简短摘要，不要写成角色台词。',
             '- keywords 是短词数组，最多 12 个。',
+            '- 不要在 content、summary 或 keywords 中写入“历史记录”、“已合并”等状态或整理标记；归档状态由 status 字段表达。',
             '- sentiment 是简短自由文本。',
             '- importance 必须是 0 到 1 的数字。',
             '- 所有 memoryId、targetMemoryId、sourceMemoryIds 必须来自下面的 id。',
@@ -1186,13 +1174,9 @@ export class LivingMemoryDreamService {
             } else {
                 await this.archiveMemory(source, touchedMemoryIds, {
                     status: 'archived',
-                    content: `历史记录：这条旧记忆已经被整理进更完整的同类记忆。原内容：${source.content}`,
-                    summary: `历史记录：这条旧记忆已被合并整理。${source.summary ?? ''}`,
-                    keywords: unique([
-                        '历史记录',
-                        '已合并',
-                        ...source.keywords
-                    ]).slice(0, 12),
+                    content: source.content,
+                    summary: source.summary,
+                    keywords: source.keywords,
                     sentiment: source.sentiment,
                     importance: Math.min(source.importance ?? 0.5, 0.35)
                 })
@@ -1209,14 +1193,11 @@ export class LivingMemoryDreamService {
         await this.repository.updateMemory(entry.id, {
             ...patch,
             status: 'archived',
-            content: this.ensureHistoryPrefix(patch.content ?? entry.content),
-            summary: this.ensureHistoryPrefix(
-                patch.summary ?? entry.summary ?? entry.content.slice(0, 80)
-            ),
-            keywords: unique([
-                '历史记录',
-                ...(patch.keywords?.length ? patch.keywords : entry.keywords)
-            ]).slice(0, 12),
+            content: normalizeText(patch.content ?? entry.content),
+            summary: patch.summary ?? entry.summary ?? entry.content.slice(0, 80),
+            keywords: unique(
+                patch.keywords?.length ? patch.keywords : entry.keywords
+            ).slice(0, 12),
             sentiment: patch.sentiment ?? entry.sentiment,
             importance:
                 patch.importance ?? Math.min(entry.importance ?? 0.5, 0.35)
@@ -1237,15 +1218,7 @@ export class LivingMemoryDreamService {
 
         return {
             ...patch,
-            status: 'archived',
-            content:
-                patch.content == null
-                    ? patch.content
-                    : this.ensureHistoryPrefix(patch.content),
-            summary:
-                patch.summary == null
-                    ? patch.summary
-                    : this.ensureHistoryPrefix(patch.summary)
+            status: 'archived'
         }
     }
 
@@ -1303,13 +1276,6 @@ export class LivingMemoryDreamService {
         }
 
         return patch
-    }
-
-    private ensureHistoryPrefix(value: string) {
-        const normalized = normalizeText(value)
-        return normalized.startsWith('历史记录：')
-            ? normalized
-            : `历史记录：${normalized}`
     }
 
     private createResult(
