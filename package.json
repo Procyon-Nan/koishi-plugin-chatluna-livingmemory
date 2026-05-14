@@ -1,6 +1,13 @@
 {
   "name": "koishi-plugin-chatluna-livingmemory",
   "version": "0.0.1",
+  "contributors": [            
+    "ProcyonNAN <3189960265@qq.com>"
+  ],
+  "repository": {                       
+    "type": "git",
+    "url": "git+https://github.com/Procyon-Nan/koishi-plugin-chatluna-livingmemory.git"
+  },
   "type": "module",
   "description": "ChatLuna plugin example",
   "main": "lib/index.cjs",
@@ -22,10 +29,10 @@
   },
   "license": "MIT",
   "keywords": [
-    "chatbot",
+    "chatluna",
     "koishi",
     "plugin",
-    "chatluna"
+    "memory"
   ],
   "dependencies": {
     "@langchain/core": "0.3.62"
@@ -86,7 +93,7 @@
   },
   "koishi": {
     "description": {
-      "zh": "ChatLuna Living Memory 插件，为预设提供异步召回、提取与 WebUI 管理能力"
+      "zh": "适用于chatluna的长期记忆插件，提供记忆的异步召回、提取与 WebUI 管理能力"
     },
     "service": {
       "required": [
