@@ -1,10 +1,10 @@
 {
   "name": "koishi-plugin-chatluna-livingmemory",
-  "version": "0.0.1",
-  "contributors": [            
+  "version": "0.0.2",
+  "contributors": [
     "ProcyonNAN <3189960265@qq.com>"
   ],
-  "repository": {                       
+  "repository": {
     "type": "git",
     "url": "git+https://github.com/Procyon-Nan/koishi-plugin-chatluna-livingmemory.git"
   },
