@@ -823,7 +823,7 @@ export class LivingMemoryDreamService {
 
         return [
             '你是长期记忆 Dream 档案员。',
-            '你的任务是整理同一 preset 下已有的陪伴型长期记忆，而不是重新创作新记忆。',
+            '你的任务是整理同一 preset 下已有的记忆条目，而不是重新创作新记忆。',
             '你只能基于下面给出的记忆条目做判断，禁止引入条目之外的新事实。',
             stage === 'active'
                 ? '当前阶段只处理 active 记忆：目标是软整理当前可召回记忆，保留关系演化痕迹。'
@@ -849,7 +849,7 @@ export class LivingMemoryDreamService {
             stage === 'active' ? activeFormat : archivedFormat,
             '',
             '字段要求：',
-            '- content 是最终会注入给 preset 的记忆正文，应保持第一人称关系视角。',
+            '- content 是最终会注入给 preset 的记忆正文，应保持第一人称关系视角。字数保持在100字以内。',
             '- summary 是检索友好的简短摘要，不要写成角色台词。',
             '- keywords 是短词数组，最多 12 个。',
             '- 不要在 content、summary 或 keywords 中写入“历史记录”、“已合并”等状态或整理标记；归档状态由 status 字段表达。',

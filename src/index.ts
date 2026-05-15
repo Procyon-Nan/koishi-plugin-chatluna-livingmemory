@@ -79,29 +79,23 @@ export const Config: Schema<Config> = Schema.object({
         .max(12)
         .step(1)
         .description(
-            '每次提取时使用的最近对话轮数（1 轮 = 1 次用户消息 + 1 次助手回复）。'
+            '每次提取时使用的最近对话轮数（1 轮 = 1 次用户消息 + 1 次AI回复）。'
         )
-        .default(3),
+        .default(10),
     extractionInterval: Schema.number()
-        .min(1)
-        .max(20)
+        .min(0)
+        .max(500)
         .step(1)
-        .description('每隔多少轮对话触发一次记忆提取。')
-        .default(3),
+        .description(
+            '每隔多少轮对话触发一次记忆提取；设为 0 时不执行自动记忆提取。'
+        )
+        .default(10),
     recallTopK: Schema.number()
         .min(1)
         .max(20)
         .step(1)
         .description('每次召回时返回的最相关记忆条数上限。')
         .default(5),
-    maxSnapshotsPerPreset: Schema.number()
-        .min(1)
-        .max(10)
-        .step(1)
-        .description(
-            '兼容旧配置项。当前召回快照按会话保存，每个会话只保留并更新一条最新快照。'
-        )
-        .default(2),
     recallStrategy: Schema.union(
         memoryRecallStrategies.map((strategy) => Schema.const(strategy))
     )

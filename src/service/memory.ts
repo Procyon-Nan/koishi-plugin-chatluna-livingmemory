@@ -327,6 +327,17 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             ].join(' ')
         )
 
+        if (this.config.extractionInterval <= 0) {
+            this.debug(
+                [
+                    'queueExtraction skipped: auto extraction disabled,',
+                    `conversationId=${scope.conversationId}`,
+                    `interval=${this.config.extractionInterval}`
+                ].join(' ')
+            )
+            return
+        }
+
         if (chatCount < this.config.extractionRounds) {
             this.debug(
                 [

@@ -232,7 +232,6 @@ export interface LivingMemoryConfig {
     extractionRounds: number
     extractionInterval: number
     recallTopK: number
-    maxSnapshotsPerPreset: number
     recallStrategy: MemoryRecallStrategy
     enableKeywordFallback: boolean
     debug: boolean
