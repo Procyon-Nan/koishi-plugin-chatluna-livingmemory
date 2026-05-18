@@ -92,6 +92,10 @@ const buildFallbackQuery = (
     return `${speaker} ${cleanedQuery}`.trim()
 }
 
+const toPresetLabel = (scope: MemoryScope) => {
+    return scope.presetLabel?.trim() || scope.presetId
+}
+
 export type RecallQueryFallbackReason =
     | 'rewrite-disabled'
     | 'model-not-configured'
@@ -301,6 +305,7 @@ export class LivingMemoryRecallQueryBuilder {
         currentTranscript: string,
         historyMessages: BaseMessage[]
     ) {
+        const presetLabel = toPresetLabel(scope)
         const recentMessages = this.formatter.takeRecentRounds(
             historyMessages,
             this.config.recallRewriteRounds
@@ -310,7 +315,7 @@ export class LivingMemoryRecallQueryBuilder {
             : '无'
 
         return [
-            `你是${scope.presetId}，对话历史中以“${scope.presetId}说：...”开头的是你自己的发言。`,
+            `你是${presetLabel}，对话历史中以“${presetLabel}说：...”开头的是你自己的发言。`,
             '【任务目标】',
             '你要结合对话历史，重点关注当前发言者的最后一条信息，叙述你们当前的话题内容。',
             '',
@@ -329,8 +334,8 @@ export class LivingMemoryRecallQueryBuilder {
             '',
             '错误输出示例：',
             '张三的偏好、与某人的关系及近期互动状态',
-            `${scope.presetId}觉得心情很不错。`,
-            `${scope.presetId}说：我把Procyon骂了一顿。`,
+            `${presetLabel}觉得心情很不错。`,
+            `${presetLabel}说：我把Procyon骂了一顿。`,
             '',
             '【对话历史】',
             '"""',

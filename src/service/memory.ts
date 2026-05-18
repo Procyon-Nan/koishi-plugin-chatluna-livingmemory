@@ -115,6 +115,11 @@ const formatDateOnly = (value: Date | string | number) => {
     ].join('-')
 }
 
+export interface QueueExtractionOptions {
+    presetPromptOverride?: string | null
+    preselectedMessages?: BaseMessage[]
+}
+
 export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     private readonly serviceLogger: Logger
     private readonly snapshotVariableByScope = new Map<string, string>()
@@ -223,7 +228,11 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         options: Partial<
             Pick<
                 MemoryScope,
-                'guildId' | 'isDirect' | 'speakerId' | 'speakerName'
+                | 'guildId'
+                | 'isDirect'
+                | 'speakerId'
+                | 'speakerName'
+                | 'presetLabel'
             >
         > = {}
     ): MemoryScope {
@@ -314,7 +323,8 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         chatCount: number,
         messages: BaseMessage[],
         presetTemplate?: PresetTemplate,
-        promptVariables: Record<string, unknown> = {}
+        promptVariables: Record<string, unknown> = {},
+        options: QueueExtractionOptions = {}
     ) {
         this.debug(
             [
@@ -370,10 +380,12 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             return
         }
 
-        const rounds = this.formatter.takeRecentRounds(
-            messages,
-            this.config.extractionRounds
-        )
+        const rounds =
+            options.preselectedMessages ??
+            this.formatter.takeRecentRounds(
+                messages,
+                this.config.extractionRounds
+            )
         if (rounds.length === 0) {
             this.debug(
                 [
@@ -397,7 +409,13 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
 
         this.extractionLockByConversation.add(lockKey)
 
-        this.runExtraction(scope, rounds, presetTemplate, promptVariables)
+        this.runExtraction(
+            scope,
+            rounds,
+            presetTemplate,
+            promptVariables,
+            options.presetPromptOverride
+        )
             .catch((error) => {
                 this.serviceLogger.warn(error)
             })
@@ -535,7 +553,8 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         scope: MemoryScope,
         messages: BaseMessage[],
         presetTemplate?: PresetTemplate,
-        promptVariables: Record<string, unknown> = {}
+        promptVariables: Record<string, unknown> = {},
+        presetPromptOverride?: string | null
     ) {
         const payload = this.formatter.toExtractionPayload(scope, messages)
         const job = await this.repository.createJob(
@@ -557,14 +576,17 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         try {
             await this.markJobRunning(job.id)
 
-            const presetPrompt = await this.renderExtractionPresetPrompt(
-                scope,
-                presetTemplate,
-                promptVariables
-            )
+            const presetPrompt =
+                presetPromptOverride ??
+                (await this.renderExtractionPresetPrompt(
+                    scope,
+                    presetTemplate,
+                    promptVariables
+                ))
             const trace = await this.extractor.extractWithTrace(payload.input, {
                 conversationId: scope.conversationId,
                 presetId: scope.presetId,
+                presetLabel: scope.presetLabel,
                 currentDate: formatDateOnly(new Date()),
                 presetPrompt
             })

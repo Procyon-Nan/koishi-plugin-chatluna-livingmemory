@@ -101,7 +101,8 @@
         "database"
       ],
       "optional": [
-        "console"
+        "console",
+        "chatluna_character"
       ]
     },
     "browser": true,

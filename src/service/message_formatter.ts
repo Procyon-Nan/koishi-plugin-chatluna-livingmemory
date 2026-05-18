@@ -182,6 +182,10 @@ export const toLivingMemorySpeakerLabel = (
     )
 }
 
+const toPresetLabel = (scope: MemoryScope) => {
+    return toStringValue(scope.presetLabel) ?? scope.presetId
+}
+
 const toFormattedMessage = (
     scope: MemoryScope,
     message: BaseMessage
@@ -213,7 +217,7 @@ const toFormattedMessage = (
             role: 'assistant',
             content: cleanLines.join('\n'),
             transcriptLines: cleanLines.map(
-                (line) => `${scope.presetId}说：${line}`
+                (line) => `${toPresetLabel(scope)}说：${line}`
             )
         }
     }

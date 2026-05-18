@@ -59,6 +59,7 @@ export interface LivingMemoryExtractionTrace {
 export interface LivingMemoryExtractionContext {
     conversationId: string
     presetId: string
+    presetLabel?: string
     currentDate?: string
     presetPrompt?: string | null
 }
@@ -184,7 +185,9 @@ export class LivingMemoryExtractor {
         context?: LivingMemoryExtractionContext
     ) {
         const assistantLabel =
-            context == null ? '当前 presetId 对应角色名' : context.presetId
+            context == null
+                ? '当前 presetId 对应角色名'
+                : context.presetLabel?.trim() || context.presetId
         const currentDate = context?.currentDate ?? formatDateOnly(new Date())
         const outputFormat = [
             '{"type":"identity|preference|fact|plan|context|other",',

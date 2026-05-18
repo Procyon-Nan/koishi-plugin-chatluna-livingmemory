@@ -44,6 +44,7 @@ export interface MemoryReference {
 export interface MemoryScope {
     conversationId: string
     presetId: string
+    presetLabel?: string
     userId?: string
     channelId?: string
     guildId?: string

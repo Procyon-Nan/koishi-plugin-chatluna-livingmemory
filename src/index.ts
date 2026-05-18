@@ -1,6 +1,7 @@
 import { Context, Schema } from 'koishi'
 import {} from 'koishi-plugin-chatluna/services/chat'
 import type {} from '@koishijs/plugin-console'
+import { apply as characterMiddlewarePlugin } from './plugins/character_middleware'
 import { apply as chatMiddlewarePlugin } from './plugins/chat_middleware'
 import {
     registerEntry as registerWebUIEntry,
@@ -23,7 +24,11 @@ export function apply(ctx: Context, config: Config) {
     })
 
     ctx.inject(['chatluna_living_memory'], (ctx) => {
-        return chatMiddlewarePlugin(ctx, config)
+        chatMiddlewarePlugin(ctx, config)
+
+        ctx.inject(['chatluna_character'], (ctx) => {
+            characterMiddlewarePlugin(ctx, config)
+        })
     })
 }
 
@@ -32,13 +37,13 @@ export const reusable = false
 
 export const inject = {
     required: ['chatluna', 'database'],
-    optional: ['console']
+    optional: ['console', 'chatluna_character']
 }
 
 export const Config: Schema<Config> = Schema.object({
     promptVariable: Schema.const('{living_memory}')
         .description(
-            '在 ChatLuna 预设提示词中写入该变量即可注入最近一次成功召回的记忆快照。'
+            '在 ChatLuna 或 Character 预设提示词中写入该变量即可注入最近一次成功召回的记忆快照。'
         )
         .role('text')
         .default('{living_memory}'),
