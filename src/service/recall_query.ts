@@ -144,101 +144,110 @@ export class LivingMemoryRecallQueryBuilder {
             )
         }
 
-        let model: Awaited<ReturnType<Context['chatluna']['createChatModel']>>
-        try {
-            model = await this.ctx.chatluna.createChatModel(
-                this.config.recallRewriteModel
-            )
-        } catch (error) {
-            return this.fallbackResult(
-                rawInput,
-                cleanedQuery,
-                fallbackQuery,
-                null,
-                null,
-                'model-unavailable',
-                summarizeError(error)
-            )
-        }
+        return this.ctx.chatluna.withUsageSource(
+            'chatluna-livingmemory',
+            async () => {
+                let model: Awaited<
+                    ReturnType<Context['chatluna']['createChatModel']>
+                >
+                try {
+                    model = await this.ctx.chatluna.createChatModel(
+                        this.config.recallRewriteModel
+                    )
+                } catch (error) {
+                    return this.fallbackResult(
+                        rawInput,
+                        cleanedQuery,
+                        fallbackQuery,
+                        null,
+                        null,
+                        'model-unavailable',
+                        summarizeError(error)
+                    )
+                }
 
-        if (model.value == null) {
-            return this.fallbackResult(
-                rawInput,
-                cleanedQuery,
-                fallbackQuery,
-                null,
-                null,
-                'model-unavailable'
-            )
-        }
+                if (model.value == null) {
+                    return this.fallbackResult(
+                        rawInput,
+                        cleanedQuery,
+                        fallbackQuery,
+                        null,
+                        null,
+                        'model-unavailable'
+                    )
+                }
 
-        const rewritePrompt = this.buildRewritePrompt(
-            scope,
-            cleanedQuery,
-            currentTranscript,
-            historyMessages
+                const rewritePrompt = this.buildRewritePrompt(
+                    scope,
+                    cleanedQuery,
+                    currentTranscript,
+                    historyMessages
+                )
+
+                try {
+                    const result = await model.value.invoke(rewritePrompt)
+                    const rewriteOutput = stringifyModelContent(
+                        result.content
+                    ).trim()
+                    const rewrittenQuery = normalizeRewriteOutput(rewriteOutput)
+
+                    if (isSkipQuery(rewrittenQuery)) {
+                        return this.fallbackResult(
+                            rawInput,
+                            cleanedQuery,
+                            fallbackQuery,
+                            rewritePrompt,
+                            rewriteOutput,
+                            'model-skip'
+                        )
+                    }
+
+                    if (rewrittenQuery.length === 0) {
+                        return this.fallbackResult(
+                            rawInput,
+                            cleanedQuery,
+                            fallbackQuery,
+                            rewritePrompt,
+                            rewriteOutput,
+                            'empty-output'
+                        )
+                    }
+
+                    if (!semanticTextPattern.test(rewrittenQuery)) {
+                        return this.fallbackResult(
+                            rawInput,
+                            cleanedQuery,
+                            fallbackQuery,
+                            rewritePrompt,
+                            rewriteOutput,
+                            'invalid-output'
+                        )
+                    }
+
+                    return {
+                        rawInput,
+                        rawInputLength: rawInput.length,
+                        cleanedQuery,
+                        finalQuery: rewrittenQuery,
+                        rewritePrompt,
+                        rewriteOutput,
+                        fallbackReason: null,
+                        skippedReason: null,
+                        error: null
+                    }
+                } catch (error) {
+                    return this.fallbackResult(
+                        rawInput,
+                        cleanedQuery,
+                        fallbackQuery,
+                        rewritePrompt,
+                        null,
+                        'invoke-failed',
+                        summarizeError(error)
+                    )
+                }
+            }
         )
-
-        try {
-            const result = await model.value.invoke(rewritePrompt)
-            const rewriteOutput = stringifyModelContent(result.content).trim()
-            const rewrittenQuery = normalizeRewriteOutput(rewriteOutput)
-
-            if (isSkipQuery(rewrittenQuery)) {
-                return this.fallbackResult(
-                    rawInput,
-                    cleanedQuery,
-                    fallbackQuery,
-                    rewritePrompt,
-                    rewriteOutput,
-                    'model-skip'
-                )
-            }
-
-            if (rewrittenQuery.length === 0) {
-                return this.fallbackResult(
-                    rawInput,
-                    cleanedQuery,
-                    fallbackQuery,
-                    rewritePrompt,
-                    rewriteOutput,
-                    'empty-output'
-                )
-            }
-
-            if (!semanticTextPattern.test(rewrittenQuery)) {
-                return this.fallbackResult(
-                    rawInput,
-                    cleanedQuery,
-                    fallbackQuery,
-                    rewritePrompt,
-                    rewriteOutput,
-                    'invalid-output'
-                )
-            }
-
-            return {
-                rawInput,
-                rawInputLength: rawInput.length,
-                cleanedQuery,
-                finalQuery: rewrittenQuery,
-                rewritePrompt,
-                rewriteOutput,
-                fallbackReason: null,
-                skippedReason: null,
-                error: null
-            }
-        } catch (error) {
-            return this.fallbackResult(
-                rawInput,
-                cleanedQuery,
-                fallbackQuery,
-                rewritePrompt,
-                null,
-                'invoke-failed',
-                summarizeError(error)
-            )
-        }
     }
 
     private fallbackResult(

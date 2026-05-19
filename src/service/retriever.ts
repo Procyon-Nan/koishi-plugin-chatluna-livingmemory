@@ -108,95 +108,103 @@ export class LivingMemoryRetriever {
             return []
         }
 
-        const embeddings = await this.ctx.chatluna.createEmbeddings(
-            this.config.embeddingModel
-        )
-        if (embeddings?.value == null) {
-            return []
-        }
-
-        const entries = await this.listActiveEntries(presetId)
-        if (entries.length === 0) {
-            return []
-        }
-
-        const queryVector = await embeddings.value.embedQuery(input)
-
-        let vectorById: Map<string, number[]>
-        try {
-            vectorById = await ensureEntryEmbeddings(
-                embeddings.value,
-                this.recallRepository,
-                this.config.embeddingModel,
-                entries,
-                {
-                    logger: this.ctx.logger('chatluna-livingmemory'),
-                    debug: (message) => {
-                        if (this.config.debug) {
-                            this.ctx
-                                .logger('chatluna-livingmemory')
-                                .info(message)
-                        }
-                    }
-                }
-            )
-        } catch (error) {
-            this.ctx
-                .logger('chatluna-livingmemory')
-                .warn(
-                    `memory retrieve embedding failed: ${summarizeError(error)}`
+        return this.ctx.chatluna.withUsageSource(
+            'chatluna-livingmemory',
+            async () => {
+                const embeddings = await this.ctx.chatluna.createEmbeddings(
+                    this.config.embeddingModel
                 )
-            return []
-        }
-
-        const embeddingResults = entries
-            .map((entry) => {
-                const vector = vectorById.get(entry.id) ?? []
-                return {
-                    id: entry.id,
-                    content: entry.content,
-                    retrievalText: toMemoryRetrievalText(entry),
-                    score: cosineSimilarity(queryVector, vector)
+                if (embeddings?.value == null) {
+                    return []
                 }
-            })
-            .sort((left, right) => right.score - left.score)
 
-        const candidateCount = Math.min(embeddingResults.length, limit * 3)
-        const candidates = embeddingResults.slice(0, candidateCount)
+                const entries = await this.listActiveEntries(presetId)
+                if (entries.length === 0) {
+                    return []
+                }
 
-        if (
-            !isModelConfigured(this.config.rerankModel) ||
-            candidates.length === 0
-        ) {
-            return candidates.slice(0, limit).map((candidate) => ({
-                id: candidate.id,
-                content: candidate.content,
-                score: candidate.score
-            }))
-        }
+                const queryVector = await embeddings.value.embedQuery(input)
 
-        const reranker = await this.ctx.chatluna.createReranker(
-            this.config.rerankModel
+                let vectorById: Map<string, number[]>
+                try {
+                    vectorById = await ensureEntryEmbeddings(
+                        embeddings.value,
+                        this.recallRepository,
+                        this.config.embeddingModel,
+                        entries,
+                        {
+                            logger: this.ctx.logger('chatluna-livingmemory'),
+                            debug: (message) => {
+                                if (this.config.debug) {
+                                    this.ctx
+                                        .logger('chatluna-livingmemory')
+                                        .info(message)
+                                }
+                            }
+                        }
+                    )
+                } catch (error) {
+                    this.ctx
+                        .logger('chatluna-livingmemory')
+                        .warn(
+                            `memory retrieve embedding failed: ${summarizeError(error)}`
+                        )
+                    return []
+                }
+
+                const embeddingResults = entries
+                    .map((entry) => {
+                        const vector = vectorById.get(entry.id) ?? []
+                        return {
+                            id: entry.id,
+                            content: entry.content,
+                            retrievalText: toMemoryRetrievalText(entry),
+                            score: cosineSimilarity(queryVector, vector)
+                        }
+                    })
+                    .sort((left, right) => right.score - left.score)
+
+                const candidateCount = Math.min(
+                    embeddingResults.length,
+                    limit * 3
+                )
+                const candidates = embeddingResults.slice(0, candidateCount)
+
+                if (
+                    !isModelConfigured(this.config.rerankModel) ||
+                    candidates.length === 0
+                ) {
+                    return candidates.slice(0, limit).map((candidate) => ({
+                        id: candidate.id,
+                        content: candidate.content,
+                        score: candidate.score
+                    }))
+                }
+
+                const reranker = await this.ctx.chatluna.createReranker(
+                    this.config.rerankModel
+                )
+                if (reranker?.value == null) {
+                    return candidates.slice(0, limit).map((candidate) => ({
+                        id: candidate.id,
+                        content: candidate.content,
+                        score: candidate.score
+                    }))
+                }
+
+                const rerankResults = await reranker.value.rerank(
+                    candidates.map((c) => c.retrievalText),
+                    input,
+                    { topN: limit }
+                )
+
+                return rerankResults.map((result) => ({
+                    id: candidates[result.index].id,
+                    content: candidates[result.index].content,
+                    score: result.relevanceScore
+                }))
+            }
         )
-        if (reranker?.value == null) {
-            return candidates.slice(0, limit).map((candidate) => ({
-                id: candidate.id,
-                content: candidate.content,
-                score: candidate.score
-            }))
-        }
-
-        const rerankResults = await reranker.value.rerank(
-            candidates.map((c) => c.retrievalText),
-            input,
-            { topN: limit }
-        )
-
-        return rerankResults.map((result) => ({
-            id: candidates[result.index].id,
-            content: candidates[result.index].content,
-            score: result.relevanceScore
-        }))
     }
 
     private async listActiveEntries(presetId: string) {
