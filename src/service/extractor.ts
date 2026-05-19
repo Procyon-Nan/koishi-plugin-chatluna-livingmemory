@@ -1,23 +1,14 @@
 import { Context } from 'koishi'
 import type { ExtractedMemoryItem } from '../types'
-import { isModelConfigured, stringifyModelContent } from './shared/utils'
+import {
+    formatDateOnly,
+    isModelConfigured,
+    stringifyModelContent
+} from './shared/utils'
 
 const normalizeText = (value: string) => value.trim()
 
 const DEFAULT_IMPORTANCE = 0.5
-
-const formatDateOnly = (value: Date | string | number) => {
-    const date = new Date(value)
-    if (!Number.isFinite(+date)) {
-        return '未知日期'
-    }
-
-    return [
-        date.getFullYear(),
-        String(date.getMonth() + 1).padStart(2, '0'),
-        String(date.getDate()).padStart(2, '0')
-    ].join('-')
-}
 
 const parseImportance = (value: unknown) => {
     const importance =

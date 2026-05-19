@@ -7,7 +7,11 @@ import { LivingMemoryMessageFormatter } from './message_formatter'
 import { LivingMemoryRecallQueryBuilder } from './recall_query'
 import { LivingMemoryRepository } from './repository'
 import { LivingMemoryRetriever } from './retriever'
-import { isModelConfigured, summarizeError } from './shared/utils'
+import {
+    formatDateOnly,
+    isModelConfigured,
+    summarizeError
+} from './shared/utils'
 import {
     filterJobList,
     filterMemoryList,
@@ -91,19 +95,6 @@ const formatRenderedPresetPrompt = (messages: BaseMessage[]) => {
         '# 当前 preset prompt（仅用于理解“我”的人设，不要从此处抽取记忆）',
         ...formattedMessages
     ].join('\n\n')
-}
-
-const formatDateOnly = (value: Date | string | number) => {
-    const date = new Date(value)
-    if (!Number.isFinite(+date)) {
-        return '未知日期'
-    }
-
-    return [
-        date.getFullYear(),
-        String(date.getMonth() + 1).padStart(2, '0'),
-        String(date.getDate()).padStart(2, '0')
-    ].join('-')
 }
 
 export interface QueueExtractionOptions {
