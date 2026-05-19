@@ -59,11 +59,6 @@ export class LivingMemoryExtractor {
         private readonly extractModel: string
     ) {}
 
-    async extract(input: string): Promise<ExtractedMemoryItem[]> {
-        const trace = await this.extractWithTrace(input)
-        return trace.extracted
-    }
-
     async extractWithTrace(
         input: string,
         context?: LivingMemoryExtractionContext

@@ -13,9 +13,7 @@ export const memoryEntryTypes = [
 
 export type MemoryEntryType = (typeof memoryEntryTypes)[number]
 
-export const memoryEntryStatuses = ['active', 'archived'] as const
-
-export type MemoryEntryStatus = (typeof memoryEntryStatuses)[number]
+export type MemoryEntryStatus = 'active' | 'archived'
 
 export interface MemoryEntryRecord {
     id: string
