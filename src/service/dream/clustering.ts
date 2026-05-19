@@ -194,71 +194,79 @@ export class DreamClusterer {
         }
 
         try {
-            const embeddings = await this.ctx.chatluna.createEmbeddings(
-                this.config.embeddingModel
-            )
-            if (embeddings?.value == null) {
-                this.debug(
-                    'memory dream embedding unavailable, fallback to keyword clusters'
-                )
-                return null
-            }
+            return await this.ctx.chatluna.withUsageSource(
+                'chatluna-livingmemory',
+                async () => {
+                    const embeddings = await this.ctx.chatluna.createEmbeddings(
+                        this.config.embeddingModel
+                    )
+                    if (embeddings?.value == null) {
+                        this.debug(
+                            'memory dream embedding unavailable, fallback to keyword clusters'
+                        )
+                        return null
+                    }
 
-            const entries = unique(groups.flatMap((group) => group.entries))
-            const vectorById = await ensureEntryEmbeddings(
-                embeddings.value,
-                this.repository,
-                this.config.embeddingModel,
-                entries,
-                {
-                    logger: this.ctx.logger('chatluna-livingmemory'),
-                    debug: (message) => this.debug(message)
-                }
-            )
+                    const entries = unique(
+                        groups.flatMap((group) => group.entries)
+                    )
+                    const vectorById = await ensureEntryEmbeddings(
+                        embeddings.value,
+                        this.repository,
+                        this.config.embeddingModel,
+                        entries,
+                        {
+                            logger: this.ctx.logger('chatluna-livingmemory'),
+                            debug: (message) => this.debug(message)
+                        }
+                    )
 
-            const refined: CandidateGroup[] = []
-            for (const group of groups) {
-                const unionFind = new UnionFind(
-                    group.entries.map((entry) => entry.id)
-                )
-
-                for (
-                    let leftIndex = 0;
-                    leftIndex < group.entries.length;
-                    leftIndex++
-                ) {
-                    for (
-                        let rightIndex = leftIndex + 1;
-                        rightIndex < group.entries.length;
-                        rightIndex++
-                    ) {
-                        const left = group.entries[leftIndex]
-                        const right = group.entries[rightIndex]
-                        const similarity = cosineSimilarity(
-                            vectorById.get(left.id) ?? [],
-                            vectorById.get(right.id) ?? []
+                    const refined: CandidateGroup[] = []
+                    for (const group of groups) {
+                        const unionFind = new UnionFind(
+                            group.entries.map((entry) => entry.id)
                         )
 
-                        if (
-                            similarity >= EMBEDDING_SIMILARITY_THRESHOLD ||
-                            (left.type === right.type &&
-                                keywordOverlap(left, right) >=
-                                    STRONG_KEYWORD_OVERLAP)
+                        for (
+                            let leftIndex = 0;
+                            leftIndex < group.entries.length;
+                            leftIndex++
                         ) {
-                            unionFind.union(left.id, right.id)
+                            for (
+                                let rightIndex = leftIndex + 1;
+                                rightIndex < group.entries.length;
+                                rightIndex++
+                            ) {
+                                const left = group.entries[leftIndex]
+                                const right = group.entries[rightIndex]
+                                const similarity = cosineSimilarity(
+                                    vectorById.get(left.id) ?? [],
+                                    vectorById.get(right.id) ?? []
+                                )
+
+                                if (
+                                    similarity >=
+                                        EMBEDDING_SIMILARITY_THRESHOLD ||
+                                    (left.type === right.type &&
+                                        keywordOverlap(left, right) >=
+                                            STRONG_KEYWORD_OVERLAP)
+                                ) {
+                                    unionFind.union(left.id, right.id)
+                                }
+                            }
+                        }
+
+                        for (const entries of unionFind.groups(group.entries)) {
+                            refined.push({
+                                reason: `embedding:${group.reason}`,
+                                entries
+                            })
                         }
                     }
-                }
 
-                for (const entries of unionFind.groups(group.entries)) {
-                    refined.push({
-                        reason: `embedding:${group.reason}`,
-                        entries
-                    })
+                    return this.dedupeGroups(refined)
                 }
-            }
-
-            return this.dedupeGroups(refined)
+            )
         } catch (error) {
             this.debug(
                 [

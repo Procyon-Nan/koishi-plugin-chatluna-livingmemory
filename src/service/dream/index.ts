@@ -54,56 +54,64 @@ export class LivingMemoryDreamService {
             })
         }
 
-        const model = await this.ctx.chatluna.createChatModel(
-            this.config.dreamModel
-        )
-        if (model.value == null) {
-            return this.createResult(entries.length, 0, {
-                skippedReason: 'model-unavailable',
-                detail: 'dream skipped: model-unavailable'
-            })
-        }
+        return this.ctx.chatluna.withUsageSource(
+            'chatluna-livingmemory',
+            async () => {
+                const model = await this.ctx.chatluna.createChatModel(
+                    this.config.dreamModel
+                )
+                if (model.value == null) {
+                    return this.createResult(entries.length, 0, {
+                        skippedReason: 'model-unavailable',
+                        detail: 'dream skipped: model-unavailable'
+                    })
+                }
 
-        const chatModel = model.value
-        const invokeModel = async (prompt: string) => {
-            const result = await chatModel.invoke(prompt)
-            return stringifyModelContent(result.content)
-        }
+                const chatModel = model.value
+                const invokeModel = async (prompt: string) => {
+                    const result = await chatModel.invoke(prompt)
+                    return stringifyModelContent(result.content)
+                }
 
-        const activeResult = await this.runStage(
-            presetId,
-            'active',
-            activeEntries,
-            invokeModel
-        )
-        const refreshedEntries =
-            await this.repository.listEntriesByPreset(presetId)
-        const archivedEntries = refreshedEntries.filter(
-            (entry) => entry.status === 'archived'
-        )
-        const archivedResult = await this.runStage(
-            presetId,
-            'archived',
-            archivedEntries,
-            invokeModel
-        )
-        const stats = sumStats([activeResult, archivedResult])
-        const detail = [activeResult.detail, archivedResult.detail].join('\n')
+                const activeResult = await this.runStage(
+                    presetId,
+                    'active',
+                    activeEntries,
+                    invokeModel
+                )
+                const refreshedEntries =
+                    await this.repository.listEntriesByPreset(presetId)
+                const archivedEntries = refreshedEntries.filter(
+                    (entry) => entry.status === 'archived'
+                )
+                const archivedResult = await this.runStage(
+                    presetId,
+                    'archived',
+                    archivedEntries,
+                    invokeModel
+                )
+                const stats = sumStats([activeResult, archivedResult])
+                const detail = [
+                    activeResult.detail,
+                    archivedResult.detail
+                ].join('\n')
 
-        this.debug(
-            [
-                `memory dream execution summary: presetId=${presetId}`,
-                detail
-            ].join('\n')
-        )
+                this.debug(
+                    [
+                        `memory dream execution summary: presetId=${presetId}`,
+                        detail
+                    ].join('\n')
+                )
 
-        return {
-            entryCount: entries.length,
-            clusterCount:
-                activeResult.clusterCount + archivedResult.clusterCount,
-            ...stats,
-            detail
-        }
+                return {
+                    entryCount: entries.length,
+                    clusterCount:
+                        activeResult.clusterCount + archivedResult.clusterCount,
+                    ...stats,
+                    detail
+                }
+            }
+        )
     }
 
     private async runStage(
