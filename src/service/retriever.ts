@@ -1,14 +1,18 @@
 import { Context } from 'koishi'
 import type {
     LivingMemoryConfig,
-    MemoryEntryRecord,
     RecallRepository,
     RetrievedMemoryItem
 } from '../types'
-
-const isModelConfigured = (model: string) => {
-    return model.length > 0 && model !== '无'
-}
+import {
+    cosineSimilarity,
+    isModelConfigured,
+    summarizeError
+} from './shared/utils'
+import {
+    ensureEntryEmbeddings,
+    toMemoryRetrievalText
+} from './shared/embeddings'
 
 const defaultKeywords = (content: string) => {
     return Array.from(
@@ -20,16 +24,6 @@ const defaultKeywords = (content: string) => {
                 .filter((part) => part.length >= 2)
         )
     ).slice(0, 12)
-}
-
-const toRetrievalText = (
-    entry: Pick<MemoryEntryRecord, 'content' | 'summary' | 'keywords'>
-) => {
-    return [
-        `摘要：${entry.summary ?? ''}`,
-        `关键词：${entry.keywords.join('、')}`,
-        `内容：${entry.content}`
-    ].join('\n')
 }
 
 export class LivingMemoryRetriever {
@@ -82,7 +76,7 @@ export class LivingMemoryRetriever {
 
         return entries
             .map((entry) => {
-                const haystack = toRetrievalText(entry).toLowerCase()
+                const haystack = toMemoryRetrievalText(entry).toLowerCase()
                 const score = terms.reduce((accumulator, term) => {
                     return accumulator + (haystack.includes(term) ? 1 : 0)
                 }, 0)
@@ -127,16 +121,44 @@ export class LivingMemoryRetriever {
         }
 
         const queryVector = await embeddings.value.embedQuery(input)
-        const retrievalTexts = entries.map((entry) => toRetrievalText(entry))
-        const docs = await embeddings.value.embedDocuments(retrievalTexts)
+
+        let vectorById: Map<string, number[]>
+        try {
+            vectorById = await ensureEntryEmbeddings(
+                embeddings.value,
+                this.recallRepository,
+                this.config.embeddingModel,
+                entries,
+                {
+                    logger: this.ctx.logger('chatluna-livingmemory'),
+                    debug: (message) => {
+                        if (this.config.debug) {
+                            this.ctx
+                                .logger('chatluna-livingmemory')
+                                .info(message)
+                        }
+                    }
+                }
+            )
+        } catch (error) {
+            this.ctx
+                .logger('chatluna-livingmemory')
+                .warn(
+                    `memory retrieve embedding failed: ${summarizeError(error)}`
+                )
+            return []
+        }
 
         const embeddingResults = entries
-            .map((entry, index) => ({
-                id: entry.id,
-                content: entry.content,
-                retrievalText: retrievalTexts[index],
-                score: this.cosineSimilarity(queryVector, docs[index] ?? [])
-            }))
+            .map((entry) => {
+                const vector = vectorById.get(entry.id) ?? []
+                return {
+                    id: entry.id,
+                    content: entry.content,
+                    retrievalText: toMemoryRetrievalText(entry),
+                    score: cosineSimilarity(queryVector, vector)
+                }
+            })
             .sort((left, right) => right.score - left.score)
 
         const candidateCount = Math.min(embeddingResults.length, limit * 3)
@@ -181,31 +203,5 @@ export class LivingMemoryRetriever {
         const entries =
             await this.recallRepository.listEntriesByPreset(presetId)
         return entries.filter((entry) => entry.status === 'active')
-    }
-
-    private cosineSimilarity(left: number[], right: number[]) {
-        if (
-            left.length === 0 ||
-            right.length === 0 ||
-            left.length !== right.length
-        ) {
-            return 0
-        }
-
-        let dot = 0
-        let leftNorm = 0
-        let rightNorm = 0
-
-        for (let index = 0; index < left.length; index++) {
-            dot += left[index] * right[index]
-            leftNorm += left[index] * left[index]
-            rightNorm += right[index] * right[index]
-        }
-
-        if (leftNorm === 0 || rightNorm === 0) {
-            return 0
-        }
-
-        return dot / Math.sqrt(leftNorm * rightNorm)
     }
 }

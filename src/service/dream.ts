@@ -7,6 +7,13 @@ import type {
 } from '../types'
 import { memoryEntryTypes } from '../types'
 import type { LivingMemoryRepository } from './repository'
+import { ensureEntryEmbeddings } from './shared/embeddings'
+import {
+    cosineSimilarity,
+    isModelConfigured,
+    stringifyModelContent,
+    summarizeError
+} from './shared/utils'
 
 const MAX_CLUSTER_SIZE = 8
 const MAX_BUCKET_SIZE = 64
@@ -21,18 +28,6 @@ const neutralSentiments = new Set([
     'none',
     'neutral'
 ])
-
-const isModelConfigured = (model: unknown): model is string => {
-    return typeof model === 'string' && model.length > 0 && model !== '无'
-}
-
-const stringifyModelContent = (content: unknown) => {
-    if (typeof content === 'string') {
-        return content
-    }
-
-    return JSON.stringify(content) ?? ''
-}
 
 const normalizeText = (value: string) => value.trim()
 
@@ -81,17 +76,6 @@ const toIsoString = (value: Date | string | number) => {
     return Number.isFinite(+date) ? date.toISOString() : ''
 }
 
-const toDreamText = (entry: MemoryEntryRecord) => {
-    return [
-        `type=${entry.type}`,
-        `sentiment=${entry.sentiment ?? ''}`,
-        `importance=${entry.importance ?? ''}`,
-        `summary=${entry.summary ?? ''}`,
-        `keywords=${entry.keywords.join('、')}`,
-        `content=${entry.content}`
-    ].join('\n')
-}
-
 const toPromptEntry = (entry: MemoryEntryRecord) => {
     return [
         `id=${entry.id}`,
@@ -126,32 +110,6 @@ const keywordOverlap = (left: MemoryEntryRecord, right: MemoryEntryRecord) => {
     }
 
     return count
-}
-
-const cosineSimilarity = (left: number[], right: number[]) => {
-    if (
-        left.length === 0 ||
-        right.length === 0 ||
-        left.length !== right.length
-    ) {
-        return 0
-    }
-
-    let dot = 0
-    let leftNorm = 0
-    let rightNorm = 0
-
-    for (let index = 0; index < left.length; index++) {
-        dot += left[index] * right[index]
-        leftNorm += left[index] * left[index]
-        rightNorm += right[index] * right[index]
-    }
-
-    if (leftNorm === 0 || rightNorm === 0) {
-        return 0
-    }
-
-    return dot / Math.sqrt(leftNorm * rightNorm)
 }
 
 interface CandidateGroup {
@@ -373,7 +331,7 @@ export class LivingMemoryDreamService {
                         `stage=${stage}`,
                         `clusterId=${cluster.id}`,
                         'reason=invoke-failed',
-                        `error=${this.summarizeError(error)}`
+                        `error=${summarizeError(error)}`
                     ].join(' ')
                 )
                 continue
@@ -666,13 +624,16 @@ export class LivingMemoryDreamService {
             }
 
             const entries = unique(groups.flatMap((group) => group.entries))
-            const vectors = await embeddings.value.embedDocuments(
-                entries.map((entry) => toDreamText(entry))
+            const vectorById = await ensureEntryEmbeddings(
+                embeddings.value,
+                this.repository,
+                this.config.embeddingModel,
+                entries,
+                {
+                    logger: this.ctx.logger('chatluna-livingmemory'),
+                    debug: (message) => this.debug(message)
+                }
             )
-            const vectorById = new Map<string, number[]>()
-            entries.forEach((entry, index) => {
-                vectorById.set(entry.id, vectors[index] ?? [])
-            })
 
             const refined: CandidateGroup[] = []
             for (const group of groups) {
@@ -721,7 +682,7 @@ export class LivingMemoryDreamService {
             this.debug(
                 [
                     'memory dream embedding failed, fallback to keyword clusters',
-                    `error=${this.summarizeError(error)}`
+                    `error=${summarizeError(error)}`
                 ].join(' ')
             )
             return null
@@ -1298,17 +1259,5 @@ export class LivingMemoryDreamService {
             skippedReason: options.skippedReason,
             detail: options.detail
         }
-    }
-
-    private summarizeError(error: unknown) {
-        if (error instanceof Error) {
-            return error.stack ?? error.message
-        }
-
-        if (typeof error === 'string') {
-            return error
-        }
-
-        return JSON.stringify(error)
     }
 }

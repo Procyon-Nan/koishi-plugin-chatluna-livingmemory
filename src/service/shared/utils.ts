@@ -1,0 +1,70 @@
+export const isModelConfigured = (model: unknown): model is string => {
+    if (typeof model !== 'string') {
+        return false
+    }
+    const trimmed = model.trim()
+    return trimmed.length > 0 && trimmed !== '无'
+}
+
+export const summarizeError = (error: unknown) => {
+    if (error instanceof Error) {
+        return error.stack ?? error.message
+    }
+
+    if (typeof error === 'string') {
+        return error
+    }
+
+    return JSON.stringify(error)
+}
+
+export const stringifyModelContent = (content: unknown) => {
+    if (typeof content === 'string') {
+        return content
+    }
+
+    if (Array.isArray(content)) {
+        return content
+            .map((part) => {
+                if (
+                    part != null &&
+                    typeof part === 'object' &&
+                    (part as Record<string, unknown>).type === 'text' &&
+                    typeof (part as Record<string, unknown>).text === 'string'
+                ) {
+                    return (part as { text: string }).text
+                }
+
+                return ''
+            })
+            .join('')
+    }
+
+    return JSON.stringify(content) ?? ''
+}
+
+export const cosineSimilarity = (left: number[], right: number[]) => {
+    if (
+        left.length === 0 ||
+        right.length === 0 ||
+        left.length !== right.length
+    ) {
+        return 0
+    }
+
+    let dot = 0
+    let leftNorm = 0
+    let rightNorm = 0
+
+    for (let index = 0; index < left.length; index++) {
+        dot += left[index] * right[index]
+        leftNorm += left[index] * left[index]
+        rightNorm += right[index] * right[index]
+    }
+
+    if (leftNorm === 0 || rightNorm === 0) {
+        return 0
+    }
+
+    return dot / Math.sqrt(leftNorm * rightNorm)
+}

@@ -70,6 +70,8 @@ export interface MemoryEntryRecord {
     importance: number | null
     sourceConversationId: string | null
     sourceMessages: MemorySourceMessage[]
+    embedding: number[] | null
+    embeddingModelId: string | null
     createdAt: Date
     updatedAt: Date
 }
@@ -257,6 +259,13 @@ export interface LivingMemoryConfig {
 export interface RecallRepository {
     listEntriesByPreset(presetId: string): Promise<MemoryEntryRecord[]>
     getEntryById(id: string): Promise<MemoryEntryRecord | undefined>
+    updateEntryEmbeddings(
+        updates: {
+            id: string
+            embedding: number[]
+            embeddingModelId: string
+        }[]
+    ): Promise<void>
 }
 
 export interface SnapshotRepository {

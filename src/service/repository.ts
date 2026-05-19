@@ -63,7 +63,13 @@ const normalizeEntryRecord = (
     ...record,
     status: normalizeStatus(record.status),
     sentiment: normalizeSentiment(record.sentiment),
-    importance: normalizeImportance(record.importance)
+    importance: normalizeImportance(record.importance),
+    embedding: Array.isArray(record.embedding) ? record.embedding : null,
+    embeddingModelId:
+        typeof record.embeddingModelId === 'string' &&
+        record.embeddingModelId.length > 0
+            ? record.embeddingModelId
+            : null
 })
 
 export class LivingMemoryRepository
@@ -102,6 +108,17 @@ export class LivingMemoryRepository
                 },
                 sourceConversationId: 'string(255)',
                 sourceMessages: 'json',
+                embedding: {
+                    type: 'json',
+                    nullable: true,
+                    initial: null
+                },
+                embeddingModelId: {
+                    type: 'string',
+                    length: 255,
+                    nullable: true,
+                    initial: null
+                },
                 createdAt: 'timestamp',
                 updatedAt: 'timestamp'
             },
@@ -422,6 +439,8 @@ export class LivingMemoryRepository
                 importance: normalizeImportance(item.importance),
                 sourceConversationId: scope.conversationId,
                 sourceMessages,
+                embedding: null,
+                embeddingModelId: null,
                 createdAt: now,
                 updatedAt: now
             }))
@@ -448,6 +467,8 @@ export class LivingMemoryRepository
             importance: normalizeImportance(input.importance),
             sourceConversationId: scope.conversationId,
             sourceMessages,
+            embedding: null,
+            embeddingModelId: null,
             createdAt: now,
             updatedAt: now
         }
@@ -463,6 +484,21 @@ export class LivingMemoryRepository
         }
 
         const content = patch.content ?? current.content
+        const keywords = patch.keywords?.length
+            ? patch.keywords.slice(0, 12)
+            : patch.content != null
+              ? defaultKeywords(content)
+              : current.keywords
+        const summary =
+            patch.summary === undefined
+                ? (current.summary ?? null)
+                : patch.summary
+        // 内容/摘要/关键词变化时需要让已缓存的向量失效，由召回时按需重算
+        const semanticChanged =
+            content !== current.content ||
+            summary !== (current.summary ?? null) ||
+            keywords.join(' ') !== current.keywords.join(' ')
+
         await this.ctx.database.set(
             'living_memory_entry',
             { id },
@@ -473,15 +509,8 @@ export class LivingMemoryRepository
                         ? normalizeStatus(current.status)
                         : normalizeStatus(patch.status),
                 content,
-                keywords: patch.keywords?.length
-                    ? patch.keywords.slice(0, 12)
-                    : patch.content != null
-                      ? defaultKeywords(content)
-                      : current.keywords,
-                summary:
-                    patch.summary === undefined
-                        ? (current.summary ?? null)
-                        : patch.summary,
+                keywords,
+                summary,
                 sentiment:
                     patch.sentiment === undefined
                         ? normalizeSentiment(current.sentiment)
@@ -490,8 +519,36 @@ export class LivingMemoryRepository
                     patch.importance === undefined
                         ? normalizeImportance(current.importance)
                         : normalizeImportance(patch.importance),
+                ...(semanticChanged
+                    ? { embedding: null, embeddingModelId: null }
+                    : {}),
                 updatedAt: new Date()
             }
+        )
+    }
+
+    async updateEntryEmbeddings(
+        updates: {
+            id: string
+            embedding: number[]
+            embeddingModelId: string
+        }[]
+    ) {
+        if (updates.length === 0) {
+            return
+        }
+
+        await Promise.all(
+            updates.map((update) =>
+                this.ctx.database.set(
+                    'living_memory_entry',
+                    { id: update.id },
+                    {
+                        embedding: update.embedding,
+                        embeddingModelId: update.embeddingModelId
+                    }
+                )
+            )
         )
     }
 

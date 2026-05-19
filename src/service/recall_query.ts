@@ -7,49 +7,13 @@ import {
     toLivingMemoryTextParts
 } from './message_formatter'
 import type { LivingMemoryConfig, MemoryScope } from '../types'
-
-const isModelConfigured = (model: string) => {
-    return model.length > 0 && model !== '无'
-}
+import {
+    isModelConfigured,
+    stringifyModelContent,
+    summarizeError
+} from './shared/utils'
 
 const semanticTextPattern = /[\p{L}\p{N}]/u
-
-const stringifyModelContent = (content: unknown) => {
-    if (typeof content === 'string') {
-        return content
-    }
-
-    if (Array.isArray(content)) {
-        return content
-            .map((part) => {
-                if (
-                    part != null &&
-                    typeof part === 'object' &&
-                    (part as Record<string, unknown>).type === 'text' &&
-                    typeof (part as Record<string, unknown>).text === 'string'
-                ) {
-                    return (part as { text: string }).text
-                }
-
-                return ''
-            })
-            .join('')
-    }
-
-    return JSON.stringify(content) ?? ''
-}
-
-const summarizeError = (error: unknown) => {
-    if (error instanceof Error) {
-        return error.stack ?? error.message
-    }
-
-    if (typeof error === 'string') {
-        return error
-    }
-
-    return JSON.stringify(error)
-}
 
 const stripFencedBlock = (value: string) => {
     return value

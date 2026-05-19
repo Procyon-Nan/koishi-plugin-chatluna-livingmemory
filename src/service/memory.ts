@@ -7,6 +7,7 @@ import { LivingMemoryMessageFormatter } from './message_formatter'
 import { LivingMemoryRecallQueryBuilder } from './recall_query'
 import { LivingMemoryRepository } from './repository'
 import { LivingMemoryRetriever } from './retriever'
+import { isModelConfigured, summarizeError } from './shared/utils'
 import {
     filterJobList,
     filterMemoryList,
@@ -28,26 +29,6 @@ import type {
 } from '../types'
 
 const normalizeText = (value: string) => value.trim()
-
-const isModelConfigured = (model: string | null | undefined) => {
-    if (typeof model !== 'string') {
-        return false
-    }
-    const trimmed = model.trim()
-    return trimmed.length > 0 && trimmed !== '无'
-}
-
-const summarizeError = (error: unknown) => {
-    if (error instanceof Error) {
-        return error.stack ?? error.message
-    }
-
-    if (typeof error === 'string') {
-        return error
-    }
-
-    return JSON.stringify(error)
-}
 
 const formatMemoryItemsForLog = (
     items: { content: string; score?: number }[]

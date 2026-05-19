@@ -1,5 +1,6 @@
 import { Context } from 'koishi'
 import type { ExtractedMemoryItem } from '../types'
+import { isModelConfigured, stringifyModelContent } from './shared/utils'
 
 const normalizeText = (value: string) => value.trim()
 
@@ -16,18 +17,6 @@ const formatDateOnly = (value: Date | string | number) => {
         String(date.getMonth() + 1).padStart(2, '0'),
         String(date.getDate()).padStart(2, '0')
     ].join('-')
-}
-
-const isModelConfigured = (model: string) => {
-    return model.length > 0 && model !== '无'
-}
-
-const stringifyModelContent = (content: unknown) => {
-    if (typeof content === 'string') {
-        return content
-    }
-
-    return JSON.stringify(content) ?? ''
 }
 
 const parseImportance = (value: unknown) => {
