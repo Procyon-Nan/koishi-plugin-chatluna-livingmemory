@@ -363,6 +363,39 @@ export class LivingMemoryRepository
         return jobs.sort((left, right) => +right.createdAt - +left.createdAt)
     }
 
+    async markStaleRunningJobsAsFailed(
+        options: { presetId?: string; kind?: MemoryJobKind } = {},
+        reason = 'recovered: stale running job'
+    ): Promise<MemoryJobRecord[]> {
+        const query: Record<string, unknown> = { status: 'running' }
+        if (options.presetId != null) {
+            query.presetId = options.presetId
+        }
+        if (options.kind != null) {
+            query.kind = options.kind
+        }
+
+        const stale = await this.ctx.database.get('living_memory_job', query)
+        if (stale.length === 0) {
+            return []
+        }
+
+        const now = new Date()
+        await this.ctx.database.set(
+            'living_memory_job',
+            { id: { $in: stale.map((job) => job.id) } },
+            {
+                status: 'failed',
+                detail: reason,
+                error: reason,
+                finishedAt: now,
+                updatedAt: now
+            }
+        )
+
+        return stale
+    }
+
     async appendMemories(
         scope: MemoryScope,
         sourceMessages: MemoryEntryRecord['sourceMessages'],

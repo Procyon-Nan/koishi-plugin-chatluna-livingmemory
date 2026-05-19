@@ -159,6 +159,23 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         }, Time.day)
     }
 
+    protected async start() {
+        try {
+            const recovered =
+                await this.repository.markStaleRunningJobsAsFailed(
+                    {},
+                    'recovered: service restarted while job was running'
+                )
+            if (recovered.length > 0) {
+                this.serviceLogger.info(
+                    `memory startup recovery: marked ${recovered.length} stale running job(s) as failed`
+                )
+            }
+        } catch (error) {
+            this.serviceLogger.warn(error)
+        }
+    }
+
     private registerPromptFunction() {
         this.ctx.effect(() =>
             this.ctx.chatluna.promptRenderer.registerFunctionProvider(
@@ -896,24 +913,15 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     }
 
     private async recoverStaleDreamJobs(presetId: string) {
-        const staleJobs =
-            await this.repository.listRunningDreamJobsByPreset(presetId)
-        if (staleJobs.length === 0) {
-            return
-        }
-
-        const now = new Date()
-        await Promise.all(
-            staleJobs.map((job) =>
-                this.repository.updateJob(job.id, {
-                    status: 'failed',
-                    detail: 'dream recovered: stale running job',
-                    error: 'dream recovered: stale running job',
-                    finishedAt: now,
-                    updatedAt: now
-                })
-            )
+        const recovered = await this.repository.markStaleRunningJobsAsFailed(
+            { presetId, kind: 'dream' },
+            'dream recovered: stale running job'
         )
+        if (recovered.length > 0) {
+            this.debug(
+                `memory dream stale jobs recovered: presetId=${presetId}, count=${recovered.length}`
+            )
+        }
     }
 
     private refreshDreamSnapshotCache(presetId: string, jobId: string) {

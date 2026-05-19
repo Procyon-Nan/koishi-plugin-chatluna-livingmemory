@@ -271,6 +271,10 @@ export interface JobRepository {
     updateJob(id: string, patch: Partial<MemoryJobRecord>): Promise<void>
     listJobsByPreset(presetId: string): Promise<MemoryJobRecord[]>
     listRunningDreamJobsByPreset(presetId: string): Promise<MemoryJobRecord[]>
+    markStaleRunningJobsAsFailed(
+        options?: { presetId?: string; kind?: MemoryJobKind },
+        reason?: string
+    ): Promise<MemoryJobRecord[]>
 }
 
 export interface ExtractionRepository {
