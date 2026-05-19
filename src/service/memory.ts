@@ -133,7 +133,6 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             this.debug.bind(this)
         )
         this.repository.defineTables()
-        this.registerPromptFunction()
         ctx.setInterval(() => {
             this.cleanupStaleJobs().catch((error) => {
                 this.serviceLogger.warn(error)
@@ -217,41 +216,6 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         return {
             warnings: this.validateConfig()
         }
-    }
-
-    private registerPromptFunction() {
-        this.ctx.effect(() =>
-            this.ctx.chatluna.promptRenderer.registerFunctionProvider(
-                'living_memory',
-                async (_args, variables) => {
-                    const built =
-                        variables != null && typeof variables === 'object'
-                            ? (
-                                  variables as {
-                                      built?: {
-                                          conversationId?: string
-                                          preset?: string
-                                      }
-                                  }
-                              ).built
-                            : undefined
-                    const presetId = built?.preset
-                    if (typeof presetId !== 'string' || presetId.length === 0) {
-                        return ''
-                    }
-
-                    const conversationId = built?.conversationId
-                    if (
-                        typeof conversationId !== 'string' ||
-                        conversationId.length === 0
-                    ) {
-                        return ''
-                    }
-
-                    return await this.renderSnapshot(presetId, conversationId)
-                }
-            )
-        )
     }
 
     private debug(message: string) {
@@ -343,18 +307,6 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             rendered
         )
         return rendered
-    }
-
-    async renderSnapshot(presetId: string, conversationId: string) {
-        const scope = { presetId, conversationId }
-        const cached = this.snapshotVariableByScope.get(
-            this.toSnapshotCacheKey(scope)
-        )
-        if (cached != null) {
-            return cached
-        }
-
-        return await this.hydratePromptVariable(scope)
     }
 
     async queueRecall(
