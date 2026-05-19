@@ -5,6 +5,7 @@ import type {
     MemorySourceMessage,
     MessageFormatter
 } from '../types'
+import { takeRecentRounds } from './shared/rounds'
 
 interface FormattedMessage {
     role: MemorySourceMessage['role']
@@ -227,35 +228,7 @@ const toFormattedMessage = (
 
 export class LivingMemoryMessageFormatter implements MessageFormatter {
     takeRecentRounds(messages: BaseMessage[], roundCount: number) {
-        if (roundCount <= 0) {
-            return []
-        }
-
-        const selected: BaseMessage[] = []
-        let completedRounds = 0
-        let hasAssistant = false
-
-        for (let index = messages.length - 1; index >= 0; index--) {
-            const message = messages[index]
-            selected.unshift(message)
-
-            const type = message.getType()
-            if (type === 'ai') {
-                hasAssistant = true
-                continue
-            }
-
-            if (type === 'human' && hasAssistant) {
-                completedRounds += 1
-                hasAssistant = false
-
-                if (completedRounds >= roundCount) {
-                    break
-                }
-            }
-        }
-
-        return completedRounds === 0 ? [] : selected
+        return takeRecentRounds(messages, roundCount, 'pair')
     }
 
     toExtractionPayload(

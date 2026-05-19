@@ -5,6 +5,7 @@ import {
 } from '@langchain/core/messages'
 import { Context, type Session } from 'koishi'
 import type { Config } from '../index'
+import { takeRecentRounds } from '../service/shared/rounds'
 import type { MemoryScope } from '../types'
 
 interface CharacterMessage {
@@ -268,56 +269,6 @@ const countCharacterCompletedRounds = (messages: BaseMessage[]) => {
     return count
 }
 
-const takeRecentCharacterRounds = (
-    messages: BaseMessage[],
-    roundCount: number
-) => {
-    if (roundCount <= 0) {
-        return []
-    }
-
-    let lastAiIndex = -1
-    for (let index = messages.length - 1; index >= 0; index--) {
-        if (messages[index].getType() === 'ai') {
-            lastAiIndex = index
-            break
-        }
-    }
-
-    if (lastAiIndex < 0) {
-        return []
-    }
-
-    let completedRounds = 0
-    let hasAiInCurrentRound = false
-    let hasHumanInCurrentRound = false
-
-    for (let index = lastAiIndex; index >= 0; index--) {
-        const type = messages[index].getType()
-        if (type === 'ai') {
-            if (hasAiInCurrentRound && hasHumanInCurrentRound) {
-                completedRounds += 1
-                if (completedRounds >= roundCount) {
-                    return messages.slice(index + 1, lastAiIndex + 1)
-                }
-                hasHumanInCurrentRound = false
-            }
-            hasAiInCurrentRound = true
-            continue
-        }
-
-        if (type === 'human' && hasAiInCurrentRound) {
-            hasHumanInCurrentRound = true
-        }
-    }
-
-    if (hasAiInCurrentRound && hasHumanInCurrentRound) {
-        return messages.slice(0, lastAiIndex + 1)
-    }
-
-    return []
-}
-
 const formatCharacterSystemPrompt = (systemPrompt: string) => {
     const normalized = systemPrompt.trim()
     if (normalized.length === 0) {
@@ -406,7 +357,11 @@ export async function apply(ctx: Context, config: Config) {
             completedRoundCountByScope.set(scopeKey, chatCount)
 
             const extractionMessages = currentReplyCompletesRound
-                ? takeRecentCharacterRounds(messages, config.extractionRounds)
+                ? takeRecentRounds(
+                      messages,
+                      config.extractionRounds,
+                      'ai-anchored'
+                  )
                 : []
 
             debug(
