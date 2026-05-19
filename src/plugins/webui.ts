@@ -60,6 +60,10 @@ export function apply(ctx: Context, _config?: Config) {
         async () => await service(ctx).listPresetIds()
     )
 
+    ctx.console.addListener('living-memory/getStatus', async () =>
+        service(ctx).getStatus()
+    )
+
     ctx.console.addListener(
         'living-memory/listMemories',
         async (query: MemoryListQuery) => await service(ctx).listMemories(query)

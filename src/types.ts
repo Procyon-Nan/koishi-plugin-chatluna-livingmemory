@@ -115,6 +115,22 @@ export interface DreamTriggerResult {
     runningJobId?: string
 }
 
+export type MemoryConfigWarningCode =
+    | 'embedding-model-missing'
+    | 'rerank-model-missing'
+    | 'extract-model-missing'
+    | 'recall-rewrite-model-missing'
+
+export interface MemoryConfigWarning {
+    code: MemoryConfigWarningCode
+    field: string
+    message: string
+}
+
+export interface MemoryServiceStatus {
+    warnings: MemoryConfigWarning[]
+}
+
 export interface MemoryMutationInput {
     type: MemoryEntryType
     status?: MemoryEntryStatus
@@ -315,6 +331,7 @@ declare module 'koishi' {
 declare module '@koishijs/plugin-console' {
     interface Events {
         'living-memory/listPresetIds': () => Promise<string[]>
+        'living-memory/getStatus': () => Promise<MemoryServiceStatus>
         'living-memory/listMemories': (
             query: MemoryListQuery
         ) => Promise<PageResult<MemoryEntryRecord>>

@@ -70,6 +70,22 @@ export interface DreamTriggerResult {
     runningJobId?: string
 }
 
+export type MemoryConfigWarningCode =
+    | 'embedding-model-missing'
+    | 'rerank-model-missing'
+    | 'extract-model-missing'
+    | 'recall-rewrite-model-missing'
+
+export interface MemoryConfigWarning {
+    code: MemoryConfigWarningCode
+    field: string
+    message: string
+}
+
+export interface MemoryServiceStatus {
+    warnings: MemoryConfigWarning[]
+}
+
 export interface MemoryMutationInput {
     type: MemoryEntryType
     status?: MemoryEntryStatus
@@ -165,6 +181,7 @@ export interface PageResult<T> {
 declare module '@koishijs/client' {
     interface Events {
         'living-memory/listPresetIds': () => string[]
+        'living-memory/getStatus': () => MemoryServiceStatus
         'living-memory/listMemories': (
             query: {
                 presetId: string

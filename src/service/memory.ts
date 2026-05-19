@@ -19,13 +19,23 @@ import {
 import type {
     DreamTriggerResult,
     LivingMemoryConfig,
+    MemoryConfigWarning,
     MemoryMutationInput,
     MemoryScope,
+    MemoryServiceStatus,
     MemorySnapshotRecord,
     MemorySnapshotWithResolvedItems
 } from '../types'
 
 const normalizeText = (value: string) => value.trim()
+
+const isModelConfigured = (model: string | null | undefined) => {
+    if (typeof model !== 'string') {
+        return false
+    }
+    const trimmed = model.trim()
+    return trimmed.length > 0 && trimmed !== '无'
+}
 
 const summarizeError = (error: unknown) => {
     if (error instanceof Error) {
@@ -173,6 +183,67 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             }
         } catch (error) {
             this.serviceLogger.warn(error)
+        }
+
+        for (const warning of this.validateConfig()) {
+            this.serviceLogger.warn(
+                `memory config warning [${warning.code}] ${warning.message}`
+            )
+        }
+    }
+
+    validateConfig(): MemoryConfigWarning[] {
+        const warnings: MemoryConfigWarning[] = []
+
+        if (this.config.recallStrategy === 'embedding-rerank') {
+            if (!isModelConfigured(this.config.embeddingModel)) {
+                warnings.push({
+                    code: 'embedding-model-missing',
+                    field: 'embeddingModel',
+                    message:
+                        '召回策略已选择 embedding-rerank，但未配置 embeddingModel；将无法进行向量召回。'
+                })
+            }
+            if (!isModelConfigured(this.config.rerankModel)) {
+                warnings.push({
+                    code: 'rerank-model-missing',
+                    field: 'rerankModel',
+                    message:
+                        '召回策略已选择 embedding-rerank，但未配置 rerankModel；将无法对召回结果重排序。'
+                })
+            }
+        }
+
+        if (
+            this.config.extractionInterval > 0 &&
+            !isModelConfigured(this.config.extractModel)
+        ) {
+            warnings.push({
+                code: 'extract-model-missing',
+                field: 'extractModel',
+                message:
+                    '自动记忆提取已启用（extractionInterval > 0），但未配置 extractModel；提取流程将被跳过。'
+            })
+        }
+
+        if (
+            this.config.enableRecallQueryRewrite &&
+            !isModelConfigured(this.config.recallRewriteModel)
+        ) {
+            warnings.push({
+                code: 'recall-rewrite-model-missing',
+                field: 'recallRewriteModel',
+                message:
+                    '召回查询改写已启用，但未配置 recallRewriteModel；将回退到原始查询。'
+            })
+        }
+
+        return warnings
+    }
+
+    getStatus(): MemoryServiceStatus {
+        return {
+            warnings: this.validateConfig()
         }
     }
 

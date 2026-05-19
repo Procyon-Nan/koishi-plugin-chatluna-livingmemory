@@ -4,6 +4,7 @@ import type {
     MemoryEntryType,
     MemoryEntryStatus,
     MemoryEntryRecord,
+    MemoryServiceStatus,
     MemorySnapshotRecord,
     MemoryJobRecord,
     MemoryMutationInput,
@@ -17,6 +18,10 @@ import type {
 
 export async function listPresetIds(): Promise<string[]> {
     return await send('living-memory/listPresetIds')
+}
+
+export async function getStatus(): Promise<MemoryServiceStatus> {
+    return await send('living-memory/getStatus')
 }
 
 export interface MemoryListParams {

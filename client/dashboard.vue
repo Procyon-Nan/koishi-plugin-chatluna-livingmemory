@@ -1,6 +1,22 @@
 <template>
     <k-layout class="living-memory-dashboard">
         <div class="dashboard-shell">
+            <el-alert
+                v-if="configWarnings.length > 0"
+                class="config-warning-banner"
+                type="warning"
+                show-icon
+                :closable="false"
+            >
+                <template #title>
+                    检测到 {{ configWarnings.length }} 项配置告警
+                </template>
+                <ul class="config-warning-list">
+                    <li v-for="warning in configWarnings" :key="warning.code">
+                        <strong>{{ warning.field }}</strong>：{{ warning.message }}
+                    </li>
+                </ul>
+            </el-alert>
             <el-tabs v-model="activeTab" class="dashboard-tabs">
                 <el-tab-pane label="记忆管理" name="memory">
             <el-card shadow="never" class="toolbar-card">
@@ -612,6 +628,7 @@ import type {
     MemoryJobRecord,
     MemoryEntryType,
     MemoryEntryStatus,
+    MemoryConfigWarning,
     ChatLunaConversationListItem,
     ChatLunaConversationOptions,
     ChatLunaConversationRouteInfo,
@@ -693,6 +710,16 @@ const memoryStatus = ref<MemoryEntryStatus | 'all'>('active')
 const memories = ref<MemoryEntryRecord[]>([])
 const snapshots = ref<MemorySnapshotRecord[]>([])
 const jobs = ref<MemoryJobRecord[]>([])
+const configWarnings = ref<MemoryConfigWarning[]>([])
+
+const fetchConfigStatus = async () => {
+    try {
+        const status = await api.getStatus()
+        configWarnings.value = status.warnings ?? []
+    } catch {
+        configWarnings.value = []
+    }
+}
 
 const chatLunaLoading = ref(false)
 const chatLunaOptionsLoading = ref(false)
@@ -1183,6 +1210,7 @@ const removeChatLunaConversation = async (
 
 onMounted(() => {
     fetchPresetIds()
+    fetchConfigStatus()
 })
 
 watch(activeTab, (tab) => {
@@ -1212,6 +1240,19 @@ watch(activeTab, (tab) => {
     gap: 16px;
     padding: 16px;
     overflow-y: auto;
+}
+
+.config-warning-banner {
+    border-radius: 12px;
+}
+
+.config-warning-list {
+    margin: 4px 0 0;
+    padding-left: 20px;
+}
+
+.config-warning-list li + li {
+    margin-top: 4px;
 }
 
 .dashboard-tabs :deep(.el-tabs__content) {
