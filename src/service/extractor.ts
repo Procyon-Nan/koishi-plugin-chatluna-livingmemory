@@ -63,34 +63,27 @@ export class LivingMemoryExtractor {
             }
         }
 
-        return this.ctx.chatluna.withUsageSource(
-            'chatluna-livingmemory',
-            async () => {
-                const model = await this.ctx.chatluna.createChatModel(
-                    this.extractModel
-                )
-                if (model.value == null) {
-                    return {
-                        extracted: [],
-                        prompt: null,
-                        output: null,
-                        skippedReason: 'model-unavailable'
-                    }
-                }
-
-                const prompt = this.buildPrompt(input, context)
-
-                const result = await model.value.invoke(prompt)
-                const content = stringifyModelContent(result.content)
-
-                return {
-                    extracted: this.parse(content),
-                    prompt,
-                    output: content,
-                    skippedReason: null
-                }
+        const model = await this.ctx.chatluna.createChatModel(this.extractModel)
+        if (model.value == null) {
+            return {
+                extracted: [],
+                prompt: null,
+                output: null,
+                skippedReason: 'model-unavailable'
             }
-        )
+        }
+
+        const prompt = this.buildPrompt(input, context)
+
+        const result = await model.value.invoke(prompt)
+        const content = stringifyModelContent(result.content)
+
+        return {
+            extracted: this.parse(content),
+            prompt,
+            output: content,
+            skippedReason: null
+        }
     }
 
     private parse(content: string): ExtractedMemoryItem[] {

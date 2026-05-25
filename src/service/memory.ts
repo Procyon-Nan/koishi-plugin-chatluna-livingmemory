@@ -106,6 +106,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     private readonly serviceLogger: Logger
     private readonly snapshotVariableByScope = new Map<string, string>()
     private readonly extractionLockByConversation = new Set<string>()
+    private readonly lastExtractionChatCountByScope = new Map<string, number>()
     private readonly recallLockByConversation = new Set<string>()
     private readonly dreamLockByPreset = new Map<string, string>()
     private readonly repository: LivingMemoryRepository
@@ -372,19 +373,28 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             return
         }
 
-        if (chatCount % this.config.extractionInterval !== 0) {
+        const lockKey = this.toSnapshotCacheKey(scope)
+        const lastExtractionChatCount =
+            this.lastExtractionChatCountByScope.get(lockKey)
+        const roundsSinceLastExtraction =
+            lastExtractionChatCount == null
+                ? chatCount
+                : chatCount - lastExtractionChatCount
+
+        if (roundsSinceLastExtraction < this.config.extractionInterval) {
             this.debug(
                 [
-                    'queueExtraction skipped: interval not matched,',
+                    'queueExtraction skipped: interval not reached,',
                     `conversationId=${scope.conversationId}`,
                     `chatCount=${chatCount}`,
+                    `lastExtractionChatCount=${lastExtractionChatCount ?? 'none'}`,
+                    `roundsSinceLastExtraction=${roundsSinceLastExtraction}`,
                     `interval=${this.config.extractionInterval}`
                 ].join(' ')
             )
             return
         }
 
-        const lockKey = this.toSnapshotCacheKey(scope)
         if (this.extractionLockByConversation.has(lockKey)) {
             this.debug(
                 `queueExtraction skipped: locked, conversationId=${scope.conversationId}`
@@ -428,6 +438,9 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             promptVariables,
             options.presetPromptOverride
         )
+            .then(() => {
+                this.lastExtractionChatCountByScope.set(lockKey, chatCount)
+            })
             .catch((error) => {
                 this.serviceLogger.warn(error)
             })
@@ -768,6 +781,11 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     async cleanupConversation(conversationId: string) {
         await this.repository.deleteSnapshotsByConversation(conversationId)
         this.clearSnapshotCacheByConversation(conversationId)
+        for (const key of this.lastExtractionChatCountByScope.keys()) {
+            if (key.endsWith(`\n${conversationId}`)) {
+                this.lastExtractionChatCountByScope.delete(key)
+            }
+        }
     }
 
     async listPresetIds(): Promise<string[]> {

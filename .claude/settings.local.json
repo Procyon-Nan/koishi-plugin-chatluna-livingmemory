@@ -8,7 +8,9 @@
       "Read(//mnt/c/Users/31899/Desktop/test/media-luna/lib/**)",
       "Bash(yarn lint *)",
       "Bash(yarn build:server)",
-      "Bash(yarn lint-fix *)"
+      "Bash(yarn lint-fix *)",
+      "Bash(npx tsc *)",
+      "Bash(echo \"EXIT=$?\")"
     ]
   }
 }

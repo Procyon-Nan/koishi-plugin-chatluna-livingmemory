@@ -16,7 +16,12 @@ interface CharacterMessage {
     timestamp?: number
 }
 
-type CharacterVariables = Record<string, unknown>
+interface CharacterPresetPayload {
+    system?: {
+        rawString?: string
+    }
+}
+
 const characterPresetSuffix = '（Character）'
 
 interface CharacterBeforeChatEventPayload {
@@ -28,9 +33,6 @@ interface CharacterBeforeChatEventPayload {
     messages: CharacterMessage[]
     focusMessage?: CharacterMessage
     triggerReason?: string
-    systemVariables: CharacterVariables
-    inputVariables: CharacterVariables
-    persistedInputVariables: CharacterVariables
 }
 
 interface CharacterAfterChatEventPayload {
@@ -39,7 +41,6 @@ interface CharacterAfterChatEventPayload {
     conversationId?: string
     presetName: string
     preset?: unknown
-    systemPrompt: string
     messages: CharacterMessage[]
     focusMessage?: CharacterMessage
     triggerReason?: string
@@ -82,9 +83,68 @@ const toNonEmptyString = (value: unknown) => {
         : undefined
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> => {
+    return value != null && typeof value === 'object' && !Array.isArray(value)
+}
+
+const isSession = (value: unknown): value is Session => {
+    return isRecord(value) && typeof value.isDirect === 'boolean'
+}
+
+const toCharacterSessionKey = (session: Session) => {
+    const id = toNonEmptyString(
+        session.isDirect ? session.userId : session.guildId
+    )
+
+    if (id == null) {
+        return undefined
+    }
+
+    return `${session.isDirect ? 'private' : 'group'}:${id}`
+}
+
+const resolveCurrentUserStableName = (session: Session) => {
+    return (
+        toNonEmptyString(session.event?.user?.nick) ??
+        toNonEmptyString(session.event?.user?.name) ??
+        toNonEmptyString(session.author?.username) ??
+        toNonEmptyString(session.username) ??
+        toNonEmptyString(session.author?.nick) ??
+        toNonEmptyString(session.author?.name) ??
+        toNonEmptyString(session.userId)
+    )
+}
+
+const isCurrentSessionUserMessage = (
+    session: Session,
+    message: CharacterMessage
+) => {
+    const messageId = toNonEmptyString(message.id)
+    const userId = toNonEmptyString(session.userId)
+
+    return messageId != null && userId != null && messageId === userId
+}
+
+const resolveCharacterMessageName = (
+    session: Session,
+    message: CharacterMessage
+) => {
+    const displayName = toNonEmptyString(message.name)
+    const stableName = isCurrentSessionUserMessage(session, message)
+        ? resolveCurrentUserStableName(session)
+        : undefined
+
+    return {
+        name: stableName ?? displayName,
+        displayName,
+        stableName
+    }
+}
+
 const assignMessageMetadata = (
     target: BaseMessage,
-    source: CharacterMessage
+    source: CharacterMessage,
+    nameInfo?: ReturnType<typeof resolveCharacterMessageName>
 ) => {
     const targetWithMetadata = target as BaseMessage & {
         id?: string
@@ -109,7 +169,9 @@ const assignMessageMetadata = (
         raw_content: source.content,
         character_id: sourceId,
         character_message_id: sourceMessageId,
-        character_timestamp: source.timestamp
+        character_timestamp: source.timestamp,
+        character_display_name: nameInfo?.displayName,
+        character_stable_name: nameInfo?.stableName
     }
 
     return target
@@ -130,28 +192,34 @@ const isBotMessage = (session: Session, message: CharacterMessage) => {
     return messageName != null && botName != null && messageName === botName
 }
 
-const toHumanMessage = (message: CharacterMessage) => {
+const toHumanMessage = (session: Session, message: CharacterMessage) => {
+    const nameInfo = resolveCharacterMessageName(session, message)
     const humanMessage = new HumanMessage({
         content: message.content,
-        name: toNonEmptyString(message.name),
+        name: nameInfo.name,
         additional_kwargs: {
             raw_content: message.content
         }
     })
 
-    return assignMessageMetadata(humanMessage, message) as HumanMessage
+    return assignMessageMetadata(
+        humanMessage,
+        message,
+        nameInfo
+    ) as HumanMessage
 }
 
-const toAiMessage = (message: CharacterMessage) => {
+const toAiMessage = (session: Session, message: CharacterMessage) => {
+    const nameInfo = resolveCharacterMessageName(session, message)
     const aiMessage = new AIMessage({
         content: message.content,
-        name: toNonEmptyString(message.name),
+        name: nameInfo.name,
         additional_kwargs: {
             raw_content: message.content
         }
     })
 
-    return assignMessageMetadata(aiMessage, message)
+    return assignMessageMetadata(aiMessage, message, nameInfo)
 }
 
 const toLangChainMessages = (
@@ -160,8 +228,8 @@ const toLangChainMessages = (
 ) => {
     return messages.map((message) =>
         isBotMessage(session, message)
-            ? toAiMessage(message)
-            : toHumanMessage(message)
+            ? toAiMessage(session, message)
+            : toHumanMessage(session, message)
     )
 }
 
@@ -196,12 +264,18 @@ const isSameCharacterMessage = (
 }
 
 const resolveSpeakerName = (session: Session, message?: CharacterMessage) => {
+    if (message != null && isCurrentSessionUserMessage(session, message)) {
+        return resolveCurrentUserStableName(session)
+    }
+
     return (
-        toNonEmptyString(message?.name) ??
         toNonEmptyString(session.event?.user?.nick) ??
         toNonEmptyString(session.event?.user?.name) ??
         toNonEmptyString(session.author?.username) ??
         toNonEmptyString(session.username) ??
+        toNonEmptyString(session.author?.nick) ??
+        toNonEmptyString(session.author?.name) ??
+        toNonEmptyString(message?.name) ??
         toNonEmptyString(message?.id) ??
         toNonEmptyString(session.userId)
     )
@@ -237,6 +311,35 @@ const createCharacterScope = (
             speakerId,
             speakerName
         }
+    )
+}
+
+const createCharacterPromptScope = (
+    ctx: Context,
+    variables: Record<string, unknown>,
+    configurable: Record<string, unknown>
+) => {
+    const built = variables.built
+    const session = configurable.session
+
+    if (!isRecord(built) || !isSession(session)) {
+        return undefined
+    }
+
+    if (!ctx.chatluna_living_memory.shouldHandleSession(session.isDirect)) {
+        return undefined
+    }
+
+    const presetName = toNonEmptyString(built.preset)
+    const sessionKey = toCharacterSessionKey(session)
+
+    if (presetName == null || sessionKey == null) {
+        return undefined
+    }
+
+    return ctx.chatluna_living_memory.createScope(
+        sessionKey,
+        `${presetName}${characterPresetSuffix}`
     )
 }
 
@@ -281,6 +384,47 @@ const formatCharacterSystemPrompt = (systemPrompt: string) => {
     ].join('\n\n')
 }
 
+const getCharacterSystemRawString = (preset: unknown) => {
+    if (!isRecord(preset)) {
+        return undefined
+    }
+
+    const system = (preset as CharacterPresetPayload).system
+    return toNonEmptyString(system?.rawString)
+}
+
+const renderCharacterPresetPromptOverride = async (
+    ctx: Context,
+    logger: ReturnType<Context['logger']>,
+    payload: CharacterAfterChatEventPayload
+) => {
+    const rawString = getCharacterSystemRawString(payload.preset)
+    if (rawString == null) {
+        return null
+    }
+
+    try {
+        const rendered = await ctx.chatluna.promptRenderer.renderTemplate(
+            rawString,
+            {
+                time: '',
+                stickers: '',
+                status: ''
+            },
+            {
+                configurable: {
+                    session: payload.session
+                }
+            }
+        )
+
+        return formatCharacterSystemPrompt(rendered.text)
+    } catch (error) {
+        logger.warn(error)
+        return null
+    }
+}
+
 export async function apply(ctx: Context, config: Config) {
     const logger = ctx.logger('chatluna-livingmemory')
     const events = ctx as unknown as CharacterEventRegistrar
@@ -291,23 +435,54 @@ export async function apply(ctx: Context, config: Config) {
         }
     }
 
+    ctx.effect(() =>
+        ctx.chatluna.promptRenderer.registerFunctionProvider(
+            'living_memory',
+            async (_args, variables, configurable) => {
+                const scope = createCharacterPromptScope(
+                    ctx,
+                    variables,
+                    configurable
+                )
+
+                if (scope == null) {
+                    return ''
+                }
+
+                try {
+                    const snapshot =
+                        await ctx.chatluna_living_memory.hydratePromptVariable(
+                            scope
+                        )
+
+                    debug(
+                        [
+                            'character living_memory rendered:',
+                            `conversationId=${scope.conversationId}`,
+                            `presetId=${scope.presetId}`,
+                            `snapshotLength=${snapshot.length}`
+                        ].join(' ')
+                    )
+
+                    return snapshot
+                } catch (error) {
+                    logger.warn(error)
+                    return ''
+                }
+            }
+        )
+    )
+
     events.on(
         'chatluna_character/before-chat',
         async (payload: CharacterBeforeChatEventPayload) => {
             const scope = createCharacterScope(ctx, payload)
-            const snapshot =
-                await ctx.chatluna_living_memory.hydratePromptVariable(scope)
-
-            payload.systemVariables.living_memory = snapshot
-            payload.inputVariables.living_memory = snapshot
-            payload.persistedInputVariables.living_memory = snapshot
 
             debug(
                 [
                     'character before-chat:',
                     `conversationId=${scope.conversationId}`,
-                    `presetId=${scope.presetId}`,
-                    `snapshotLength=${snapshot.length}`
+                    `presetId=${scope.presetId}`
                 ].join(' ')
             )
 
@@ -318,7 +493,10 @@ export async function apply(ctx: Context, config: Config) {
                 return
             }
 
-            const currentMessage = toHumanMessage(payload.focusMessage)
+            const currentMessage = toHumanMessage(
+                payload.session,
+                payload.focusMessage
+            )
             const historyMessages = payload.messages.filter(
                 (message) =>
                     !isSameCharacterMessage(message, payload.focusMessage)
@@ -375,6 +553,9 @@ export async function apply(ctx: Context, config: Config) {
                 ].join(' ')
             )
 
+            const presetPromptOverride =
+                await renderCharacterPresetPromptOverride(ctx, logger, payload)
+
             await ctx.chatluna_living_memory.queueExtraction(
                 scope,
                 chatCount,
@@ -382,9 +563,7 @@ export async function apply(ctx: Context, config: Config) {
                 undefined,
                 {},
                 {
-                    presetPromptOverride: formatCharacterSystemPrompt(
-                        payload.systemPrompt
-                    ),
+                    presetPromptOverride,
                     preselectedMessages: extractionMessages
                 }
             )
