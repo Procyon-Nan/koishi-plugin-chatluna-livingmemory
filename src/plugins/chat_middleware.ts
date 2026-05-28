@@ -176,7 +176,6 @@ export async function apply(ctx: Context, config: Config) {
                 return
             }
             const speakerName = prepareSpeakerName(session, sourceMessage)
-            writeRawUserContent(sourceMessage, promptVariables)
 
             debug(
                 `after-chat resolved: conversationId=${conversationId}, presetId=${presetId}, fallbackPresetId=${fallbackPresetId ?? ''}`
