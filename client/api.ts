@@ -8,11 +8,6 @@ import type {
     MemorySnapshotRecord,
     MemoryJobRecord,
     MemoryMutationInput,
-    ChatLunaConversationListItem,
-    ChatLunaConversationListQuery,
-    ChatLunaConversationOptions,
-    DeleteChatLunaConversationInput,
-    UpdateChatLunaConversationUsageInput,
     PageResult
 } from './types'
 
@@ -98,26 +93,4 @@ export async function runDream(presetId: string): Promise<DreamTriggerResult> {
 
 export async function clearPresetData(presetId: string): Promise<{ success: true }> {
     return await send('living-memory/clearPresetData', presetId)
-}
-
-export async function listChatLunaConversations(
-    params: ChatLunaConversationListQuery
-): Promise<PageResult<ChatLunaConversationListItem>> {
-    return await send('living-memory/listChatLunaConversations', params)
-}
-
-export async function listChatLunaConversationOptions(): Promise<ChatLunaConversationOptions> {
-    return await send('living-memory/listChatLunaConversationOptions')
-}
-
-export async function updateChatLunaConversationUsage(
-    input: UpdateChatLunaConversationUsageInput
-): Promise<ChatLunaConversationListItem> {
-    return await send('living-memory/updateChatLunaConversationUsage', input)
-}
-
-export async function deleteChatLunaConversation(
-    input: DeleteChatLunaConversationInput
-): Promise<{ success: true }> {
-    return await send('living-memory/deleteChatLunaConversation', input)
 }

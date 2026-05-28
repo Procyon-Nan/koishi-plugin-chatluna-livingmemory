@@ -17,8 +17,6 @@
                     </li>
                 </ul>
             </el-alert>
-            <el-tabs v-model="activeTab" class="dashboard-tabs">
-                <el-tab-pane label="记忆管理" name="memory">
             <el-card shadow="never" class="toolbar-card">
                 <template #header>
                     <div class="toolbar-header">
@@ -268,179 +266,6 @@
                     </el-card>
                 </el-col>
             </el-row>
-                </el-tab-pane>
-
-                <el-tab-pane label="ChatLuna 会话" name="chatluna">
-                    <el-card shadow="never" class="toolbar-card">
-                        <template #header>
-                            <div class="toolbar-header">
-                                <span>ChatLuna 会话</span>
-                                <span class="card-tip">仅展示当前活跃会话</span>
-                            </div>
-                        </template>
-
-                        <div class="conversation-toolbar">
-                            <el-input
-                                v-model="chatLunaKeyword"
-                                placeholder="搜索标题、模型、预设、用户或群聊 ID"
-                                clearable
-                                @keyup.enter="refreshChatLunaConversations"
-                                @clear="refreshChatLunaConversations"
-                            >
-                                <template #prepend>搜索</template>
-                            </el-input>
-
-                            <el-button
-                                :loading="chatLunaLoading"
-                                type="primary"
-                                @click="refreshChatLunaConversations"
-                            >
-                                刷新
-                            </el-button>
-                        </div>
-                    </el-card>
-
-                    <el-card shadow="never" class="table-card">
-                        <template #header>
-                            <div class="card-header">
-                                <span>会话列表</span>
-                                <span class="card-tip">修改后需保存才会写入 ChatLuna 会话字段</span>
-                            </div>
-                        </template>
-
-                        <el-table
-                            :data="chatLunaConversations"
-                            :row-key="getChatLunaRowKey"
-                            border
-                            v-loading="chatLunaLoading"
-                            max-height="560"
-                        >
-                            <el-table-column label="状态" width="88">
-                                <template #default="scope">
-                                    <el-tooltip
-                                        :content="formatChatLunaStatusTip(scope.row)"
-                                        placement="top"
-                                    >
-                                        <el-tag
-                                            :type="scope.row.isCurrent ? 'success' : 'info'"
-                                            size="small"
-                                            effect="plain"
-                                        >
-                                            {{ scope.row.isCurrent ? '当前' : '可用' }}
-                                        </el-tag>
-                                    </el-tooltip>
-                                </template>
-                            </el-table-column>
-                            <el-table-column prop="seq" label="#" width="72" />
-                            <el-table-column prop="title" label="标题" min-width="180" show-overflow-tooltip />
-                            <el-table-column label="路由" min-width="220" show-overflow-tooltip>
-                                <template #default="scope">
-                                    <el-tag
-                                        :type="routeTagType(scope.row.route.mode)"
-                                        size="small"
-                                        effect="plain"
-                                    >
-                                        {{ routeModeLabel(scope.row.route.mode) }}
-                                    </el-tag>
-                                    <span class="route-text">{{ formatRoute(scope.row.route) }}</span>
-                                </template>
-                            </el-table-column>
-                            <el-table-column prop="createdBy" label="创建者" min-width="120" show-overflow-tooltip />
-                            <el-table-column label="模型" min-width="240">
-                                <template #default="scope">
-                                    <el-select
-                                        v-model="chatLunaDrafts[scope.row.id].model"
-                                        filterable
-                                        placeholder="选择模型"
-                                        class="usage-select"
-                                        :loading="chatLunaOptionsLoading"
-                                        :disabled="isChatLunaConversationBusy(scope.row)"
-                                    >
-                                        <el-option
-                                            v-for="model in chatLunaOptions.models"
-                                            :key="model.value"
-                                            :label="model.label"
-                                            :value="model.value"
-                                        />
-                                    </el-select>
-                                </template>
-                            </el-table-column>
-                            <el-table-column label="预设" min-width="200">
-                                <template #default="scope">
-                                    <el-select
-                                        v-model="chatLunaDrafts[scope.row.id].preset"
-                                        filterable
-                                        placeholder="选择预设"
-                                        class="usage-select"
-                                        :loading="chatLunaOptionsLoading"
-                                        :disabled="isChatLunaConversationBusy(scope.row)"
-                                    >
-                                        <el-option
-                                            v-for="preset in chatLunaOptions.presets"
-                                            :key="preset.value"
-                                            :label="preset.label"
-                                            :value="preset.value"
-                                        />
-                                    </el-select>
-                                </template>
-                            </el-table-column>
-                            <el-table-column prop="chatMode" label="模式" width="120" show-overflow-tooltip />
-                            <el-table-column label="最近对话" min-width="160">
-                                <template #default="scope">{{ formatTime(scope.row.lastChatAt) }}</template>
-                            </el-table-column>
-                            <el-table-column label="操作" width="220" fixed="right">
-                                <template #default="scope">
-                                    <el-space>
-                                        <el-button
-                                            size="small"
-                                            type="primary"
-                                            :disabled="
-                                                !isChatLunaConversationDirty(scope.row) ||
-                                                isChatLunaConversationBusy(scope.row)
-                                            "
-                                            :loading="savingConversationId === scope.row.id"
-                                            @click="saveChatLunaConversation(scope.row)"
-                                        >
-                                            保存
-                                        </el-button>
-                                        <el-button
-                                            size="small"
-                                            :disabled="
-                                                !isChatLunaConversationDirty(scope.row) ||
-                                                isChatLunaConversationBusy(scope.row)
-                                            "
-                                            @click="resetChatLunaDraft(scope.row)"
-                                        >
-                                            还原
-                                        </el-button>
-                                        <el-button
-                                            size="small"
-                                            type="danger"
-                                            :disabled="isChatLunaConversationBusy(scope.row)"
-                                            :loading="deletingConversationId === scope.row.id"
-                                            @click="removeChatLunaConversation(scope.row)"
-                                        >
-                                            删除
-                                        </el-button>
-                                    </el-space>
-                                </template>
-                            </el-table-column>
-                        </el-table>
-
-                        <div class="pagination-row">
-                            <el-pagination
-                                v-model:current-page="chatLunaPage"
-                                v-model:page-size="chatLunaPageSize"
-                                :page-sizes="[10, 20, 50, 100]"
-                                :total="chatLunaTotal"
-                                layout="total, sizes, prev, pager, next"
-                                @current-change="fetchChatLunaConversations"
-                                @size-change="onChatLunaPageSizeChange"
-                            />
-                        </div>
-                    </el-card>
-                </el-tab-pane>
-            </el-tabs>
         </div>
     </k-layout>
 
@@ -618,7 +443,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as api from './api'
 import type {
@@ -628,26 +453,11 @@ import type {
     MemoryJobRecord,
     MemoryEntryType,
     MemoryEntryStatus,
-    MemoryConfigWarning,
-    ChatLunaConversationListItem,
-    ChatLunaConversationOptions,
-    ChatLunaConversationRouteInfo,
-    ChatLunaConversationRouteMode
+    MemoryConfigWarning
 } from './types'
 import { memoryEntryTypes } from './types'
 
 const memoryTypes = memoryEntryTypes
-const activeTab = ref<'memory' | 'chatluna'>('memory')
-
-interface ChatLunaConversationDraft {
-    model: string
-    preset: string
-}
-
-const emptyChatLunaOptions = (): ChatLunaConversationOptions => ({
-    models: [],
-    presets: []
-})
 
 const formatTime = (value: string | Date | null | undefined): string => {
     if (!value) return ''
@@ -720,20 +530,6 @@ const fetchConfigStatus = async () => {
         configWarnings.value = []
     }
 }
-
-const chatLunaLoading = ref(false)
-const chatLunaOptionsLoading = ref(false)
-const savingConversationId = ref<string | null>(null)
-const deletingConversationId = ref<string | null>(null)
-const chatLunaKeyword = ref('')
-const chatLunaPage = ref(1)
-const chatLunaPageSize = ref(20)
-const chatLunaTotal = ref(0)
-const chatLunaOptions = ref<ChatLunaConversationOptions>(
-    emptyChatLunaOptions()
-)
-const chatLunaConversations = ref<ChatLunaConversationListItem[]>([])
-const chatLunaDrafts = reactive<Record<string, ChatLunaConversationDraft>>({})
 
 const form = reactive({
     type: 'fact' as MemoryEntryType,
@@ -1001,222 +797,9 @@ const doClearPresetData = async () => {
     }
 }
 
-const getChatLunaRowKey = (row: ChatLunaConversationListItem) => row.id
-
-const formatChatLunaStatusTip = (
-    conversation: ChatLunaConversationListItem
-) => {
-    return `记录状态：${conversation.status}；当前绑定：${
-        conversation.activeConversationId ?? '-'
-    }`
-}
-
-const routeModeLabel = (mode: ChatLunaConversationRouteMode): string => {
-    if (mode === 'personal') return '个人'
-    if (mode === 'shared') return '共享'
-    if (mode === 'custom') return '自定义'
-    return '未知'
-}
-
-const routeTagType = (mode: ChatLunaConversationRouteMode) => {
-    if (mode === 'personal') return 'success'
-    if (mode === 'shared') return 'warning'
-    if (mode === 'custom') return 'primary'
-    return 'info'
-}
-
-const formatRoute = (route: ChatLunaConversationRouteInfo): string => {
-    if (route.mode === 'custom') {
-        return route.routeKey ?? route.baseBindingKey
-    }
-
-    if (route.mode === 'shared') {
-        return `群聊 ${route.guildId ?? '-'}`
-    }
-
-    if (route.mode === 'personal' && route.isDirect) {
-        return `私聊 ${route.userId ?? '-'}`
-    }
-
-    if (route.mode === 'personal') {
-        return `群聊 ${route.guildId ?? '-'} / 用户 ${route.userId ?? '-'}`
-    }
-
-    return route.baseBindingKey
-}
-
-const syncChatLunaDrafts = (items: ChatLunaConversationListItem[]) => {
-    const visibleIds = new Set(items.map((item) => item.id))
-
-    for (const key of Object.keys(chatLunaDrafts)) {
-        if (!visibleIds.has(key)) {
-            delete chatLunaDrafts[key]
-        }
-    }
-
-    for (const item of items) {
-        chatLunaDrafts[item.id] = {
-            model: item.model,
-            preset: item.preset
-        }
-    }
-}
-
-const fetchChatLunaOptions = async () => {
-    chatLunaOptionsLoading.value = true
-
-    try {
-        chatLunaOptions.value = await api.listChatLunaConversationOptions()
-    } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        ElMessage.error(`加载 ChatLuna 选项失败：${message}`)
-    } finally {
-        chatLunaOptionsLoading.value = false
-    }
-}
-
-const fetchChatLunaConversations = async () => {
-    chatLunaLoading.value = true
-
-    try {
-        const result = await api.listChatLunaConversations({
-            keyword: chatLunaKeyword.value.trim() || undefined,
-            page: chatLunaPage.value,
-            pageSize: chatLunaPageSize.value
-        })
-
-        chatLunaConversations.value = result.items
-        chatLunaTotal.value = result.total
-        chatLunaPage.value = result.page
-        chatLunaPageSize.value = result.pageSize
-        syncChatLunaDrafts(result.items)
-    } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        ElMessage.error(`加载 ChatLuna 会话失败：${message}`)
-    } finally {
-        chatLunaLoading.value = false
-    }
-}
-
-const refreshChatLunaConversations = async () => {
-    chatLunaPage.value = 1
-    await Promise.all([fetchChatLunaOptions(), fetchChatLunaConversations()])
-}
-
-const onChatLunaPageSizeChange = () => {
-    chatLunaPage.value = 1
-    fetchChatLunaConversations()
-}
-
-const isChatLunaConversationBusy = (
-    conversation: ChatLunaConversationListItem
-) => {
-    return (
-        savingConversationId.value === conversation.id ||
-        deletingConversationId.value === conversation.id
-    )
-}
-
-const isChatLunaConversationDirty = (
-    conversation: ChatLunaConversationListItem
-) => {
-    const draft = chatLunaDrafts[conversation.id]
-
-    if (draft == null) return false
-
-    return draft.model !== conversation.model || draft.preset !== conversation.preset
-}
-
-const resetChatLunaDraft = (conversation: ChatLunaConversationListItem) => {
-    chatLunaDrafts[conversation.id] = {
-        model: conversation.model,
-        preset: conversation.preset
-    }
-}
-
-const saveChatLunaConversation = async (
-    conversation: ChatLunaConversationListItem
-) => {
-    const draft = chatLunaDrafts[conversation.id]
-
-    if (draft == null || !isChatLunaConversationDirty(conversation)) {
-        return
-    }
-
-    savingConversationId.value = conversation.id
-
-    try {
-        const updated = await api.updateChatLunaConversationUsage({
-            conversationId: conversation.id,
-            model: draft.model !== conversation.model ? draft.model : undefined,
-            preset:
-                draft.preset !== conversation.preset ? draft.preset : undefined
-        })
-        const index = chatLunaConversations.value.findIndex(
-            (item) => item.id === updated.id
-        )
-
-        if (index >= 0) {
-            chatLunaConversations.value[index] = updated
-        }
-        resetChatLunaDraft(updated)
-        ElMessage.success('ChatLuna 会话已更新')
-    } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        ElMessage.error(`保存 ChatLuna 会话失败：${message}`)
-    } finally {
-        savingConversationId.value = null
-    }
-}
-
-const removeChatLunaConversation = async (
-    conversation: ChatLunaConversationListItem
-) => {
-    try {
-        await ElMessageBox.confirm(
-            `删除会话「${conversation.title || conversation.id}」后，会移除该 ChatLuna 会话的消息记录与权限记录，并解除当前绑定；该操作不能从此界面恢复。是否继续？`,
-            '删除 ChatLuna 会话',
-            {
-                type: 'warning',
-                confirmButtonText: '确认删除',
-                cancelButtonText: '取消'
-            }
-        )
-    } catch {
-        return
-    }
-
-    deletingConversationId.value = conversation.id
-
-    try {
-        await api.deleteChatLunaConversation({
-            conversationId: conversation.id
-        })
-        delete chatLunaDrafts[conversation.id]
-
-        if (chatLunaConversations.value.length <= 1 && chatLunaPage.value > 1) {
-            chatLunaPage.value -= 1
-        }
-
-        ElMessage.success('ChatLuna 会话已删除')
-        await fetchChatLunaConversations()
-    } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        ElMessage.error(`删除 ChatLuna 会话失败：${message}`)
-    } finally {
-        deletingConversationId.value = null
-    }
-}
-
 onMounted(() => {
     fetchPresetIds()
     fetchConfigStatus()
-})
-
-watch(activeTab, (tab) => {
-    if (tab === 'chatluna' && chatLunaConversations.value.length === 0) {
-        refreshChatLunaConversations()
-    }
 })
 </script>
 
@@ -1255,16 +838,6 @@ watch(activeTab, (tab) => {
     margin-top: 4px;
 }
 
-.dashboard-tabs :deep(.el-tabs__content) {
-    overflow: visible;
-}
-
-.dashboard-tabs :deep(.el-tab-pane) {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-}
-
 .toolbar-card,
 .table-card {
     border-radius: 12px;
@@ -1293,27 +866,6 @@ watch(activeTab, (tab) => {
     display: flex;
     flex-wrap: wrap;
     gap: 12px;
-}
-
-.conversation-toolbar {
-    display: grid;
-    grid-template-columns: minmax(260px, 1fr) auto;
-    gap: 12px;
-    align-items: center;
-}
-
-.usage-select {
-    width: 100%;
-}
-
-.route-text {
-    margin-left: 8px;
-}
-
-.pagination-row {
-    display: flex;
-    justify-content: flex-end;
-    margin-top: 12px;
 }
 
 .summary-row,
@@ -1494,8 +1046,7 @@ watch(activeTab, (tab) => {
 }
 
 @media (max-width: 1200px) {
-    .toolbar-grid,
-    .conversation-toolbar {
+    .toolbar-grid {
         grid-template-columns: 1fr;
     }
 }

@@ -3,19 +3,8 @@ import { Context } from 'koishi'
 import type {} from '@koishijs/plugin-console'
 import type { Config } from '../index'
 import type { JobListQuery, MemoryListQuery, SnapshotListQuery } from '../query'
-import {
-    deleteChatLunaConversation,
-    listChatLunaConversationOptions,
-    listChatLunaConversations,
-    updateChatLunaConversationUsage
-} from '../service/chatluna_conversation_admin'
 import type { ChatLunaLivingMemoryService } from '../service/memory'
-import type {
-    ChatLunaConversationListQuery,
-    DeleteChatLunaConversationInput,
-    MemoryMutationInput,
-    UpdateChatLunaConversationUsageInput
-} from '../types'
+import type { MemoryMutationInput } from '../types'
 
 const packageName = 'koishi-plugin-chatluna-livingmemory'
 
@@ -136,28 +125,5 @@ export function apply(ctx: Context, _config?: Config) {
         ok(async (presetId: string) => {
             await service(ctx).clearPresetData(presetId)
         })
-    )
-
-    ctx.console.addListener(
-        'living-memory/listChatLunaConversations',
-        async (query: ChatLunaConversationListQuery) =>
-            await listChatLunaConversations(ctx, query ?? {})
-    )
-
-    ctx.console.addListener(
-        'living-memory/listChatLunaConversationOptions',
-        async () => listChatLunaConversationOptions(ctx)
-    )
-
-    ctx.console.addListener(
-        'living-memory/updateChatLunaConversationUsage',
-        async (input: UpdateChatLunaConversationUsageInput) =>
-            await updateChatLunaConversationUsage(ctx, input)
-    )
-
-    ctx.console.addListener(
-        'living-memory/deleteChatLunaConversation',
-        async (input: DeleteChatLunaConversationInput) =>
-            await deleteChatLunaConversation(ctx, input)
     )
 }

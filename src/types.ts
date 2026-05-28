@@ -143,81 +143,6 @@ export interface MemoryMutationInput {
     importance?: number | null
 }
 
-export type ChatLunaConversationRouteMode =
-    | 'personal'
-    | 'shared'
-    | 'custom'
-    | 'unknown'
-
-export type ChatLunaConversationStatus =
-    | 'active'
-    | 'archived'
-    | 'deleted'
-    | 'broken'
-
-export interface ChatLunaConversationRouteInfo {
-    mode: ChatLunaConversationRouteMode
-    baseBindingKey: string
-    presetLane?: string | null
-    platform?: string | null
-    selfId?: string | null
-    userId?: string | null
-    guildId?: string | null
-    routeKey?: string | null
-    isDirect?: boolean | null
-}
-
-export interface ChatLunaConversationListQuery {
-    keyword?: string
-    page?: number
-    pageSize?: number
-}
-
-export interface ChatLunaModelOption {
-    label: string
-    value: string
-    platform: string
-    name: string
-}
-
-export interface ChatLunaPresetOption {
-    label: string
-    value: string
-}
-
-export interface ChatLunaConversationOptions {
-    models: ChatLunaModelOption[]
-    presets: ChatLunaPresetOption[]
-}
-
-export interface ChatLunaConversationListItem {
-    id: string
-    seq?: number
-    bindingKey: string
-    title: string
-    model: string
-    preset: string
-    chatMode: string
-    createdBy: string
-    createdAt: Date
-    updatedAt: Date
-    lastChatAt?: Date | null
-    status: ChatLunaConversationStatus
-    isCurrent: boolean
-    activeConversationId?: string | null
-    route: ChatLunaConversationRouteInfo
-}
-
-export interface UpdateChatLunaConversationUsageInput {
-    conversationId: string
-    model?: string
-    preset?: string
-}
-
-export interface DeleteChatLunaConversationInput {
-    conversationId: string
-}
-
 export interface ExtractedMemoryItem {
     type: MemoryEntryType
     status?: MemoryEntryStatus
@@ -374,16 +299,6 @@ declare module '@koishijs/plugin-console' {
         ) => Promise<DreamTriggerResult>
         'living-memory/clearPresetData': (
             presetId: string
-        ) => Promise<{ success: true }>
-        'living-memory/listChatLunaConversations': (
-            query: ChatLunaConversationListQuery
-        ) => Promise<PageResult<ChatLunaConversationListItem>>
-        'living-memory/listChatLunaConversationOptions': () => Promise<ChatLunaConversationOptions>
-        'living-memory/updateChatLunaConversationUsage': (
-            input: UpdateChatLunaConversationUsageInput
-        ) => Promise<ChatLunaConversationListItem>
-        'living-memory/deleteChatLunaConversation': (
-            input: DeleteChatLunaConversationInput
         ) => Promise<{ success: true }>
     }
 }
