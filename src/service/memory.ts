@@ -361,18 +361,6 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             return
         }
 
-        if (chatCount < this.config.extractionRounds) {
-            this.debug(
-                [
-                    'queueExtraction skipped: insufficient rounds,',
-                    `conversationId=${scope.conversationId}`,
-                    `chatCount=${chatCount}`,
-                    `extractionRounds=${this.config.extractionRounds}`
-                ].join(' ')
-            )
-            return
-        }
-
         const lockKey = this.toSnapshotCacheKey(scope)
         const lastExtractionChatCount =
             this.lastExtractionChatCountByScope.get(lockKey)
