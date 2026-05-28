@@ -16,25 +16,44 @@ interface FormattedMessage {
 export const livingMemoryRawContentKey = 'living_memory_raw_content'
 const rawContentByMessage = new WeakMap<BaseMessage, string>()
 
-export const setLivingMemoryRawContent = (
-    message: BaseMessage,
-    rawContent: string
-) => {
-    const normalized = rawContent.trim()
-    if (normalized.length > 0) {
-        rawContentByMessage.set(message, normalized)
-    }
-}
-
-const bracketSpeakerLinePattern = /^\[([^\]]+)\]\s*说\s*[:：]\s*(.*)$/u
-const bareSpeakerLinePattern =
-    /^([^\s:：\[\]，。！？,.!?]{1,64})\s*说\s*[:：]\s*(.*)$/u
-
 const toStringValue = (value: unknown) => {
     return typeof value === 'string' && value.trim().length > 0
         ? value.trim()
         : null
 }
+
+export const setLivingMemoryRawContent = (
+    message: BaseMessage,
+    rawContent: string
+) => {
+    const cachedRawContent = rawContentByMessage.get(message)
+    if (cachedRawContent != null) {
+        return
+    }
+
+    const existingRawContent = toStringValue(
+        message.additional_kwargs?.[livingMemoryRawContentKey]
+    )
+    if (existingRawContent != null) {
+        rawContentByMessage.set(message, existingRawContent)
+        return
+    }
+
+    const normalized = rawContent.trim()
+    if (normalized.length === 0) {
+        return
+    }
+
+    rawContentByMessage.set(message, normalized)
+
+    const additionalKwargs =
+        message.additional_kwargs as Record<string, unknown>
+    additionalKwargs[livingMemoryRawContentKey] = normalized
+}
+
+const bracketSpeakerLinePattern = /^\[([^\]]+)\]\s*说\s*[:：]\s*(.*)$/u
+const bareSpeakerLinePattern =
+    /^([^\s:：\[\]，。！？,.!?]{1,64})\s*说\s*[:：]\s*(.*)$/u
 
 const normalizeBracketSpeaker = (speaker: string) => {
     const parts = speaker
