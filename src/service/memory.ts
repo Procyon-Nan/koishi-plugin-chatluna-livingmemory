@@ -34,6 +34,42 @@ import type {
 
 const normalizeText = (value: string) => value.trim()
 
+const characterPresetSuffix = '（Character）'
+
+interface CharacterPresetProvider {
+    preset?: {
+        getAllPreset?: () => Promise<unknown>
+    }
+}
+
+const toPresetIdList = (value: unknown): string[] => {
+    if (!Array.isArray(value)) {
+        return []
+    }
+
+    return value
+        .map((item) => (typeof item === 'string' ? item.trim() : ''))
+        .filter((item) => item.length > 0)
+}
+
+const mergePresetIds = (...groups: string[][]): string[] => {
+    const result: string[] = []
+    const seen = new Set<string>()
+
+    for (const group of groups) {
+        for (const id of group) {
+            if (seen.has(id)) {
+                continue
+            }
+
+            seen.add(id)
+            result.push(id)
+        }
+    }
+
+    return result
+}
+
 const formatMemoryItemsForLog = (
     items: { content: string; score?: number }[]
 ) => {
@@ -777,7 +813,55 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     }
 
     async listPresetIds(): Promise<string[]> {
-        return await this.repository.listDistinctPresetIds()
+        const configuredChatLunaPresetIds = this.listChatLunaPresetIds()
+        const [configuredCharacterPresetIds, storedPresetIds] =
+            await Promise.all([
+                this.listCharacterPresetIds(),
+                this.repository.listDistinctPresetIds()
+            ])
+
+        return mergePresetIds(
+            configuredChatLunaPresetIds,
+            configuredCharacterPresetIds,
+            storedPresetIds.sort((left, right) => left.localeCompare(right))
+        )
+    }
+
+    private listChatLunaPresetIds(): string[] {
+        try {
+            return toPresetIdList(
+                this.ctx.chatluna.preset.getAllPreset(false).value
+            )
+        } catch (error) {
+            this.debug(
+                `webui preset list skipped chatluna presets: ${summarizeError(error)}`
+            )
+            return []
+        }
+    }
+
+    private async listCharacterPresetIds(): Promise<string[]> {
+        const character = (
+            this.ctx as Context & {
+                chatluna_character?: CharacterPresetProvider
+            }
+        ).chatluna_character
+        const presetProvider = character?.preset
+
+        if (presetProvider?.getAllPreset == null) {
+            return []
+        }
+
+        try {
+            return toPresetIdList(await presetProvider.getAllPreset()).map(
+                (presetId) => `${presetId}${characterPresetSuffix}`
+            )
+        } catch (error) {
+            this.debug(
+                `webui preset list skipped character presets: ${summarizeError(error)}`
+            )
+            return []
+        }
     }
 
     async listMemories(query: MemoryListQuery) {

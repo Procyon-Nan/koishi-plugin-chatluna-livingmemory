@@ -553,10 +553,19 @@ export class LivingMemoryRepository
     }
 
     async listDistinctPresetIds(): Promise<string[]> {
-        const entries = await this.ctx.database.get('living_memory_entry', {}, [
-            'presetId'
+        const [entries, snapshots, jobs] = await Promise.all([
+            this.ctx.database.get('living_memory_entry', {}, ['presetId']),
+            this.ctx.database.get('living_memory_snapshot', {}, ['presetId']),
+            this.ctx.database.get('living_memory_job', {}, ['presetId'])
         ])
-        return [...new Set(entries.map((e) => e.presetId))]
+
+        return [
+            ...new Set(
+                [...entries, ...snapshots, ...jobs]
+                    .map((record) => record.presetId)
+                    .filter((presetId) => presetId.length > 0)
+            )
+        ]
     }
 
     async removeExpiredJobs(deadline: Date) {

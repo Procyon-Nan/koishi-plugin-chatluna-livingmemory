@@ -35,6 +35,7 @@
                             placeholder="选择或输入预设 ID"
                             class="preset-select"
                             @change="onPresetChange"
+                            @visible-change="onPresetVisibleChange"
                         >
                             <el-option
                                 v-for="id in presetIds"
@@ -730,6 +731,12 @@ const fetchPresetIds = async () => {
 
 const onPresetChange = () => {
     refreshAll()
+}
+
+const onPresetVisibleChange = (visible: boolean) => {
+    if (visible) {
+        fetchPresetIds()
+    }
 }
 
 const onMemoryFilterChange = () => {
