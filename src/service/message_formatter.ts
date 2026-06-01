@@ -46,8 +46,10 @@ export const setLivingMemoryRawContent = (
 
     rawContentByMessage.set(message, normalized)
 
-    const additionalKwargs =
-        message.additional_kwargs as Record<string, unknown>
+    const additionalKwargs = message.additional_kwargs as Record<
+        string,
+        unknown
+    >
     additionalKwargs[livingMemoryRawContentKey] = normalized
 }
 
