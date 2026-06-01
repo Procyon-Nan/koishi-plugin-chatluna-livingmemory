@@ -165,7 +165,7 @@ export interface ExtractionPayload {
 }
 
 export interface LivingMemoryConfig {
-    promptVariable: '{living_memory}'
+    enableSnapshotInjection: boolean
     extractModel: string
     dreamModel: string
     enableRecallQueryRewrite: boolean

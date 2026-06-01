@@ -6,7 +6,7 @@
 
 ## 功能
 
-- 通过 `{living_memory}` 变量向 prompt 中注入记忆快照。
+- 在标准 ChatLuna 请求中注入一次记忆快照上下文。
 - 按预设（preset）分区保存记忆，支持同一预设跨会话共享长期记忆。
 - 异步进行记忆检索与召回，并把召回结果写入记忆快照，供下一轮对话使用。
 - 异步进行记忆总结与存储，将对话转化为符合预设角色风格的第一人称叙事记忆。
@@ -54,13 +54,9 @@ yarn build chatluna-livingmemory
 - Embedding 模型：`bce-embedding-base_v1`
 - Reranker 模型：`bce-reranker-base_v1`
 
-3. 在需要记忆注入的 ChatLuna 主插件或 Character（伪装）预设中写入记忆变量：
+3. 对标准 ChatLuna 主插件会话，保持 `开启记忆快照注入` 配置为开启状态。插件会在当前用户消息之后自动注入最近一次成功召回的记忆快照。
 
-```text
-{living_memory}
-```
-
-4. 与 Bot 开始对话。
+4. Character（伪装）会话暂保持既有预设接入方式。
 
 5. 在 Koishi Console 侧边栏进入 livingmemory WebUI，进行记忆的查看和管理。
 

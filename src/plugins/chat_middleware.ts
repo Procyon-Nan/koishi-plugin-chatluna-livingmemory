@@ -50,6 +50,15 @@ const writeRawUserContent = (
     setLivingMemoryRawContent(message, rawContent)
 }
 
+const formatSnapshotInjection = (snapshot: string) => {
+    const normalized = snapshot.trim()
+    if (normalized.length === 0) {
+        return null
+    }
+
+    return `【你的记忆】\n${normalized}`
+}
+
 export async function apply(ctx: Context, config: Config) {
     const logger = ctx.logger('chatluna-livingmemory')
     const debug = (message: string) => {
@@ -115,16 +124,49 @@ export async function apply(ctx: Context, config: Config) {
                 }
             )
 
-            const snapshot =
-                await ctx.chatluna_living_memory.hydratePromptVariable(scope)
+            const enableSnapshotInjection =
+                config.enableSnapshotInjection !== false
+            let snapshot = ''
+            if (enableSnapshotInjection) {
+                try {
+                    snapshot =
+                        await ctx.chatluna_living_memory.hydratePromptVariable(
+                            scope
+                        )
+                    const injection = formatSnapshotInjection(snapshot)
+                    if (injection != null) {
+                        ctx.chatluna.contextManager.inject({
+                            conversationId,
+                            name: 'after_user_message',
+                            // 交给 ChatLuna core 转成 HumanMessage，避免不同
+                            // @langchain/core 实例导致 instanceof 失效。
+                            value: injection,
+                            once: true
+                        })
+                        debug(
+                            [
+                                'before-chat snapshot injection queued:',
+                                `conversationId=${conversationId}`,
+                                `presetId=${presetId}`,
+                                `injectionLength=${injection.length}`
+                            ].join(' ')
+                        )
+                    }
+                } catch (error) {
+                    logger.warn(error)
+                }
+            }
 
-            promptVariables.living_memory = snapshot
+            const snapshotInjectionStatus = enableSnapshotInjection
+                ? 'enabled'
+                : 'disabled'
 
             debug(
                 [
                     'before-chat recall queued:',
                     `conversationId=${conversationId}`,
                     `presetId=${presetId}`,
+                    `snapshotInjection=${snapshotInjectionStatus}`,
                     `snapshotLength=${snapshot.length}`
                 ].join(' ')
             )

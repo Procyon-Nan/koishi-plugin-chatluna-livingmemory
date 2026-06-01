@@ -41,12 +41,11 @@ export const inject = {
 }
 
 export const Config: Schema<Config> = Schema.object({
-    promptVariable: Schema.const('{living_memory}')
+    enableSnapshotInjection: Schema.boolean()
         .description(
-            '在 ChatLuna 或 Character 预设提示词中写入该变量即可注入最近一次成功召回的记忆快照。'
+            '开启记忆快照注入。启用后，标准 ChatLuna 会在当前用户消息之后注入最近一次成功召回的记忆快照。'
         )
-        .role('text')
-        .default('{living_memory}'),
+        .default(true),
     extractModel: Schema.dynamic('model')
         .description('用于从对话中提取记忆的 LLM 模型。')
         .default('无'),
