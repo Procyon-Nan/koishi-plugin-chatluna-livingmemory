@@ -25,47 +25,62 @@
                 </template>
 
                 <div class="toolbar-grid">
-                    <el-select
-                        v-model="presetId"
-                        filterable
-                        allow-create
-                        default-first-option
-                        clearable
-                        placeholder="选择或输入预设 ID"
-                        @change="onPresetChange"
-                    >
-                        <el-option
-                            v-for="id in presetIds"
-                            :key="id"
-                            :label="id"
-                            :value="id"
-                        />
-                    </el-select>
+                    <div class="toolbar-filters">
+                        <el-select
+                            v-model="presetId"
+                            filterable
+                            allow-create
+                            default-first-option
+                            clearable
+                            placeholder="选择或输入预设 ID"
+                            class="preset-select"
+                            @change="onPresetChange"
+                        >
+                            <el-option
+                                v-for="id in presetIds"
+                                :key="id"
+                                :label="id"
+                                :value="id"
+                            />
+                        </el-select>
 
-                    <el-input
-                        v-model="memoryKeyword"
-                        placeholder="按关键词过滤记忆"
-                        clearable
-                        @keyup.enter="refreshAll"
-                        @clear="refreshAll"
-                    >
-                        <template #prepend>搜索</template>
-                    </el-input>
+                        <el-input
+                            v-model="memoryKeyword"
+                            placeholder="按关键词过滤记忆"
+                            clearable
+                            class="keyword-input"
+                            @keyup.enter="onMemoryFilterChange"
+                            @clear="onMemoryFilterChange"
+                        >
+                            <template #prepend>搜索</template>
+                        </el-input>
 
-                    <el-select v-model="memoryType" clearable placeholder="全部类型" @change="refreshAll">
-                        <el-option
-                            v-for="item in memoryTypes"
-                            :key="item"
-                            :label="item"
-                            :value="item"
-                        />
-                    </el-select>
+                        <el-select
+                            v-model="memoryType"
+                            clearable
+                            placeholder="全部类型"
+                            class="type-select"
+                            @change="onMemoryFilterChange"
+                        >
+                            <el-option
+                                v-for="item in memoryTypes"
+                                :key="item"
+                                :label="getMemoryTypeLabel(item)"
+                                :value="item"
+                            />
+                        </el-select>
 
-                    <el-select v-model="memoryStatus" placeholder="记忆状态" @change="refreshAll">
-                        <el-option label="活跃记忆" value="active" />
-                        <el-option label="历史记录" value="archived" />
-                        <el-option label="全部状态" value="all" />
-                    </el-select>
+                        <el-select
+                            v-model="memoryStatus"
+                            placeholder="记忆状态"
+                            class="status-select"
+                            @change="onMemoryFilterChange"
+                        >
+                            <el-option label="活跃记忆" value="active" />
+                            <el-option label="历史记录" value="archived" />
+                            <el-option label="全部状态" value="all" />
+                        </el-select>
+                    </div>
 
                     <div class="toolbar-actions">
                         <el-button :loading="loading" type="primary" @click="refreshAll">
@@ -99,7 +114,7 @@
                     <el-card shadow="never">
                         <div class="summary-item">
                             <div class="summary-label">记忆数量</div>
-                            <div class="summary-value">{{ memories.length }}</div>
+                            <div class="summary-value">{{ memoryTotal }}</div>
                         </div>
                     </el-card>
                 </el-col>
@@ -107,7 +122,7 @@
                     <el-card shadow="never">
                         <div class="summary-item">
                             <div class="summary-label">快照数量</div>
-                            <div class="summary-value">{{ snapshots.length }}</div>
+                            <div class="summary-value">{{ snapshotTotal }}</div>
                         </div>
                     </el-card>
                 </el-col>
@@ -115,7 +130,7 @@
                     <el-card shadow="never">
                         <div class="summary-item">
                             <div class="summary-label">任务数量</div>
-                            <div class="summary-value">{{ jobs.length }}</div>
+                            <div class="summary-value">{{ jobTotal }}</div>
                         </div>
                     </el-card>
                 </el-col>
@@ -129,9 +144,19 @@
                     </div>
                 </template>
 
-                <el-table :data="memories" border v-loading="loading" max-height="400">
+                <el-table :data="memories" border v-loading="loading" max-height="450">
                     <el-table-column prop="id" label="ID" min-width="180" />
-                    <el-table-column prop="type" label="类型" width="120" />
+                    <el-table-column label="类型" width="140">
+                        <template #default="scope">
+                            <el-tag
+                                :type="getMemoryTagType(scope.row.type)"
+                                size="small"
+                                effect="plain"
+                            >
+                                {{ getMemoryTypeLabel(scope.row.type) }}
+                            </el-tag>
+                        </template>
+                    </el-table-column>
                     <el-table-column label="状态" width="100">
                         <template #default="scope">
                             <el-tag
@@ -147,7 +172,11 @@
                     <el-table-column prop="summary" label="摘要" min-width="200" show-overflow-tooltip />
                     <el-table-column prop="sentiment" label="情绪" width="120" show-overflow-tooltip />
                     <el-table-column label="重要度" width="100">
-                        <template #default="scope">{{ formatImportance(scope.row.importance) }}</template>
+                        <template #default="scope">
+                            <span :style="getImportanceStyle(scope.row.importance)">
+                                {{ formatImportance(scope.row.importance) }}
+                            </span>
+                        </template>
                     </el-table-column>
                     <el-table-column label="关键词" min-width="200">
                         <template #default="scope">
@@ -187,6 +216,18 @@
                         </template>
                     </el-table-column>
                 </el-table>
+
+                <div class="pagination-container">
+                    <el-pagination
+                        v-model:current-page="memoryPage"
+                        v-model:page-size="memoryPageSize"
+                        :total="memoryTotal"
+                        :page-sizes="[10, 20, 50, 100]"
+                        layout="total, sizes, prev, pager, next, jumper"
+                        @current-change="onMemoryPageChange"
+                        @size-change="onMemorySizeChange"
+                    />
+                </div>
             </el-card>
 
             <el-row :gutter="16" class="table-row">
@@ -200,23 +241,6 @@
                         </template>
 
                         <el-table :data="snapshots" border v-loading="loading" max-height="300">
-                            <el-table-column
-                                width="56"
-                                align="center"
-                                class-name="snapshot-detail-cell"
-                            >
-                                <template #default="scope">
-                                    <button
-                                        type="button"
-                                        class="snapshot-detail-button"
-                                        title="查看快照详情"
-                                        aria-label="查看快照详情"
-                                        @click="openSnapshotDialog(scope.row)"
-                                    >
-                                        <span class="snapshot-detail-icon" aria-hidden="true" />
-                                    </button>
-                                </template>
-                            </el-table-column>
                             <el-table-column prop="id" label="ID" min-width="160" />
                             <el-table-column prop="strategy" label="策略" width="140" />
                             <el-table-column prop="query" label="查询" min-width="180" show-overflow-tooltip />
@@ -226,20 +250,41 @@
                             <el-table-column label="创建时间" min-width="160">
                                 <template #default="scope">{{ formatTime(scope.row.createdAt) }}</template>
                             </el-table-column>
-                            <el-table-column label="操作" width="96" fixed="right">
+                            <el-table-column label="操作" width="140" fixed="right">
                                 <template #default="scope">
-                                    <el-button
-                                        size="small"
-                                        type="danger"
-                                        plain
-                                        :loading="deletingSnapshotId === scope.row.id"
-                                        @click="removeSnapshot(scope.row)"
-                                    >
-                                        删除
-                                    </el-button>
+                                    <el-space>
+                                        <el-button
+                                            size="small"
+                                            type="primary"
+                                            link
+                                            @click="openSnapshotDialog(scope.row)"
+                                        >
+                                            详情
+                                        </el-button>
+                                        <el-button
+                                            size="small"
+                                            type="danger"
+                                            plain
+                                            :loading="deletingSnapshotId === scope.row.id"
+                                            @click="removeSnapshot(scope.row)"
+                                        >
+                                            删除
+                                        </el-button>
+                                    </el-space>
                                 </template>
                             </el-table-column>
                         </el-table>
+
+                        <div class="pagination-container pagination-compact">
+                            <el-pagination
+                                v-model:current-page="snapshotPage"
+                                v-model:page-size="snapshotPageSize"
+                                :total="snapshotTotal"
+                                size="small"
+                                layout="total, prev, pager, next"
+                                @current-change="onSnapshotPageChange"
+                            />
+                        </div>
                     </el-card>
                 </el-col>
 
@@ -254,8 +299,22 @@
 
                         <el-table :data="jobs" border v-loading="loading" max-height="300">
                             <el-table-column prop="id" label="ID" min-width="160" />
-                            <el-table-column prop="kind" label="类型" width="120" />
-                            <el-table-column prop="status" label="状态" width="120" />
+                            <el-table-column label="类型" width="120">
+                                <template #default="scope">
+                                    {{ getJobKindLabel(scope.row.kind) }}
+                                </template>
+                            </el-table-column>
+                            <el-table-column label="状态" width="120">
+                                <template #default="scope">
+                                    <el-tag
+                                        :type="getJobStatusTagType(scope.row.status)"
+                                        size="small"
+                                        effect="light"
+                                    >
+                                        {{ getJobStatusLabel(scope.row.status) }}
+                                    </el-tag>
+                                </template>
+                            </el-table-column>
                             <el-table-column label="创建时间" min-width="160">
                                 <template #default="scope">{{ formatTime(scope.row.createdAt) }}</template>
                             </el-table-column>
@@ -263,6 +322,17 @@
                                 <template #default="scope">{{ formatTime(scope.row.updatedAt) }}</template>
                             </el-table-column>
                         </el-table>
+
+                        <div class="pagination-container pagination-compact">
+                            <el-pagination
+                                v-model:current-page="jobPage"
+                                v-model:page-size="jobPageSize"
+                                :total="jobTotal"
+                                size="small"
+                                layout="total, prev, pager, next"
+                                @current-change="onJobPageChange"
+                            />
+                        </div>
                     </el-card>
                 </el-col>
             </el-row>
@@ -517,6 +587,18 @@ const memoryKeyword = ref('')
 const memoryType = ref<MemoryEntryType | ''>('')
 const memoryStatus = ref<MemoryEntryStatus | 'all'>('active')
 
+const memoryPage = ref(1)
+const memoryPageSize = ref(20)
+const memoryTotal = ref(0)
+
+const snapshotPage = ref(1)
+const snapshotPageSize = ref(10)
+const snapshotTotal = ref(0)
+
+const jobPage = ref(1)
+const jobPageSize = ref(10)
+const jobTotal = ref(0)
+
 const memories = ref<MemoryEntryRecord[]>([])
 const snapshots = ref<MemorySnapshotRecord[]>([])
 const jobs = ref<MemoryJobRecord[]>([])
@@ -568,6 +650,76 @@ const resetForm = () => {
     editingMemoryId.value = null
 }
 
+const getMemoryTypeLabel = (type: string): string => {
+    const labels: Record<string, string> = {
+        identity: '身份 (identity)',
+        preference: '偏好 (preference)',
+        fact: '事实 (fact)',
+        plan: '计划 (plan)',
+        context: '上下文 (context)',
+        other: '其它 (other)'
+    }
+    return labels[type] || type
+}
+
+const getMemoryTagType = (
+    type: string
+): 'success' | 'warning' | 'danger' | 'info' | '' => {
+    const types: Record<string, 'success' | 'warning' | 'danger' | 'info' | ''> = {
+        identity: '',
+        preference: 'success',
+        fact: 'info',
+        plan: 'warning',
+        context: 'danger',
+        other: 'info'
+    }
+    return types[type] || 'info'
+}
+
+const getImportanceStyle = (
+    value: number | null | undefined
+): Record<string, string> => {
+    if (value == null) return {}
+    if (value >= 0.7) {
+        return { color: 'var(--el-color-danger)', fontWeight: 'bold' }
+    } else if (value >= 0.4) {
+        return { color: 'var(--el-color-primary)', fontWeight: 'bold' }
+    }
+    return { color: 'var(--el-text-color-secondary)' }
+}
+
+const getJobKindLabel = (kind: string): string => {
+    const labels: Record<string, string> = {
+        recall: '记忆召回',
+        extract: '记忆提取',
+        dream: 'Dream 固化',
+        clear: '数据清理'
+    }
+    return labels[kind] || kind
+}
+
+const getJobStatusLabel = (status: string): string => {
+    const labels: Record<string, string> = {
+        pending: '排队中',
+        running: '运行中',
+        completed: '已完成',
+        failed: '已失败'
+    }
+    return labels[status] || status
+}
+
+const getJobStatusTagType = (
+    status: string
+): 'success' | 'warning' | 'danger' | 'info' => {
+    const types: Record<string, 'success' | 'warning' | 'danger' | 'info'> = {
+        pending: 'info',
+        running: 'warning',
+        completed: 'success',
+        failed: 'danger'
+    }
+    return types[status] || 'info'
+}
+
 const fetchPresetIds = async () => {
     try {
         presetIds.value = await api.listPresetIds()
@@ -580,42 +732,115 @@ const onPresetChange = () => {
     refreshAll()
 }
 
+const onMemoryFilterChange = () => {
+    memoryPage.value = 1
+    fetchMemories()
+}
+
+const onMemoryPageChange = (page: number) => {
+    memoryPage.value = page
+    fetchMemories()
+}
+
+const onMemorySizeChange = (size: number) => {
+    memoryPageSize.value = size
+    memoryPage.value = 1
+    fetchMemories()
+}
+
+const onSnapshotPageChange = (page: number) => {
+    snapshotPage.value = page
+    fetchSnapshots()
+}
+
+const onJobPageChange = (page: number) => {
+    jobPage.value = page
+    fetchJobs()
+}
+
+const fetchMemories = async (skipLoading = false) => {
+    if (!ensurePreset()) return
+    if (!skipLoading) loading.value = true
+    try {
+        const result = await api.listMemories({
+            presetId: presetId.value,
+            keyword: memoryKeyword.value.trim() || undefined,
+            type: memoryType.value || undefined,
+            status: memoryStatus.value,
+            page: memoryPage.value,
+            pageSize: memoryPageSize.value
+        })
+        memories.value = result.items
+        memoryTotal.value = result.total
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        ElMessage.error(`获取记忆失败：${message}`)
+    } finally {
+        if (!skipLoading) loading.value = false
+    }
+}
+
+const fetchSnapshots = async (skipLoading = false) => {
+    if (!ensurePreset()) return
+    if (!skipLoading) loading.value = true
+    try {
+        const result = await api.listSnapshots({
+            presetId: presetId.value,
+            page: snapshotPage.value,
+            pageSize: snapshotPageSize.value
+        })
+        snapshots.value = result.items
+        snapshotTotal.value = result.total
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        ElMessage.error(`获取快照失败：${message}`)
+    } finally {
+        if (!skipLoading) loading.value = false
+    }
+}
+
+const fetchJobs = async (skipLoading = false) => {
+    if (!ensurePreset()) return
+    if (!skipLoading) loading.value = true
+    try {
+        const result = await api.listJobs({
+            presetId: presetId.value,
+            page: jobPage.value,
+            pageSize: jobPageSize.value
+        })
+        jobs.value = result.items
+        jobTotal.value = result.total
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        ElMessage.error(`获取任务失败：${message}`)
+    } finally {
+        if (!skipLoading) loading.value = false
+    }
+}
+
 const refreshAll = async () => {
     normalizePreset()
     if (!ensurePreset()) {
         memories.value = []
         snapshots.value = []
         jobs.value = []
+        memoryTotal.value = 0
+        snapshotTotal.value = 0
+        jobTotal.value = 0
         return
     }
 
     loading.value = true
+    memoryPage.value = 1
+    snapshotPage.value = 1
+    jobPage.value = 1
 
     try {
-        const [memoryResult, snapshotResult, jobResult] = await Promise.all([
-            api.listMemories({
-                presetId: presetId.value,
-                keyword: memoryKeyword.value.trim() || undefined,
-                type: memoryType.value || undefined,
-                status: memoryStatus.value,
-                page: 1,
-                pageSize: 50
-            }),
-            api.listSnapshots({
-                presetId: presetId.value,
-                page: 1,
-                pageSize: 20
-            }),
-            api.listJobs({
-                presetId: presetId.value,
-                page: 1,
-                pageSize: 20
-            })
+        await Promise.all([
+            fetchMemories(true),
+            fetchSnapshots(true),
+            fetchJobs(true)
         ])
-
-        memories.value = memoryResult.items
-        snapshots.value = snapshotResult.items
-        jobs.value = jobResult.items
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         ElMessage.error(`刷新失败：${message}`)
@@ -857,15 +1082,48 @@ onMounted(() => {
 }
 
 .toolbar-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.toolbar-filters {
+    display: flex;
+    flex-wrap: wrap;
     gap: 12px;
+    align-items: center;
+}
+
+.toolbar-filters .el-select,
+.toolbar-filters .el-input {
+    width: 180px;
+}
+
+.toolbar-filters .preset-select {
+    width: 200px;
+}
+
+.toolbar-filters .keyword-input {
+    width: 240px;
 }
 
 .toolbar-actions {
     display: flex;
     flex-wrap: wrap;
     gap: 12px;
+    align-items: center;
+}
+
+.pagination-container {
+    display: flex;
+    justify-content: flex-end;
+    padding: 12px 0 0;
+}
+
+.pagination-compact {
+    padding: 8px 0 0;
 }
 
 .summary-row,
