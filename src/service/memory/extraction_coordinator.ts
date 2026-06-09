@@ -71,10 +71,27 @@ export class LivingMemoryExtractionCoordinator {
         const lockKey = scopeKey(scope)
         const lastExtractionChatCount =
             this.lastExtractionChatCountByScope.get(lockKey)
-        const roundsSinceLastExtraction =
-            lastExtractionChatCount == null
-                ? chatCount
-                : chatCount - lastExtractionChatCount
+
+        // 首次见到该 scope（含插件重载/重启后内存计数丢失的情形）：chatCount 的
+        // 来源（core 累加值 / character 现数）与抽取基线不保证同步归零，直接用其
+        // 绝对值会误触发立即抽取。改为以当前 chatCount 为基线、从 0 重新计时，
+        // 本次跳过，之后按增量 chatCount - 基线 判定。代价是重载后抽取倒计时会
+        // 重置一个 interval，与本插件“尽力而为、容忍滞后”的取舍一致。
+        if (lastExtractionChatCount == null) {
+            this.lastExtractionChatCountByScope.set(lockKey, chatCount)
+            this.debug(
+                [
+                    'queueExtraction skipped: baseline initialized,',
+                    `conversationId=${scope.conversationId}`,
+                    `presetId=${scope.presetId}`,
+                    `baselineChatCount=${chatCount}`,
+                    `interval=${this.config.extractionInterval}`
+                ].join(' ')
+            )
+            return
+        }
+
+        const roundsSinceLastExtraction = chatCount - lastExtractionChatCount
 
         if (roundsSinceLastExtraction < this.config.extractionInterval) {
             this.debug(
