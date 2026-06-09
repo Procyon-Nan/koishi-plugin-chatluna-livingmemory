@@ -1,6 +1,11 @@
-import type { DreamCluster, DreamStage } from './types'
-import { toPromptEntry } from './util'
+import type { DreamCluster, DreamStage } from '../dream/types'
+import { toPromptEntry } from '../dream/util'
+import { DREAM_ACTIVE_FORMAT, DREAM_ARCHIVED_FORMAT } from './schema'
 
+/**
+ * 构建 Dream 整理提示词。纯函数，按阶段（active / archived）切换操作指南与输出格式。
+ * 输出格式串引用自 ./schema，与 dream/parser.ts 保持单一真相源。
+ */
 export const buildDreamPrompt = (
     presetId: string,
     cluster: DreamCluster,
@@ -22,39 +27,8 @@ export const buildDreamPrompt = (
         '- deleteSource：只用于声明 merge 的 source 可以删除；代码层只会删除成功 merge 的 source，独立 deleteSource 会被跳过。',
         '- archived 阶段禁止恢复为 active，也禁止使用 archive 操作。'
     ]
-    const activeFormat = [
-        '{"operations":[',
-        '{"action":"keep","memoryIds":["..."],"reason":"..."},',
-        '{"action":"update","memoryId":"...","memory":',
-        '{"type":"fact","content":"...","summary":"...",',
-        '"keywords":["..."],"sentiment":"...","importance":0.5},',
-        '"reason":"..."},',
-        '{"action":"merge","targetMemoryId":"...",',
-        '"sourceMemoryIds":["..."],"memory":',
-        '{"type":"fact","content":"...","summary":"...",',
-        '"keywords":["..."],"sentiment":"...","importance":0.8},',
-        '"reason":"..."},',
-        '{"action":"archive","memoryId":"...","memory":',
-        '{"content":"...","summary":"...",',
-        '"keywords":["..."],"sentiment":"...",',
-        '"importance":0.3},"reason":"..."}]}'
-    ].join('')
-    const archivedFormat = [
-        '{"operations":[',
-        '{"action":"keep","memoryIds":["..."],"reason":"..."},',
-        '{"action":"update","memoryId":"...","memory":',
-        '{"type":"fact","content":"...","summary":"...",',
-        '"keywords":["..."],"sentiment":"...","importance":0.4},',
-        '"reason":"..."},',
-        '{"action":"merge","targetMemoryId":"...",',
-        '"sourceMemoryIds":["..."],"memory":',
-        '{"type":"fact","content":"...","summary":"...",',
-        '"keywords":["..."],"sentiment":"...","importance":0.5},',
-        '"reason":"..."},',
-        '{"action":"deleteSource","targetMemoryId":"...",',
-        '"sourceMemoryIds":["..."],',
-        '"reason":"merge source 已压缩进 target"}]}'
-    ].join('')
+    const activeFormat = DREAM_ACTIVE_FORMAT
+    const archivedFormat = DREAM_ARCHIVED_FORMAT
 
     return [
         '你是长期记忆 Dream 档案员。',

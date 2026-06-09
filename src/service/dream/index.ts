@@ -9,7 +9,7 @@ import {
 import { DreamClusterer } from './clustering'
 import { DreamExecutor } from './executor'
 import { parseDreamOperations } from './parser'
-import { buildDreamPrompt } from './prompts'
+import { buildDreamPrompt } from '../prompts'
 import {
     addStats,
     createEmptyStageResult,
