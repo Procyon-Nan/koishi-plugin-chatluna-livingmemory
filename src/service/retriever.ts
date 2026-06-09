@@ -195,11 +195,33 @@ export class LivingMemoryRetriever {
             { topN: limit }
         )
 
-        return rerankResults.map((result) => ({
-            id: candidates[result.index].id,
-            content: candidates[result.index].content,
-            score: result.relevanceScore
-        }))
+        // rerank 服务返回的 index 为外部输入，直接作为下标可能越界
+        // （协议差异、索引基准不一致等），会取到 undefined 并抛错导致整轮
+        // 召回失败。对每条结果做边界校验：越界则跳过并记录日志，合法则回填。
+        return rerankResults
+            .map((result) => {
+                const candidate = candidates[result.index]
+                if (candidate == null) {
+                    if (this.config.debug) {
+                        this.ctx
+                            .logger('chatluna-livingmemory')
+                            .info(
+                                [
+                                    'memory rerank index out of bounds:',
+                                    `index=${result.index}`,
+                                    `candidateCount=${candidates.length}`
+                                ].join(' ')
+                            )
+                    }
+                    return null
+                }
+                return {
+                    id: candidate.id,
+                    content: candidate.content,
+                    score: result.relevanceScore
+                }
+            })
+            .filter((item): item is NonNullable<typeof item> => item != null)
     }
 
     private async listActiveEntries(presetId: string) {
