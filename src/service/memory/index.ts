@@ -1,0 +1,369 @@
+import { BaseMessage, HumanMessage } from '@langchain/core/messages'
+import { Context, Logger, Service, Time } from 'koishi'
+import type { PresetTemplate } from 'koishi-plugin-chatluna/llm-core/prompt'
+import { LivingMemoryDreamService } from '../dream'
+import { LivingMemoryExtractor } from '../extractor'
+import { LivingMemoryMessageFormatter } from '../message_formatter'
+import { LivingMemoryRecallQueryBuilder } from '../recall_query'
+import { LivingMemoryRepository } from '../repository'
+import { LivingMemoryRetriever } from '../retriever'
+import { isModelConfigured } from '../shared/utils'
+import {
+    filterJobList,
+    filterMemoryList,
+    filterSnapshotList,
+    type JobListQuery,
+    type MemoryListQuery,
+    type PageResult,
+    type SnapshotListQuery
+} from '../../query'
+import type {
+    DreamTriggerResult,
+    LivingMemoryConfig,
+    MemoryConfigWarning,
+    MemoryMutationInput,
+    MemoryScope,
+    MemoryServiceStatus,
+    MemorySnapshotWithResolvedItems
+} from '../../types'
+import { LivingMemoryDreamCoordinator } from './dream_coordinator'
+import { LivingMemoryExtractionCoordinator } from './extraction_coordinator'
+import { LivingMemoryJobTracker } from './job_tracker'
+import { LivingMemoryPresetCatalog } from './preset_catalog'
+import { LivingMemoryRecallCoordinator } from './recall_coordinator'
+import { LivingMemorySnapshotCache } from './snapshot_cache'
+import type { QueueExtractionOptions } from './helpers'
+
+export type { QueueExtractionOptions } from './helpers'
+
+export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
+    private readonly serviceLogger: Logger
+    private readonly repository: LivingMemoryRepository
+    private readonly snapshotCache: LivingMemorySnapshotCache
+    private readonly recallCoordinator: LivingMemoryRecallCoordinator
+    private readonly extractionCoordinator: LivingMemoryExtractionCoordinator
+    private readonly dreamCoordinator: LivingMemoryDreamCoordinator
+    private readonly presetCatalog: LivingMemoryPresetCatalog
+
+    constructor(
+        public readonly ctx: Context,
+        public config: LivingMemoryConfig
+    ) {
+        super(ctx, 'chatluna_living_memory', true)
+        this.serviceLogger = ctx.logger('chatluna-livingmemory')
+        const debug = (message: string) => this.debug(message)
+
+        this.repository = new LivingMemoryRepository(ctx)
+        const retriever = new LivingMemoryRetriever(
+            ctx,
+            config,
+            this.repository
+        )
+        const extractor = new LivingMemoryExtractor(ctx, config.extractModel)
+        const formatter = new LivingMemoryMessageFormatter()
+        const recallQuery = new LivingMemoryRecallQueryBuilder(ctx, config)
+        const dream = new LivingMemoryDreamService(
+            ctx,
+            config,
+            this.repository,
+            debug
+        )
+
+        const jobTracker = new LivingMemoryJobTracker(this.repository)
+        this.snapshotCache = new LivingMemorySnapshotCache(this.repository)
+        this.recallCoordinator = new LivingMemoryRecallCoordinator(
+            config,
+            this.repository,
+            recallQuery,
+            retriever,
+            this.snapshotCache,
+            jobTracker,
+            this.serviceLogger,
+            debug
+        )
+        this.extractionCoordinator = new LivingMemoryExtractionCoordinator(
+            ctx,
+            config,
+            this.repository,
+            formatter,
+            extractor,
+            jobTracker,
+            this.serviceLogger,
+            debug
+        )
+        this.dreamCoordinator = new LivingMemoryDreamCoordinator(
+            dream,
+            this.repository,
+            this.snapshotCache,
+            jobTracker,
+            this.serviceLogger,
+            debug
+        )
+        this.presetCatalog = new LivingMemoryPresetCatalog(
+            ctx,
+            this.repository,
+            debug
+        )
+
+        this.repository.defineTables()
+        ctx.setInterval(() => {
+            this.cleanupStaleJobs().catch((error) => {
+                this.serviceLogger.warn(error)
+            })
+        }, Time.day)
+    }
+
+    protected async start() {
+        try {
+            const recovered =
+                await this.repository.markStaleRunningJobsAsFailed(
+                    {},
+                    'recovered: service restarted while job was running'
+                )
+            if (recovered.length > 0) {
+                this.serviceLogger.info(
+                    `memory startup recovery: marked ${recovered.length} stale running job(s) as failed`
+                )
+            }
+        } catch (error) {
+            this.serviceLogger.warn(error)
+        }
+
+        for (const warning of this.validateConfig()) {
+            this.serviceLogger.warn(
+                `memory config warning [${warning.code}] ${warning.message}`
+            )
+        }
+    }
+
+    validateConfig(): MemoryConfigWarning[] {
+        const warnings: MemoryConfigWarning[] = []
+
+        if (this.config.recallStrategy === 'embedding-rerank') {
+            if (!isModelConfigured(this.config.embeddingModel)) {
+                warnings.push({
+                    code: 'embedding-model-missing',
+                    field: 'embeddingModel',
+                    message:
+                        '召回策略已选择 embedding-rerank，但未配置 embeddingModel；将无法进行向量召回。'
+                })
+            }
+            if (!isModelConfigured(this.config.rerankModel)) {
+                warnings.push({
+                    code: 'rerank-model-missing',
+                    field: 'rerankModel',
+                    message:
+                        '召回策略已选择 embedding-rerank，但未配置 rerankModel；将无法对召回结果重排序。'
+                })
+            }
+        }
+
+        if (
+            this.config.extractionInterval > 0 &&
+            !isModelConfigured(this.config.extractModel)
+        ) {
+            warnings.push({
+                code: 'extract-model-missing',
+                field: 'extractModel',
+                message:
+                    '自动记忆提取已启用（extractionInterval > 0），但未配置 extractModel；提取流程将被跳过。'
+            })
+        }
+
+        if (
+            this.config.enableRecallQueryRewrite &&
+            !isModelConfigured(this.config.recallRewriteModel)
+        ) {
+            warnings.push({
+                code: 'recall-rewrite-model-missing',
+                field: 'recallRewriteModel',
+                message:
+                    '召回查询改写已启用，但未配置 recallRewriteModel；将回退到原始查询。'
+            })
+        }
+
+        return warnings
+    }
+
+    getStatus(): MemoryServiceStatus {
+        return {
+            warnings: this.validateConfig()
+        }
+    }
+
+    private debug(message: string) {
+        if (this.config.debug) {
+            this.serviceLogger.info(message)
+        }
+    }
+
+    shouldHandleSession(isDirect: boolean) {
+        return typeof isDirect === 'boolean'
+    }
+
+    resolvePresetId(message: HumanMessage, fallbackPresetId?: string) {
+        const presetFromMessage = message.additional_kwargs?.preset
+        if (
+            typeof presetFromMessage === 'string' &&
+            presetFromMessage.length > 0
+        ) {
+            return presetFromMessage
+        }
+
+        if (fallbackPresetId && fallbackPresetId.length > 0) {
+            return fallbackPresetId
+        }
+
+        return null
+    }
+
+    createScope(
+        conversationId: string,
+        presetId: string,
+        userId?: string,
+        channelId?: string,
+        options: Partial<
+            Pick<
+                MemoryScope,
+                | 'guildId'
+                | 'isDirect'
+                | 'speakerId'
+                | 'speakerName'
+                | 'presetLabel'
+            >
+        > = {}
+    ): MemoryScope {
+        return {
+            conversationId,
+            presetId,
+            userId,
+            channelId,
+            ...options
+        }
+    }
+
+    async hydratePromptVariable(
+        scope: Pick<MemoryScope, 'presetId' | 'conversationId'>
+    ) {
+        return await this.snapshotCache.hydrate(scope)
+    }
+
+    async queueRecall(
+        scope: MemoryScope,
+        currentMessage: HumanMessage,
+        loadHistoryMessages: () => Promise<BaseMessage[]>
+    ) {
+        await this.recallCoordinator.queue(
+            scope,
+            currentMessage,
+            loadHistoryMessages
+        )
+    }
+
+    async queueExtraction(
+        scope: MemoryScope,
+        chatCount: number,
+        messages: BaseMessage[],
+        presetTemplate?: PresetTemplate,
+        promptVariables: Record<string, unknown> = {},
+        options: QueueExtractionOptions = {}
+    ) {
+        await this.extractionCoordinator.queue(
+            scope,
+            chatCount,
+            messages,
+            presetTemplate,
+            promptVariables,
+            options
+        )
+    }
+
+    async cleanupConversation(conversationId: string) {
+        await this.repository.deleteSnapshotsByConversation(conversationId)
+        this.snapshotCache.clearByConversation(conversationId)
+        this.extractionCoordinator.clearByConversation(conversationId)
+    }
+
+    async listPresetIds(): Promise<string[]> {
+        return await this.presetCatalog.list()
+    }
+
+    async listMemories(query: MemoryListQuery) {
+        const items = await this.repository.listEntriesByPreset(query.presetId)
+        return filterMemoryList(items, query)
+    }
+
+    async getMemory(memoryId: string) {
+        return await this.repository.getEntryById(memoryId)
+    }
+
+    async createMemory(scope: MemoryScope, input: MemoryMutationInput) {
+        return await this.repository.createMemory(scope, input)
+    }
+
+    async updateMemory(memoryId: string, patch: Partial<MemoryMutationInput>) {
+        await this.repository.updateMemory(memoryId, patch)
+    }
+
+    async deleteMemory(memoryId: string) {
+        await this.repository.deleteMemory(memoryId)
+    }
+
+    async deleteSnapshot(snapshotId: string) {
+        const deleted = await this.repository.deleteSnapshot(snapshotId)
+        if (deleted != null) {
+            this.snapshotCache.clearByScope(deleted)
+        }
+    }
+
+    async listSnapshots(
+        query: SnapshotListQuery
+    ): Promise<PageResult<MemorySnapshotWithResolvedItems>> {
+        const items = await this.repository.listSnapshotsByPreset(
+            query.presetId
+        )
+        const page = filterSnapshotList(items, query)
+        const memoryIds = [
+            ...new Set(
+                page.items.flatMap((snapshot) =>
+                    snapshot.items.map((item) => item.memoryId)
+                )
+            )
+        ]
+        const records = await this.repository.getEntriesByIds(memoryIds)
+        const recordById = new Map(records.map((record) => [record.id, record]))
+
+        return {
+            ...page,
+            items: page.items.map((snapshot) => ({
+                ...snapshot,
+                resolvedItems: snapshot.items.map((item) => {
+                    const memory = recordById.get(item.memoryId) ?? null
+                    return {
+                        ...item,
+                        memory,
+                        missing: memory == null
+                    }
+                })
+            }))
+        }
+    }
+
+    async listJobs(query: JobListQuery) {
+        const items = await this.repository.listJobsByPreset(query.presetId)
+        return filterJobList(items, query)
+    }
+
+    async runDream(presetId: string): Promise<DreamTriggerResult> {
+        return await this.dreamCoordinator.run(presetId)
+    }
+
+    async clearPresetData(presetId: string) {
+        await this.repository.clearAllByPreset(presetId)
+        this.snapshotCache.clearByPreset(presetId)
+    }
+
+    async cleanupStaleJobs(maxAge: number = Time.week) {
+        await this.repository.removeExpiredJobs(new Date(Date.now() - maxAge))
+    }
+}
