@@ -234,10 +234,16 @@ export class DreamExecutor {
             stats.skipped++
             return
         }
-        patch.importance = Math.max(
-            patch.importance ?? 0,
-            ...sources.map((source) => source.importance ?? 0.5)
-        )
+        // importance：原先取所有 source 的 max，反复 merge 会令 target 重要度
+        // 单调非减、持续抬高。改为取 source 群（含 target 自身）的均值，使重复
+        // 合并收敛而非膨胀。模型在 merge 操作中显式给出 importance 时尊重其判断，
+        // 否则用均值。source 与模型值均已在 [0,1] 内，均值无需再钳。
+        patch.importance =
+            patch.importance ??
+            sources.reduce(
+                (sum, source) => sum + (source.importance ?? 0.5),
+                0
+            ) / sources.length
         patch.keywords = unique([
             ...(patch.keywords ?? []),
             ...sources.flatMap((source) => source.keywords)
