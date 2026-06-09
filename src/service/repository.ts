@@ -371,7 +371,12 @@ export class LivingMemoryRepository
         options: { presetId?: string; kind?: MemoryJobKind } = {},
         reason = 'recovered: stale running job'
     ): Promise<MemoryJobRecord[]> {
-        const query: Record<string, unknown> = { status: 'running' }
+        // 同时回收 pending 与 running：作业表为审计日志，不参与调度。
+        // 若进程在 createJob（写入 pending）之后、markRunning 之前被终止，
+        // 该行会永久卡在 pending，仅扫 running 无法清理，遗留幽灵审计记录。
+        const query: Record<string, unknown> = {
+            status: { $in: ['pending', 'running'] }
+        }
         if (options.presetId != null) {
             query.presetId = options.presetId
         }
