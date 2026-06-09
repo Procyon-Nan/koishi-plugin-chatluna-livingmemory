@@ -232,6 +232,24 @@ export class LivingMemoryExtractionCoordinator {
                 )
             }
 
+            // 模型输出无法解析为合法 JSON 数组：不做修复或重试，仅记录日志，
+            // 并将作业标记为失败，使任务列表如实反映“解析失败”而非“抽取 0 条”。
+            if (trace.parseError != null) {
+                this.debug(
+                    [
+                        `memory extraction parse failed: jobId=${job.id}`,
+                        `conversationId=${scope.conversationId}`,
+                        `presetId=${scope.presetId}`,
+                        `parseError=${trace.parseError}`
+                    ].join(' ')
+                )
+                await this.jobTracker.markFailed(
+                    job.id,
+                    `extraction parse failed: ${trace.parseError}`
+                )
+                return
+            }
+
             const extracted = trace.extracted
             this.debug(
                 [

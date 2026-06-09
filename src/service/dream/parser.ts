@@ -1,6 +1,12 @@
 import type { DreamOperation } from './types'
 
-const parseDreamJson = (output: string): unknown => {
+interface DreamJsonResult {
+    value: unknown
+    // JSON 解析失败的原因。为 null 表示解析成功（含合法但无可用操作的情形）。
+    parseError: string | null
+}
+
+const parseDreamJson = (output: string): DreamJsonResult => {
     const normalized = output.trim()
     const objectStart = normalized.indexOf('{')
     const objectEnd = normalized.lastIndexOf('}')
@@ -19,19 +25,28 @@ const parseDreamJson = (output: string): unknown => {
           : ''
 
     if (raw.length === 0) {
-        return null
+        return { value: null, parseError: 'no JSON delimiters found' }
     }
 
     try {
-        return JSON.parse(raw)
-    } catch {
-        return null
+        return { value: JSON.parse(raw), parseError: null }
+    } catch (error) {
+        return {
+            value: null,
+            parseError: error instanceof Error ? error.message : String(error)
+        }
     }
 }
 
-export const parseDreamOperations = (output: string): DreamOperation[] => {
-    const parsed = parseDreamJson(output)
-    const operations = Array.isArray(parsed)
+export interface ParsedDreamOperations {
+    operations: DreamOperation[]
+    // 模型输出无法解析为合法 JSON 时的原因，用于区分“无可用操作”与“解析失败”。
+    parseError: string | null
+}
+
+export const parseDreamOperations = (output: string): ParsedDreamOperations => {
+    const { value: parsed, parseError } = parseDreamJson(output)
+    const rawOperations = Array.isArray(parsed)
         ? parsed
         : parsed != null &&
             typeof parsed === 'object' &&
@@ -39,7 +54,7 @@ export const parseDreamOperations = (output: string): DreamOperation[] => {
           ? (parsed as { operations: unknown[] }).operations
           : []
 
-    return operations
+    const operations = rawOperations
         .map((operation): DreamOperation | null => {
             if (operation == null || typeof operation !== 'object') {
                 return null
@@ -59,4 +74,6 @@ export const parseDreamOperations = (output: string): DreamOperation[] => {
             return record as unknown as DreamOperation
         })
         .filter((operation): operation is DreamOperation => operation != null)
+
+    return { operations, parseError }
 }

@@ -174,7 +174,7 @@ export class LivingMemoryDreamService {
                 ].join('\n')
             )
 
-            const operations = parseDreamOperations(output)
+            const { operations, parseError } = parseDreamOperations(output)
             if (operations.length === 0) {
                 stats.skipped++
                 this.debug(
@@ -182,7 +182,9 @@ export class LivingMemoryDreamService {
                         `memory dream cluster skipped: presetId=${presetId}`,
                         `stage=${stage}`,
                         `clusterId=${cluster.id}`,
-                        'reason=empty-or-invalid-operations'
+                        parseError != null
+                            ? `reason=parse-failed error=${parseError}`
+                            : 'reason=no-valid-operations'
                     ].join(' ')
                 )
                 continue

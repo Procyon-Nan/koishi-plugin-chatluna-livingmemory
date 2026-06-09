@@ -3,7 +3,8 @@ import type { ExtractedMemoryItem } from '../types'
 import {
     formatDateOnly,
     isModelConfigured,
-    stringifyModelContent
+    stringifyModelContent,
+    summarizeError
 } from './shared/utils'
 
 const normalizeText = (value: string) => value.trim()
@@ -34,6 +35,10 @@ export interface LivingMemoryExtractionTrace {
     prompt: string | null
     output: string | null
     skippedReason: LivingMemoryExtractionSkipReason | null
+    // 模型输出无法解析为合法 JSON 数组时的原因。为 null 表示解析成功
+    // （含模型合法返回空数组）。用于区分“无可抽取内容”与“解析失败”，
+    // 使作业状态如实反映，而非一律标记为成功。
+    parseError: string | null
 }
 
 export interface LivingMemoryExtractionContext {
@@ -59,7 +64,8 @@ export class LivingMemoryExtractor {
                 extracted: [],
                 prompt: null,
                 output: null,
-                skippedReason: 'model-not-configured'
+                skippedReason: 'model-not-configured',
+                parseError: null
             }
         }
 
@@ -69,7 +75,8 @@ export class LivingMemoryExtractor {
                 extracted: [],
                 prompt: null,
                 output: null,
-                skippedReason: 'model-unavailable'
+                skippedReason: 'model-unavailable',
+                parseError: null
             }
         }
 
@@ -78,24 +85,33 @@ export class LivingMemoryExtractor {
         const result = await model.value.invoke(prompt)
         const content = stringifyModelContent(result.content)
 
+        const { extracted, parseError } = this.parse(content)
+
         return {
-            extracted: this.parse(content),
+            extracted,
             prompt,
             output: content,
-            skippedReason: null
+            skippedReason: null,
+            parseError
         }
     }
 
-    private parse(content: string): ExtractedMemoryItem[] {
+    private parse(content: string): {
+        extracted: ExtractedMemoryItem[]
+        parseError: string | null
+    } {
         const normalized = content.trim()
         if (normalized.length === 0) {
-            return []
+            return { extracted: [], parseError: 'empty model output' }
         }
 
         const firstBracket = normalized.indexOf('[')
         const lastBracket = normalized.lastIndexOf(']')
         if (firstBracket < 0 || lastBracket < firstBracket) {
-            return []
+            return {
+                extracted: [],
+                parseError: 'no JSON array delimiters found'
+            }
         }
 
         const raw = normalized.slice(firstBracket, lastBracket + 1)
@@ -103,15 +119,15 @@ export class LivingMemoryExtractor {
 
         try {
             parsed = JSON.parse(raw)
-        } catch {
-            return []
+        } catch (error) {
+            return { extracted: [], parseError: summarizeError(error) }
         }
 
         if (!Array.isArray(parsed)) {
-            return []
+            return { extracted: [], parseError: 'parsed value is not an array' }
         }
 
-        return parsed
+        const extracted = parsed
             .map((item) => {
                 if (item == null || typeof item !== 'object') {
                     return null
@@ -153,6 +169,8 @@ export class LivingMemoryExtractor {
                 }
             })
             .filter((item): item is NonNullable<typeof item> => item != null)
+
+        return { extracted, parseError: null }
     }
 
     private buildPrompt(
