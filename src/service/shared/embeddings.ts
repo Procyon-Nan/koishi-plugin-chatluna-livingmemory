@@ -18,6 +18,10 @@ export interface EmbeddingRepositoryLike {
 export interface EnsureEntryEmbeddingsOptions {
     logger?: { warn: (message: unknown) => void }
     debug?: (message: string) => void
+    // 当前模型输出的向量维度。传入后，已缓存但维度不匹配的旧向量会被判为
+    // 失效并重算，以规避模型在同一标识下变更维度时 cosine 静默返回 0 的问题。
+    // 为 0 或未提供时跳过维度校验，避免异常的空向量误判所有缓存失效。
+    expectedDimension?: number
 }
 
 export const toMemoryRetrievalText = (
@@ -32,12 +36,16 @@ export const toMemoryRetrievalText = (
 
 const isCachedVectorValid = (
     entry: MemoryEntryRecord,
-    modelId: string
+    modelId: string,
+    expectedDimension?: number
 ): entry is MemoryEntryRecord & { embedding: number[] } => {
     return (
         Array.isArray(entry.embedding) &&
         entry.embedding.length > 0 &&
-        entry.embeddingModelId === modelId
+        entry.embeddingModelId === modelId &&
+        (expectedDimension == null ||
+            expectedDimension <= 0 ||
+            entry.embedding.length === expectedDimension)
     )
 }
 
@@ -52,7 +60,7 @@ export async function ensureEntryEmbeddings(
     const stale: MemoryEntryRecord[] = []
 
     for (const entry of entries) {
-        if (isCachedVectorValid(entry, modelId)) {
+        if (isCachedVectorValid(entry, modelId, options.expectedDimension)) {
             result.set(entry.id, entry.embedding)
         } else {
             stale.push(entry)

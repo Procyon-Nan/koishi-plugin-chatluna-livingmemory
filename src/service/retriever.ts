@@ -137,7 +137,10 @@ export class LivingMemoryRetriever {
                                 .logger('chatluna-livingmemory')
                                 .info(message)
                         }
-                    }
+                    },
+                    // 查询向量由当前模型现算，其维度即当前模型的输出维度，
+                    // 以此让维度不一致的旧缓存向量失效重算，避免 cosine 静默归零。
+                    expectedDimension: queryVector.length
                 }
             )
         } catch (error) {

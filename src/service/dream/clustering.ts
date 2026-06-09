@@ -205,6 +205,24 @@ export class DreamClusterer {
             }
 
             const entries = unique(groups.flatMap((group) => group.entries))
+
+            // Dream 无天然查询向量作维度锚，用一条代表性条目现算一次以探测当前
+            // 模型的输出维度，使维度不一致的旧缓存向量失效重算（详见 ensureEntryEmbeddings）。
+            let expectedDimension = 0
+            const probeEntry = entries[0]
+            if (probeEntry != null) {
+                try {
+                    const probeVector = await embeddings.value.embedQuery(
+                        probeEntry.content
+                    )
+                    expectedDimension = probeVector.length
+                } catch (error) {
+                    this.debug(
+                        `memory dream embedding dimension probe failed: ${summarizeError(error)}`
+                    )
+                }
+            }
+
             const vectorById = await ensureEntryEmbeddings(
                 embeddings.value,
                 this.repository,
@@ -212,7 +230,8 @@ export class DreamClusterer {
                 entries,
                 {
                     logger: this.ctx.logger('chatluna-livingmemory'),
-                    debug: (message) => this.debug(message)
+                    debug: (message) => this.debug(message),
+                    expectedDimension
                 }
             )
 
