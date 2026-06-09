@@ -112,6 +112,18 @@ export class LivingMemoryRetriever {
             this.config.embeddingModel
         )
         if (embeddings?.value == null) {
+            // embedding 模型已配置但未能创建可用实例，返回空结果。
+            // 若开启关键词回退，retrieve 会据此降级到关键词检索。
+            if (this.config.debug) {
+                this.ctx
+                    .logger('chatluna-livingmemory')
+                    .info(
+                        [
+                            'memory retrieve embedding unavailable:',
+                            `model=${this.config.embeddingModel}`
+                        ].join(' ')
+                    )
+            }
             return []
         }
 

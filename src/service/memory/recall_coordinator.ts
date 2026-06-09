@@ -35,6 +35,15 @@ export class LivingMemoryRecallCoordinator {
     ) {
         const lockKey = scopeKey(scope)
         if (this.recallLockByConversation.has(lockKey)) {
+            // 同一会话同一预设已有召回在跑，本次请求直接丢弃，不做 coalescing。
+            // snapshot 由后续请求基于最新历史消息重新触发追上，最多滞后一轮。
+            this.debug(
+                [
+                    `memory recall skipped: conversationId=${scope.conversationId}`,
+                    `presetId=${scope.presetId}`,
+                    'reason=recall-in-progress'
+                ].join(' ')
+            )
             return
         }
 
