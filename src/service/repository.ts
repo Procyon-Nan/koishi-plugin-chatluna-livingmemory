@@ -298,8 +298,7 @@ export class LivingMemoryRepository
         }
 
         await this.ctx.database.remove('living_memory_snapshot', {
-            presetId: snapshot.presetId,
-            conversationId: snapshot.conversationId
+            id: snapshotId
         })
 
         return snapshot
