@@ -1,4 +1,5 @@
-import type { ExtractedMemoryItem } from '../../types'
+import { memoryEntryTypes } from '../../types'
+import type { ExtractedMemoryItem, MemoryMutationInput } from '../../types'
 import type { DreamOperation } from '../dream/types'
 
 /**
@@ -17,8 +18,12 @@ import type { DreamOperation } from '../dream/types'
 // 字段被改名或删除时，示例里的旧键会变成多余属性而报错。
 type SchemaShape<T> = Partial<Record<keyof T, unknown>>
 
+// 抽取与 Dream 输出里 type 字段的可选值，直接派生自类型枚举，
+// 避免在提示词里手抄字符串而与 memoryEntryTypes 漂移。
+export const MEMORY_TYPE_OPTIONS = memoryEntryTypes.join('|')
+
 const extractionExample = {
-    type: 'identity|preference|fact|plan|context|other',
+    type: MEMORY_TYPE_OPTIONS,
     content: '...',
     keywords: ['...'],
     summary: '...',
@@ -38,7 +43,7 @@ const dreamActiveOperations = [
             keywords: ['...'],
             sentiment: '...',
             importance: 0.5
-        },
+        } satisfies SchemaShape<MemoryMutationInput>,
         reason: '...'
     },
     {
@@ -52,7 +57,7 @@ const dreamActiveOperations = [
             keywords: ['...'],
             sentiment: '...',
             importance: 0.8
-        },
+        } satisfies SchemaShape<MemoryMutationInput>,
         reason: '...'
     },
     {
@@ -64,7 +69,7 @@ const dreamActiveOperations = [
             keywords: ['...'],
             sentiment: '...',
             importance: 0.3
-        },
+        } satisfies SchemaShape<MemoryMutationInput>,
         reason: '...'
     }
 ] satisfies SchemaShape<DreamOperation>[]
@@ -81,7 +86,7 @@ const dreamArchivedOperations = [
             keywords: ['...'],
             sentiment: '...',
             importance: 0.4
-        },
+        } satisfies SchemaShape<MemoryMutationInput>,
         reason: '...'
     },
     {
@@ -95,7 +100,7 @@ const dreamArchivedOperations = [
             keywords: ['...'],
             sentiment: '...',
             importance: 0.5
-        },
+        } satisfies SchemaShape<MemoryMutationInput>,
         reason: '...'
     },
     {
