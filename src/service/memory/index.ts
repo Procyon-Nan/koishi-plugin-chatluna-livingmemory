@@ -1,4 +1,4 @@
-import { BaseMessage, HumanMessage } from '@langchain/core/messages'
+import type { HumanMessage } from '@langchain/core/messages'
 import { Context, Logger, Service, Time } from 'koishi'
 import type { PresetTemplate } from 'koishi-plugin-chatluna/llm-core/prompt'
 import { LivingMemoryDreamService } from '../dream'
@@ -20,6 +20,7 @@ import {
 import type {
     DreamTriggerResult,
     LivingMemoryConfig,
+    LivingMemoryTranscriptMessage,
     MemoryConfigWarning,
     MemoryMutationInput,
     MemoryScope,
@@ -250,8 +251,8 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
 
     async queueRecall(
         scope: MemoryScope,
-        currentMessage: HumanMessage,
-        loadHistoryMessages: () => Promise<BaseMessage[]>
+        currentMessage: LivingMemoryTranscriptMessage,
+        loadHistoryMessages: () => Promise<LivingMemoryTranscriptMessage[]>
     ) {
         await this.recallCoordinator.queue(
             scope,
@@ -263,7 +264,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     async queueExtraction(
         scope: MemoryScope,
         chatCount: number,
-        messages: BaseMessage[],
+        messages: LivingMemoryTranscriptMessage[],
         presetTemplate?: PresetTemplate,
         promptVariables: Record<string, unknown> = {},
         options: QueueExtractionOptions = {}

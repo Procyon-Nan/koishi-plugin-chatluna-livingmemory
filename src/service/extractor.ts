@@ -1,7 +1,6 @@
 import { Context } from 'koishi'
 import type { ExtractedMemoryItem } from '../types'
 import {
-    formatDateOnly,
     isModelConfigured,
     stringifyModelContent,
     summarizeError
@@ -46,7 +45,6 @@ export interface LivingMemoryExtractionContext {
     conversationId: string
     presetId: string
     presetLabel?: string
-    currentDate?: string
     presetPrompt?: string | null
 }
 
@@ -182,12 +180,10 @@ export class LivingMemoryExtractor {
             context == null
                 ? '当前 presetId 对应角色名'
                 : context.presetLabel?.trim() || context.presetId
-        const currentDate = context?.currentDate ?? formatDateOnly(new Date())
 
         return buildExtractionPrompt({
             input,
             assistantLabel,
-            currentDate,
             presetPrompt: context?.presetPrompt
         })
     }

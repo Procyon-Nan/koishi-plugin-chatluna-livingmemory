@@ -1,12 +1,10 @@
-import type { BaseMessage } from '@langchain/core/messages'
 import { Context } from 'koishi'
-import {
-    LivingMemoryMessageFormatter,
-    toLivingMemoryCleanLines,
-    toLivingMemorySpeakerLabel,
-    toLivingMemoryTextParts
-} from './message_formatter'
-import type { LivingMemoryConfig, MemoryScope } from '../types'
+import { LivingMemoryMessageFormatter } from './message_formatter'
+import type {
+    LivingMemoryConfig,
+    LivingMemoryTranscriptMessage,
+    MemoryScope
+} from '../types'
 import {
     isModelConfigured,
     stringifyModelContent,
@@ -45,16 +43,14 @@ const isSkipQuery = (query: string) => {
 }
 
 const buildFallbackQuery = (
-    scope: MemoryScope,
-    currentMessage: BaseMessage,
+    currentMessage: LivingMemoryTranscriptMessage,
     cleanedQuery: string
 ) => {
-    const speaker = toLivingMemorySpeakerLabel(scope, currentMessage)
-    if (speaker === '用户') {
+    if (currentMessage.speakerLabel === '用户') {
         return cleanedQuery
     }
 
-    return `${speaker} ${cleanedQuery}`.trim()
+    return `${currentMessage.speakerLabel} ${cleanedQuery}`.trim()
 }
 
 const toPresetLabel = (scope: MemoryScope) => {
@@ -92,20 +88,15 @@ export class LivingMemoryRecallQueryBuilder {
 
     async resolve(
         scope: MemoryScope,
-        currentMessage: BaseMessage,
-        historyMessages: BaseMessage[]
+        currentMessage: LivingMemoryTranscriptMessage,
+        historyMessages: LivingMemoryTranscriptMessage[]
     ): Promise<RecallQueryResult> {
-        const rawParts = toLivingMemoryTextParts(currentMessage)
-        const rawInput = rawParts.join('\n')
-        const cleanedQuery = toLivingMemoryCleanLines(currentMessage)
+        const rawInput = currentMessage.contentLines.join('\n')
+        const cleanedQuery = currentMessage.contentLines
             .filter((line) => semanticTextPattern.test(line))
             .join('\n')
-        const fallbackQuery = buildFallbackQuery(
-            scope,
-            currentMessage,
-            cleanedQuery
-        )
-        const currentTranscript = this.formatter.toExtractionPayload(scope, [
+        const fallbackQuery = buildFallbackQuery(currentMessage, cleanedQuery)
+        const currentTranscript = this.formatter.toExtractionPayload([
             currentMessage
         ]).input
 
@@ -268,7 +259,7 @@ export class LivingMemoryRecallQueryBuilder {
         scope: MemoryScope,
         cleanedQuery: string,
         currentTranscript: string,
-        historyMessages: BaseMessage[]
+        historyMessages: LivingMemoryTranscriptMessage[]
     ) {
         const presetLabel = toPresetLabel(scope)
         const recentMessages = this.formatter.takeRecentRounds(
@@ -276,7 +267,7 @@ export class LivingMemoryRecallQueryBuilder {
             this.config.recallRewriteRounds
         )
         const history = recentMessages.length
-            ? this.formatter.toExtractionPayload(scope, recentMessages).input
+            ? this.formatter.toExtractionPayload(recentMessages).input
             : '无'
 
         return buildRecallRewritePrompt({

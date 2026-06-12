@@ -15,6 +15,15 @@ export type MemoryEntryType = (typeof memoryEntryTypes)[number]
 
 export type MemoryEntryStatus = 'active' | 'archived'
 
+export interface MemorySourceMessage {
+    role: 'user' | 'assistant' | 'system'
+    speakerLabel?: string
+    contentLines?: string[]
+    createdAt?: string
+    transcriptLines?: string[]
+    content: string
+}
+
 export interface MemoryEntryRecord {
     id: string
     presetId: string
@@ -26,6 +35,7 @@ export interface MemoryEntryRecord {
     sentiment: string | null
     importance: number | null
     sourceConversationId: string | null
+    sourceMessages: MemorySourceMessage[]
     createdAt: Date
     updatedAt: Date
 }

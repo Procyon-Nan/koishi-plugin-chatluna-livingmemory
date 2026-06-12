@@ -5,8 +5,6 @@ export interface ExtractionPromptInput {
     input: string
     /** 角色名标签（用于「XX说：」前缀），无上下文时为占位符。 */
     assistantLabel: string
-    /** 当前日期字符串。 */
-    currentDate: string
     /** 可选的 preset 人设前缀，会被拼接在任务提示词之前。 */
     presetPrompt?: string | null
 }
@@ -18,12 +16,11 @@ export interface ExtractionPromptInput {
 export const buildExtractionPrompt = (
     params: ExtractionPromptInput
 ): string => {
-    const { input, assistantLabel, currentDate, presetPrompt } = params
+    const { input, assistantLabel, presetPrompt } = params
     const outputFormat = EXTRACTION_OUTPUT_FORMAT
     const taskPrompt = [
         '# 任务目标：',
         '你要以第一人称回顾历史对话，生成符合你人格特色的记忆。',
-        `当前日期：${currentDate}`,
         '',
         '【历史对话】',
         '"""',
@@ -39,9 +36,10 @@ export const buildExtractionPrompt = (
         '5. 重要程度：这段对话对未来交流的参考价值。',
         '',
         '【历史对话的消息格式说明】',
-        '历史对话中的每条消息都包含发言者标签：',
-        `- 以「${assistantLabel}说：」开头的是你自己的发言。`,
-        '- 以「昵称说：」开头的是具体发言者的发言；群聊中可能出现多个不同昵称，他们是不同的发言者。',
+        '历史对话中的每条消息都包含发送时间和发言者标签：',
+        '- 每条消息前的方括号中的内容是这一条消息实际发送的时间。',
+        `- 以「${assistantLabel}说：」开头的是你说的话。`,
+        '- 以「昵称说：」开头的是具体发言者说的话；群聊中可能出现多个不同昵称，他们是不同的发言者。',
         '',
         '【记忆类型】',
         `type 字段必须取以下之一（${MEMORY_TYPE_OPTIONS}）：`,
@@ -66,12 +64,12 @@ export const buildExtractionPrompt = (
         '- 昵称要求：content、summary 和 keywords 中必须使用消息前缀中的具体昵称来指代发言者（如"张三"），绝对不能用"用户"、"对方"等泛化词汇替代，也不要把多个群成员混成同一个人，更不要把你自己的发言错误当作其他人的发言',
         '',
         '【时间处理要求】',
-        `当前对话发生日期为 ${currentDate}。`,
+        '依据每条消息前的方括号中的时间理解消息的先后关系和日期归属。',
         '将对话中出现的相对时间（如"今天"、"刚才"、"现在"、"明天"、"昨天"、"下周"、"上个月"等）转换为具体日期后再写入记忆。',
         '如果记忆涉及短期状态、身体状态、情绪状态、临时计划、当天事件或当前正在发生的事，content 中必须写明具体日期。',
-        '不要把短期状态写成永久事实；必须表达为当时状态，不暗示现在仍然如此。',
+        '不要把短期状态写成永久事实；必须表达为当时的状态，之后可能会发生变化。',
         '不好的示例："张三一天没睡觉。"',
-        `好的示例："张三说自己在${currentDate}一天没睡觉"`,
+        `好的示例："张三在2026-05-01那天晚上说自己一天没睡觉"`,
         '对稳定身份、长期偏好、长期关系等记忆，可以不在 content 开头强行写日期，但如果对话中出现了明确时间，仍应保留具体日期。',
         '',
         '# 输出格式：',

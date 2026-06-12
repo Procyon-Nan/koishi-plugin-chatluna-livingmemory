@@ -1,4 +1,3 @@
-import { BaseMessage, HumanMessage } from '@langchain/core/messages'
 import { Logger } from 'koishi'
 import { LivingMemoryRepository } from '../repository'
 import { LivingMemoryRetriever } from '../retriever'
@@ -12,7 +11,11 @@ import {
 } from './helpers'
 import { LivingMemoryJobTracker } from './job_tracker'
 import { LivingMemorySnapshotCache } from './snapshot_cache'
-import type { LivingMemoryConfig, MemoryScope } from '../../types'
+import type {
+    LivingMemoryConfig,
+    LivingMemoryTranscriptMessage,
+    MemoryScope
+} from '../../types'
 
 export class LivingMemoryRecallCoordinator {
     private readonly recallLockByConversation = new Set<string>()
@@ -30,8 +33,8 @@ export class LivingMemoryRecallCoordinator {
 
     async queue(
         scope: MemoryScope,
-        currentMessage: HumanMessage,
-        loadHistoryMessages: () => Promise<BaseMessage[]>
+        currentMessage: LivingMemoryTranscriptMessage,
+        loadHistoryMessages: () => Promise<LivingMemoryTranscriptMessage[]>
     ) {
         const lockKey = scopeKey(scope)
         if (this.recallLockByConversation.has(lockKey)) {
@@ -60,10 +63,10 @@ export class LivingMemoryRecallCoordinator {
 
     private async run(
         scope: MemoryScope,
-        currentMessage: HumanMessage,
-        loadHistoryMessages: () => Promise<BaseMessage[]>
+        currentMessage: LivingMemoryTranscriptMessage,
+        loadHistoryMessages: () => Promise<LivingMemoryTranscriptMessage[]>
     ) {
-        let historyMessages: BaseMessage[] = []
+        let historyMessages: LivingMemoryTranscriptMessage[] = []
         try {
             historyMessages = await loadHistoryMessages()
         } catch (error) {

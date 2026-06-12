@@ -1,7 +1,12 @@
 import { Context, type Session } from 'koishi'
 import type { HumanMessage } from '@langchain/core/messages'
 import type { Config } from '../index'
-import { setLivingMemoryRawContent } from '../service/message_formatter'
+import {
+    formatChatLunaTranscriptDiagnostics,
+    setLivingMemoryRawContent,
+    toChatLunaTranscriptMessageResult,
+    toChatLunaTranscriptMessagesWithDiagnostics
+} from '../service/chatluna_transcript_adapter'
 
 const toNonEmptyString = (value: unknown) => {
     return typeof value === 'string' && value.trim().length > 0
@@ -124,6 +129,25 @@ export async function apply(ctx: Context, config: Config) {
                 }
             )
 
+            const currentTranscript = toChatLunaTranscriptMessageResult(
+                scope,
+                message,
+                {
+                    fallbackCreatedAt: new Date()
+                }
+            )
+            if (currentTranscript.message == null) {
+                debug(
+                    [
+                        'before-chat recall skipped:',
+                        `conversationId=${conversationId}`,
+                        `presetId=${presetId}`,
+                        `reason=${currentTranscript.reason}`
+                    ].join(' ')
+                )
+                return
+            }
+
             const enableSnapshotInjection =
                 config.enableSnapshotInjection !== false
             let snapshot = ''
@@ -173,8 +197,28 @@ export async function apply(ctx: Context, config: Config) {
 
             await ctx.chatluna_living_memory.queueRecall(
                 scope,
-                message,
-                async () => await chatInterface.chatHistory.getMessages()
+                currentTranscript.message,
+                async () => {
+                    const history = toChatLunaTranscriptMessagesWithDiagnostics(
+                        scope,
+                        await chatInterface.chatHistory.getMessages()
+                    )
+                    if (history.diagnostics.length > 0) {
+                        debug(
+                            [
+                                'before-chat recall history transcript diagnostics:',
+                                `conversationId=${conversationId}`,
+                                `presetId=${presetId}`,
+                                `dropped=${history.diagnostics.length}`,
+                                formatChatLunaTranscriptDiagnostics(
+                                    history.diagnostics
+                                )
+                            ].join(' ')
+                        )
+                    }
+
+                    return history.messages
+                }
             )
         }
     )
@@ -237,6 +281,10 @@ export async function apply(ctx: Context, config: Config) {
             )
 
             const messages = await chatInterface.chatHistory.getMessages()
+            const transcript = toChatLunaTranscriptMessagesWithDiagnostics(
+                scope,
+                messages
+            )
             const chatCount =
                 typeof promptVariables.chatCount === 'number'
                     ? promptVariables.chatCount
@@ -248,14 +296,29 @@ export async function apply(ctx: Context, config: Config) {
                     `conversationId=${conversationId}`,
                     `presetId=${presetId}`,
                     `chatCount=${chatCount}`,
-                    `messagesLength=${messages.length}`
+                    `messagesLength=${messages.length}`,
+                    `transcriptMessagesLength=${transcript.messages.length}`,
+                    `transcriptDiagnosticsLength=${transcript.diagnostics.length}`
                 ].join(' ')
             )
+            if (transcript.diagnostics.length > 0) {
+                debug(
+                    [
+                        'after-chat extraction transcript diagnostics:',
+                        `conversationId=${conversationId}`,
+                        `presetId=${presetId}`,
+                        `dropped=${transcript.diagnostics.length}`,
+                        formatChatLunaTranscriptDiagnostics(
+                            transcript.diagnostics
+                        )
+                    ].join(' ')
+                )
+            }
 
             await ctx.chatluna_living_memory.queueExtraction(
                 scope,
                 chatCount,
-                messages,
+                transcript.messages,
                 chatInterface.preset.value,
                 promptVariables
             )

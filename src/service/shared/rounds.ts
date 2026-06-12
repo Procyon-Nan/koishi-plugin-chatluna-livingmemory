@@ -1,12 +1,12 @@
-import type { BaseMessage } from '@langchain/core/messages'
+import type { LivingMemoryTranscriptMessage } from '../../types'
 
 export type TakeRecentRoundsMode = 'pair' | 'ai-anchored'
 
 export const takeRecentRounds = (
-    messages: BaseMessage[],
+    messages: LivingMemoryTranscriptMessage[],
     roundCount: number,
     mode: TakeRecentRoundsMode = 'pair'
-): BaseMessage[] => {
+): LivingMemoryTranscriptMessage[] => {
     if (roundCount <= 0) {
         return []
     }
@@ -19,10 +19,10 @@ export const takeRecentRounds = (
 }
 
 const takePairRounds = (
-    messages: BaseMessage[],
+    messages: LivingMemoryTranscriptMessage[],
     roundCount: number
-): BaseMessage[] => {
-    const selected: BaseMessage[] = []
+): LivingMemoryTranscriptMessage[] => {
+    const selected: LivingMemoryTranscriptMessage[] = []
     let completedRounds = 0
     let hasAssistant = false
 
@@ -30,13 +30,12 @@ const takePairRounds = (
         const message = messages[index]
         selected.unshift(message)
 
-        const type = message.getType()
-        if (type === 'ai') {
+        if (message.role === 'assistant') {
             hasAssistant = true
             continue
         }
 
-        if (type === 'human' && hasAssistant) {
+        if (message.role === 'user' && hasAssistant) {
             completedRounds += 1
             hasAssistant = false
 
@@ -50,46 +49,46 @@ const takePairRounds = (
 }
 
 const takeAiAnchoredRounds = (
-    messages: BaseMessage[],
+    messages: LivingMemoryTranscriptMessage[],
     roundCount: number
-): BaseMessage[] => {
-    let lastAiIndex = -1
+): LivingMemoryTranscriptMessage[] => {
+    let lastAssistantIndex = -1
     for (let index = messages.length - 1; index >= 0; index--) {
-        if (messages[index].getType() === 'ai') {
-            lastAiIndex = index
+        if (messages[index].role === 'assistant') {
+            lastAssistantIndex = index
             break
         }
     }
 
-    if (lastAiIndex < 0) {
+    if (lastAssistantIndex < 0) {
         return []
     }
 
     let completedRounds = 0
-    let hasAiInCurrentRound = false
-    let hasHumanInCurrentRound = false
+    let hasAssistantInCurrentRound = false
+    let hasUserInCurrentRound = false
 
-    for (let index = lastAiIndex; index >= 0; index--) {
-        const type = messages[index].getType()
-        if (type === 'ai') {
-            if (hasAiInCurrentRound && hasHumanInCurrentRound) {
+    for (let index = lastAssistantIndex; index >= 0; index--) {
+        const role = messages[index].role
+        if (role === 'assistant') {
+            if (hasAssistantInCurrentRound && hasUserInCurrentRound) {
                 completedRounds += 1
                 if (completedRounds >= roundCount) {
-                    return messages.slice(index + 1, lastAiIndex + 1)
+                    return messages.slice(index + 1, lastAssistantIndex + 1)
                 }
-                hasHumanInCurrentRound = false
+                hasUserInCurrentRound = false
             }
-            hasAiInCurrentRound = true
+            hasAssistantInCurrentRound = true
             continue
         }
 
-        if (type === 'human' && hasAiInCurrentRound) {
-            hasHumanInCurrentRound = true
+        if (role === 'user' && hasAssistantInCurrentRound) {
+            hasUserInCurrentRound = true
         }
     }
 
-    if (hasAiInCurrentRound && hasHumanInCurrentRound) {
-        return messages.slice(0, lastAiIndex + 1)
+    if (hasAssistantInCurrentRound && hasUserInCurrentRound) {
+        return messages.slice(0, lastAssistantIndex + 1)
     }
 
     return []

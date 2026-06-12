@@ -1,4 +1,3 @@
-import type { BaseMessage } from '@langchain/core/messages'
 import type {
     JobListQuery,
     MemoryListQuery,
@@ -55,7 +54,18 @@ export interface MemoryScope {
 
 export interface MemorySourceMessage {
     role: 'user' | 'assistant' | 'system'
+    speakerLabel?: string
+    contentLines?: string[]
+    createdAt?: string
+    transcriptLines?: string[]
     content: string
+}
+
+export interface LivingMemoryTranscriptMessage {
+    role: 'user' | 'assistant'
+    speakerLabel: string
+    contentLines: string[]
+    createdAt: Date
 }
 
 export interface MemoryEntryRecord {
@@ -242,10 +252,12 @@ export interface ExtractionRepository {
 }
 
 export interface MessageFormatter {
-    takeRecentRounds(messages: BaseMessage[], roundCount: number): BaseMessage[]
+    takeRecentRounds(
+        messages: LivingMemoryTranscriptMessage[],
+        roundCount: number
+    ): LivingMemoryTranscriptMessage[]
     toExtractionPayload(
-        scope: MemoryScope,
-        messages: BaseMessage[]
+        messages: LivingMemoryTranscriptMessage[]
     ): ExtractionPayload
 }
 

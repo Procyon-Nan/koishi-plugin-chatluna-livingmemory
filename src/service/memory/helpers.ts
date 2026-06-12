@@ -1,9 +1,9 @@
 import { BaseMessage } from '@langchain/core/messages'
-import type { MemoryScope } from '../../types'
+import type { LivingMemoryTranscriptMessage, MemoryScope } from '../../types'
 
 export interface QueueExtractionOptions {
     presetPromptOverride?: string | null
-    preselectedMessages?: BaseMessage[]
+    preselectedMessages?: LivingMemoryTranscriptMessage[]
 }
 
 export type DebugLogger = (message: string) => void

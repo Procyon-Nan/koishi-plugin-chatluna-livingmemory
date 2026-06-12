@@ -1,10 +1,9 @@
-import { BaseMessage } from '@langchain/core/messages'
 import { Context, Logger } from 'koishi'
 import type { PresetTemplate } from 'koishi-plugin-chatluna/llm-core/prompt'
 import { LivingMemoryRepository } from '../repository'
 import { LivingMemoryExtractor } from '../extractor'
 import { LivingMemoryMessageFormatter } from '../message_formatter'
-import { formatDateOnly, summarizeError } from '../shared/utils'
+import { summarizeError } from '../shared/utils'
 import {
     type DebugLogger,
     formatMemoryItemsForLog,
@@ -13,7 +12,11 @@ import {
     scopeKey
 } from './helpers'
 import { LivingMemoryJobTracker } from './job_tracker'
-import type { LivingMemoryConfig, MemoryScope } from '../../types'
+import type {
+    LivingMemoryConfig,
+    LivingMemoryTranscriptMessage,
+    MemoryScope
+} from '../../types'
 
 export class LivingMemoryExtractionCoordinator {
     private readonly extractionLockByConversation = new Set<string>()
@@ -41,7 +44,7 @@ export class LivingMemoryExtractionCoordinator {
     async queue(
         scope: MemoryScope,
         chatCount: number,
-        messages: BaseMessage[],
+        messages: LivingMemoryTranscriptMessage[],
         presetTemplate?: PresetTemplate,
         promptVariables: Record<string, unknown> = {},
         options: QueueExtractionOptions = {}
@@ -163,12 +166,12 @@ export class LivingMemoryExtractionCoordinator {
 
     private async run(
         scope: MemoryScope,
-        messages: BaseMessage[],
+        messages: LivingMemoryTranscriptMessage[],
         presetTemplate?: PresetTemplate,
         promptVariables: Record<string, unknown> = {},
         presetPromptOverride?: string | null
     ) {
-        const payload = this.formatter.toExtractionPayload(scope, messages)
+        const payload = this.formatter.toExtractionPayload(messages)
         const job = await this.repository.createJob(
             scope,
             'extract',
@@ -199,7 +202,6 @@ export class LivingMemoryExtractionCoordinator {
                 conversationId: scope.conversationId,
                 presetId: scope.presetId,
                 presetLabel: scope.presetLabel,
-                currentDate: formatDateOnly(new Date()),
                 presetPrompt
             })
             if (trace.skippedReason != null) {
