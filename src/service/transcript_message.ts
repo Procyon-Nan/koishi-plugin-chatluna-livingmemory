@@ -160,16 +160,8 @@ export const createLivingMemoryTranscriptMessageResult = (
 const padDatePart = (value: number) => value.toString().padStart(2, '0')
 
 export const formatLivingMemoryMessageTime = (date: Date) => {
-    const timezoneOffsetMinutes = -date.getTimezoneOffset()
-    const timezoneSign = timezoneOffsetMinutes >= 0 ? '+' : '-'
-    const absoluteTimezoneOffsetMinutes = Math.abs(timezoneOffsetMinutes)
-    const timezoneHours = padDatePart(
-        Math.floor(absoluteTimezoneOffsetMinutes / 60)
-    )
-    const timezoneMinutes = padDatePart(absoluteTimezoneOffsetMinutes % 60)
-    const timezone = `${timezoneSign}${timezoneHours}:${timezoneMinutes}`
     const datePart = `${date.getFullYear()}-${padDatePart(date.getMonth() + 1)}-${padDatePart(date.getDate())}`
-    const timePart = `${padDatePart(date.getHours())}:${padDatePart(date.getMinutes())}:${padDatePart(date.getSeconds())}`
+    const timePart = `${padDatePart(date.getHours())}:${padDatePart(date.getMinutes())}`
 
-    return `${datePart}T${timePart}${timezone}`
+    return `${datePart} ${timePart}`
 }
