@@ -1,6 +1,7 @@
 <template>
     <k-layout class="living-memory-dashboard">
         <div class="dashboard-shell">
+            <!-- Alert banner -->
             <el-alert
                 v-if="configWarnings.length > 0"
                 class="config-warning-banner"
@@ -17,15 +18,25 @@
                     </li>
                 </ul>
             </el-alert>
+
+            <!-- Toolbar Card -->
             <el-card shadow="never" class="toolbar-card">
                 <template #header>
                     <div class="toolbar-header">
-                        <span>Living Memory</span>
+                        <span class="toolbar-title">Living Memory</span>
+                        <div class="header-right-actions">
+                            <button class="theme-toggle-btn" @click="toggleTheme" title="切换主题">
+                                <svg v-if="isDark" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+                                <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+                                <span class="toggle-text">{{ isDark ? 'LIGHT' : 'DARK' }}</span>
+                            </button>
+                        </div>
                     </div>
                 </template>
 
                 <div class="toolbar-grid">
-                    <div class="toolbar-filters">
+                    <div class="filter-group-horizontal">
+                        <span class="field-label-inline">预设 ID</span>
                         <el-select
                             v-model="presetId"
                             filterable
@@ -44,49 +55,14 @@
                                 :value="id"
                             />
                         </el-select>
-
-                        <el-input
-                            v-model="memoryKeyword"
-                            placeholder="按关键词过滤记忆"
-                            clearable
-                            class="keyword-input"
-                            @keyup.enter="onMemoryFilterChange"
-                            @clear="onMemoryFilterChange"
-                        >
-                            <template #prepend>搜索</template>
-                        </el-input>
-
-                        <el-select
-                            v-model="memoryType"
-                            clearable
-                            placeholder="全部类型"
-                            class="type-select"
-                            @change="onMemoryFilterChange"
-                        >
-                            <el-option
-                                v-for="item in memoryTypes"
-                                :key="item"
-                                :label="getMemoryTypeLabel(item)"
-                                :value="item"
-                            />
-                        </el-select>
-
-                        <el-select
-                            v-model="memoryStatus"
-                            placeholder="记忆状态"
-                            class="status-select"
-                            @change="onMemoryFilterChange"
-                        >
-                            <el-option label="活跃记忆" value="active" />
-                            <el-option label="历史记录" value="archived" />
-                            <el-option label="全部状态" value="all" />
-                        </el-select>
                     </div>
 
                     <div class="toolbar-actions">
-                        <el-button :loading="loading" type="primary" @click="refreshAll">
-                            刷新
-                        </el-button>
+                        <div class="refresh-btn-wrapper">
+                            <el-button :loading="loading" type="primary" @click="refreshAll" class="refresh-button">
+                                刷新
+                            </el-button>
+                        </div>
                         <el-button :disabled="!presetId" @click="openCreateDialog">
                             新建记忆
                         </el-button>
@@ -110,237 +86,287 @@
                 </div>
             </el-card>
 
-            <el-row :gutter="16" class="summary-row">
-                <el-col :span="8">
-                    <el-card shadow="never">
-                        <div class="summary-item">
-                            <div class="summary-label">记忆数量</div>
-                            <div class="summary-value">{{ memoryTotal }}</div>
+            <!-- Two Column Layout: Filter left, List right -->
+            <div class="dashboard-body-layout">
+                <!-- Memory Category Filtering Card (Vertical Left) -->
+                <el-card shadow="never" class="category-card">
+                    <template #header>
+                        <div class="card-header">
+                            <span class="card-title">记忆筛选面板</span>
                         </div>
-                    </el-card>
-                </el-col>
-                <el-col :span="8">
-                    <el-card shadow="never">
-                        <div class="summary-item">
-                            <div class="summary-label">快照数量</div>
-                            <div class="summary-value">{{ snapshotTotal }}</div>
+                    </template>
+                    <div class="category-filters-vertical">
+                        <div class="category-item-vertical">
+                            <span class="category-label-vertical">关键词搜索</span>
+                            <el-input
+                                v-model="memoryKeyword"
+                                placeholder="输入并回车搜索"
+                                clearable
+                                class="keyword-input"
+                                @keyup.enter="onMemoryFilterChange"
+                                @clear="onMemoryFilterChange"
+                            />
                         </div>
-                    </el-card>
-                </el-col>
-                <el-col :span="8">
-                    <el-card shadow="never">
-                        <div class="summary-item">
-                            <div class="summary-label">任务数量</div>
-                            <div class="summary-value">{{ jobTotal }}</div>
+                        <div class="category-item-vertical">
+                            <span class="category-label-vertical">状态</span>
+                            <div class="category-options-vertical">
+                                <button 
+                                    v-for="opt in statusOptions" 
+                                    :key="opt.value"
+                                    :class="['category-btn-vertical', { active: memoryStatus === opt.value }]"
+                                    @click="setMemoryStatus(opt.value)"
+                                >
+                                    <span class="btn-text-content">{{ opt.label }}</span>
+                                    <span class="btn-count-badge">{{ getStatusCount(opt.value) }}</span>
+                                </button>
+                            </div>
                         </div>
-                    </el-card>
-                </el-col>
-            </el-row>
-
-            <el-card shadow="never" class="table-card">
-                <template #header>
-                    <div class="card-header">
-                        <span>记忆列表</span>
-                        <span class="card-tip">支持按关键词和类型过滤</span>
+                        <div class="category-item-vertical">
+                            <span class="category-label-vertical">类别</span>
+                            <div class="category-options-vertical">
+                                <button 
+                                    :class="['category-btn-vertical', { active: memoryType === '' }]"
+                                    @click="setMemoryType('')"
+                                >
+                                    <span class="btn-text-content">全部</span>
+                                    <span class="btn-count-badge">{{ totalMemoryCount }}</span>
+                                </button>
+                                <button 
+                                    v-for="type in memoryTypes" 
+                                    :key="type"
+                                    :class="['category-btn-vertical', { active: memoryType === type }]"
+                                    @click="setMemoryType(type)"
+                                >
+                                    <span class="btn-text-content">{{ getMemoryTypeLabel(type) }}</span>
+                                    <span class="btn-count-badge">{{ getTypeCount(type) }}</span>
+                                </button>
+                            </div>
+                        </div>
+                        <!-- Reset Button -->
+                        <div class="category-reset-container">
+                            <button class="reset-filter-btn" @click="resetFilters">
+                                重置筛选条件
+                            </button>
+                        </div>
                     </div>
-                </template>
+                </el-card>
 
-                <el-table :data="memories" border v-loading="loading" max-height="450">
-                    <el-table-column prop="id" label="ID" min-width="180" />
-                    <el-table-column label="类型" width="140">
-                        <template #default="scope">
-                            <el-tag
-                                :type="getMemoryTagType(scope.row.type)"
-                                size="small"
-                                effect="plain"
-                            >
-                                {{ getMemoryTypeLabel(scope.row.type) }}
-                            </el-tag>
-                        </template>
-                    </el-table-column>
-                    <el-table-column label="状态" width="100">
-                        <template #default="scope">
-                            <el-tag
-                                :type="scope.row.status === 'archived' ? 'info' : 'success'"
-                                size="small"
-                                effect="plain"
-                            >
-                                {{ scope.row.status === 'archived' ? '历史' : '活跃' }}
-                            </el-tag>
-                        </template>
-                    </el-table-column>
-                    <el-table-column prop="content" label="内容" min-width="260" show-overflow-tooltip />
-                    <el-table-column prop="summary" label="摘要" min-width="200" show-overflow-tooltip />
-                    <el-table-column prop="sentiment" label="情绪" width="120" show-overflow-tooltip />
-                    <el-table-column label="重要度" width="100">
-                        <template #default="scope">
-                            <span :style="getImportanceStyle(scope.row.importance)">
-                                {{ formatImportance(scope.row.importance) }}
-                            </span>
-                        </template>
-                    </el-table-column>
-                    <el-table-column label="关键词" min-width="200">
-                        <template #default="scope">
-                            <el-space wrap>
-                                <el-tag
-                                    v-for="kw in scope.row.keywords"
-                                    :key="kw"
-                                    size="small"
-                                    effect="plain"
-                                >
-                                    {{ kw }}
-                                </el-tag>
-                            </el-space>
-                        </template>
-                    </el-table-column>
-                    <el-table-column label="创建时间" min-width="160">
-                        <template #default="scope">{{ formatTime(scope.row.createdAt) }}</template>
-                    </el-table-column>
-                    <el-table-column label="更新时间" min-width="160">
-                        <template #default="scope">{{ formatTime(scope.row.updatedAt) }}</template>
-                    </el-table-column>
-                    <el-table-column label="操作" width="180" fixed="right">
-                        <template #default="scope">
-                            <el-space>
-                                <el-button size="small" @click="openEditDialog(scope.row)">
-                                    编辑
-                                </el-button>
-                                <el-button
-                                    size="small"
-                                    type="danger"
-                                    plain
-                                    @click="removeMemory(scope.row.id)"
-                                >
-                                    删除
-                                </el-button>
-                            </el-space>
-                        </template>
-                    </el-table-column>
-                </el-table>
+                <!-- Consolidated Main Content Tabs Card (Right) -->
+                <el-card shadow="never" class="main-content-card" :body-style="{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }">
+                    <el-tabs v-model="activeTab" class="custom-tabs">
+                        <el-tab-pane name="memories">
+                            <template #label>
+                                <span class="tab-label-container">
+                                    <span>记忆列表</span>
+                                    <span class="tab-badge">{{ memoryTotal }}</span>
+                                </span>
+                            </template>
+                            <div class="tab-pane-content">
+                                <el-table :data="memories" border v-loading="loading">
+                                    <el-table-column prop="id" label="ID" min-width="180" />
+                                    <el-table-column label="类型" width="140">
+                                        <template #default="scope">
+                                            <el-tag
+                                                :type="getMemoryTagType(scope.row.type)"
+                                                size="small"
+                                                effect="plain"
+                                            >
+                                                {{ getMemoryTypeLabel(scope.row.type) }}
+                                            </el-tag>
+                                        </template>
+                                    </el-table-column>
+                                    <el-table-column label="状态" width="100">
+                                        <template #default="scope">
+                                            <el-tag
+                                                :type="scope.row.status === 'archived' ? 'info' : 'success'"
+                                                size="small"
+                                                effect="plain"
+                                            >
+                                                {{ scope.row.status === 'archived' ? '历史' : '活跃' }}
+                                            </el-tag>
+                                        </template>
+                                    </el-table-column>
+                                    <el-table-column prop="content" label="内容" min-width="260" show-overflow-tooltip />
+                                    <el-table-column prop="summary" label="摘要" min-width="200" show-overflow-tooltip />
+                                    <el-table-column prop="sentiment" label="情绪" width="120" show-overflow-tooltip />
+                                    <el-table-column label="重要度" width="100">
+                                        <template #default="scope">
+                                            <span :style="getImportanceStyle(scope.row.importance)">
+                                                {{ formatImportance(scope.row.importance) }}
+                                            </span>
+                                        </template>
+                                    </el-table-column>
+                                    <el-table-column label="关键词" min-width="200">
+                                        <template #default="scope">
+                                            <el-space wrap>
+                                                <el-tag
+                                                    v-for="kw in scope.row.keywords"
+                                                    :key="kw"
+                                                    size="small"
+                                                    effect="plain"
+                                                >
+                                                    {{ kw }}
+                                                </el-tag>
+                                            </el-space>
+                                        </template>
+                                    </el-table-column>
+                                    <el-table-column label="创建时间" min-width="160">
+                                        <template #default="scope">{{ formatTime(scope.row.createdAt) }}</template>
+                                    </el-table-column>
+                                    <el-table-column label="更新时间" min-width="160">
+                                        <template #default="scope">{{ formatTime(scope.row.updatedAt) }}</template>
+                                    </el-table-column>
+                                    <el-table-column label="操作" width="180" fixed="right">
+                                        <template #default="scope">
+                                            <el-space>
+                                                <el-button size="small" @click="openEditDialog(scope.row)">
+                                                    编辑
+                                                </el-button>
+                                                <el-button
+                                                    size="small"
+                                                    type="danger"
+                                                    plain
+                                                    @click="removeMemory(scope.row.id)"
+                                                >
+                                                    删除
+                                                </el-button>
+                                            </el-space>
+                                        </template>
+                                    </el-table-column>
+                                </el-table>
 
-                <div class="pagination-container">
-                    <el-pagination
-                        v-model:current-page="memoryPage"
-                        v-model:page-size="memoryPageSize"
-                        :total="memoryTotal"
-                        :page-sizes="[10, 20, 50, 100]"
-                        layout="total, sizes, prev, pager, next, jumper"
-                        @current-change="onMemoryPageChange"
-                        @size-change="onMemorySizeChange"
-                    />
-                </div>
-            </el-card>
-
-            <el-row :gutter="16" class="table-row">
-                <el-col :span="12">
-                    <el-card shadow="never" class="table-card">
-                        <template #header>
-                            <div class="card-header">
-                                <span>快照列表</span>
-                                <span class="card-tip">展示当前预设最近保留的 living_memory</span>
+                                <div class="pagination-container">
+                                    <el-pagination
+                                        v-model:current-page="memoryPage"
+                                        v-model:page-size="memoryPageSize"
+                                        :total="memoryTotal"
+                                        :page-sizes="[20, 50, 100]"
+                                        layout="total, sizes, prev, pager, next, jumper"
+                                        @current-change="onMemoryPageChange"
+                                        @size-change="onMemorySizeChange"
+                                    />
+                                </div>
                             </div>
-                        </template>
+                        </el-tab-pane>
 
-                        <el-table :data="snapshots" border v-loading="loading" max-height="300">
-                            <el-table-column prop="id" label="ID" min-width="160" />
-                            <el-table-column prop="strategy" label="策略" width="140" />
-                            <el-table-column prop="query" label="查询" min-width="180" show-overflow-tooltip />
-                            <el-table-column label="命中" width="80">
-                                <template #default="scope">{{ scope.row.resolvedItems.length }}</template>
-                            </el-table-column>
-                            <el-table-column label="创建时间" min-width="160">
-                                <template #default="scope">{{ formatTime(scope.row.createdAt) }}</template>
-                            </el-table-column>
-                            <el-table-column label="操作" width="140" fixed="right">
-                                <template #default="scope">
-                                    <el-space>
-                                        <el-button
-                                            size="small"
-                                            type="primary"
-                                            link
-                                            @click="openSnapshotDialog(scope.row)"
-                                        >
-                                            详情
-                                        </el-button>
-                                        <el-button
-                                            size="small"
-                                            type="danger"
-                                            plain
-                                            :loading="deletingSnapshotId === scope.row.id"
-                                            @click="removeSnapshot(scope.row)"
-                                        >
-                                            删除
-                                        </el-button>
-                                    </el-space>
-                                </template>
-                            </el-table-column>
-                        </el-table>
+                        <el-tab-pane name="snapshots">
+                            <template #label>
+                                <span class="tab-label-container">
+                                    <span>快照列表</span>
+                                    <span class="tab-badge">{{ snapshotTotal }}</span>
+                                </span>
+                            </template>
+                            <div class="tab-pane-content">
+                                <el-table :data="snapshots" border v-loading="loading">
+                                    <el-table-column prop="id" label="ID" min-width="160" />
+                                    <el-table-column prop="strategy" label="策略" width="140" />
+                                    <el-table-column prop="query" label="查询" min-width="180" show-overflow-tooltip />
+                                    <el-table-column label="命中" width="80">
+                                        <template #default="scope">{{ scope.row.resolvedItems.length }}</template>
+                                    </el-table-column>
+                                    <el-table-column label="创建时间" min-width="160">
+                                        <template #default="scope">{{ formatTime(scope.row.createdAt) }}</template>
+                                    </el-table-column>
+                                    <el-table-column label="操作" width="140" fixed="right">
+                                        <template #default="scope">
+                                            <el-space>
+                                                <el-button
+                                                    size="small"
+                                                    type="primary"
+                                                    link
+                                                    @click="openSnapshotDialog(scope.row)"
+                                                >
+                                                    详情
+                                                </el-button>
+                                                <el-button
+                                                    size="small"
+                                                    type="danger"
+                                                    plain
+                                                    :loading="deletingSnapshotId === scope.row.id"
+                                                    @click="removeSnapshot(scope.row)"
+                                                >
+                                                    删除
+                                                </el-button>
+                                            </el-space>
+                                        </template>
+                                    </el-table-column>
+                                </el-table>
 
-                        <div class="pagination-container pagination-compact">
-                            <el-pagination
-                                v-model:current-page="snapshotPage"
-                                v-model:page-size="snapshotPageSize"
-                                :total="snapshotTotal"
-                                size="small"
-                                layout="total, prev, pager, next"
-                                @current-change="onSnapshotPageChange"
-                            />
-                        </div>
-                    </el-card>
-                </el-col>
-
-                <el-col :span="12">
-                    <el-card shadow="never" class="table-card">
-                        <template #header>
-                            <div class="card-header">
-                                <span>任务列表</span>
-                                <span class="card-tip">异步召回、提取与 Dream 状态</span>
+                                <div class="pagination-container">
+                                    <el-pagination
+                                        v-model:current-page="snapshotPage"
+                                        v-model:page-size="snapshotPageSize"
+                                        :total="snapshotTotal"
+                                        :page-sizes="[20, 50, 100]"
+                                        layout="total, sizes, prev, pager, next, jumper"
+                                        @current-change="onSnapshotPageChange"
+                                        @size-change="onSnapshotSizeChange"
+                                    />
+                                </div>
                             </div>
-                        </template>
+                        </el-tab-pane>
 
-                        <el-table :data="jobs" border v-loading="loading" max-height="300">
-                            <el-table-column prop="id" label="ID" min-width="160" />
-                            <el-table-column label="类型" width="120">
-                                <template #default="scope">
-                                    {{ getJobKindLabel(scope.row.kind) }}
-                                </template>
-                            </el-table-column>
-                            <el-table-column label="状态" width="120">
-                                <template #default="scope">
-                                    <el-tag
-                                        :type="getJobStatusTagType(scope.row.status)"
-                                        size="small"
-                                        effect="light"
-                                    >
-                                        {{ getJobStatusLabel(scope.row.status) }}
-                                    </el-tag>
-                                </template>
-                            </el-table-column>
-                            <el-table-column label="创建时间" min-width="160">
-                                <template #default="scope">{{ formatTime(scope.row.createdAt) }}</template>
-                            </el-table-column>
-                            <el-table-column label="更新时间" min-width="160">
-                                <template #default="scope">{{ formatTime(scope.row.updatedAt) }}</template>
-                            </el-table-column>
-                        </el-table>
+                        <el-tab-pane name="jobs">
+                            <template #label>
+                                <span class="tab-label-container">
+                                    <span>任务列表</span>
+                                    <span class="tab-badge">{{ jobTotal }}</span>
+                                </span>
+                            </template>
+                            <div class="tab-pane-content">
+                                <el-table :data="jobs" border v-loading="loading">
+                                    <el-table-column prop="id" label="ID" min-width="160" />
+                                    <el-table-column label="类型" width="120">
+                                        <template #default="scope">
+                                            {{ getJobKindLabel(scope.row.kind) }}
+                                        </template>
+                                    </el-table-column>
+                                    <el-table-column label="状态" width="120">
+                                        <template #default="scope">
+                                            <el-tag
+                                                :type="getJobStatusTagType(scope.row.status)"
+                                                size="small"
+                                                effect="light"
+                                            >
+                                                {{ getJobStatusLabel(scope.row.status) }}
+                                            </el-tag>
+                                        </template>
+                                    </el-table-column>
+                                    <el-table-column label="创建时间" min-width="160">
+                                        <template #default="scope">{{ formatTime(scope.row.createdAt) }}</template>
+                                    </el-table-column>
+                                    <el-table-column label="更新时间" min-width="160">
+                                        <template #default="scope">{{ formatTime(scope.row.updatedAt) }}</template>
+                                    </el-table-column>
+                                </el-table>
 
-                        <div class="pagination-container pagination-compact">
-                            <el-pagination
-                                v-model:current-page="jobPage"
-                                v-model:page-size="jobPageSize"
-                                :total="jobTotal"
-                                size="small"
-                                layout="total, prev, pager, next"
-                                @current-change="onJobPageChange"
-                            />
-                        </div>
-                    </el-card>
-                </el-col>
-            </el-row>
+                                <div class="pagination-container">
+                                    <el-pagination
+                                        v-model:current-page="jobPage"
+                                        v-model:page-size="jobPageSize"
+                                        :total="jobTotal"
+                                        :page-sizes="[20, 50, 100]"
+                                        layout="total, sizes, prev, pager, next, jumper"
+                                        @current-change="onJobPageChange"
+                                        @size-change="onJobSizeChange"
+                                    />
+                                </div>
+                            </div>
+                        </el-tab-pane>
+                    </el-tabs>
+                </el-card>
+            </div>
         </div>
     </k-layout>
 
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="720px">
+    <!-- Dialogs -->
+    <el-dialog 
+        v-model="dialogVisible" 
+        :title="dialogTitle" 
+        width="720px"
+        class="lm-dialog"
+        modal-class="lm-dialog-overlay"
+    >
         <el-form label-width="96px">
             <el-form-item label="类型">
                 <el-select v-model="form.type" placeholder="请选择类型">
@@ -421,7 +447,7 @@
         v-model="snapshotDialogVisible"
         title="快照详情"
         width="860px"
-        class="snapshot-dialog"
+        class="snapshot-dialog lm-dialog"
         modal-class="snapshot-dialog-overlay"
     >
         <template v-if="selectedSnapshot != null">
@@ -593,17 +619,79 @@ const memoryPageSize = ref(20)
 const memoryTotal = ref(0)
 
 const snapshotPage = ref(1)
-const snapshotPageSize = ref(10)
+const snapshotPageSize = ref(20)
 const snapshotTotal = ref(0)
 
 const jobPage = ref(1)
-const jobPageSize = ref(10)
+const jobPageSize = ref(20)
 const jobTotal = ref(0)
 
 const memories = ref<MemoryEntryRecord[]>([])
 const snapshots = ref<MemorySnapshotRecord[]>([])
 const jobs = ref<MemoryJobRecord[]>([])
 const configWarnings = ref<MemoryConfigWarning[]>([])
+
+// Cache total dataset of entries for counting status and type amounts in local filters
+const allPresetMemories = ref<MemoryEntryRecord[]>([])
+
+const totalMemoryCount = computed(() => allPresetMemories.value.length)
+
+const getStatusCount = (status: 'active' | 'archived' | 'all') => {
+    if (status === 'all') {
+        return allPresetMemories.value.length
+    }
+    return allPresetMemories.value.filter(item => item.status === status).length
+}
+
+const getTypeCount = (type: MemoryEntryType | '') => {
+    if (type === '') {
+        return allPresetMemories.value.length
+    }
+    return allPresetMemories.value.filter(item => item.type === type).length
+}
+
+const activeTab = ref('memories')
+const isDark = ref(false)
+
+const statusOptions = [
+    { label: '活跃记忆', value: 'active' as const },
+    { label: '归档记忆', value: 'archived' as const },
+    { label: '全部记忆', value: 'all' as const }
+]
+
+const setMemoryStatus = (status: 'active' | 'archived' | 'all') => {
+    memoryStatus.value = status
+    onMemoryFilterChange()
+}
+
+const setMemoryType = (type: MemoryEntryType | '') => {
+    memoryType.value = type
+    onMemoryFilterChange()
+}
+
+const resetFilters = () => {
+    memoryKeyword.value = ''
+    memoryStatus.value = 'active'
+    memoryType.value = ''
+    onMemoryFilterChange()
+}
+
+const toggleTheme = () => {
+    isDark.value = !isDark.value
+    updateThemeClass(isDark.value)
+}
+
+const updateThemeClass = (dark: boolean) => {
+    if (dark) {
+        document.documentElement.classList.add('dark')
+        document.body.classList.add('theme-dark')
+        document.body.classList.remove('theme-light')
+    } else {
+        document.documentElement.classList.remove('dark')
+        document.body.classList.add('theme-light')
+        document.body.classList.remove('theme-dark')
+    }
+}
 
 const fetchConfigStatus = async () => {
     try {
@@ -653,12 +741,12 @@ const resetForm = () => {
 
 const getMemoryTypeLabel = (type: string): string => {
     const labels: Record<string, string> = {
-        identity: '身份 (identity)',
-        preference: '偏好 (preference)',
-        fact: '事实 (fact)',
-        plan: '计划 (plan)',
-        context: '上下文 (context)',
-        other: '其它 (other)'
+        identity: '身份',
+        preference: '偏好',
+        fact: '事实',
+        plan: '计划',
+        context: '上下文',
+        other: '其它'
     }
     return labels[type] || type
 }
@@ -682,11 +770,11 @@ const getImportanceStyle = (
 ): Record<string, string> => {
     if (value == null) return {}
     if (value >= 0.7) {
-        return { color: 'var(--el-color-danger)', fontWeight: 'bold' }
+        return { color: 'var(--lm-danger)', fontWeight: 'bold' }
     } else if (value >= 0.4) {
-        return { color: 'var(--el-color-primary)', fontWeight: 'bold' }
+        return { color: 'var(--lm-primary)', fontWeight: 'bold' }
     }
-    return { color: 'var(--el-text-color-secondary)' }
+    return { color: 'var(--lm-text-tertiary)' }
 }
 
 const getJobKindLabel = (kind: string): string => {
@@ -760,8 +848,20 @@ const onSnapshotPageChange = (page: number) => {
     fetchSnapshots()
 }
 
+const onSnapshotSizeChange = (size: number) => {
+    snapshotPageSize.value = size
+    snapshotPage.value = 1
+    fetchSnapshots()
+}
+
 const onJobPageChange = (page: number) => {
     jobPage.value = page
+    fetchJobs()
+}
+
+const onJobSizeChange = (size: number) => {
+    jobPageSize.value = size
+    jobPage.value = 1
     fetchJobs()
 }
 
@@ -769,6 +869,14 @@ const fetchMemories = async (skipLoading = false) => {
     if (!ensurePreset()) return
     if (!skipLoading) loading.value = true
     try {
+        // Fetch all memories for local counts cache first
+        const allResult = await api.listMemories({
+            presetId: presetId.value,
+            page: 1,
+            pageSize: 100000 // A large number to fetch everything in this preset for counts
+        })
+        allPresetMemories.value = allResult.items
+
         const result = await api.listMemories({
             presetId: presetId.value,
             keyword: memoryKeyword.value.trim() || undefined,
@@ -1032,12 +1140,98 @@ const doClearPresetData = async () => {
 onMounted(() => {
     fetchPresetIds()
     fetchConfigStatus()
+    const hasDarkClass = document.documentElement.classList.contains('dark') || document.body.classList.contains('dark')
+    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+    isDark.value = hasDarkClass || prefersDark
+    updateThemeClass(isDark.value)
 })
 </script>
 
 <style scoped>
+/* Define global/local variables on body for seamless teleported component styles */
+:global(body.theme-light) {
+    --lm-bg-primary: #ffffff;
+    --lm-bg-secondary: #f8f9fa;
+    --lm-bg-hover: #f1f3f5;
+    --lm-border: #e9ecef;
+    --lm-border-hover: #dee2e6;
+    --lm-text-primary: #212529;
+    --lm-text-secondary: #495057;
+    --lm-text-tertiary: #868e96;
+    --lm-primary: #2563eb;
+    --lm-primary-hover: #1d4ed8;
+    --lm-primary-light: #eff6ff;
+    --lm-success: #10b981;
+    --lm-success-light: #ecfdf5;
+    --lm-warning: #f59e0b;
+    --lm-warning-light: #fefbeb;
+    --lm-danger: #ef4444;
+    --lm-danger-light: #fef2f2;
+    --lm-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.02);
+    --lm-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --lm-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+    /* Element Plus Overrides mapping */
+    --el-color-primary: var(--lm-primary) !important;
+    --el-color-success: var(--lm-success) !important;
+    --el-color-warning: var(--lm-warning) !important;
+    --el-color-danger: var(--lm-danger) !important;
+    --el-text-color-primary: var(--lm-text-primary) !important;
+    --el-text-color-regular: var(--lm-text-secondary) !important;
+    --el-text-color-secondary: var(--lm-text-tertiary) !important;
+    --el-border-color: var(--lm-border) !important;
+    --el-border-color-light: var(--lm-border) !important;
+    --el-border-color-lighter: var(--lm-border) !important;
+    --el-fill-color-blank: var(--lm-bg-primary) !important;
+    --el-bg-color: var(--lm-bg-primary) !important;
+    --el-bg-color-overlay: var(--lm-bg-primary) !important;
+}
+
+:global(body.theme-dark) {
+    --lm-bg-primary: #18181b;
+    --lm-bg-secondary: #09090b;
+    --lm-bg-hover: #27272a;
+    --lm-border: #27272a;
+    --lm-border-hover: #3f3f46;
+    --lm-text-primary: #f4f4f5;
+    --lm-text-secondary: #a1a1aa;
+    --lm-text-tertiary: #71717a;
+    --lm-primary: #3b82f6;
+    --lm-primary-hover: #60a5fa;
+    --lm-primary-light: rgba(59, 130, 246, 0.1);
+    --lm-success: #10b981;
+    --lm-success-light: rgba(16, 185, 129, 0.1);
+    --lm-warning: #f59e0b;
+    --lm-warning-light: rgba(245, 158, 11, 0.1);
+    --lm-danger: #ef4444;
+    --lm-danger-light: rgba(239, 68, 68, 0.1);
+    --lm-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+    --lm-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --lm-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+    /* Element Plus Overrides mapping */
+    --el-color-primary: var(--lm-primary) !important;
+    --el-color-success: var(--lm-success) !important;
+    --el-color-warning: var(--lm-warning) !important;
+    --el-color-danger: var(--lm-danger) !important;
+    --el-text-color-primary: var(--lm-text-primary) !important;
+    --el-text-color-regular: var(--lm-text-secondary) !important;
+    --el-text-color-secondary: var(--lm-text-tertiary) !important;
+    --el-border-color: var(--lm-border) !important;
+    --el-border-color-light: var(--lm-border) !important;
+    --el-border-color-lighter: var(--lm-border) !important;
+    --el-fill-color-blank: var(--lm-bg-primary) !important;
+    --el-bg-color: var(--lm-bg-primary) !important;
+    --el-bg-color-overlay: var(--lm-bg-primary) !important;
+}
+
+/* Base styles styling */
 .living-memory-dashboard {
     height: 100%;
+    background-color: var(--lm-bg-secondary) !important;
+    color: var(--lm-text-primary);
+    font-family: var(--lm-font-sans);
+    transition: background-color 150ms ease, color 150ms ease;
 }
 
 .living-memory-dashboard :deep(.layout-main) {
@@ -1050,15 +1244,447 @@ onMounted(() => {
 }
 
 .dashboard-shell {
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 24px;
     display: flex;
     flex-direction: column;
-    gap: 16px;
-    padding: 16px;
+    gap: 20px;
     overflow-y: auto;
 }
 
+/* Card layout wrapper */
+:deep(.el-card) {
+    background-color: var(--lm-bg-primary) !important;
+    border: 1px solid var(--lm-border) !important;
+    border-radius: 6px !important;
+    box-shadow: var(--lm-shadow) !important;
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+:deep(.el-card__header) {
+    border-bottom: 1px solid var(--lm-border) !important;
+    padding: 12px 20px !important;
+    background-color: var(--lm-bg-primary) !important;
+}
+
+/* Toolbar Header style */
+.toolbar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+}
+
+.toolbar-title {
+    font-family: var(--lm-font-mono);
+    font-weight: 700;
+    font-size: 16px;
+    letter-spacing: 0.05em;
+    color: var(--lm-text-primary);
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.toolbar-title::before {
+    content: '';
+    display: inline-block;
+    width: 4px;
+    height: 16px;
+    background-color: var(--lm-primary);
+    border-radius: 2px;
+}
+
+.header-right-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.theme-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: transparent;
+    border: 1px solid var(--lm-border);
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: var(--lm-font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--lm-text-secondary);
+    transition: all 150ms ease;
+}
+
+.theme-toggle-btn:hover {
+    background: var(--lm-bg-hover);
+    color: var(--lm-text-primary);
+    border-color: var(--lm-border-hover);
+}
+
+.theme-toggle-btn svg {
+    color: var(--lm-text-secondary);
+}
+
+.theme-toggle-btn:hover svg {
+    color: var(--lm-primary);
+}
+
+/* Grid parameters */
+.toolbar-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+}
+
+@media (min-width: 768px) {
+    .toolbar-grid {
+        grid-template-columns: 1fr auto;
+        align-items: center;
+    }
+}
+
+.filter-group-horizontal {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+}
+
+.field-label-inline {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--lm-text-tertiary);
+    font-family: var(--lm-font-mono);
+    white-space: nowrap;
+}
+
+.preset-select {
+    max-width: 240px;
+}
+
+/* Layout for Sidebar panel & List details */
+.dashboard-body-layout {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 20px;
+    align-items: stretch;
+    height: calc(100vh - 220px);
+    min-height: 500px;
+}
+
+@media (max-width: 1024px) {
+    .dashboard-body-layout {
+        grid-template-columns: 1fr;
+        align-items: start;
+        height: auto;
+    }
+}
+
+/* Category Filter Card Styles */
+.category-card {
+    border-radius: 6px !important;
+    height: 100%;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+}
+
+.category-card :deep(.el-card__header) {
+    height: 52px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+}
+
+.category-card :deep(.el-card__body) {
+    flex: 1;
+    overflow-y: auto;
+}
+
+.category-filters-vertical {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.category-item-vertical {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.category-label-vertical {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--lm-text-tertiary);
+    font-family: var(--lm-font-mono);
+}
+
+.category-options-vertical {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.category-btn-vertical {
+    background-color: var(--lm-bg-secondary);
+    border: 1px solid var(--lm-border);
+    color: var(--lm-text-secondary);
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    text-align: left;
+    font-family: var(--lm-font-sans);
+    transition: all 120ms ease;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.btn-text-content {
+    flex: 1;
+}
+
+.btn-count-badge {
+    font-family: var(--lm-font-mono);
+    font-size: 10px;
+    padding: 1px 5px;
+    border-radius: 8px;
+    background-color: var(--lm-bg-hover);
+    color: var(--lm-text-tertiary);
+    margin-left: 8px;
+    border: 1px solid var(--lm-border);
+}
+
+.category-btn-vertical.active .btn-count-badge {
+    background-color: var(--lm-primary);
+    color: #ffffff;
+    border-color: var(--lm-primary);
+}
+
+.category-btn-vertical:hover {
+    background-color: var(--lm-bg-hover);
+    color: var(--lm-text-primary);
+    border-color: var(--lm-border-hover);
+}
+
+.category-btn-vertical.active {
+    background-color: var(--lm-primary-light);
+    border-color: var(--lm-primary);
+    color: var(--lm-primary);
+    font-weight: 600;
+}
+
+.category-reset-container {
+    border-top: 1px solid var(--lm-border);
+    padding-top: 16px;
+    margin-top: 4px;
+}
+
+.reset-filter-btn {
+    background-color: var(--lm-bg-primary);
+    border: 1px dashed var(--lm-border);
+    color: var(--lm-text-secondary);
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    font-weight: 500;
+    width: 100%;
+    font-family: var(--lm-font-sans);
+    transition: all 150ms ease;
+}
+
+.reset-filter-btn:hover {
+    background-color: var(--lm-bg-hover);
+    border-color: var(--lm-border-hover);
+    color: var(--lm-text-primary);
+}
+
+/* Custom Overrides for Input & Selects */
+:deep(.el-input__wrapper),
+:deep(.el-select .el-input__wrapper),
+:global(.lm-dialog .el-input__wrapper),
+:global(.lm-dialog .el-textarea__inner) {
+    background-color: var(--lm-bg-secondary) !important;
+    border: 1px solid var(--lm-border) !important;
+    box-shadow: none !important;
+    border-radius: 4px !important;
+    padding: 4px 12px !important;
+    color: var(--lm-text-primary) !important;
+    transition: border-color 150ms ease, background-color 150ms ease;
+}
+
+:deep(.el-input__wrapper:hover),
+:deep(.el-select .el-input__wrapper:hover),
+:deep(.el-input__wrapper.is-focus),
+:deep(.el-select .el-input__wrapper.is-focus),
+:global(.lm-dialog .el-input__wrapper:hover),
+:global(.lm-dialog .el-textarea__inner:hover),
+:global(.lm-dialog .el-input__wrapper.is-focus),
+:global(.lm-dialog .el-textarea__inner:focus) {
+    border-color: var(--lm-border-hover) !important;
+    background-color: var(--lm-bg-primary) !important;
+}
+
+:deep(.el-input__inner),
+:global(.lm-dialog .el-input__inner),
+:global(.lm-dialog .el-textarea__inner) {
+    color: var(--lm-text-primary) !important;
+    font-family: var(--lm-font-sans);
+    font-size: 13px !important;
+}
+
+:deep(.el-input__inner::placeholder),
+:global(.lm-dialog .el-input__inner::placeholder) {
+    color: var(--lm-text-tertiary) !important;
+}
+
+:deep(.el-select),
+:deep(.el-input) {
+    width: 100% !important;
+}
+
+/* Dialog & Dropdown Theme Sync (Fixes transparent dropdown backgrounds) */
+:global(body.theme-light .el-select__popper),
+:global(body.theme-light .el-popper),
+:global(body.theme-light .el-select-dropdown),
+:global(body.theme-light .el-select-dropdown__wrap),
+:global(body.theme-light .el-select-dropdown__list) {
+    background-color: #ffffff !important;
+    border: 1px solid #e9ecef !important;
+    color: #212529 !important;
+}
+
+:global(body.theme-dark .el-select__popper),
+:global(body.theme-dark .el-popper),
+:global(body.theme-dark .el-select-dropdown),
+:global(body.theme-dark .el-select-dropdown__wrap),
+:global(body.theme-dark .el-select-dropdown__list) {
+    background-color: #18181b !important;
+    border: 1px solid #27272a !important;
+    color: #f4f4f5 !important;
+}
+
+:global(.el-select-dropdown__item) {
+    color: var(--lm-text-secondary) !important;
+}
+
+:global(.el-select-dropdown__item.is-hovering),
+:global(.el-select-dropdown__item:hover) {
+    background-color: var(--lm-bg-hover) !important;
+    color: var(--lm-text-primary) !important;
+}
+
+:global(.el-select-dropdown__item.is-selected) {
+    color: var(--lm-primary) !important;
+    background-color: var(--lm-primary-light) !important;
+    font-weight: bold;
+}
+
+/* Button overrides */
+:deep(.el-button),
+:global(.lm-dialog .el-button) {
+    border-radius: 4px !important;
+    font-weight: 500 !important;
+    font-family: var(--lm-font-sans);
+    padding: 8px 16px !important;
+    font-size: 13px !important;
+    transition: all 150ms ease !important;
+    box-shadow: none !important;
+}
+
+:deep(.el-button--default),
+:global(.lm-dialog .el-button--default) {
+    background-color: var(--lm-bg-primary) !important;
+    border: 1px solid var(--lm-border) !important;
+    color: var(--lm-text-secondary) !important;
+}
+
+:deep(.el-button--default:hover),
+:global(.lm-dialog .el-button--default:hover) {
+    background-color: var(--lm-bg-hover) !important;
+    color: var(--lm-text-primary) !important;
+    border-color: var(--lm-border-hover) !important;
+}
+
+:deep(.el-button--primary),
+:global(.lm-dialog .el-button--primary) {
+    background-color: var(--lm-primary) !important;
+    border: 1px solid var(--lm-primary) !important;
+    color: #ffffff !important;
+}
+
+:deep(.el-button--primary:hover),
+:global(.lm-dialog .el-button--primary:hover) {
+    background-color: var(--lm-primary-hover) !important;
+    border-color: var(--lm-primary-hover) !important;
+    color: #ffffff !important;
+}
+
+:deep(.el-button--danger),
+:global(.lm-dialog .el-button--danger) {
+    background-color: var(--lm-danger) !important;
+    border: 1px solid var(--lm-danger) !important;
+    color: #ffffff !important;
+}
+
+:deep(.el-button--danger.is-plain) {
+    background-color: var(--lm-danger-light) !important;
+    border: 1px solid var(--lm-danger) !important;
+    color: var(--lm-danger) !important;
+}
+
+:deep(.el-button--danger.is-plain:hover) {
+    background-color: var(--lm-danger) !important;
+    color: #ffffff !important;
+}
+
+:deep(.el-button.is-disabled),
+:global(.lm-dialog .el-button.is-disabled) {
+    background-color: var(--lm-bg-secondary) !important;
+    border-color: var(--lm-border) !important;
+    color: var(--lm-text-tertiary) !important;
+    opacity: 0.6;
+}
+
+/* Prevent layout shifts when loading is active on the refresh button */
+.refresh-btn-wrapper {
+    display: inline-flex;
+    width: 68px; /* Fixed width matching the exact size of the refresh button */
+    height: 32px;
+}
+
+.refresh-btn-wrapper :deep(.refresh-button) {
+    width: 100% !important;
+    padding: 0 !important;
+    justify-content: center;
+    align-items: center;
+}
+
+.toolbar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+}
+
+/* Warnings */
 .config-warning-banner {
-    border-radius: 12px;
+    border-radius: 6px !important;
+    border: 1px solid var(--lm-warning) !important;
+    background-color: var(--lm-warning-light) !important;
+    color: var(--lm-text-primary) !important;
 }
 
 .config-warning-list {
@@ -1070,249 +1696,411 @@ onMounted(() => {
     margin-top: 4px;
 }
 
-.toolbar-card,
-.table-card {
-    border-radius: 12px;
+/* Tables styling */
+:deep(.el-table) {
+    background-color: var(--lm-bg-primary) !important;
+    border: 1px solid var(--lm-border) !important;
+    border-radius: 4px !important;
 }
 
-.toolbar-header,
-.card-header {
+:deep(.el-table th.el-table__cell) {
+    background-color: var(--lm-bg-secondary) !important;
+    color: var(--lm-text-secondary) !important;
+    font-weight: 600 !important;
+    font-size: 11px !important;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-family: var(--lm-font-mono);
+    border-bottom: 1px solid var(--lm-border) !important;
+    padding: 10px 0 !important;
+}
+
+:deep(.el-table td.el-table__cell) {
+    border-bottom: 1px solid var(--lm-border) !important;
+    color: var(--lm-text-primary) !important;
+    font-size: 13px !important;
+    padding: 8px 0 !important;
+}
+
+:deep(.el-table--border .el-table__inner-wrapper::after),
+:deep(.el-table--border::after),
+:deep(.el-table--border::before) {
+    background-color: var(--lm-border) !important;
+}
+
+:deep(.el-table__border-left-patch) {
+    background-color: var(--lm-border) !important;
+}
+
+:deep(.el-table--border .el-table__cell) {
+    border-right: 1px solid var(--lm-border) !important;
+}
+
+:deep(.el-table__row:hover > td.el-table__cell) {
+    background-color: var(--lm-bg-hover) !important;
+}
+
+:deep(.el-table .el-table__cell:first-child .cell) {
+    font-family: var(--lm-font-mono);
+    font-size: 12px;
+}
+
+/* Tag colors */
+:deep(.el-tag) {
+    border-radius: 3px !important;
+    font-weight: 500 !important;
+    font-size: 11px !important;
+    font-family: var(--lm-font-mono);
+    padding: 2px 6px !important;
+    height: auto !important;
+    line-height: 1.2 !important;
+    border: 1px solid currentColor !important;
+}
+
+:deep(.el-tag--plain.el-tag--info) {
+    background-color: var(--lm-bg-secondary) !important;
+    border-color: var(--lm-border) !important;
+    color: var(--lm-text-secondary) !important;
+}
+
+/* Tab Header & Custom Styling inside consolidated main card */
+.main-content-card {
+    border-radius: 6px !important;
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
+    flex-direction: column;
 }
 
-.card-tip {
-    color: var(--el-text-color-secondary);
-    font-size: 13px;
+.main-content-card :deep(.el-card__header) {
+    display: none;
 }
 
-.toolbar-grid {
+.main-content-card :deep(.el-card__body) {
+    padding: 0 20px 20px 20px !important;
     display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+.card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--lm-text-primary);
+    font-family: var(--lm-font-sans);
+}
+
+.custom-tabs {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+.custom-tabs :deep(.el-tabs__header) {
+    margin: 0 0 20px 0 !important;
+    border-bottom: 1px solid var(--lm-border) !important;
+}
+
+.custom-tabs :deep(.el-tabs__nav-wrap) {
+    width: 100%;
+}
+
+.custom-tabs :deep(.el-tabs__nav-wrap::after) {
+    display: none !important;
+}
+
+.custom-tabs :deep(.el-tabs__item) {
+    font-family: var(--lm-font-sans) !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    color: var(--lm-text-secondary) !important;
+    height: 52px !important;
+    line-height: 52px !important;
+}
+
+.custom-tabs :deep(.el-tabs__item.is-active) {
+    color: var(--lm-primary) !important;
+}
+
+.custom-tabs :deep(.el-tabs__nav) {
+    height: 52px !important;
+}
+
+.custom-tabs :deep(.el-tabs__active-bar) {
+    bottom: 0 !important;
+}
+
+.custom-tabs :deep(.el-tabs__content) {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    margin-top: 0px;
+}
+
+.custom-tabs :deep(.el-tab-pane) {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+.tab-pane-content {
+    display: flex;
+    flex-direction: column;
     gap: 16px;
+    flex: 1;
+    min-height: 0;
 }
 
-.toolbar-filters {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
+.tab-label-container {
+    font-family: var(--lm-font-sans) !important;
+    font-weight: 600 !important;
+    display: inline-flex;
     align-items: center;
 }
 
-.toolbar-filters .el-select,
-.toolbar-filters .el-input {
-    width: 180px;
+.tab-badge {
+    font-family: var(--lm-font-mono);
+    font-size: 10px;
+    padding: 1px 5px;
+    border-radius: 8px;
+    background-color: var(--lm-bg-hover);
+    color: var(--lm-text-tertiary);
+    margin-left: 6px;
+    border: 1px solid var(--lm-border);
+    font-weight: normal;
+    line-height: 1.2;
+    transition: all 120ms ease;
 }
 
-.toolbar-filters .preset-select {
-    width: 200px;
+.custom-tabs :deep(.el-tabs__item.is-active) .tab-badge {
+    background-color: var(--lm-primary-light);
+    color: var(--lm-primary);
+    border-color: var(--lm-primary);
 }
 
-.toolbar-filters .keyword-input {
-    width: 240px;
-}
-
-.toolbar-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    align-items: center;
-}
-
+/* Pagination */
 .pagination-container {
     display: flex;
     justify-content: flex-end;
-    padding: 12px 0 0;
+    padding-top: 20px;
+    margin-top: auto;
+    border-top: 1px solid var(--lm-border);
+    background-color: transparent;
 }
 
-.pagination-compact {
-    padding: 8px 0 0;
+.pagination-container :deep(.el-pagination) {
+    gap: 12px;
 }
 
-.summary-row,
-.table-row {
-    margin: 0;
+.pagination-container :deep(.el-pagination__sizes) {
+    margin-right: 16px;
 }
 
-.summary-item {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
+.pagination-container :deep(.el-pagination__jump) {
+    margin-left: 16px;
 }
 
-.summary-label {
-    color: var(--el-text-color-secondary);
-    font-size: 13px;
+:deep(.el-pagination button),
+:deep(.el-pagination .el-pager li) {
+    background-color: var(--lm-bg-primary) !important;
+    border: 1px solid var(--lm-border) !important;
+    color: var(--lm-text-secondary) !important;
+    border-radius: 4px !important;
+    font-family: var(--lm-font-mono) !important;
+    font-size: 12px !important;
+    min-width: 28px !important;
+    height: 28px !important;
+    line-height: 26px !important;
+    margin: 0 2px !important;
+    transition: all 150ms ease !important;
 }
 
-.summary-value {
-    font-size: 28px;
-    font-weight: 600;
+:deep(.el-pagination button:hover),
+:deep(.el-pagination .el-pager li:hover) {
+    border-color: var(--lm-border-hover) !important;
+    color: var(--lm-text-primary) !important;
+    background-color: var(--lm-bg-hover) !important;
 }
 
-:deep(.snapshot-detail-cell .cell) {
-    padding: 0;
-    overflow: visible;
-    text-overflow: clip;
+:deep(.el-pagination .el-pager li.is-active) {
+    background-color: var(--lm-primary) !important;
+    border-color: var(--lm-primary) !important;
+    color: #ffffff !important;
 }
 
-.snapshot-detail-button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    flex: 0 0 28px;
-    padding: 0;
-    border: 0;
-    border-radius: 50%;
-    background: transparent;
-    color: var(--el-text-color-secondary);
-    cursor: pointer;
-    font-size: 0;
-    line-height: 1;
+/* Dialog layout styling */
+:global(.lm-dialog) {
+    border-radius: 6px !important;
     overflow: hidden;
+    box-shadow: var(--lm-shadow) !important;
+    background-color: var(--lm-bg-primary) !important;
 }
 
-.snapshot-detail-button:hover,
-.snapshot-detail-button:focus {
-    color: var(--el-color-primary);
-    background: var(--el-fill-color);
+:global(.lm-dialog .el-dialog__header) {
+    border-bottom: 1px solid var(--lm-border) !important;
+    padding: 16px 20px !important;
+    margin-right: 0 !important;
+    background-color: var(--lm-bg-primary) !important;
 }
 
-.snapshot-detail-icon {
-    display: inline-block;
-    width: 7px;
-    height: 7px;
-    border-top: 1.5px solid currentColor;
-    border-right: 1.5px solid currentColor;
-    transform: rotate(45deg);
+:global(.lm-dialog .el-dialog__title) {
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    color: var(--lm-text-primary) !important;
+    font-family: var(--lm-font-sans);
 }
 
-:global(.snapshot-dialog.el-dialog),
-:global(.snapshot-dialog .el-dialog),
-:global(.snapshot-dialog-overlay .el-dialog) {
-    border: 1px solid var(--el-border-color-lighter);
-    background: var(--el-card-bg-color, var(--el-bg-color));
-    color: var(--el-text-color-primary);
-    box-shadow: var(--el-box-shadow-dark);
+:global(.lm-dialog .el-dialog__body) {
+    padding: 20px !important;
+    background-color: var(--lm-bg-primary) !important;
+    color: var(--lm-text-primary) !important;
 }
 
-:global(.snapshot-dialog.el-dialog .el-dialog__header),
-:global(.snapshot-dialog .el-dialog__header),
-:global(.snapshot-dialog-overlay .el-dialog__header) {
-    border-bottom: 1px solid var(--el-border-color-lighter);
-    background: var(--el-card-bg-color, var(--el-bg-color));
-    margin-right: 0;
+:global(.lm-dialog .el-dialog__footer) {
+    border-top: 1px solid var(--lm-border) !important;
+    padding: 12px 20px !important;
+    background-color: var(--lm-bg-secondary) !important;
 }
 
-:global(.snapshot-dialog.el-dialog .el-dialog__title),
-:global(.snapshot-dialog .el-dialog__title),
-:global(.snapshot-dialog-overlay .el-dialog__title) {
-    color: var(--el-text-color-primary);
+:global(.lm-dialog-overlay) {
+    background-color: rgba(0, 0, 0, 0.4) !important;
+    backdrop-filter: blur(1px);
 }
 
-:global(.snapshot-dialog.el-dialog .el-dialog__body),
-:global(.snapshot-dialog .el-dialog__body),
-:global(.snapshot-dialog-overlay .el-dialog__body) {
-    max-height: 70vh;
-    overflow-y: auto;
-    background: var(--el-card-bg-color, var(--el-bg-color));
-    color: var(--el-text-color-primary);
+/* Form items in Dialogs */
+:global(.lm-dialog .el-form-item) {
+    margin-bottom: 16px !important;
 }
 
+:global(.lm-dialog .el-form-item__label) {
+    color: var(--lm-text-secondary) !important;
+    font-size: 13px !important;
+}
+
+/* Snapshot dialog detail contents */
 .snapshot-dialog-meta {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px 16px;
-    margin-bottom: 12px;
-    padding: 10px;
-    border: 1px solid var(--el-border-color-lighter);
-    border-radius: 8px;
-    background: var(--el-bg-color);
-    color: var(--el-text-color-regular);
-    font-size: 13px;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+    padding: 14px;
+    border: 1px solid var(--lm-border);
+    border-radius: 4px;
+    background-color: var(--lm-bg-secondary);
+}
+
+@media (max-width: 768px) {
+    .snapshot-dialog-meta {
+        grid-template-columns: 1fr 1fr;
+    }
 }
 
 .snapshot-dialog-meta > div {
     display: flex;
-    gap: 8px;
-    min-width: 0;
+    flex-direction: column;
+    gap: 4px;
 }
 
 .snapshot-dialog-label {
-    flex: 0 0 auto;
-    color: var(--el-text-color-secondary);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--lm-text-tertiary) !important;
+    font-family: var(--lm-font-mono);
 }
 
 .snapshot-dialog-meta span:last-child {
-    color: var(--el-text-color-primary);
+    font-family: var(--lm-font-mono);
+    font-size: 12px;
+    color: var(--lm-text-primary) !important;
 }
 
 .snapshot-dialog-query {
     grid-column: 1 / -1;
+    border-top: 1px solid var(--lm-border);
+    padding-top: 8px;
+    margin-top: 4px;
 }
 
 .snapshot-dialog-query span:last-child {
-    white-space: pre-wrap;
-    word-break: break-word;
+    font-family: var(--lm-font-mono) !important;
+    font-size: 12px !important;
+    line-height: 1.4 !important;
 }
 
 .snapshot-memory-list {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
 }
 
 .snapshot-memory-item {
+    border: 1px solid var(--lm-border) !important;
+    border-radius: 4px !important;
+    background-color: var(--lm-bg-primary) !important;
+    padding: 14px !important;
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 10px;
-    border: 1px solid var(--el-border-color-lighter);
-    border-radius: 8px;
-    background: var(--el-bg-color);
-    color: var(--el-text-color-primary);
+    gap: 10px !important;
 }
 
-.snapshot-memory-header,
-.snapshot-memory-meta {
+.snapshot-memory-header {
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
-    gap: 8px 12px;
+    gap: 12px;
+    border-bottom: 1px dashed var(--lm-border);
+    padding-bottom: 8px;
 }
 
-.snapshot-memory-id,
-.snapshot-memory-score,
-.snapshot-memory-meta,
-.snapshot-memory-summary,
-.snapshot-memory-missing {
-    color: var(--el-text-color-regular);
-    font-size: 13px;
+.snapshot-memory-id {
+    font-family: var(--lm-font-mono);
+    font-weight: 600;
+    color: var(--lm-text-secondary) !important;
+    font-size: 12px;
+}
+
+.snapshot-memory-score {
+    margin-left: auto;
+    font-family: var(--lm-font-mono);
+    color: var(--lm-primary) !important;
+    font-size: 12px !important;
+    font-weight: 600;
 }
 
 .snapshot-memory-content {
-    white-space: pre-wrap;
-    color: var(--el-text-color-primary);
-    line-height: 1.6;
+    font-size: 13px !important;
+    line-height: 1.5 !important;
+    color: var(--lm-text-primary) !important;
+}
+
+.snapshot-memory-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px !important;
+    font-size: 11px !important;
+    color: var(--lm-text-tertiary) !important;
+    font-family: var(--lm-font-mono);
 }
 
 .snapshot-memory-summary {
-    line-height: 1.5;
+    font-size: 12px !important;
+    background-color: var(--lm-bg-secondary) !important;
+    border-left: 2px solid var(--lm-primary);
+    padding: 6px 10px !important;
+    color: var(--lm-text-secondary) !important;
+    border-radius: 0 4px 4px 0;
 }
 
 .snapshot-memory-keywords {
     margin-top: 2px;
 }
 
-@media (max-width: 1200px) {
-    .toolbar-grid {
-        grid-template-columns: 1fr;
-    }
+.snapshot-memory-missing {
+    color: var(--lm-danger);
+    font-size: 12px;
+    font-family: var(--lm-font-mono);
 }
 </style>
