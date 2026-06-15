@@ -304,13 +304,13 @@
                             </template>
                             <div class="tab-pane-content">
                                 <el-table :data="jobs" border v-loading="loading">
-                                    <el-table-column prop="id" label="ID" min-width="160" />
-                                    <el-table-column label="类型" width="120">
+                                    <el-table-column prop="id" label="ID" min-width="160" header-align="center" />
+                                    <el-table-column label="类型" width="120" align="center" header-align="center">
                                         <template #default="scope">
                                             {{ getJobKindLabel(scope.row.kind) }}
                                         </template>
                                     </el-table-column>
-                                    <el-table-column label="状态" width="120">
+                                    <el-table-column label="状态" width="120" align="center" header-align="center">
                                         <template #default="scope">
                                             <el-tag
                                                 :type="getJobStatusTagType(scope.row.status)"
@@ -321,10 +321,10 @@
                                             </el-tag>
                                         </template>
                                     </el-table-column>
-                                    <el-table-column label="创建时间" min-width="160">
+                                    <el-table-column label="创建时间" min-width="160" align="center" header-align="center">
                                         <template #default="scope">{{ formatTime(scope.row.createdAt) }}</template>
                                     </el-table-column>
-                                    <el-table-column label="更新时间" min-width="160">
+                                    <el-table-column label="更新时间" min-width="160" align="center" header-align="center">
                                         <template #default="scope">{{ formatTime(scope.row.updatedAt) }}</template>
                                     </el-table-column>
                                 </el-table>
