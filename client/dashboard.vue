@@ -163,40 +163,31 @@
                             </template>
                             <div class="tab-pane-content">
                                 <el-table :data="memories" border v-loading="loading">
-                                    <el-table-column prop="id" label="ID" min-width="180" />
-                                    <el-table-column label="类型" width="140">
+                                    <el-table-column label="类型" width="80" align="center">
                                         <template #default="scope">
-                                            <el-tag
-                                                :type="getMemoryTagType(scope.row.type)"
-                                                size="small"
-                                                effect="plain"
-                                            >
+                                            <span :class="['type-text-span', getMemoryTagType(scope.row.type)]">
                                                 {{ getMemoryTypeLabel(scope.row.type) }}
-                                            </el-tag>
+                                            </span>
                                         </template>
                                     </el-table-column>
-                                    <el-table-column label="状态" width="100">
+                                    <el-table-column label="状态" width="70" align="center">
                                         <template #default="scope">
-                                            <el-tag
-                                                :type="scope.row.status === 'archived' ? 'info' : 'success'"
-                                                size="small"
-                                                effect="plain"
-                                            >
+                                            <span :class="['status-text-span', scope.row.status === 'archived' ? 'archived' : 'active']">
                                                 {{ scope.row.status === 'archived' ? '历史' : '活跃' }}
-                                            </el-tag>
+                                            </span>
                                         </template>
                                     </el-table-column>
-                                    <el-table-column prop="content" label="内容" min-width="260" show-overflow-tooltip />
-                                    <el-table-column prop="summary" label="摘要" min-width="200" show-overflow-tooltip />
-                                    <el-table-column prop="sentiment" label="情绪" width="120" show-overflow-tooltip />
-                                    <el-table-column label="重要度" width="100">
+                                    <el-table-column prop="summary" label="摘要" min-width="260" header-align="center" show-overflow-tooltip />
+                                    <el-table-column prop="content" label="内容" min-width="260" header-align="center" show-overflow-tooltip />
+                                    <el-table-column prop="sentiment" label="情绪" min-width="100" align="center" show-overflow-tooltip />
+                                    <el-table-column label="重要度" width="80" align="center">
                                         <template #default="scope">
                                             <span :style="getImportanceStyle(scope.row.importance)">
                                                 {{ formatImportance(scope.row.importance) }}
                                             </span>
                                         </template>
                                     </el-table-column>
-                                    <el-table-column label="关键词" min-width="200">
+                                    <el-table-column label="关键词" min-width="220" header-align="center">
                                         <template #default="scope">
                                             <el-space wrap>
                                                 <el-tag
@@ -210,10 +201,10 @@
                                             </el-space>
                                         </template>
                                     </el-table-column>
-                                    <el-table-column label="创建时间" min-width="160">
+                                    <el-table-column label="创建时间" min-width="130" align="center">
                                         <template #default="scope">{{ formatTime(scope.row.createdAt) }}</template>
                                     </el-table-column>
-                                    <el-table-column label="更新时间" min-width="160">
+                                    <el-table-column label="更新时间" min-width="130" align="center">
                                         <template #default="scope">{{ formatTime(scope.row.updatedAt) }}</template>
                                     </el-table-column>
                                     <el-table-column label="操作" width="180" fixed="right">
@@ -1740,9 +1731,40 @@ onMounted(() => {
     background-color: var(--lm-bg-hover) !important;
 }
 
-:deep(.el-table .el-table__cell:first-child .cell) {
-    font-family: var(--lm-font-mono);
-    font-size: 12px;
+/* Custom plain text labels for type and status columns */
+.type-text-span,
+.status-text-span {
+    font-size: 13px;
+    font-weight: 600;
+    font-family: var(--lm-font-sans);
+}
+
+/* Type colors mapping from getMemoryTagType classes */
+.type-text-span.success {
+    color: var(--lm-success);
+}
+.type-text-span.info {
+    color: var(--lm-text-secondary);
+}
+.type-text-span.warning {
+    color: var(--lm-warning);
+}
+.type-text-span.danger {
+    color: var(--lm-danger);
+}
+.type-text-span.identity {
+    color: var(--lm-primary); /* Empty mapping, fallback to primary */
+}
+.type-text-span:not(.success):not(.info):not(.warning):not(.danger) {
+    color: var(--lm-primary);
+}
+
+/* Status colors mapping */
+.status-text-span.active {
+    color: var(--lm-success);
+}
+.status-text-span.archived {
+    color: var(--lm-text-tertiary);
 }
 
 /* Tag colors */
