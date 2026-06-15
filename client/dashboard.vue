@@ -1,5 +1,5 @@
 <template>
-    <k-layout class="living-memory-dashboard">
+    <k-layout :class="['living-memory-dashboard', isDark ? 'lm-theme-dark' : 'lm-theme-light']">
         <div class="dashboard-shell">
             <!-- Alert banner -->
             <el-alert
@@ -24,13 +24,6 @@
                 <template #header>
                     <div class="toolbar-header">
                         <span class="toolbar-title">Living Memory</span>
-                        <div class="header-right-actions">
-                            <button class="theme-toggle-btn" @click="toggleTheme" title="切换主题">
-                                <svg v-if="isDark" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
-                                <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
-                                <span class="toggle-text">{{ isDark ? 'LIGHT' : 'DARK' }}</span>
-                            </button>
-                        </div>
                     </div>
                 </template>
 
@@ -45,6 +38,7 @@
                             clearable
                             placeholder="选择或输入预设 ID"
                             class="preset-select"
+                            :popper-class="isDark ? 'lm-select-popper lm-theme-dark' : 'lm-select-popper lm-theme-light'"
                             @change="onPresetChange"
                             @visible-change="onPresetVisibleChange"
                         >
@@ -64,7 +58,7 @@
                             </el-button>
                         </div>
                         <el-button :disabled="!presetId" @click="openCreateDialog">
-                            新建记忆
+                            注入记忆
                         </el-button>
                         <el-button
                             :disabled="!presetId"
@@ -349,16 +343,20 @@
     </k-layout>
 
     <!-- Dialogs -->
-    <el-dialog 
-        v-model="dialogVisible" 
-        :title="dialogTitle" 
+    <el-dialog
+        v-model="dialogVisible"
+        :title="dialogTitle"
         width="720px"
-        class="lm-dialog"
+        :class="['lm-dialog', isDark ? 'lm-theme-dark' : 'lm-theme-light']"
         modal-class="lm-dialog-overlay"
     >
         <el-form label-width="96px">
             <el-form-item label="类型">
-                <el-select v-model="form.type" placeholder="请选择类型">
+                <el-select
+                    v-model="form.type"
+                    placeholder="请选择类型"
+                    :popper-class="isDark ? 'lm-select-popper lm-theme-dark' : 'lm-select-popper lm-theme-light'"
+                >
                     <el-option
                         v-for="item in memoryTypes"
                         :key="item"
@@ -369,7 +367,11 @@
             </el-form-item>
 
             <el-form-item label="状态">
-                <el-select v-model="form.status" placeholder="请选择状态">
+                <el-select
+                    v-model="form.status"
+                    placeholder="请选择状态"
+                    :popper-class="isDark ? 'lm-select-popper lm-theme-dark' : 'lm-select-popper lm-theme-light'"
+                >
                     <el-option label="活跃记忆" value="active" />
                     <el-option label="历史记录" value="archived" />
                 </el-select>
@@ -420,6 +422,7 @@
                     allow-create
                     default-first-option
                     placeholder="可输入多个关键词"
+                    :popper-class="isDark ? 'lm-select-popper lm-theme-dark' : 'lm-select-popper lm-theme-light'"
                 />
             </el-form-item>
         </el-form>
@@ -436,7 +439,7 @@
         v-model="snapshotDialogVisible"
         title="快照详情"
         width="860px"
-        class="snapshot-dialog lm-dialog"
+        :class="['snapshot-dialog', 'lm-dialog', isDark ? 'lm-theme-dark' : 'lm-theme-light']"
         modal-class="snapshot-dialog-overlay"
     >
         <template v-if="selectedSnapshot != null">
@@ -530,6 +533,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useColorMode } from '@koishijs/client'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as api from './api'
 import type {
@@ -648,7 +652,9 @@ const getTypeCount = (type: MemoryEntryType | '') => {
 }
 
 const activeTab = ref('memories')
-const isDark = ref(false)
+
+const colorMode = useColorMode()
+const isDark = computed(() => colorMode.value === 'dark')
 
 const statusOptions = [
     { label: '活跃记忆', value: 'active' as const },
@@ -671,23 +677,6 @@ const resetFilters = () => {
     memoryStatus.value = 'active'
     memoryType.value = ''
     onMemoryFilterChange()
-}
-
-const toggleTheme = () => {
-    isDark.value = !isDark.value
-    updateThemeClass(isDark.value)
-}
-
-const updateThemeClass = (dark: boolean) => {
-    if (dark) {
-        document.documentElement.classList.add('dark')
-        document.body.classList.add('theme-dark')
-        document.body.classList.remove('theme-light')
-    } else {
-        document.documentElement.classList.remove('dark')
-        document.body.classList.add('theme-light')
-        document.body.classList.remove('theme-dark')
-    }
 }
 
 const fetchConfigStatus = async () => {
@@ -1137,16 +1126,12 @@ const doClearPresetData = async () => {
 onMounted(() => {
     fetchPresetIds()
     fetchConfigStatus()
-    const hasDarkClass = document.documentElement.classList.contains('dark') || document.body.classList.contains('dark')
-    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
-    isDark.value = hasDarkClass || prefersDark
-    updateThemeClass(isDark.value)
 })
 </script>
 
 <style scoped>
 /* Define global/local variables on body for seamless teleported component styles */
-:global(body.theme-light) {
+.living-memory-dashboard.lm-theme-light {
     --lm-bg-primary: #ffffff;
     --lm-bg-secondary: #f8f9fa;
     --lm-bg-hover: #f1f3f5;
@@ -1184,7 +1169,7 @@ onMounted(() => {
     --el-bg-color-overlay: var(--lm-bg-primary) !important;
 }
 
-:global(body.theme-dark) {
+.living-memory-dashboard.lm-theme-dark {
     --lm-bg-primary: #18181b;
     --lm-bg-secondary: #09090b;
     --lm-bg-hover: #27272a;
@@ -1214,6 +1199,73 @@ onMounted(() => {
     --el-text-color-primary: var(--lm-text-primary) !important;
     --el-text-color-regular: var(--lm-text-secondary) !important;
     --el-text-color-secondary: var(--lm-text-tertiary) !important;
+    --el-border-color: var(--lm-border) !important;
+    --el-border-color-light: var(--lm-border) !important;
+    --el-border-color-lighter: var(--lm-border) !important;
+    --el-fill-color-blank: var(--lm-bg-primary) !important;
+    --el-bg-color: var(--lm-bg-primary) !important;
+    --el-bg-color-overlay: var(--lm-bg-primary) !important;
+}
+
+/* Also define custom variables for Dialogs, mapped locally per dialog element state */
+:global(.lm-dialog.lm-theme-light) {
+    --lm-bg-primary: #ffffff;
+    --lm-bg-secondary: #f8f9fa;
+    --lm-bg-hover: #f1f3f5;
+    --lm-border: #e9ecef;
+    --lm-border-hover: #dee2e6;
+    --lm-text-primary: #212529;
+    --lm-text-secondary: #495057;
+    --lm-text-tertiary: #868e96;
+    --lm-primary: #2563eb;
+    --lm-primary-hover: #1d4ed8;
+    --lm-primary-light: #eff6ff;
+    --lm-success: #10b981;
+    --lm-success-light: #ecfdf5;
+    --lm-warning: #f59e0b;
+    --lm-warning-light: #fefbeb;
+    --lm-danger: #ef4444;
+    --lm-danger-light: #fef2f2;
+    --lm-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.02);
+    --lm-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --lm-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+    --el-color-primary: var(--lm-primary) !important;
+    --el-text-color-primary: var(--lm-text-primary) !important;
+    --el-text-color-regular: var(--lm-text-secondary) !important;
+    --el-border-color: var(--lm-border) !important;
+    --el-border-color-light: var(--lm-border) !important;
+    --el-border-color-lighter: var(--lm-border) !important;
+    --el-fill-color-blank: var(--lm-bg-primary) !important;
+    --el-bg-color: var(--lm-bg-primary) !important;
+    --el-bg-color-overlay: var(--lm-bg-primary) !important;
+}
+
+:global(.lm-dialog.lm-theme-dark) {
+    --lm-bg-primary: #18181b;
+    --lm-bg-secondary: #09090b;
+    --lm-bg-hover: #27272a;
+    --lm-border: #27272a;
+    --lm-border-hover: #3f3f46;
+    --lm-text-primary: #f4f4f5;
+    --lm-text-secondary: #a1a1aa;
+    --lm-text-tertiary: #71717a;
+    --lm-primary: #3b82f6;
+    --lm-primary-hover: #60a5fa;
+    --lm-primary-light: rgba(59, 130, 246, 0.1);
+    --lm-success: #10b981;
+    --lm-success-light: rgba(16, 185, 129, 0.1);
+    --lm-warning: #f59e0b;
+    --lm-warning-light: rgba(245, 158, 11, 0.1);
+    --lm-danger: #ef4444;
+    --lm-danger-light: rgba(239, 68, 68, 0.1);
+    --lm-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+    --lm-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --lm-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+    --el-color-primary: var(--lm-primary) !important;
+    --el-text-color-primary: var(--lm-text-primary) !important;
+    --el-text-color-regular: var(--lm-text-secondary) !important;
     --el-border-color: var(--lm-border) !important;
     --el-border-color-light: var(--lm-border) !important;
     --el-border-color-lighter: var(--lm-border) !important;
@@ -1292,42 +1344,6 @@ onMounted(() => {
     height: 16px;
     background-color: var(--lm-primary);
     border-radius: 2px;
-}
-
-.header-right-actions {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-.theme-toggle-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    background: transparent;
-    border: 1px solid var(--lm-border);
-    padding: 6px 12px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-family: var(--lm-font-mono);
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--lm-text-secondary);
-    transition: all 150ms ease;
-}
-
-.theme-toggle-btn:hover {
-    background: var(--lm-bg-hover);
-    color: var(--lm-text-primary);
-    border-color: var(--lm-border-hover);
-}
-
-.theme-toggle-btn svg {
-    color: var(--lm-text-secondary);
-}
-
-.theme-toggle-btn:hover svg {
-    color: var(--lm-primary);
 }
 
 /* Grid parameters */
@@ -1553,37 +1569,35 @@ onMounted(() => {
 }
 
 /* Dialog & Dropdown Theme Sync (Fixes transparent dropdown backgrounds) */
-:global(body.theme-light .el-select__popper),
-:global(body.theme-light .el-popper),
-:global(body.theme-light .el-select-dropdown),
-:global(body.theme-light .el-select-dropdown__wrap),
-:global(body.theme-light .el-select-dropdown__list) {
+:global(.lm-select-popper.lm-theme-light),
+:global(.lm-select-popper.lm-theme-light .el-select-dropdown),
+:global(.lm-select-popper.lm-theme-light .el-select-dropdown__wrap),
+:global(.lm-select-popper.lm-theme-light .el-select-dropdown__list) {
     background-color: #ffffff !important;
     border: 1px solid #e9ecef !important;
     color: #212529 !important;
 }
 
-:global(body.theme-dark .el-select__popper),
-:global(body.theme-dark .el-popper),
-:global(body.theme-dark .el-select-dropdown),
-:global(body.theme-dark .el-select-dropdown__wrap),
-:global(body.theme-dark .el-select-dropdown__list) {
+:global(.lm-select-popper.lm-theme-dark),
+:global(.lm-select-popper.lm-theme-dark .el-select-dropdown),
+:global(.lm-select-popper.lm-theme-dark .el-select-dropdown__wrap),
+:global(.lm-select-popper.lm-theme-dark .el-select-dropdown__list) {
     background-color: #18181b !important;
     border: 1px solid #27272a !important;
     color: #f4f4f5 !important;
 }
 
-:global(.el-select-dropdown__item) {
+:global(.lm-select-popper .el-select-dropdown__item) {
     color: var(--lm-text-secondary) !important;
 }
 
-:global(.el-select-dropdown__item.is-hovering),
-:global(.el-select-dropdown__item:hover) {
+:global(.lm-select-popper .el-select-dropdown__item.is-hovering),
+:global(.lm-select-popper .el-select-dropdown__item:hover) {
     background-color: var(--lm-bg-hover) !important;
     color: var(--lm-text-primary) !important;
 }
 
-:global(.el-select-dropdown__item.is-selected) {
+:global(.lm-select-popper .el-select-dropdown__item.is-selected) {
     color: var(--lm-primary) !important;
     background-color: var(--lm-primary-light) !important;
     font-weight: bold;
