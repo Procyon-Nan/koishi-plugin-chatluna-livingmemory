@@ -249,22 +249,20 @@
                             </template>
                             <div class="tab-pane-content">
                                 <el-table :data="snapshots" border v-loading="loading">
-                                    <el-table-column prop="id" label="ID" min-width="160" />
-                                    <el-table-column prop="strategy" label="策略" width="140" />
-                                    <el-table-column prop="query" label="查询" min-width="180" show-overflow-tooltip />
-                                    <el-table-column label="命中" width="80">
+                                    <el-table-column prop="id" label="ID" min-width="160" header-align="center" />
+                                    <el-table-column prop="strategy" label="策略" width="140" align="center" header-align="center" />
+                                    <el-table-column prop="query" label="查询" min-width="180" header-align="center" show-overflow-tooltip />
+                                    <el-table-column label="命中" width="80" align="center" header-align="center">
                                         <template #default="scope">{{ scope.row.resolvedItems.length }}</template>
                                     </el-table-column>
-                                    <el-table-column label="创建时间" min-width="160">
+                                    <el-table-column label="创建时间" min-width="160" align="center" header-align="center">
                                         <template #default="scope">{{ formatTime(scope.row.createdAt) }}</template>
                                     </el-table-column>
-                                    <el-table-column label="操作" width="140" fixed="right">
+                                    <el-table-column label="操作" width="180" align="center" header-align="center" fixed="right">
                                         <template #default="scope">
                                             <el-space>
                                                 <el-button
                                                     size="small"
-                                                    type="primary"
-                                                    link
                                                     @click="openSnapshotDialog(scope.row)"
                                                 >
                                                     详情
