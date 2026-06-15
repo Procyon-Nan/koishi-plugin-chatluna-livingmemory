@@ -623,7 +623,15 @@ const configWarnings = ref<MemoryConfigWarning[]>([])
 // Cache total dataset of entries for counting status and type amounts in local filters
 const allPresetMemories = ref<MemoryEntryRecord[]>([])
 
-const totalMemoryCount = computed(() => allPresetMemories.value.length)
+// Filter memories by current status for secondary category counts
+const statusFilteredMemories = computed(() => {
+    if (memoryStatus.value === 'all') {
+        return allPresetMemories.value
+    }
+    return allPresetMemories.value.filter(item => item.status === memoryStatus.value)
+})
+
+const totalMemoryCount = computed(() => statusFilteredMemories.value.length)
 
 const getStatusCount = (status: 'active' | 'archived' | 'all') => {
     if (status === 'all') {
@@ -634,9 +642,9 @@ const getStatusCount = (status: 'active' | 'archived' | 'all') => {
 
 const getTypeCount = (type: MemoryEntryType | '') => {
     if (type === '') {
-        return allPresetMemories.value.length
+        return statusFilteredMemories.value.length
     }
-    return allPresetMemories.value.filter(item => item.type === type).length
+    return statusFilteredMemories.value.filter(item => item.type === type).length
 }
 
 const activeTab = ref('memories')
