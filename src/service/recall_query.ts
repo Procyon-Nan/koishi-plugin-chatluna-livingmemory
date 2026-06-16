@@ -50,7 +50,7 @@ const buildFallbackQuery = (
         return cleanedQuery
     }
 
-    return `${currentMessage.speakerLabel} ${cleanedQuery}`.trim()
+    return `${currentMessage.speakerLabel}说：${cleanedQuery}`.trim()
 }
 
 const toPresetLabel = (scope: MemoryScope) => {
