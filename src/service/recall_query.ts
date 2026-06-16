@@ -13,6 +13,23 @@ import {
 import { buildRecallRewritePrompt } from './prompts'
 
 const semanticTextPattern = /[\p{L}\p{N}]/u
+const queryLineTerminatorPattern = /[。！？!?；;，,、：:]$/u
+
+const normalizeQueryLines = (lines: string[]) => {
+    return lines
+        .map((line) => line.trim().replace(/\s+/gu, ' '))
+        .filter((line) => semanticTextPattern.test(line))
+        .reduce((sentence, line) => {
+            if (sentence.length === 0) {
+                return line
+            }
+
+            const separator = queryLineTerminatorPattern.test(sentence)
+                ? ''
+                : '，'
+            return `${sentence}${separator}${line}`
+        }, '')
+}
 
 const stripFencedBlock = (value: string) => {
     return value
@@ -92,9 +109,7 @@ export class LivingMemoryRecallQueryBuilder {
         historyMessages: LivingMemoryTranscriptMessage[]
     ): Promise<RecallQueryResult> {
         const rawInput = currentMessage.contentLines.join('\n')
-        const cleanedQuery = currentMessage.contentLines
-            .filter((line) => semanticTextPattern.test(line))
-            .join('\n')
+        const cleanedQuery = normalizeQueryLines(currentMessage.contentLines)
         const fallbackQuery = buildFallbackQuery(currentMessage, cleanedQuery)
         const currentTranscript = this.formatter.toExtractionPayload([
             currentMessage
