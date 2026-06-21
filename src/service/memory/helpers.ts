@@ -11,6 +11,11 @@ export type DebugLogger = (message: string) => void
 export interface CharacterPresetProvider {
     preset?: {
         getAllPreset?: () => Promise<unknown>
+        getPreset?: (
+            presetName: string,
+            loadForDisk?: boolean,
+            throwError?: boolean
+        ) => Promise<unknown>
     }
 }
 

@@ -8,6 +8,7 @@ import type {
     UserProfileRepository
 } from '../types'
 import {
+    type CharacterPresetProvider,
     characterPresetSuffix,
     formatRenderedPresetPrompt
 } from './memory/helpers'
@@ -38,6 +39,45 @@ const unique = <T>(items: T[]) => Array.from(new Set(items))
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
     return value != null && typeof value === 'object' && !Array.isArray(value)
+}
+
+interface CharacterPresetPayload {
+    system?: {
+        rawString?: unknown
+    }
+}
+
+const toNonEmptyString = (value: unknown) => {
+    return typeof value === 'string' && value.trim().length > 0
+        ? value
+        : undefined
+}
+
+const toCharacterPresetName = (presetId: string) => {
+    return presetId.endsWith(characterPresetSuffix)
+        ? presetId.slice(0, -characterPresetSuffix.length)
+        : null
+}
+
+const getCharacterSystemRawString = (preset: unknown) => {
+    if (!isRecord(preset)) {
+        return undefined
+    }
+
+    const system = (preset as CharacterPresetPayload).system
+    return toNonEmptyString(system?.rawString)
+}
+
+const formatCharacterSystemPrompt = (systemPrompt: string) => {
+    const normalized = systemPrompt.trim()
+    if (normalized.length === 0) {
+        return null
+    }
+
+    return [
+        '# 当前 Character system prompt（仅用于理解“我”的人设，不要从此处抽取记忆）',
+        normalized
+    ].join('\n\n')
 }
 
 const truncateText = (value: string, maxLength: number) => {
@@ -494,42 +534,105 @@ export class LivingMemoryUserProfileService {
     }
 
     private async resolvePresetPrompt(presetId: string) {
-        const candidates = unique([
-            presetId,
-            presetId.endsWith(characterPresetSuffix)
-                ? presetId.slice(0, -characterPresetSuffix.length)
-                : presetId
-        ])
+        const characterPresetName = toCharacterPresetName(presetId)
+        if (characterPresetName != null) {
+            return await this.resolveCharacterPresetPrompt(
+                presetId,
+                characterPresetName
+            )
+        }
 
-        for (const candidate of candidates) {
-            try {
-                const preset = this.ctx.chatluna.preset.getPreset(
-                    candidate,
-                    false
-                ).value
-                if (preset == null) {
-                    continue
-                }
+        return await this.resolveChatLunaPresetPrompt(presetId)
+    }
 
-                const rendered =
-                    await this.ctx.chatluna.promptRenderer.renderPresetTemplate(
-                        preset
-                    )
-                const prompt = formatRenderedPresetPrompt(rendered.messages)
-                if (prompt != null) {
-                    return prompt
-                }
-            } catch (error) {
+    private async resolveChatLunaPresetPrompt(presetId: string) {
+        try {
+            const preset = this.ctx.chatluna.preset.getPreset(
+                presetId,
+                false
+            ).value
+            if (preset == null) {
+                return null
+            }
+
+            const rendered =
+                await this.ctx.chatluna.promptRenderer.renderPresetTemplate(
+                    preset
+                )
+            return formatRenderedPresetPrompt(rendered.messages)
+        } catch (error) {
+            this.debug(
+                [
+                    `memory user profile preset prompt skipped: presetId=${presetId}`,
+                    'source=chatluna',
+                    `error=${summarizeError(error)}`
+                ].join(' ')
+            )
+            return null
+        }
+    }
+
+    private async resolveCharacterPresetPrompt(
+        presetId: string,
+        presetName: string
+    ) {
+        const character = (
+            this.ctx as Context & {
+                chatluna_character?: CharacterPresetProvider
+            }
+        ).chatluna_character
+        const presetProvider = character?.preset
+        if (presetProvider?.getPreset == null) {
+            this.debug(
+                [
+                    `memory user profile preset prompt skipped: presetId=${presetId}`,
+                    'source=character',
+                    'reason=character-preset-unavailable'
+                ].join(' ')
+            )
+            return null
+        }
+
+        try {
+            const preset = await presetProvider.getPreset(
+                presetName,
+                false,
+                false
+            )
+            const rawString = getCharacterSystemRawString(preset)
+            if (rawString == null) {
                 this.debug(
                     [
                         `memory user profile preset prompt skipped: presetId=${presetId}`,
-                        `candidate=${candidate}`,
-                        `error=${summarizeError(error)}`
+                        'source=character',
+                        `presetName=${presetName}`,
+                        'reason=empty-system-prompt'
                     ].join(' ')
                 )
+                return null
             }
-        }
 
-        return null
+            const rendered =
+                await this.ctx.chatluna.promptRenderer.renderTemplate(
+                    rawString,
+                    {
+                        time: '',
+                        stickers: '',
+                        status: ''
+                    }
+                )
+
+            return formatCharacterSystemPrompt(rendered.text)
+        } catch (error) {
+            this.debug(
+                [
+                    `memory user profile preset prompt skipped: presetId=${presetId}`,
+                    'source=character',
+                    `presetName=${presetName}`,
+                    `error=${summarizeError(error)}`
+                ].join(' ')
+            )
+            return null
+        }
     }
 }
