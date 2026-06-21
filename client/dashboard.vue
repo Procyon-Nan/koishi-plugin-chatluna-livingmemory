@@ -156,69 +156,100 @@
                                 </span>
                             </template>
                             <div class="tab-pane-content">
-                                <el-table :data="memories" border v-loading="loading">
-                                    <el-table-column label="类型" width="80" align="center">
-                                        <template #default="scope">
-                                            <span :class="['type-text-span', getMemoryTagType(scope.row.type)]">
-                                                {{ getMemoryTypeLabel(scope.row.type) }}
-                                            </span>
-                                        </template>
-                                    </el-table-column>
-                                    <el-table-column label="状态" width="70" align="center">
-                                        <template #default="scope">
-                                            <span :class="['status-text-span', scope.row.status === 'archived' ? 'archived' : 'active']">
-                                                {{ scope.row.status === 'archived' ? '历史' : '活跃' }}
-                                            </span>
-                                        </template>
-                                    </el-table-column>
-                                    <el-table-column prop="summary" label="摘要" min-width="260" header-align="center" show-overflow-tooltip />
-                                    <el-table-column prop="content" label="内容" min-width="260" header-align="center" show-overflow-tooltip />
-                                    <el-table-column prop="sentiment" label="情绪" min-width="100" align="center" show-overflow-tooltip />
-                                    <el-table-column label="重要度" width="80" align="center">
-                                        <template #default="scope">
-                                            <span :style="getImportanceStyle(scope.row.importance)">
-                                                {{ formatImportance(scope.row.importance) }}
-                                            </span>
-                                        </template>
-                                    </el-table-column>
-                                    <el-table-column label="关键词" min-width="220" header-align="center">
-                                        <template #default="scope">
-                                            <el-space wrap>
-                                                <el-tag
-                                                    v-for="kw in scope.row.keywords"
-                                                    :key="kw"
-                                                    size="small"
-                                                    effect="plain"
-                                                >
-                                                    {{ kw }}
-                                                </el-tag>
-                                            </el-space>
-                                        </template>
-                                    </el-table-column>
-                                    <el-table-column label="创建时间" min-width="130" align="center">
-                                        <template #default="scope">{{ formatTime(scope.row.createdAt) }}</template>
-                                    </el-table-column>
-                                    <el-table-column label="更新时间" min-width="130" align="center">
-                                        <template #default="scope">{{ formatTime(scope.row.updatedAt) }}</template>
-                                    </el-table-column>
-                                    <el-table-column label="操作" width="180" fixed="right">
-                                        <template #default="scope">
-                                            <el-space>
-                                                <el-button size="small" @click="openEditDialog(scope.row)">
+                                <div class="memory-list-panel" v-loading="loading">
+                                    <el-empty
+                                        v-if="memories.length === 0 && !loading"
+                                        description="没有符合条件的记忆"
+                                        :image-size="64"
+                                    />
+
+                                    <div v-else class="memory-card-list">
+                                        <article
+                                            v-for="memory in memories"
+                                            :key="memory.id"
+                                            :class="[
+                                                'memory-card',
+                                                `memory-card--${memory.type}`,
+                                                { 'is-archived': memory.status === 'archived' }
+                                            ]"
+                                        >
+                                            <div class="memory-card-main">
+                                                <div class="memory-card-header">
+                                                    <div class="memory-card-title-block">
+                                                        <div class="memory-card-kicker">
+                                                            <span :class="['type-text-span', getMemoryTagType(memory.type)]">
+                                                                {{ getMemoryTypeLabel(memory.type) }}
+                                                            </span>
+                                                            <span :class="['status-text-span', memory.status]">
+                                                                {{ getMemoryStatusLabel(memory.status) }}
+                                                            </span>
+                                                            <span v-if="memory.sentiment" class="memory-emotion">
+                                                                {{ memory.sentiment }}
+                                                            </span>
+                                                        </div>
+                                                        <p v-if="memory.summary" class="memory-card-summary">
+                                                            {{ memory.summary }}
+                                                        </p>
+                                                    </div>
+
+                                                    <div class="memory-card-importance">
+                                                        <span class="memory-card-importance-label">重要度</span>
+                                                        <div
+                                                            class="importance-meter"
+                                                            :title="memory.importance == null ? '未设置重要度' : `重要度 ${formatImportance(memory.importance)}`"
+                                                        >
+                                                            <span
+                                                                :class="['importance-meter-fill', getImportanceTone(memory.importance)]"
+                                                                :style="{ width: formatImportancePercent(memory.importance) }"
+                                                            />
+                                                        </div>
+                                                        <span class="memory-card-importance-value">
+                                                            {{ formatImportance(memory.importance) || '-' }}
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                <p class="memory-card-content">
+                                                    {{ memory.content }}
+                                                </p>
+
+                                                <div class="memory-card-footer">
+                                                    <div class="memory-card-meta">
+                                                        <span>创建 {{ formatTime(memory.createdAt) }}</span>
+                                                        <span>更新 {{ formatTime(memory.updatedAt) }}</span>
+                                                    </div>
+                                                    <div
+                                                        v-if="memory.keywords.length > 0"
+                                                        class="memory-keywords"
+                                                    >
+                                                        <el-tag
+                                                            v-for="kw in memory.keywords"
+                                                            :key="kw"
+                                                            size="small"
+                                                            effect="plain"
+                                                        >
+                                                            {{ kw }}
+                                                        </el-tag>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="memory-card-actions">
+                                                <el-button size="small" @click="openEditDialog(memory)">
                                                     编辑
                                                 </el-button>
                                                 <el-button
                                                     size="small"
                                                     type="danger"
                                                     plain
-                                                    @click="removeMemory(scope.row.id)"
+                                                    @click="removeMemory(memory.id)"
                                                 >
                                                     删除
                                                 </el-button>
-                                            </el-space>
-                                        </template>
-                                    </el-table-column>
-                                </el-table>
+                                            </div>
+                                        </article>
+                                    </div>
+                                </div>
 
                                 <div class="pagination-container">
                                     <el-pagination
@@ -751,16 +782,41 @@ const getMemoryTagType = (
     return types[type] || 'info'
 }
 
-const getImportanceStyle = (
-    value: number | null | undefined
-): Record<string, string> => {
-    if (value == null) return {}
-    if (value >= 0.7) {
-        return { color: 'var(--lm-danger)', fontWeight: 'bold' }
-    } else if (value >= 0.4) {
-        return { color: 'var(--lm-primary)', fontWeight: 'bold' }
+const getMemoryStatusLabel = (status: MemoryEntryStatus): string => {
+    return status === 'archived' ? '归档' : '活跃'
+}
+
+const clampImportance = (value: number | null | undefined): number | null => {
+    if (value == null || !Number.isFinite(value)) {
+        return null
     }
-    return { color: 'var(--lm-text-tertiary)' }
+
+    return Math.min(1, Math.max(0, value))
+}
+
+const getImportanceTone = (
+    value: number | null | undefined
+): 'high' | 'medium' | 'low' | 'empty' => {
+    const normalized = clampImportance(value)
+    if (normalized == null) {
+        return 'empty'
+    }
+    if (normalized >= 0.7) {
+        return 'high'
+    }
+    if (normalized >= 0.4) {
+        return 'medium'
+    }
+    return 'low'
+}
+
+const formatImportancePercent = (value: number | null | undefined): string => {
+    const normalized = clampImportance(value)
+    if (normalized == null) {
+        return '0%'
+    }
+
+    return `${Math.round(normalized * 100)}%`
 }
 
 const getJobKindLabel = (kind: string): string => {
@@ -1705,6 +1761,260 @@ onMounted(() => {
 
 .config-warning-list li + li {
     margin-top: 4px;
+}
+
+/* Memory card list */
+.memory-list-panel {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 14px;
+    border: 1px solid var(--lm-border);
+    border-radius: 4px;
+    background-color: var(--lm-bg-secondary);
+}
+
+.memory-card-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.memory-card {
+    --memory-accent: var(--lm-primary);
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 16px;
+    padding: 16px 16px 16px 18px;
+    border: 1px solid var(--lm-border);
+    border-radius: 6px;
+    background-color: var(--lm-bg-primary);
+    box-shadow: var(--lm-shadow);
+    transition: border-color 150ms ease, background-color 150ms ease;
+}
+
+.memory-card::before {
+    content: '';
+    position: absolute;
+    inset: 12px auto 12px 0;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background-color: var(--memory-accent);
+}
+
+.memory-card:hover {
+    border-color: var(--lm-border-hover);
+}
+
+.memory-card.is-archived {
+    opacity: 0.82;
+}
+
+.memory-card--identity {
+    --memory-accent: var(--lm-primary);
+}
+
+.memory-card--preference {
+    --memory-accent: var(--lm-success);
+}
+
+.memory-card--fact {
+    --memory-accent: var(--lm-text-secondary);
+}
+
+.memory-card--plan {
+    --memory-accent: var(--lm-warning);
+}
+
+.memory-card--context {
+    --memory-accent: var(--lm-danger);
+}
+
+.memory-card--other {
+    --memory-accent: var(--lm-text-tertiary);
+}
+
+.memory-card-main {
+    min-width: 0;
+}
+
+.memory-card-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 150px;
+    gap: 18px;
+    align-items: start;
+}
+
+.memory-card-title-block {
+    min-width: 0;
+}
+
+.memory-card-kicker {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.memory-emotion {
+    display: inline-flex;
+    align-items: center;
+    max-width: 160px;
+    padding: 2px 8px;
+    border: 1px solid var(--lm-border);
+    border-radius: 999px;
+    background-color: var(--lm-bg-secondary);
+    color: var(--lm-text-secondary);
+    font-size: 12px;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.memory-card-summary {
+    margin: 8px 0 0;
+    color: var(--lm-text-primary);
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.5;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.memory-card-content {
+    margin: 12px 0 0;
+    color: var(--lm-text-primary);
+    font-size: 14px;
+    line-height: 1.65;
+    white-space: pre-wrap;
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.memory-card-importance {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 6px 10px;
+    align-items: center;
+}
+
+.memory-card-importance-label {
+    grid-column: 1 / -1;
+    color: var(--lm-text-tertiary);
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.memory-card-importance-value {
+    color: var(--lm-text-secondary);
+    font-family: var(--lm-font-mono);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.importance-meter {
+    width: 100%;
+    height: 6px;
+    overflow: hidden;
+    border-radius: 999px;
+    background-color: var(--lm-bg-hover);
+}
+
+.importance-meter-fill {
+    display: block;
+    height: 100%;
+    min-width: 0;
+    border-radius: inherit;
+    background-color: var(--lm-text-tertiary);
+    transition: width 150ms ease;
+}
+
+.importance-meter-fill.high {
+    background-color: var(--lm-danger);
+}
+
+.importance-meter-fill.medium {
+    background-color: var(--lm-primary);
+}
+
+.importance-meter-fill.low {
+    background-color: var(--lm-text-tertiary);
+}
+
+.importance-meter-fill.empty {
+    background-color: transparent;
+}
+
+.memory-card-footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 16px;
+    align-items: center;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--lm-border);
+}
+
+.memory-card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    color: var(--lm-text-tertiary);
+    font-family: var(--lm-font-mono);
+    font-size: 11px;
+}
+
+.memory-keywords {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-left: auto;
+}
+
+.memory-card-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: stretch;
+    justify-content: flex-start;
+    width: 72px;
+}
+
+.memory-card-actions :deep(.el-button) {
+    width: 100%;
+    margin-left: 0 !important;
+}
+
+@media (max-width: 768px) {
+    .memory-list-panel {
+        padding: 10px;
+    }
+
+    .memory-card {
+        grid-template-columns: 1fr;
+    }
+
+    .memory-card-header {
+        grid-template-columns: 1fr;
+    }
+
+    .memory-card-importance {
+        max-width: 220px;
+    }
+
+    .memory-keywords {
+        margin-left: 0;
+    }
+
+    .memory-card-actions {
+        flex-direction: row;
+        width: 100%;
+    }
 }
 
 /* Tables styling */
