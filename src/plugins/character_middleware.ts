@@ -1,4 +1,4 @@
-import { Context, type Session } from 'koishi'
+import { Context, type Logger, type Session } from 'koishi'
 import type { Config } from '../index'
 import {
     type CharacterTranscriptSourceMessage,
@@ -11,9 +11,15 @@ import {
     toCharacterTranscriptMessagesWithDiagnostics
 } from '../service/character_transcript_adapter'
 import { takeRecentRounds } from '../service/shared/rounds'
+import { collectUserProfileSpeakerLabels } from '../service/user_profile'
 import type { MemoryScope } from '../types'
 
 type CharacterMessage = CharacterTranscriptSourceMessage
+
+type PromptSections = {
+    snapshot: string
+    userProfiles: string
+}
 
 interface CharacterPresetPayload {
     system?: {
@@ -191,9 +197,24 @@ const getCharacterSystemRawString = (preset: unknown) => {
     return toNonEmptyString(system?.rawString)
 }
 
+const formatPromptVariable = (sections: PromptSections) => {
+    const snapshot = sections.snapshot.trim()
+    const userProfiles = sections.userProfiles.trim()
+    const parts: string[] = []
+
+    if (snapshot.length > 0) {
+        parts.push(snapshot)
+    }
+    if (userProfiles.length > 0) {
+        parts.push(`【相关用户画像】\n${userProfiles}`)
+    }
+
+    return parts.join('\n\n')
+}
+
 const renderCharacterPresetPromptOverride = async (
     ctx: Context,
-    logger: ReturnType<Context['logger']>,
+    logger: Logger,
     payload: CharacterAfterChatEventPayload
 ) => {
     const rawString = getCharacterSystemRawString(payload.preset)
@@ -227,6 +248,7 @@ export async function apply(ctx: Context, config: Config) {
     const logger = ctx.logger('chatluna-livingmemory')
     const events = ctx as unknown as CharacterEventRegistrar
     const completedRoundCountByScope = new Map<string, number>()
+    const profileSpeakerLabelsByScope = new Map<string, string[]>()
     const debug = (message: string) => {
         if (config.debug) {
             logger.info(message)
@@ -248,21 +270,26 @@ export async function apply(ctx: Context, config: Config) {
                 }
 
                 try {
-                    const snapshot =
-                        await ctx.chatluna_living_memory.hydratePromptVariable(
-                            scope
+                    const speakerLabels =
+                        profileSpeakerLabelsByScope.get(toScopeKey(scope)) ?? []
+                    const sections =
+                        await ctx.chatluna_living_memory.hydratePromptSections(
+                            scope,
+                            { speakerLabels }
                         )
+                    const rendered = formatPromptVariable(sections)
 
                     debug(
                         [
                             'character living_memory rendered:',
                             `conversationId=${scope.conversationId}`,
                             `presetId=${scope.presetId}`,
-                            `snapshotLength=${snapshot.length}`
+                            `snapshotLength=${sections.snapshot.length}`,
+                            `userProfilesLength=${sections.userProfiles.length}`
                         ].join(' ')
                     )
 
-                    return snapshot
+                    return rendered
                 } catch (error) {
                     logger.warn(error)
                     return ''
@@ -312,33 +339,36 @@ export async function apply(ctx: Context, config: Config) {
                 (message) =>
                     !isSameCharacterMessage(message, payload.focusMessage)
             )
+            const history = toCharacterTranscriptMessagesWithDiagnostics(
+                scope,
+                payload.session,
+                historyMessages
+            )
+            if (history.diagnostics.length > 0) {
+                debug(
+                    [
+                        'character before-chat history transcript diagnostics:',
+                        `conversationId=${scope.conversationId}`,
+                        `presetId=${scope.presetId}`,
+                        `dropped=${history.diagnostics.length}`,
+                        formatCharacterTranscriptDiagnostics(
+                            history.diagnostics
+                        )
+                    ].join(' ')
+                )
+            }
+            profileSpeakerLabelsByScope.set(
+                toScopeKey(scope),
+                collectUserProfileSpeakerLabels([
+                    ...history.messages,
+                    currentTranscript.message
+                ])
+            )
 
             await ctx.chatluna_living_memory.queueRecall(
                 scope,
                 currentTranscript.message,
-                async () => {
-                    const history =
-                        toCharacterTranscriptMessagesWithDiagnostics(
-                            scope,
-                            payload.session,
-                            historyMessages
-                        )
-                    if (history.diagnostics.length > 0) {
-                        debug(
-                            [
-                                'character before-chat history transcript diagnostics:',
-                                `conversationId=${scope.conversationId}`,
-                                `presetId=${scope.presetId}`,
-                                `dropped=${history.diagnostics.length}`,
-                                formatCharacterTranscriptDiagnostics(
-                                    history.diagnostics
-                                )
-                            ].join(' ')
-                        )
-                    }
-
-                    return history.messages
-                }
+                async () => history.messages
             )
         }
     )
@@ -367,6 +397,10 @@ export async function apply(ctx: Context, config: Config) {
             }
             const messages = transcript.messages
             const scopeKey = toScopeKey(scope)
+            profileSpeakerLabelsByScope.set(
+                scopeKey,
+                collectUserProfileSpeakerLabels(messages)
+            )
             const observedChatCount = countCharacterCompletedRounds(messages)
             const previousChatCount = completedRoundCountByScope.get(scopeKey)
             const currentReplyCompletesRound =
@@ -437,6 +471,11 @@ export async function apply(ctx: Context, config: Config) {
             for (const key of completedRoundCountByScope.keys()) {
                 if (key.endsWith(`\n${payload.sessionKey}`)) {
                     completedRoundCountByScope.delete(key)
+                }
+            }
+            for (const key of profileSpeakerLabelsByScope.keys()) {
+                if (key.endsWith(`\n${payload.sessionKey}`)) {
+                    profileSpeakerLabelsByScope.delete(key)
                 }
             }
         }

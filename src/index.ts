@@ -46,12 +46,21 @@ export const Config: Schema<Config> = Schema.object({
             '开启 chatLuna 主插件的记忆注入（character 插件需通过预设中的 {living_memory} 变量注入）'
         )
         .default(true),
+    enableUserProfileInjection: Schema.boolean()
+        .description('开启用户画像注入。')
+        .default(false),
     extractModel: Schema.dynamic('model')
         .description('用于从对话中提取记忆的 LLM 模型。')
         .default('无'),
     dreamModel: Schema.dynamic('model')
         .description('用于 Dream 记忆整理与合并决策的 LLM 模型。')
         .default('无'),
+    userProfileMemoryLimit: Schema.number()
+        .min(5)
+        .max(100)
+        .step(1)
+        .description('生成单个用户画像时可送入 LLM 的相关记忆条数上限。')
+        .default(20),
     enableRecallQueryRewrite: Schema.boolean()
         .description('是否在召回前使用 LLM 根据历史信息改写检索的查询文本。')
         .default(false),

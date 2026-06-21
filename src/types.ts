@@ -2,7 +2,8 @@ import type {
     JobListQuery,
     MemoryListQuery,
     PageResult,
-    SnapshotListQuery
+    SnapshotListQuery,
+    UserProfileListQuery
 } from './query'
 import {} from 'koishi-plugin-chatluna/services/chat'
 import type { ChatLunaLivingMemoryService } from './service/memory'
@@ -120,6 +121,24 @@ export interface MemoryJobRecord {
     updatedAt: Date
 }
 
+export interface UserProfileRecord {
+    id: string
+    presetId: string
+    speakerKey: string
+    speakerLabel: string
+    content: string
+    sourceMemoryIds: string[]
+    createdAt: Date
+    updatedAt: Date
+}
+
+export interface UserProfileInput {
+    speakerKey: string
+    speakerLabel: string
+    content: string
+    sourceMemoryIds: string[]
+}
+
 export interface DreamTriggerResult {
     success: true
     started: boolean
@@ -176,8 +195,10 @@ export interface ExtractionPayload {
 
 export interface LivingMemoryConfig {
     enableSnapshotInjection: boolean
+    enableUserProfileInjection: boolean
     extractModel: string
     dreamModel: string
+    userProfileMemoryLimit: number
     enableRecallQueryRewrite: boolean
     recallRewriteRounds: number
     recallRewriteModel: string
@@ -251,6 +272,18 @@ export interface ExtractionRepository {
     deleteMemory(id: string): Promise<void>
 }
 
+export interface UserProfileRepository {
+    listUserProfilesByPreset(presetId: string): Promise<UserProfileRecord[]>
+    listUserProfilesBySpeakerKeys(
+        presetId: string,
+        speakerKeys: string[]
+    ): Promise<UserProfileRecord[]>
+    replaceUserProfile(
+        presetId: string,
+        profile: UserProfileInput
+    ): Promise<void>
+}
+
 export interface MessageFormatter {
     takeRecentRounds(
         messages: LivingMemoryTranscriptMessage[],
@@ -270,6 +303,7 @@ declare module 'koishi' {
         living_memory_entry: MemoryEntryRecord
         living_memory_snapshot: MemorySnapshotRecord
         living_memory_job: MemoryJobRecord
+        living_memory_user_profile: UserProfileRecord
     }
 }
 
@@ -306,6 +340,9 @@ declare module '@koishijs/plugin-console' {
         'living-memory/listJobs': (
             query: JobListQuery
         ) => Promise<PageResult<MemoryJobRecord>>
+        'living-memory/listUserProfiles': (
+            query: UserProfileListQuery
+        ) => Promise<PageResult<UserProfileRecord>>
         'living-memory/runDream': (
             presetId: string
         ) => Promise<DreamTriggerResult>

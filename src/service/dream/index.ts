@@ -8,6 +8,7 @@ import {
 } from '../shared/utils'
 import { DreamClusterer } from './clustering'
 import { DreamExecutor } from './executor'
+import { LivingMemoryUserProfileService } from '../user_profile'
 import { parseDreamOperations } from './parser'
 import { buildDreamPrompt } from '../prompts'
 import {
@@ -24,6 +25,7 @@ export type { DreamRunResult } from './types'
 export class LivingMemoryDreamService {
     private readonly clusterer: DreamClusterer
     private readonly executor: DreamExecutor
+    private readonly userProfiles: LivingMemoryUserProfileService
 
     constructor(
         private readonly ctx: Context,
@@ -33,6 +35,12 @@ export class LivingMemoryDreamService {
     ) {
         this.clusterer = new DreamClusterer(ctx, config, repository, debug)
         this.executor = new DreamExecutor(repository)
+        this.userProfiles = new LivingMemoryUserProfileService(
+            ctx,
+            config,
+            repository,
+            debug
+        )
     }
 
     async run(presetId: string): Promise<DreamRunResult> {
@@ -87,8 +95,18 @@ export class LivingMemoryDreamService {
             archivedEntries,
             invokeModel
         )
+        const finalEntries = await this.repository.listEntriesByPreset(presetId)
+        const profileResult = await this.userProfiles.regenerate(
+            presetId,
+            finalEntries.filter((entry) => entry.status === 'active'),
+            invokeModel
+        )
         const stats = sumStats([activeResult, archivedResult])
-        const detail = [activeResult.detail, archivedResult.detail].join('\n')
+        const detail = [
+            activeResult.detail,
+            archivedResult.detail,
+            profileResult.detail
+        ].join('\n')
 
         this.debug(
             [

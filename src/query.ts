@@ -3,7 +3,8 @@ import type {
     MemoryEntryStatus,
     MemoryJobRecord,
     MemoryJobStatus,
-    MemorySnapshotRecord
+    MemorySnapshotRecord,
+    UserProfileRecord
 } from './types'
 
 export interface PageRequest {
@@ -27,6 +28,10 @@ export interface JobListQuery extends PageRequest {
     presetId: string
     kind?: MemoryJobRecord['kind']
     status?: MemoryJobStatus
+}
+
+export interface UserProfileListQuery extends PageRequest {
+    presetId: string
 }
 
 export interface PageResult<T> {
@@ -142,5 +147,20 @@ export const filterJobList = (
     const sorted = filtered.sort(
         (left, right) => +right.createdAt - +left.createdAt
     )
+    return paginate(sorted, query.page, query.pageSize)
+}
+
+export const filterUserProfileList = (
+    items: UserProfileRecord[],
+    query: UserProfileListQuery
+): PageResult<UserProfileRecord> => {
+    const sorted = items.sort((left, right) => {
+        if (+right.updatedAt !== +left.updatedAt) {
+            return +right.updatedAt - +left.updatedAt
+        }
+
+        return left.speakerLabel.localeCompare(right.speakerLabel)
+    })
+
     return paginate(sorted, query.page, query.pageSize)
 }

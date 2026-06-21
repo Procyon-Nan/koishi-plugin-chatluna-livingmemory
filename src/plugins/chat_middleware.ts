@@ -7,6 +7,13 @@ import {
     toChatLunaTranscriptMessageResult,
     toChatLunaTranscriptMessagesWithDiagnostics
 } from '../service/chatluna_transcript_adapter'
+import { collectUserProfileSpeakerLabels } from '../service/user_profile'
+import type { LivingMemoryTranscriptMessage } from '../types'
+
+type PromptSections = {
+    snapshot: string
+    userProfiles: string
+}
 
 const toNonEmptyString = (value: unknown) => {
     return typeof value === 'string' && value.trim().length > 0
@@ -55,13 +62,23 @@ const writeRawUserContent = (
     setLivingMemoryRawContent(message, rawContent)
 }
 
-const formatSnapshotInjection = (snapshot: string) => {
-    const normalized = snapshot.trim()
-    if (normalized.length === 0) {
+const formatPromptInjection = (sections: PromptSections) => {
+    const snapshot = sections.snapshot.trim()
+    const userProfiles = sections.userProfiles.trim()
+    const parts: string[] = []
+
+    if (snapshot.length > 0) {
+        parts.push(`【你的记忆】\n${snapshot}`)
+    }
+    if (userProfiles.length > 0) {
+        parts.push(`【相关用户画像】\n${userProfiles}`)
+    }
+
+    if (parts.length === 0) {
         return null
     }
 
-    return `【你的记忆】\n${normalized}`
+    return parts.join('\n\n')
 }
 
 export async function apply(ctx: Context, config: Config) {
@@ -148,57 +165,11 @@ export async function apply(ctx: Context, config: Config) {
                 return
             }
 
-            const enableSnapshotInjection =
-                config.enableSnapshotInjection !== false
-            let snapshot = ''
-            if (enableSnapshotInjection) {
-                try {
-                    snapshot =
-                        await ctx.chatluna_living_memory.hydratePromptVariable(
-                            scope
-                        )
-                    const injection = formatSnapshotInjection(snapshot)
-                    if (injection != null) {
-                        ctx.chatluna.contextManager.inject({
-                            conversationId,
-                            name: 'after_user_message',
-                            // 交给 ChatLuna core 转成 HumanMessage，避免不同
-                            // @langchain/core 实例导致 instanceof 失效。
-                            value: injection,
-                            once: true
-                        })
-                        debug(
-                            [
-                                'before-chat snapshot injection queued:',
-                                `conversationId=${conversationId}`,
-                                `presetId=${presetId}`,
-                                `injectionLength=${injection.length}`
-                            ].join(' ')
-                        )
-                    }
-                } catch (error) {
-                    logger.warn(error)
-                }
-            }
-
-            const snapshotInjectionStatus = enableSnapshotInjection
-                ? 'enabled'
-                : 'disabled'
-
-            debug(
-                [
-                    'before-chat recall queued:',
-                    `conversationId=${conversationId}`,
-                    `presetId=${presetId}`,
-                    `snapshotInjection=${snapshotInjectionStatus}`,
-                    `snapshotLength=${snapshot.length}`
-                ].join(' ')
-            )
-
-            await ctx.chatluna_living_memory.queueRecall(
-                scope,
-                currentTranscript.message,
-                async () => {
+            let historyMessagesPromise: Promise<
+                LivingMemoryTranscriptMessage[]
+            > | null = null
+            const loadHistoryMessages = () => {
+                historyMessagesPromise ??= (async () => {
                     const history = toChatLunaTranscriptMessagesWithDiagnostics(
                         scope,
                         await chatInterface.chatHistory.getMessages()
@@ -218,7 +189,83 @@ export async function apply(ctx: Context, config: Config) {
                     }
 
                     return history.messages
+                })()
+
+                return historyMessagesPromise
+            }
+
+            const enableSnapshotInjection =
+                config.enableSnapshotInjection !== false
+            const enableUserProfileInjection =
+                config.enableUserProfileInjection === true
+            let sections = {
+                snapshot: '',
+                userProfiles: ''
+            }
+            if (enableSnapshotInjection || enableUserProfileInjection) {
+                try {
+                    const historyMessages = enableUserProfileInjection
+                        ? await loadHistoryMessages()
+                        : []
+                    const speakerLabels = collectUserProfileSpeakerLabels([
+                        ...historyMessages,
+                        currentTranscript.message
+                    ])
+                    sections =
+                        await ctx.chatluna_living_memory.hydratePromptSections(
+                            scope,
+                            {
+                                includeSnapshot: enableSnapshotInjection,
+                                speakerLabels
+                            }
+                        )
+                    const injection = formatPromptInjection(sections)
+                    if (injection != null) {
+                        ctx.chatluna.contextManager.inject({
+                            conversationId,
+                            name: 'after_user_message',
+                            // 交给 ChatLuna core 转成 HumanMessage，避免不同
+                            // @langchain/core 实例导致 instanceof 失效。
+                            value: injection,
+                            once: true
+                        })
+                        debug(
+                            [
+                                'before-chat prompt injection queued:',
+                                `conversationId=${conversationId}`,
+                                `presetId=${presetId}`,
+                                `injectionLength=${injection.length}`
+                            ].join(' ')
+                        )
+                    }
+                } catch (error) {
+                    logger.warn(error)
                 }
+            }
+
+            const snapshotInjectionStatus = enableSnapshotInjection
+                ? 'enabled'
+                : 'disabled'
+            const userProfileInjectionStatus = enableUserProfileInjection
+                ? 'enabled'
+                : 'disabled'
+
+            debug(
+                [
+                    'before-chat recall queued:',
+                    `conversationId=${conversationId}`,
+                    `presetId=${presetId}`,
+                    `snapshotInjection=${snapshotInjectionStatus}`,
+                    `snapshotLength=${sections.snapshot.length}`,
+                    `userProfileInjection=${userProfileInjectionStatus}`,
+                    `userProfilesLength=${sections.userProfiles.length}`
+                ].join(' ')
+            )
+
+            await ctx.chatluna_living_memory.queueRecall(
+                scope,
+                currentTranscript.message,
+                loadHistoryMessages
             )
         }
     )

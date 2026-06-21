@@ -14,7 +14,10 @@ import type {
     MemoryScope,
     MemorySnapshotRecord,
     RecallRepository,
-    SnapshotRepository
+    SnapshotRepository,
+    UserProfileInput,
+    UserProfileRecord,
+    UserProfileRepository
 } from '../types'
 
 const defaultKeywords = (content: string) => {
@@ -29,6 +32,8 @@ const defaultKeywords = (content: string) => {
     ).slice(0, 12)
 }
 
+const keywordFingerprintSeparator = '\u0000'
+
 const normalizeSentiment = (sentiment: string | null | undefined) => {
     const normalized = sentiment?.trim()
     return normalized?.length ? normalized : null
@@ -37,12 +42,16 @@ const normalizeSentiment = (sentiment: string | null | undefined) => {
 const normalizeImportance = (
     importance: number | string | null | undefined
 ) => {
-    const normalized =
-        typeof importance === 'number'
-            ? importance
-            : typeof importance === 'string' && importance.trim().length > 0
-              ? Number(importance.trim())
-              : Number.NaN
+    let normalized = Number.NaN
+
+    if (typeof importance === 'number') {
+        normalized = importance
+    } else if (typeof importance === 'string') {
+        const trimmed = importance.trim()
+        if (trimmed.length > 0) {
+            normalized = Number(trimmed)
+        }
+    }
 
     if (!Number.isFinite(normalized)) {
         return null
@@ -55,6 +64,21 @@ const normalizeStatus = (
     status: MemoryEntryStatus | string | null | undefined
 ): MemoryEntryStatus => {
     return status === 'archived' ? 'archived' : 'active'
+}
+
+const resolveKeywords = (
+    current: Pick<MemoryEntryRecord, 'keywords'>,
+    patch: Partial<MemoryMutationInput>,
+    content: string
+) => {
+    if (patch.keywords?.length) {
+        return patch.keywords.slice(0, 12)
+    }
+    if (patch.content != null) {
+        return defaultKeywords(content)
+    }
+
+    return current.keywords
 }
 
 const normalizeEntryRecord = (
@@ -72,12 +96,27 @@ const normalizeEntryRecord = (
             : null
 })
 
+const normalizeUserProfileRecord = (
+    record: UserProfileRecord
+): UserProfileRecord => ({
+    ...record,
+    speakerKey: record.speakerKey.trim(),
+    speakerLabel: record.speakerLabel.trim(),
+    content: record.content.trim(),
+    sourceMemoryIds: Array.isArray(record.sourceMemoryIds)
+        ? record.sourceMemoryIds.filter(
+              (id): id is string => typeof id === 'string' && id.length > 0
+          )
+        : []
+})
+
 export class LivingMemoryRepository
     implements
         RecallRepository,
         SnapshotRepository,
         JobRepository,
-        ExtractionRepository
+        ExtractionRepository,
+        UserProfileRepository
 {
     constructor(private readonly ctx: Context) {}
 
@@ -159,6 +198,24 @@ export class LivingMemoryRepository
                 createdAt: 'timestamp',
                 startedAt: 'timestamp',
                 finishedAt: 'timestamp',
+                updatedAt: 'timestamp'
+            },
+            {
+                autoInc: false,
+                primary: 'id'
+            }
+        )
+
+        this.ctx.model.extend(
+            'living_memory_user_profile',
+            {
+                id: 'string(64)',
+                presetId: 'string(255)',
+                speakerKey: 'string(255)',
+                speakerLabel: 'string(255)',
+                content: 'text',
+                sourceMemoryIds: 'json',
+                createdAt: 'timestamp',
                 updatedAt: 'timestamp'
             },
             {
@@ -476,41 +533,41 @@ export class LivingMemoryRepository
         }
 
         const content = patch.content ?? current.content
-        const keywords = patch.keywords?.length
-            ? patch.keywords.slice(0, 12)
-            : patch.content != null
-              ? defaultKeywords(content)
-              : current.keywords
+        const keywords = resolveKeywords(current, patch, content)
         const summary =
             patch.summary === undefined
                 ? (current.summary ?? null)
                 : patch.summary
+        const status =
+            patch.status === undefined
+                ? normalizeStatus(current.status)
+                : normalizeStatus(patch.status)
+        const sentiment =
+            patch.sentiment === undefined
+                ? normalizeSentiment(current.sentiment)
+                : normalizeSentiment(patch.sentiment)
+        const importance =
+            patch.importance === undefined
+                ? normalizeImportance(current.importance)
+                : normalizeImportance(patch.importance)
         // 内容/摘要/关键词变化时需要让已缓存的向量失效，由召回时按需重算
         const semanticChanged =
             content !== current.content ||
             summary !== (current.summary ?? null) ||
-            keywords.join(' ') !== current.keywords.join(' ')
+            keywords.join(keywordFingerprintSeparator) !==
+                current.keywords.join(keywordFingerprintSeparator)
 
         await this.ctx.database.set(
             'living_memory_entry',
             { id },
             {
                 type: patch.type ?? current.type,
-                status:
-                    patch.status === undefined
-                        ? normalizeStatus(current.status)
-                        : normalizeStatus(patch.status),
+                status,
                 content,
                 keywords,
                 summary,
-                sentiment:
-                    patch.sentiment === undefined
-                        ? normalizeSentiment(current.sentiment)
-                        : normalizeSentiment(patch.sentiment),
-                importance:
-                    patch.importance === undefined
-                        ? normalizeImportance(current.importance)
-                        : normalizeImportance(patch.importance),
+                sentiment,
+                importance,
                 ...(semanticChanged
                     ? { embedding: null, embeddingModelId: null }
                     : {}),
@@ -548,24 +605,110 @@ export class LivingMemoryRepository
         await this.ctx.database.remove('living_memory_entry', { id })
     }
 
+    async listUserProfilesByPreset(
+        presetId: string
+    ): Promise<UserProfileRecord[]> {
+        const profiles = await this.ctx.database.get(
+            'living_memory_user_profile',
+            { presetId }
+        )
+
+        return profiles
+            .map(normalizeUserProfileRecord)
+            .sort((left, right) =>
+                left.speakerLabel.localeCompare(right.speakerLabel)
+            )
+    }
+
+    async listUserProfilesBySpeakerKeys(
+        presetId: string,
+        speakerKeys: string[]
+    ): Promise<UserProfileRecord[]> {
+        const keys = [...new Set(speakerKeys)].filter((key) => key.length > 0)
+        if (keys.length === 0) {
+            return []
+        }
+
+        const profiles = await this.ctx.database.get(
+            'living_memory_user_profile',
+            {
+                presetId,
+                speakerKey: {
+                    $in: keys
+                }
+            }
+        )
+
+        return profiles.map(normalizeUserProfileRecord)
+    }
+
+    async replaceUserProfile(presetId: string, profile: UserProfileInput) {
+        const existing = (
+            await this.ctx.database.get('living_memory_user_profile', {
+                presetId,
+                speakerKey: profile.speakerKey
+            })
+        )
+            .map(normalizeUserProfileRecord)
+            .sort((left, right) => +left.createdAt - +right.createdAt)
+        const current = existing[0]
+        const now = new Date()
+        const record = {
+            presetId,
+            speakerKey: profile.speakerKey,
+            speakerLabel: profile.speakerLabel,
+            content: profile.content,
+            sourceMemoryIds: profile.sourceMemoryIds,
+            updatedAt: now
+        }
+
+        if (current == null) {
+            await this.ctx.database.create('living_memory_user_profile', {
+                ...record,
+                id: randomUUID(),
+                createdAt: now
+            })
+            return
+        }
+
+        await this.ctx.database.set(
+            'living_memory_user_profile',
+            { id: current.id },
+            record
+        )
+
+        const staleIds = existing.slice(1).map((profile) => profile.id)
+        if (staleIds.length > 0) {
+            await this.ctx.database.remove('living_memory_user_profile', {
+                id: {
+                    $in: staleIds
+                }
+            })
+        }
+    }
+
     async clearAllByPreset(presetId: string) {
         await Promise.all([
             this.ctx.database.remove('living_memory_entry', { presetId }),
             this.ctx.database.remove('living_memory_snapshot', { presetId }),
-            this.ctx.database.remove('living_memory_job', { presetId })
+            this.ctx.database.remove('living_memory_job', { presetId }),
+            this.ctx.database.remove('living_memory_user_profile', { presetId })
         ])
     }
 
     async listDistinctPresetIds(): Promise<string[]> {
-        const [entries, snapshots, jobs] = await Promise.all([
+        const [entries, snapshots, jobs, profiles] = await Promise.all([
             this.ctx.database.get('living_memory_entry', {}, ['presetId']),
             this.ctx.database.get('living_memory_snapshot', {}, ['presetId']),
-            this.ctx.database.get('living_memory_job', {}, ['presetId'])
+            this.ctx.database.get('living_memory_job', {}, ['presetId']),
+            this.ctx.database.get('living_memory_user_profile', {}, [
+                'presetId'
+            ])
         ])
 
         return [
             ...new Set(
-                [...entries, ...snapshots, ...jobs]
+                [...entries, ...snapshots, ...jobs, ...profiles]
                     .map((record) => record.presetId)
                     .filter((presetId) => presetId.length > 0)
             )

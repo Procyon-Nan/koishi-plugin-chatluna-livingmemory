@@ -7,15 +7,18 @@ import { LivingMemoryMessageFormatter } from '../message_formatter'
 import { LivingMemoryRecallQueryBuilder } from '../recall_query'
 import { LivingMemoryRepository } from '../repository'
 import { LivingMemoryRetriever } from '../retriever'
+import { LivingMemoryUserProfileService } from '../user_profile'
 import { isModelConfigured } from '../shared/utils'
 import {
     filterJobList,
     filterMemoryList,
     filterSnapshotList,
+    filterUserProfileList,
     type JobListQuery,
     type MemoryListQuery,
     type PageResult,
-    type SnapshotListQuery
+    type SnapshotListQuery,
+    type UserProfileListQuery
 } from '../../query'
 import type {
     DreamTriggerResult,
@@ -45,6 +48,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     private readonly extractionCoordinator: LivingMemoryExtractionCoordinator
     private readonly dreamCoordinator: LivingMemoryDreamCoordinator
     private readonly presetCatalog: LivingMemoryPresetCatalog
+    private readonly userProfiles: LivingMemoryUserProfileService
 
     constructor(
         public readonly ctx: Context,
@@ -63,6 +67,12 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         const extractor = new LivingMemoryExtractor(ctx, config.extractModel)
         const formatter = new LivingMemoryMessageFormatter()
         const recallQuery = new LivingMemoryRecallQueryBuilder(ctx, config)
+        this.userProfiles = new LivingMemoryUserProfileService(
+            ctx,
+            config,
+            this.repository,
+            debug
+        )
         const dream = new LivingMemoryDreamService(
             ctx,
             config,
@@ -249,6 +259,29 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         return await this.snapshotCache.hydrate(scope)
     }
 
+    async hydratePromptSections(
+        scope: Pick<MemoryScope, 'presetId' | 'conversationId'>,
+        options: {
+            includeSnapshot?: boolean
+            speakerLabels?: string[]
+        } = {}
+    ) {
+        const [snapshot, userProfiles] = await Promise.all([
+            options.includeSnapshot === false
+                ? Promise.resolve('')
+                : this.snapshotCache.hydrate(scope),
+            this.userProfiles.renderForSpeakers(
+                scope.presetId,
+                options.speakerLabels ?? []
+            )
+        ])
+
+        return {
+            snapshot,
+            userProfiles
+        }
+    }
+
     async queueRecall(
         scope: MemoryScope,
         currentMessage: LivingMemoryTranscriptMessage,
@@ -353,6 +386,13 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     async listJobs(query: JobListQuery) {
         const items = await this.repository.listJobsByPreset(query.presetId)
         return filterJobList(items, query)
+    }
+
+    async listUserProfiles(query: UserProfileListQuery) {
+        const items = await this.repository.listUserProfilesByPreset(
+            query.presetId
+        )
+        return filterUserProfileList(items, query)
     }
 
     async runDream(presetId: string): Promise<DreamTriggerResult> {

@@ -71,6 +71,17 @@ export interface MemoryJobRecord {
     updatedAt: Date
 }
 
+export interface UserProfileRecord {
+    id: string
+    presetId: string
+    speakerKey: string
+    speakerLabel: string
+    content: string
+    sourceMemoryIds: string[]
+    createdAt: Date
+    updatedAt: Date
+}
+
 export interface DreamTriggerResult {
     success: true
     started: boolean
@@ -162,6 +173,13 @@ declare module '@koishijs/client' {
                 pageSize?: number
             }
         ) => PageResult<MemoryJobRecord>
+        'living-memory/listUserProfiles': (
+            query: {
+                presetId: string
+                page?: number
+                pageSize?: number
+            }
+        ) => PageResult<UserProfileRecord>
         'living-memory/runDream': (
             presetId: string
         ) => DreamTriggerResult

@@ -1,29 +1,30 @@
+import { existsSync, realpathSync } from 'fs'
 import { resolve } from 'path'
 import { Context } from 'koishi'
 import type {} from '@koishijs/plugin-console'
 import type { Config } from '../index'
-import type { JobListQuery, MemoryListQuery, SnapshotListQuery } from '../query'
+import type {
+    JobListQuery,
+    MemoryListQuery,
+    SnapshotListQuery,
+    UserProfileListQuery
+} from '../query'
 import type { ChatLunaLivingMemoryService } from '../service/memory'
 import type { MemoryMutationInput } from '../types'
 
 const packageName = 'koishi-plugin-chatluna-livingmemory'
 
-/**
- * 通过 node_modules symlink 路径注册 entry，而非真实路径。
- * Koishi console 的安全检查要求 prod 路径包含 'node_modules'，
- * 而 external/ 下的插件真实路径不含该关键词，会被 403 拦截。
- */
-function resolveEntryViaNodeModules(ctx: Context) {
+function resolveEntryPaths(ctx: Context) {
     const baseDir = ctx.loader?.baseDir ?? process.cwd()
+    const packageRoot = resolve(baseDir, 'node_modules', packageName)
+    const devPackageRoot = existsSync(packageRoot)
+        ? realpathSync(packageRoot)
+        : packageRoot
+
     return {
-        dev: resolve(
-            baseDir,
-            'node_modules',
-            packageName,
-            'client',
-            'index.ts'
-        ),
-        prod: resolve(baseDir, 'node_modules', packageName, 'dist')
+        dev: resolve(devPackageRoot, 'client', 'index.ts'),
+        // Koishi console production path checks require a node_modules path.
+        prod: resolve(packageRoot, 'dist')
     }
 }
 
@@ -39,7 +40,7 @@ const ok = <T extends unknown[]>(fn: (...args: T) => Promise<void>) => {
 }
 
 export function registerEntry(ctx: Context) {
-    const paths = resolveEntryViaNodeModules(ctx)
+    const paths = resolveEntryPaths(ctx)
     ctx.console.addEntry(paths)
 }
 
@@ -113,6 +114,12 @@ export function apply(ctx: Context, _config?: Config) {
     ctx.console.addListener(
         'living-memory/listJobs',
         async (query: JobListQuery) => await service(ctx).listJobs(query)
+    )
+
+    ctx.console.addListener(
+        'living-memory/listUserProfiles',
+        async (query: UserProfileListQuery) =>
+            await service(ctx).listUserProfiles(query)
     )
 
     ctx.console.addListener(

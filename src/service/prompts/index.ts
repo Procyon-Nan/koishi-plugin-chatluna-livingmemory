@@ -3,6 +3,11 @@ export type { ExtractionPromptInput } from './extraction'
 export { buildRecallRewritePrompt } from './recall_query'
 export type { RecallRewritePromptInput } from './recall_query'
 export { buildDreamPrompt } from './dream'
+export { buildUserProfilePrompt } from './user_profile'
+export type {
+    UserProfilePromptGroup,
+    UserProfilePromptInput
+} from './user_profile'
 export {
     EXTRACTION_OUTPUT_FORMAT,
     DREAM_ACTIVE_FORMAT,

@@ -8,7 +8,8 @@ import type {
     MemorySnapshotRecord,
     MemoryJobRecord,
     MemoryMutationInput,
-    PageResult
+    PageResult,
+    UserProfileRecord
 } from './types'
 
 export async function listPresetIds(): Promise<string[]> {
@@ -39,6 +40,12 @@ export interface JobListParams {
     presetId: string
     kind?: string
     status?: string
+    page?: number
+    pageSize?: number
+}
+
+export interface UserProfileListParams {
+    presetId: string
     page?: number
     pageSize?: number
 }
@@ -85,6 +92,12 @@ export async function deleteSnapshot(
 
 export async function listJobs(params: JobListParams): Promise<PageResult<MemoryJobRecord>> {
     return await send('living-memory/listJobs', params)
+}
+
+export async function listUserProfiles(
+    params: UserProfileListParams
+): Promise<PageResult<UserProfileRecord>> {
+    return await send('living-memory/listUserProfiles', params)
 }
 
 export async function runDream(presetId: string): Promise<DreamTriggerResult> {

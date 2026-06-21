@@ -265,6 +265,67 @@
                             </div>
                         </el-tab-pane>
 
+                        <el-tab-pane name="profiles">
+                            <template #label>
+                                <span class="tab-label-container">
+                                    <span>用户画像</span>
+                                    <span class="tab-badge">{{ profileTotal }}</span>
+                                </span>
+                            </template>
+                            <div class="tab-pane-content">
+                                <div class="profile-list-panel" v-loading="loading">
+                                    <el-empty
+                                        v-if="userProfiles.length === 0 && !loading"
+                                        description="暂无用户画像"
+                                        :image-size="64"
+                                    />
+
+                                    <div v-else class="profile-card-list">
+                                        <article
+                                            v-for="profile in userProfiles"
+                                            :key="profile.id"
+                                            class="profile-card"
+                                        >
+                                            <div class="profile-card-header">
+                                                <div class="profile-card-title-block">
+                                                    <div class="profile-card-kicker">
+                                                        用户画像
+                                                    </div>
+                                                    <h3 class="profile-card-title">
+                                                        {{ profile.speakerLabel }}
+                                                    </h3>
+                                                </div>
+                                                <span class="profile-source-count">
+                                                    {{ profile.sourceMemoryIds?.length ?? 0 }} 条来源记忆
+                                                </span>
+                                            </div>
+
+                                            <p class="profile-card-content">
+                                                {{ profile.content }}
+                                            </p>
+
+                                            <div class="profile-card-footer">
+                                                <span>创建 {{ formatTime(profile.createdAt) }}</span>
+                                                <span>更新 {{ formatTime(profile.updatedAt) }}</span>
+                                            </div>
+                                        </article>
+                                    </div>
+                                </div>
+
+                                <div class="pagination-container">
+                                    <el-pagination
+                                        v-model:current-page="profilePage"
+                                        v-model:page-size="profilePageSize"
+                                        :total="profileTotal"
+                                        :page-sizes="[20, 50, 100]"
+                                        layout="total, sizes, prev, pager, next, jumper"
+                                        @current-change="onProfilePageChange"
+                                        @size-change="onProfileSizeChange"
+                                    />
+                                </div>
+                            </div>
+                        </el-tab-pane>
+
                         <el-tab-pane name="snapshots">
                             <template #label>
                                 <span class="tab-label-container">
@@ -574,7 +635,8 @@ import type {
     MemoryJobRecord,
     MemoryEntryType,
     MemoryEntryStatus,
-    MemoryConfigWarning
+    MemoryConfigWarning,
+    UserProfileRecord
 } from './types'
 import { memoryEntryTypes } from './types'
 
@@ -650,9 +712,14 @@ const jobPage = ref(1)
 const jobPageSize = ref(20)
 const jobTotal = ref(0)
 
+const profilePage = ref(1)
+const profilePageSize = ref(20)
+const profileTotal = ref(0)
+
 const memories = ref<MemoryEntryRecord[]>([])
 const snapshots = ref<MemorySnapshotRecord[]>([])
 const jobs = ref<MemoryJobRecord[]>([])
+const userProfiles = ref<UserProfileRecord[]>([])
 const configWarnings = ref<MemoryConfigWarning[]>([])
 
 // Cache total dataset of entries for counting status and type amounts in local filters
@@ -907,6 +974,17 @@ const onJobSizeChange = (size: number) => {
     fetchJobs()
 }
 
+const onProfilePageChange = (page: number) => {
+    profilePage.value = page
+    fetchUserProfiles()
+}
+
+const onProfileSizeChange = (size: number) => {
+    profilePageSize.value = size
+    profilePage.value = 1
+    fetchUserProfiles()
+}
+
 const fetchMemories = async (skipLoading = false) => {
     if (!ensurePreset()) return
     if (!skipLoading) loading.value = true
@@ -975,15 +1053,36 @@ const fetchJobs = async (skipLoading = false) => {
     }
 }
 
+const fetchUserProfiles = async (skipLoading = false) => {
+    if (!ensurePreset()) return
+    if (!skipLoading) loading.value = true
+    try {
+        const result = await api.listUserProfiles({
+            presetId: presetId.value,
+            page: profilePage.value,
+            pageSize: profilePageSize.value
+        })
+        userProfiles.value = result.items
+        profileTotal.value = result.total
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        ElMessage.error(`获取用户画像失败：${message}`)
+    } finally {
+        if (!skipLoading) loading.value = false
+    }
+}
+
 const refreshAll = async () => {
     normalizePreset()
     if (!ensurePreset()) {
         memories.value = []
         snapshots.value = []
         jobs.value = []
+        userProfiles.value = []
         memoryTotal.value = 0
         snapshotTotal.value = 0
         jobTotal.value = 0
+        profileTotal.value = 0
         return
     }
 
@@ -991,12 +1090,14 @@ const refreshAll = async () => {
     memoryPage.value = 1
     snapshotPage.value = 1
     jobPage.value = 1
+    profilePage.value = 1
 
     try {
         await Promise.all([
             fetchMemories(true),
             fetchSnapshots(true),
-            fetchJobs(true)
+            fetchJobs(true),
+            fetchUserProfiles(true)
         ])
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
@@ -1153,7 +1254,7 @@ const doClearPresetData = async () => {
 
     try {
         await ElMessageBox.confirm(
-            `该操作会清空预设 ${presetId.value} 的全部记忆、快照和任务记录，且不可恢复。是否继续？`,
+            `该操作会清空预设 ${presetId.value} 的全部记忆、用户画像、快照和任务记录，且不可恢复。是否继续？`,
             '危险操作',
             {
                 type: 'warning',
@@ -2014,6 +2115,125 @@ onMounted(() => {
     .memory-card-actions {
         flex-direction: row;
         width: 100%;
+    }
+}
+
+/* User profile card list */
+.profile-list-panel {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 14px;
+    border: 1px solid var(--lm-border);
+    border-radius: 4px;
+    background-color: var(--lm-bg-secondary);
+}
+
+.profile-card-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.profile-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 16px 16px 16px 18px;
+    border: 1px solid var(--lm-border);
+    border-radius: 6px;
+    background-color: var(--lm-bg-primary);
+    box-shadow: var(--lm-shadow);
+    transition: border-color 150ms ease, background-color 150ms ease;
+}
+
+.profile-card::before {
+    content: '';
+    position: absolute;
+    inset: 12px auto 12px 0;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background-color: var(--lm-primary);
+}
+
+.profile-card:hover {
+    border-color: var(--lm-border-hover);
+}
+
+.profile-card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.profile-card-title-block {
+    min-width: 0;
+}
+
+.profile-card-kicker {
+    color: var(--lm-text-tertiary);
+    font-family: var(--lm-font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.profile-card-title {
+    margin: 4px 0 0;
+    color: var(--lm-text-primary);
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.4;
+    word-break: break-word;
+}
+
+.profile-source-count {
+    flex: 0 0 auto;
+    padding: 3px 8px;
+    border: 1px solid var(--lm-border);
+    border-radius: 999px;
+    background-color: var(--lm-bg-secondary);
+    color: var(--lm-text-secondary);
+    font-family: var(--lm-font-mono);
+    font-size: 11px;
+    line-height: 1.3;
+    white-space: nowrap;
+}
+
+.profile-card-content {
+    margin: 0;
+    color: var(--lm-text-primary);
+    font-size: 14px;
+    line-height: 1.65;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.profile-card-footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--lm-border);
+    color: var(--lm-text-tertiary);
+    font-family: var(--lm-font-mono);
+    font-size: 11px;
+}
+
+@media (max-width: 768px) {
+    .profile-list-panel {
+        padding: 10px;
+    }
+
+    .profile-card-header {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .profile-source-count {
+        align-self: flex-start;
     }
 }
 
