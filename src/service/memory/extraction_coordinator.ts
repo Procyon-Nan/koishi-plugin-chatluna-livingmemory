@@ -7,8 +7,8 @@ import { summarizeError } from '../shared/utils'
 import {
     type DebugLogger,
     formatMemoryItemsForLog,
-    formatRenderedPresetPrompt,
     type QueueExtractionOptions,
+    renderChatLunaPresetPrompt,
     scopeKey
 } from './helpers'
 import { LivingMemoryJobTracker } from './job_tracker'
@@ -300,12 +300,11 @@ export class LivingMemoryExtractionCoordinator {
         }
 
         try {
-            const rendered =
-                await this.ctx.chatluna.promptRenderer.renderPresetTemplate(
-                    presetTemplate,
-                    promptVariables
-                )
-            const presetPrompt = formatRenderedPresetPrompt(rendered.messages)
+            const presetPrompt = await renderChatLunaPresetPrompt(
+                this.ctx,
+                presetTemplate,
+                promptVariables
+            )
             if (presetPrompt == null) {
                 this.debug(
                     [

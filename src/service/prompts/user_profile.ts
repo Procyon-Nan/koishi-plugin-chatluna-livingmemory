@@ -47,7 +47,7 @@ const formatExistingProfileSection = (
     const section = [existingProfile.content]
     if (existingProfile.sourceMemoryIds.length > 0) {
         section.push(
-            `【${speakerLabel}已有的个人画像的来源记忆 id】`,
+            `\n【${speakerLabel}已有的个人画像的来源记忆 id】`,
             formatSourceMemoryIds(existingProfile.sourceMemoryIds)
         )
     }
@@ -58,7 +58,6 @@ const formatExistingProfileSection = (
 const formatGroup = (group: UserProfilePromptGroup) => {
     return [
         `【${group.speakerLabel}已有的个人画像】`,
-        '',
         formatExistingProfileSection(group.speakerLabel, group.existingProfile),
         '',
         `【关于${group.speakerLabel}的记忆】`,

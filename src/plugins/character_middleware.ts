@@ -12,6 +12,11 @@ import {
 } from '../service/character_transcript_adapter'
 import { takeRecentRounds } from '../service/shared/rounds'
 import { collectUserProfileSpeakerLabels } from '../service/user_profile'
+import {
+    type CharacterPresetPromptSource,
+    characterPresetSuffix,
+    renderCharacterPresetPrompt
+} from '../service/memory/helpers'
 import type { MemoryScope } from '../types'
 
 type CharacterMessage = CharacterTranscriptSourceMessage
@@ -21,20 +26,12 @@ type PromptSections = {
     userProfiles: string
 }
 
-interface CharacterPresetPayload {
-    system?: {
-        rawString?: string
-    }
-}
-
-const characterPresetSuffix = '（Character）'
-
 interface CharacterBeforeChatEventPayload {
     session: Session
     sessionKey: string
     conversationId?: string
     presetName: string
-    preset?: unknown
+    preset: CharacterPresetPromptSource
     messages: CharacterMessage[]
     focusMessage?: CharacterMessage
     triggerReason?: string
@@ -45,7 +42,7 @@ interface CharacterAfterChatEventPayload {
     sessionKey: string
     conversationId?: string
     presetName: string
-    preset?: unknown
+    preset: CharacterPresetPromptSource
     messages: CharacterMessage[]
     focusMessage?: CharacterMessage
     triggerReason?: string
@@ -176,27 +173,6 @@ const toScopeKey = (
     return `${scope.presetId}\n${scope.conversationId}`
 }
 
-const formatCharacterSystemPrompt = (systemPrompt: string) => {
-    const normalized = systemPrompt.trim()
-    if (normalized.length === 0) {
-        return null
-    }
-
-    return [
-        '# 当前 Character system prompt（仅用于理解“我”的人设，不要从此处抽取记忆）',
-        normalized
-    ].join('\n\n')
-}
-
-const getCharacterSystemRawString = (preset: unknown) => {
-    if (!isRecord(preset)) {
-        return undefined
-    }
-
-    const system = (preset as CharacterPresetPayload).system
-    return toNonEmptyString(system?.rawString)
-}
-
 const formatPromptVariable = (sections: PromptSections) => {
     const snapshot = sections.snapshot.trim()
     const userProfiles = sections.userProfiles.trim()
@@ -217,27 +193,10 @@ const renderCharacterPresetPromptOverride = async (
     logger: Logger,
     payload: CharacterAfterChatEventPayload
 ) => {
-    const rawString = getCharacterSystemRawString(payload.preset)
-    if (rawString == null) {
-        return null
-    }
-
     try {
-        const rendered = await ctx.chatluna.promptRenderer.renderTemplate(
-            rawString,
-            {
-                time: '',
-                stickers: '',
-                status: ''
-            },
-            {
-                configurable: {
-                    session: payload.session
-                }
-            }
-        )
-
-        return formatCharacterSystemPrompt(rendered.text)
+        return await renderCharacterPresetPrompt(ctx, payload.preset, {
+            session: payload.session
+        })
     } catch (error) {
         logger.warn(error)
         return null

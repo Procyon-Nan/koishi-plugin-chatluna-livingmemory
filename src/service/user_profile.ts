@@ -10,7 +10,8 @@ import type {
 import {
     type CharacterPresetProvider,
     characterPresetSuffix,
-    formatRenderedPresetPrompt
+    renderCharacterPresetPrompt,
+    renderChatLunaPresetPrompt
 } from './memory/helpers'
 import { buildUserProfilePrompt } from './prompts'
 import { summarizeError } from './shared/utils'
@@ -41,43 +42,10 @@ const isRecord = (value: unknown): value is Record<string, unknown> => {
     return value != null && typeof value === 'object' && !Array.isArray(value)
 }
 
-interface CharacterPresetPayload {
-    system?: {
-        rawString?: unknown
-    }
-}
-
-const toNonEmptyString = (value: unknown) => {
-    return typeof value === 'string' && value.trim().length > 0
-        ? value
-        : undefined
-}
-
 const toCharacterPresetName = (presetId: string) => {
     return presetId.endsWith(characterPresetSuffix)
         ? presetId.slice(0, -characterPresetSuffix.length)
         : null
-}
-
-const getCharacterSystemRawString = (preset: unknown) => {
-    if (!isRecord(preset)) {
-        return undefined
-    }
-
-    const system = (preset as CharacterPresetPayload).system
-    return toNonEmptyString(system?.rawString)
-}
-
-const formatCharacterSystemPrompt = (systemPrompt: string) => {
-    const normalized = systemPrompt.trim()
-    if (normalized.length === 0) {
-        return null
-    }
-
-    return [
-        '# 当前 Character system prompt（仅用于理解“我”的人设，不要从此处抽取记忆）',
-        normalized
-    ].join('\n\n')
 }
 
 const truncateText = (value: string, maxLength: number) => {
@@ -555,11 +523,7 @@ export class LivingMemoryUserProfileService {
                 return null
             }
 
-            const rendered =
-                await this.ctx.chatluna.promptRenderer.renderPresetTemplate(
-                    preset
-                )
-            return formatRenderedPresetPrompt(rendered.messages)
+            return await renderChatLunaPresetPrompt(this.ctx, preset)
         } catch (error) {
             this.debug(
                 [
@@ -594,13 +558,9 @@ export class LivingMemoryUserProfileService {
         }
 
         try {
-            const preset = await presetProvider.getPreset(
-                presetName,
-                false,
-                false
-            )
-            const rawString = getCharacterSystemRawString(preset)
-            if (rawString == null) {
+            const preset = await presetProvider.getPreset(presetName, false)
+            const prompt = await renderCharacterPresetPrompt(this.ctx, preset)
+            if (prompt == null) {
                 this.debug(
                     [
                         `memory user profile preset prompt skipped: presetId=${presetId}`,
@@ -612,17 +572,7 @@ export class LivingMemoryUserProfileService {
                 return null
             }
 
-            const rendered =
-                await this.ctx.chatluna.promptRenderer.renderTemplate(
-                    rawString,
-                    {
-                        time: '',
-                        stickers: '',
-                        status: ''
-                    }
-                )
-
-            return formatCharacterSystemPrompt(rendered.text)
+            return prompt
         } catch (error) {
             this.debug(
                 [

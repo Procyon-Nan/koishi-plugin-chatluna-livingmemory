@@ -1,4 +1,6 @@
 import { BaseMessage } from '@langchain/core/messages'
+import type { Context, Session } from 'koishi'
+import type { PresetTemplate } from 'koishi-plugin-chatluna/llm-core/prompt'
 import type { LivingMemoryTranscriptMessage, MemoryScope } from '../../types'
 
 export interface QueueExtractionOptions {
@@ -8,6 +10,12 @@ export interface QueueExtractionOptions {
 
 export type DebugLogger = (message: string) => void
 
+export interface CharacterPresetPromptSource {
+    system: {
+        rawString: string
+    }
+}
+
 export interface CharacterPresetProvider {
     preset?: {
         getAllPreset?: () => Promise<unknown>
@@ -15,7 +23,7 @@ export interface CharacterPresetProvider {
             presetName: string,
             loadForDisk?: boolean,
             throwError?: boolean
-        ) => Promise<unknown>
+        ) => Promise<CharacterPresetPromptSource>
     }
 }
 
@@ -116,4 +124,60 @@ export const formatRenderedPresetPrompt = (messages: BaseMessage[]) => {
         '# 当前 preset prompt（仅用于理解“我”的人设，不要从此处抽取记忆）',
         ...formattedMessages
     ].join('\n\n')
+}
+
+export const renderChatLunaPresetPrompt = async (
+    ctx: Context,
+    presetTemplate: PresetTemplate,
+    variables: Record<string, unknown> = {}
+) => {
+    const rendered = await ctx.chatluna.promptRenderer.renderPresetTemplate(
+        presetTemplate,
+        variables
+    )
+
+    return formatRenderedPresetPrompt(rendered.messages)
+}
+
+const formatCharacterPresetPrompt = (systemPrompt: string) => {
+    const normalized = systemPrompt.trim()
+    if (normalized.length === 0) {
+        return null
+    }
+
+    return [
+        '# 当前 Character system prompt（仅用于理解“我”的人设，不要从此处抽取记忆）',
+        normalized
+    ].join('\n\n')
+}
+
+export const renderCharacterPresetPrompt = async (
+    ctx: Context,
+    preset: CharacterPresetPromptSource,
+    options: {
+        session?: Session
+    } = {}
+) => {
+    const rawString = preset.system.rawString.trim()
+    if (rawString.length === 0) {
+        return null
+    }
+
+    const rendered = await ctx.chatluna.promptRenderer.renderTemplate(
+        rawString,
+        {
+            time: '',
+            stickers: '',
+            status: ''
+        },
+        options.session == null
+            ? undefined
+            : {
+                  configurable: {
+                      session: options.session
+                  }
+              }
+    )
+
+    return formatCharacterPresetPrompt(rendered.text)
 }
