@@ -61,6 +61,8 @@ export const normalizeUserProfileSpeakerKey = (speakerLabel: string) => {
     return normalizeText(speakerLabel).toLowerCase()
 }
 
+export const normalizeUserProfileSpeakerLabel = normalizeText
+
 export const collectUserProfileSpeakerLabels = (
     messages: LivingMemoryTranscriptMessage[]
 ) => {
@@ -106,7 +108,7 @@ export class LivingMemoryUserProfileService {
             }
         }
 
-        const speakers = this.collectSpeakerLabels(activeEntries)
+        const speakers = await this.repository.listPresetSpeakers(presetId)
         if (speakers.length === 0) {
             return {
                 generated: 0,
@@ -252,33 +254,6 @@ export class LivingMemoryUserProfileService {
                     `${profile.speakerLabel}的个人画像：\n${profile.content}`
             )
             .join('\n\n')
-    }
-
-    private collectSpeakerLabels(activeEntries: MemoryEntryRecord[]) {
-        const speakerLabelByKey = new Map<string, string>()
-        for (const entry of activeEntries) {
-            for (const message of entry.sourceMessages) {
-                if (message.role !== 'user' || message.speakerLabel == null) {
-                    continue
-                }
-
-                const label = normalizeText(message.speakerLabel)
-                const key = normalizeUserProfileSpeakerKey(label)
-                if (label.length > 0 && key.length > 0) {
-                    speakerLabelByKey.set(
-                        key,
-                        speakerLabelByKey.get(key) ?? label
-                    )
-                }
-            }
-        }
-
-        return [...speakerLabelByKey.entries()].map(
-            ([speakerKey, speakerLabel]) => ({
-                speakerKey,
-                speakerLabel
-            })
-        )
     }
 
     private buildGroups(

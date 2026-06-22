@@ -293,6 +293,14 @@ export async function apply(ctx: Context, config: Config) {
                 )
                 return
             }
+            ctx.chatluna_living_memory
+                .recordPresetSpeaker(
+                    scope,
+                    currentTranscript.message.speakerLabel
+                )
+                .catch((error) => {
+                    logger.warn(error)
+                })
 
             const historyMessages = payload.messages.filter(
                 (message) =>

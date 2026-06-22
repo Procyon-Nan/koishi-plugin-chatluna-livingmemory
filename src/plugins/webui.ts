@@ -123,6 +123,13 @@ export function apply(ctx: Context, _config?: Config) {
     )
 
     ctx.console.addListener(
+        'living-memory/deleteUserProfile',
+        ok(async (profileId: string) => {
+            await service(ctx).deleteUserProfile(profileId)
+        })
+    )
+
+    ctx.console.addListener(
         'living-memory/runDream',
         async (presetId: string) => await service(ctx).runDream(presetId)
     )

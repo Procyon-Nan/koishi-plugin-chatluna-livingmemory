@@ -100,6 +100,12 @@ export async function listUserProfiles(
     return await send('living-memory/listUserProfiles', params)
 }
 
+export async function deleteUserProfile(
+    profileId: string
+): Promise<{ success: true }> {
+    return await send('living-memory/deleteUserProfile', profileId)
+}
+
 export async function runDream(presetId: string): Promise<DreamTriggerResult> {
     return await send('living-memory/runDream', presetId)
 }

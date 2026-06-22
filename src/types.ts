@@ -139,6 +139,23 @@ export interface UserProfileInput {
     sourceMemoryIds: string[]
 }
 
+export interface PresetSpeakerRecord {
+    id: string
+    presetId: string
+    speakerKey: string
+    speakerLabel: string
+    speakerId: string | null
+    createdAt: Date
+    updatedAt: Date
+}
+
+export interface PresetSpeakerInput {
+    presetId: string
+    speakerKey: string
+    speakerLabel: string
+    speakerId?: string | null
+}
+
 export interface DreamTriggerResult {
     success: true
     started: boolean
@@ -273,6 +290,8 @@ export interface ExtractionRepository {
 }
 
 export interface UserProfileRepository {
+    listPresetSpeakers(presetId: string): Promise<PresetSpeakerRecord[]>
+    upsertPresetSpeaker(input: PresetSpeakerInput): Promise<void>
     listUserProfilesByPreset(presetId: string): Promise<UserProfileRecord[]>
     listUserProfilesBySpeakerKeys(
         presetId: string,
@@ -282,6 +301,7 @@ export interface UserProfileRepository {
         presetId: string,
         profile: UserProfileInput
     ): Promise<void>
+    deleteUserProfile(profileId: string): Promise<void>
 }
 
 export interface MessageFormatter {
@@ -304,6 +324,7 @@ declare module 'koishi' {
         living_memory_snapshot: MemorySnapshotRecord
         living_memory_job: MemoryJobRecord
         living_memory_user_profile: UserProfileRecord
+        living_memory_preset_speaker: PresetSpeakerRecord
     }
 }
 
@@ -343,6 +364,9 @@ declare module '@koishijs/plugin-console' {
         'living-memory/listUserProfiles': (
             query: UserProfileListQuery
         ) => Promise<PageResult<UserProfileRecord>>
+        'living-memory/deleteUserProfile': (
+            profileId: string
+        ) => Promise<{ success: true }>
         'living-memory/runDream': (
             presetId: string
         ) => Promise<DreamTriggerResult>

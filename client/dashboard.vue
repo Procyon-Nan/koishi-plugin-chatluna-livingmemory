@@ -305,8 +305,20 @@
                                             </p>
 
                                             <div class="profile-card-footer">
-                                                <span>创建 {{ formatTime(profile.createdAt) }}</span>
-                                                <span>更新 {{ formatTime(profile.updatedAt) }}</span>
+                                                <div class="profile-card-meta">
+                                                    <span>创建 {{ formatTime(profile.createdAt) }}</span>
+                                                    <span>更新 {{ formatTime(profile.updatedAt) }}</span>
+                                                </div>
+                                                <el-button
+                                                    class="profile-card-delete"
+                                                    size="small"
+                                                    type="danger"
+                                                    plain
+                                                    :loading="deletingProfileId === profile.id"
+                                                    @click="removeUserProfile(profile)"
+                                                >
+                                                    删除
+                                                </el-button>
                                             </div>
                                         </article>
                                     </div>
@@ -693,6 +705,7 @@ const editingMemoryId = ref<string | null>(null)
 const snapshotDialogVisible = ref(false)
 const selectedSnapshot = ref<MemorySnapshotRecord | null>(null)
 const deletingSnapshotId = ref<string | null>(null)
+const deletingProfileId = ref<string | null>(null)
 
 const presetId = ref('')
 const presetIds = ref<string[]>([])
@@ -1223,6 +1236,38 @@ const removeMemory = async (memoryId: string) => {
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         ElMessage.error(`删除失败：${message}`)
+    }
+}
+
+const removeUserProfile = async (profile: UserProfileRecord) => {
+    try {
+        await ElMessageBox.confirm(
+            `删除 ${profile.speakerLabel} 的用户画像后，该画像将不再注入；后续 Dream 仍可能根据记忆重新生成。是否继续？`,
+            '删除用户画像',
+            {
+                type: 'warning',
+                confirmButtonText: '确认删除',
+                cancelButtonText: '取消'
+            }
+        )
+    } catch {
+        return
+    }
+
+    deletingProfileId.value = profile.id
+
+    try {
+        await api.deleteUserProfile(profile.id)
+        ElMessage.success('用户画像已删除')
+        if (userProfiles.value.length === 1 && profilePage.value > 1) {
+            profilePage.value -= 1
+        }
+        await fetchUserProfiles(true)
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        ElMessage.error(`删除失败：${message}`)
+    } finally {
+        deletingProfileId.value = null
     }
 }
 
@@ -2214,12 +2259,28 @@ onMounted(() => {
 .profile-card-footer {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
     gap: 10px;
     padding-top: 12px;
     border-top: 1px dashed var(--lm-border);
+}
+
+.profile-card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
     color: var(--lm-text-tertiary);
     font-family: var(--lm-font-mono);
     font-size: 11px;
+}
+
+.profile-card-delete {
+    margin-left: auto;
+}
+
+.profile-card-footer :deep(.el-button) {
+    margin-left: 0 !important;
 }
 
 @media (max-width: 768px) {
@@ -2234,6 +2295,10 @@ onMounted(() => {
 
     .profile-source-count {
         align-self: flex-start;
+    }
+
+    .profile-card-delete {
+        margin-left: 0;
     }
 }
 

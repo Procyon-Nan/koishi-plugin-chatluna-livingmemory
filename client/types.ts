@@ -180,6 +180,9 @@ declare module '@koishijs/client' {
                 pageSize?: number
             }
         ) => PageResult<UserProfileRecord>
+        'living-memory/deleteUserProfile': (
+            profileId: string
+        ) => { success: true }
         'living-memory/runDream': (
             presetId: string
         ) => DreamTriggerResult

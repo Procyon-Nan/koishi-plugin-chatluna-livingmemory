@@ -7,7 +7,11 @@ import { LivingMemoryMessageFormatter } from '../message_formatter'
 import { LivingMemoryRecallQueryBuilder } from '../recall_query'
 import { LivingMemoryRepository } from '../repository'
 import { LivingMemoryRetriever } from '../retriever'
-import { LivingMemoryUserProfileService } from '../user_profile'
+import {
+    LivingMemoryUserProfileService,
+    normalizeUserProfileSpeakerKey,
+    normalizeUserProfileSpeakerLabel
+} from '../user_profile'
 import { isModelConfigured } from '../shared/utils'
 import {
     filterJobList,
@@ -253,6 +257,24 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         }
     }
 
+    async recordPresetSpeaker(
+        scope: Pick<MemoryScope, 'presetId' | 'speakerId' | 'userId'>,
+        speakerLabel: string
+    ) {
+        const label = normalizeUserProfileSpeakerLabel(speakerLabel)
+        const speakerKey = normalizeUserProfileSpeakerKey(label)
+        if (label.length === 0 || speakerKey.length === 0) {
+            return
+        }
+
+        await this.repository.upsertPresetSpeaker({
+            presetId: scope.presetId,
+            speakerKey,
+            speakerLabel: label,
+            speakerId: scope.speakerId ?? scope.userId ?? null
+        })
+    }
+
     async hydratePromptVariable(
         scope: Pick<MemoryScope, 'presetId' | 'conversationId'>
     ) {
@@ -393,6 +415,10 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             query.presetId
         )
         return filterUserProfileList(items, query)
+    }
+
+    async deleteUserProfile(profileId: string) {
+        await this.repository.deleteUserProfile(profileId)
     }
 
     async runDream(presetId: string): Promise<DreamTriggerResult> {

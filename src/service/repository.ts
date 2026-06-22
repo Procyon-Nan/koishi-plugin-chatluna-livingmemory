@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto'
+import { createHash, randomUUID } from 'crypto'
 import { Context } from 'koishi'
 import type {
     ExtractedMemoryItem,
@@ -13,6 +13,8 @@ import type {
     MemoryReference,
     MemoryScope,
     MemorySnapshotRecord,
+    PresetSpeakerInput,
+    PresetSpeakerRecord,
     RecallRepository,
     SnapshotRepository,
     UserProfileInput,
@@ -108,6 +110,26 @@ const normalizeUserProfileRecord = (
               (id): id is string => typeof id === 'string' && id.length > 0
           )
         : []
+})
+
+const normalizeOptionalString = (value: string | null | undefined) => {
+    const normalized = value?.trim()
+    return normalized?.length ? normalized : null
+}
+
+const createPresetSpeakerId = (presetId: string, speakerKey: string) => {
+    return createHash('sha256')
+        .update(`${presetId}\u0000${speakerKey}`)
+        .digest('hex')
+}
+
+const normalizePresetSpeakerRecord = (
+    record: PresetSpeakerRecord
+): PresetSpeakerRecord => ({
+    ...record,
+    speakerKey: record.speakerKey.trim(),
+    speakerLabel: record.speakerLabel.trim(),
+    speakerId: normalizeOptionalString(record.speakerId)
 })
 
 export class LivingMemoryRepository
@@ -215,6 +237,28 @@ export class LivingMemoryRepository
                 speakerLabel: 'string(255)',
                 content: 'text',
                 sourceMemoryIds: 'json',
+                createdAt: 'timestamp',
+                updatedAt: 'timestamp'
+            },
+            {
+                autoInc: false,
+                primary: 'id'
+            }
+        )
+
+        this.ctx.model.extend(
+            'living_memory_preset_speaker',
+            {
+                id: 'string(64)',
+                presetId: 'string(255)',
+                speakerKey: 'string(255)',
+                speakerLabel: 'string(255)',
+                speakerId: {
+                    type: 'string',
+                    length: 255,
+                    nullable: true,
+                    initial: null
+                },
                 createdAt: 'timestamp',
                 updatedAt: 'timestamp'
             },
@@ -605,6 +649,65 @@ export class LivingMemoryRepository
         await this.ctx.database.remove('living_memory_entry', { id })
     }
 
+    async listPresetSpeakers(presetId: string): Promise<PresetSpeakerRecord[]> {
+        const speakers = await this.ctx.database.get(
+            'living_memory_preset_speaker',
+            { presetId }
+        )
+
+        return speakers
+            .map(normalizePresetSpeakerRecord)
+            .filter(
+                (speaker) =>
+                    speaker.speakerKey.length > 0 &&
+                    speaker.speakerLabel.length > 0
+            )
+            .sort((left, right) =>
+                left.speakerLabel.localeCompare(right.speakerLabel)
+            )
+    }
+
+    async upsertPresetSpeaker(input: PresetSpeakerInput) {
+        const presetId = input.presetId.trim()
+        const speakerKey = input.speakerKey.trim()
+        const speakerLabel = input.speakerLabel.trim()
+        if (
+            presetId.length === 0 ||
+            speakerKey.length === 0 ||
+            speakerLabel.length === 0
+        ) {
+            return
+        }
+
+        const now = new Date()
+        const id = createPresetSpeakerId(presetId, speakerKey)
+        const record = {
+            presetId,
+            speakerKey,
+            speakerLabel,
+            speakerId: normalizeOptionalString(input.speakerId),
+            updatedAt: now
+        }
+        const existing = (
+            await this.ctx.database.get('living_memory_preset_speaker', { id })
+        )[0]
+
+        if (existing == null) {
+            await this.ctx.database.create('living_memory_preset_speaker', {
+                ...record,
+                id,
+                createdAt: now
+            })
+            return
+        }
+
+        await this.ctx.database.set(
+            'living_memory_preset_speaker',
+            { id },
+            record
+        )
+    }
+
     async listUserProfilesByPreset(
         presetId: string
     ): Promise<UserProfileRecord[]> {
@@ -687,28 +790,45 @@ export class LivingMemoryRepository
         }
     }
 
+    async deleteUserProfile(profileId: string) {
+        await this.ctx.database.remove('living_memory_user_profile', {
+            id: profileId
+        })
+    }
+
     async clearAllByPreset(presetId: string) {
         await Promise.all([
             this.ctx.database.remove('living_memory_entry', { presetId }),
             this.ctx.database.remove('living_memory_snapshot', { presetId }),
             this.ctx.database.remove('living_memory_job', { presetId }),
-            this.ctx.database.remove('living_memory_user_profile', { presetId })
+            this.ctx.database.remove('living_memory_user_profile', {
+                presetId
+            }),
+            this.ctx.database.remove('living_memory_preset_speaker', {
+                presetId
+            })
         ])
     }
 
     async listDistinctPresetIds(): Promise<string[]> {
-        const [entries, snapshots, jobs, profiles] = await Promise.all([
-            this.ctx.database.get('living_memory_entry', {}, ['presetId']),
-            this.ctx.database.get('living_memory_snapshot', {}, ['presetId']),
-            this.ctx.database.get('living_memory_job', {}, ['presetId']),
-            this.ctx.database.get('living_memory_user_profile', {}, [
-                'presetId'
+        const [entries, snapshots, jobs, profiles, speakers] =
+            await Promise.all([
+                this.ctx.database.get('living_memory_entry', {}, ['presetId']),
+                this.ctx.database.get('living_memory_snapshot', {}, [
+                    'presetId'
+                ]),
+                this.ctx.database.get('living_memory_job', {}, ['presetId']),
+                this.ctx.database.get('living_memory_user_profile', {}, [
+                    'presetId'
+                ]),
+                this.ctx.database.get('living_memory_preset_speaker', {}, [
+                    'presetId'
+                ])
             ])
-        ])
 
         return [
             ...new Set(
-                [...entries, ...snapshots, ...jobs, ...profiles]
+                [...entries, ...snapshots, ...jobs, ...profiles, ...speakers]
                     .map((record) => record.presetId)
                     .filter((presetId) => presetId.length > 0)
             )
