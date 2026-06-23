@@ -63,13 +63,6 @@ const dreamActiveOperations = [
     {
         action: 'archive',
         memoryId: '...',
-        memory: {
-            content: '...',
-            summary: '...',
-            keywords: ['...'],
-            sentiment: '...',
-            importance: 0.3
-        } satisfies SchemaShape<MemoryMutationInput>,
         reason: '...'
     }
 ] satisfies SchemaShape<DreamOperation>[]

@@ -158,13 +158,8 @@ export class DreamExecutor {
             return
         }
 
-        const patch = this.regenerateKeywordsFromContent(
-            this.sanitizeMemoryPatch(operation.memory, entry)
-        )
-        if (Object.keys(patch).length === 0) {
-            stats.skipped++
-            return
-        }
+        const patch = this.sanitizeMemoryPatch(operation.memory)
+        this.assertCompleteMetadataForNewContent(operation, patch)
 
         await this.repository.updateMemory(
             entry.id,
@@ -188,11 +183,7 @@ export class DreamExecutor {
             return
         }
 
-        await this.archiveMemory(
-            entry,
-            touchedMemoryIds,
-            this.sanitizeMemoryPatch(operation.memory, entry)
-        )
+        await this.archiveMemory(entry, touchedMemoryIds)
         stats.archived++
     }
 
@@ -231,22 +222,8 @@ export class DreamExecutor {
             return
         }
 
-        const patch = this.sanitizeMemoryPatch(operation.memory, target)
-        if (patch.content == null || patch.content.trim().length === 0) {
-            stats.skipped++
-            return
-        }
-        // importance：原先取所有 source 的 max，反复 merge 会令 target 重要度
-        // 单调非减、持续抬高。改为取 source 群（含 target 自身）的均值，使重复
-        // 合并收敛而非膨胀。模型在 merge 操作中显式给出 importance 时尊重其判断，
-        // 否则用均值。source 与模型值均已在 [0,1] 内，均值无需再钳。
-        patch.importance =
-            patch.importance ??
-            sources.reduce(
-                (sum, source) => sum + (source.importance ?? 0.5),
-                0
-            ) / sources.length
-        this.regenerateKeywordsFromContent(patch)
+        const patch = this.sanitizeMemoryPatch(operation.memory)
+        this.assertCompleteMetadataForNewContent(operation, patch)
 
         await this.repository.updateMemory(
             target.id,
@@ -266,14 +243,7 @@ export class DreamExecutor {
                 mergeDeletedSourceIds.add(source.id)
                 stats.deleted++
             } else {
-                await this.archiveMemory(source, touchedMemoryIds, {
-                    status: 'archived',
-                    content: source.content,
-                    summary: source.summary,
-                    keywords: source.keywords,
-                    sentiment: source.sentiment,
-                    importance: Math.min(source.importance ?? 0.5, 0.35)
-                })
+                await this.archiveMemory(source, touchedMemoryIds)
                 stats.archived++
             }
         }
@@ -281,21 +251,10 @@ export class DreamExecutor {
 
     private async archiveMemory(
         entry: MemoryEntryRecord,
-        touchedMemoryIds: Set<string>,
-        patch: Partial<MemoryMutationInput>
+        touchedMemoryIds: Set<string>
     ) {
         await this.repository.updateMemory(entry.id, {
-            ...patch,
-            status: 'archived',
-            content: normalizeText(patch.content ?? entry.content),
-            summary:
-                patch.summary ?? entry.summary ?? entry.content.slice(0, 80),
-            keywords: unique(
-                patch.keywords?.length ? patch.keywords : entry.keywords
-            ).slice(0, 12),
-            sentiment: patch.sentiment ?? entry.sentiment,
-            importance:
-                patch.importance ?? Math.min(entry.importance ?? 0.5, 0.35)
+            status: 'archived'
         })
         touchedMemoryIds.add(entry.id)
     }
@@ -318,8 +277,7 @@ export class DreamExecutor {
     }
 
     private sanitizeMemoryPatch(
-        memory: Record<string, unknown> | undefined,
-        fallback: MemoryEntryRecord
+        memory: Record<string, unknown> | undefined
     ): Partial<MemoryMutationInput> {
         if (memory == null || typeof memory !== 'object') {
             return {}
@@ -366,16 +324,24 @@ export class DreamExecutor {
             patch.importance = parseImportance(memory.importance)
         }
 
-        if (patch.content != null && patch.keywords == null) {
-            patch.keywords = fallback.keywords
-        }
-
         return patch
     }
 
-    private regenerateKeywordsFromContent(patch: Partial<MemoryMutationInput>) {
-        delete patch.keywords
-
-        return patch
+    private assertCompleteMetadataForNewContent(
+        operation: DreamOperation,
+        patch: Partial<MemoryMutationInput>
+    ) {
+        if (
+            patch.type == null ||
+            patch.content == null ||
+            patch.summary == null ||
+            (patch.keywords?.length ?? 0) === 0 ||
+            patch.sentiment == null ||
+            patch.importance == null
+        ) {
+            throw new Error(
+                `dream ${operation.action} failed: generated memory is incomplete`
+            )
+        }
     }
 }

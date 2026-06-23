@@ -9,6 +9,11 @@ export interface ExtractionPromptInput {
     presetPrompt?: string | null
 }
 
+export const MEMORY_KEYWORDS_DESCRIPTION =
+    '短词数组，作为检索锚点，保留具体昵称、状态、动作、关系和事件关键词；不要包含普通日期、时间戳'
+
+export const MEMORY_KEYWORDS_REQUIREMENT = `- keywords：${MEMORY_KEYWORDS_DESCRIPTION}。`
+
 /**
  * 构建记忆抽取提示词。纯函数：所有动态值经入参传入，无副作用。
  * 输出契约（outputFormat）引用自 ./schema，与解析器保持单一真相源。
@@ -58,7 +63,7 @@ export const buildExtractionPrompt = (
         '- summary：检索友好的语义摘要，第一人称、简短清晰准确，用于之后召回这条记忆；避免颜文字、口癖、过度角色语气、长句，不要写成角色台词、吐槽或抒情句。',
         '  好的示例："张三用眼过度，我提醒他休息并引导眼部放松"',
         '  不推荐的示例："张三这孩子居然觉得眼周充血是常事，真是个无可救药的大笨蛋呢……"',
-        '- keywords：短词数组，作为检索锚点，保留具体昵称、状态、动作、关系和事件关键词；不要包含普通日期、时间戳。',
+        MEMORY_KEYWORDS_REQUIREMENT,
         '- sentiment：简短自由文本的情绪色彩，可用类似"担心"、"亲近"、"愉快"、"疲惫"、"中性"这样的词，没有明显情绪时写"中性"；不要写成长句。好的示例："担心"。',
         '- importance：0 到 1 之间的数字，表示这条记忆的长期价值，越高越重要；日常闲聊但有关系连续性价值可给 0.4 到 0.7，明确身份、偏好、关系、健康、计划等长期信息可给 0.7 到 1。',
         '- 昵称要求：content、summary 和 keywords 中必须使用消息前缀中的具体昵称来指代发言者（如"张三"），绝对不能用"用户"、"对方"等泛化词汇替代，也不要把多个群成员混成同一个人，更不要把你自己的发言错误当作其他人的发言',

@@ -22,19 +22,11 @@ import type {
     UserProfileRepository
 } from '../types'
 
-const defaultKeywords = (content: string) => {
-    return Array.from(
-        new Set(
-            content
-                .toLowerCase()
-                .split(/[^\p{L}\p{N}_]+/u)
-                .map((part) => part.trim())
-                .filter((part) => part.length >= 2)
-        )
-    ).slice(0, 12)
-}
-
 const keywordFingerprintSeparator = '\u0000'
+
+const normalizeKeywords = (keywords: string[] | null | undefined) => {
+    return keywords?.length ? keywords.slice(0, 12) : []
+}
 
 const normalizeSentiment = (sentiment: string | null | undefined) => {
     const normalized = sentiment?.trim()
@@ -70,14 +62,10 @@ const normalizeStatus = (
 
 const resolveKeywords = (
     current: Pick<MemoryEntryRecord, 'keywords'>,
-    patch: Partial<MemoryMutationInput>,
-    content: string
+    patch: Partial<MemoryMutationInput>
 ) => {
-    if (patch.keywords?.length) {
-        return patch.keywords.slice(0, 12)
-    }
-    if (patch.content != null) {
-        return defaultKeywords(content)
+    if (patch.keywords !== undefined) {
+        return normalizeKeywords(patch.keywords)
     }
 
     return current.keywords
@@ -524,9 +512,7 @@ export class LivingMemoryRepository
                 type: item.type,
                 status: normalizeStatus(item.status),
                 content: item.content,
-                keywords: item.keywords?.length
-                    ? item.keywords.slice(0, 12)
-                    : defaultKeywords(item.content),
+                keywords: normalizeKeywords(item.keywords),
                 summary: item.summary ?? null,
                 sentiment: normalizeSentiment(item.sentiment),
                 importance: normalizeImportance(item.importance),
@@ -552,9 +538,7 @@ export class LivingMemoryRepository
             type: input.type,
             status: normalizeStatus(input.status),
             content: input.content,
-            keywords: input.keywords?.length
-                ? input.keywords.slice(0, 12)
-                : defaultKeywords(input.content),
+            keywords: normalizeKeywords(input.keywords),
             summary: input.summary ?? null,
             sentiment: normalizeSentiment(input.sentiment),
             importance: normalizeImportance(input.importance),
@@ -577,7 +561,7 @@ export class LivingMemoryRepository
         }
 
         const content = patch.content ?? current.content
-        const keywords = resolveKeywords(current, patch, content)
+        const keywords = resolveKeywords(current, patch)
         const summary =
             patch.summary === undefined
                 ? (current.summary ?? null)
