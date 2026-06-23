@@ -158,7 +158,9 @@ export class DreamExecutor {
             return
         }
 
-        const patch = this.sanitizeMemoryPatch(operation.memory, entry)
+        const patch = this.regenerateKeywordsFromContent(
+            this.sanitizeMemoryPatch(operation.memory, entry)
+        )
         if (Object.keys(patch).length === 0) {
             stats.skipped++
             return
@@ -244,10 +246,7 @@ export class DreamExecutor {
                 (sum, source) => sum + (source.importance ?? 0.5),
                 0
             ) / sources.length
-        patch.keywords = unique([
-            ...(patch.keywords ?? []),
-            ...sources.flatMap((source) => source.keywords)
-        ]).slice(0, 12)
+        this.regenerateKeywordsFromContent(patch)
 
         await this.repository.updateMemory(
             target.id,
@@ -370,6 +369,12 @@ export class DreamExecutor {
         if (patch.content != null && patch.keywords == null) {
             patch.keywords = fallback.keywords
         }
+
+        return patch
+    }
+
+    private regenerateKeywordsFromContent(patch: Partial<MemoryMutationInput>) {
+        delete patch.keywords
 
         return patch
     }
