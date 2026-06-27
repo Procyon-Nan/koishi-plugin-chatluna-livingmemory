@@ -45,8 +45,10 @@ yarn build chatluna-livingmemory
 | LLM 模型 | 从对话中提取记忆 | 必需 |
 | Dream LLM 模型 | 进行 Dream 记忆整理与合并决策 | 必需 |
 | 召回查询改写 LLM 模型 | 在召回前改写检索查询 | 可选 |
-| 嵌入模型 | 进行记忆向量化检索 | 可选 |
-| Reranker 模型 | 对召回结果重排序 | 可选 |
+| Embedding 嵌入模型 | 进行记忆向量化检索 | 可选 |
+| Reranker 重排序模型 | 对召回结果重排序 | 可选 |
+
+如果你不知道应该如何配置 Embedding 嵌入模型 和 Reranker 重排序模型，请参考[此文档](https://github.com/Procyon-Nan/koishi-plugin-chatluna-livingmemory/blob/main/docs/embedding-reranker-guide.md)进行配置
 
 参考测试组合：
 
