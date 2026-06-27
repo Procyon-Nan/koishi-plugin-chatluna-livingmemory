@@ -17,5 +17,5 @@ tsconfig.tsbuildinfo
 .DS_Store
 Thumbs.db
 
-# local-only agent guide
-AGENTS.md
+# local planning workspace
+tmp/

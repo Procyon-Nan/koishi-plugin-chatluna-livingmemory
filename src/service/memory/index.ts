@@ -154,23 +154,19 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     validateConfig(): MemoryConfigWarning[] {
         const warnings: MemoryConfigWarning[] = []
 
-        if (this.config.recallStrategy === 'embedding-rerank') {
-            if (!isModelConfigured(this.config.embeddingModel)) {
-                warnings.push({
-                    code: 'embedding-model-missing',
-                    field: 'embeddingModel',
-                    message:
-                        '召回策略已选择 embedding-rerank，但未配置 embeddingModel；将无法进行向量召回。'
-                })
-            }
-            if (!isModelConfigured(this.config.rerankModel)) {
-                warnings.push({
-                    code: 'rerank-model-missing',
-                    field: 'rerankModel',
-                    message:
-                        '召回策略已选择 embedding-rerank，但未配置 rerankModel；将无法对召回结果重排序。'
-                })
-            }
+        if (!isModelConfigured(this.config.embeddingModel)) {
+            warnings.push({
+                code: 'embedding-model-missing',
+                field: 'embeddingModel',
+                message: '未配置 embeddingModel；记忆召回将失败。'
+            })
+        }
+        if (!isModelConfigured(this.config.rerankModel)) {
+            warnings.push({
+                code: 'rerank-model-missing',
+                field: 'rerankModel',
+                message: '未配置 rerankModel；记忆召回将失败。'
+            })
         }
 
         if (

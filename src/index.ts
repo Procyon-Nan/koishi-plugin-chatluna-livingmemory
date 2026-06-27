@@ -8,7 +8,7 @@ import {
     apply as webuiPlugin
 } from './plugins/webui'
 import { ChatLunaLivingMemoryService } from './service/memory'
-import { type LivingMemoryConfig, memoryRecallStrategies } from './types'
+import type { LivingMemoryConfig } from './types'
 
 export type Config = LivingMemoryConfig
 
@@ -78,14 +78,10 @@ export const Config: Schema<Config> = Schema.object({
         )
         .default('无'),
     embeddingModel: Schema.dynamic('embeddings')
-        .description(
-            '用于记忆向量化检索的嵌入模型。仅在召回策略为 embedding-rerank 时需要。'
-        )
+        .description('用于记忆向量化检索的嵌入模型。记忆召回需要配置。')
         .default('无'),
     rerankModel: Schema.dynamic('reranker')
-        .description(
-            '用于对召回结果重排序的 Reranker 模型。仅在召回策略为 embedding-rerank 时需要。'
-        )
+        .description('用于对召回结果重排序的 Reranker 模型。记忆召回需要配置。')
         .default('无'),
     extractionRounds: Schema.number()
         .min(1)
@@ -109,19 +105,6 @@ export const Config: Schema<Config> = Schema.object({
         .step(1)
         .description('每次召回时返回的最相关记忆条数上限。')
         .default(5),
-    recallStrategy: Schema.union(
-        memoryRecallStrategies.map((strategy) => Schema.const(strategy))
-    )
-        .role('radio')
-        .description(
-            '记忆召回策略。keyword 使用关键词匹配；embedding-rerank 使用向量检索加重排序。'
-        )
-        .default('keyword'),
-    enableKeywordFallback: Schema.boolean()
-        .description(
-            '当 embedding-rerank 策略失败时，是否自动回退到 keyword 策略。'
-        )
-        .default(true),
     debug: Schema.boolean()
         .description('输出记忆召回、记忆总结和触发诊断日志。')
         .default(false)

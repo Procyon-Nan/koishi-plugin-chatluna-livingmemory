@@ -17,7 +17,7 @@ export const memoryEntryTypes = [
     'other'
 ] as const
 
-export const memoryRecallStrategies = ['keyword', 'embedding-rerank'] as const
+export const memoryRecallStrategy = 'embedding-rerank' as const
 
 export const memoryJobKinds = ['recall', 'extract', 'dream'] as const
 
@@ -32,7 +32,7 @@ export const memoryEntryStatuses = ['active', 'archived'] as const
 
 export type MemoryEntryType = (typeof memoryEntryTypes)[number]
 export type MemoryEntryStatus = (typeof memoryEntryStatuses)[number]
-export type MemoryRecallStrategy = (typeof memoryRecallStrategies)[number]
+export type MemoryRecallStrategy = typeof memoryRecallStrategy
 export type MemoryJobKind = (typeof memoryJobKinds)[number]
 export type MemoryJobStatus = (typeof memoryJobStatuses)[number]
 
@@ -224,8 +224,6 @@ export interface LivingMemoryConfig {
     extractionRounds: number
     extractionInterval: number
     recallTopK: number
-    recallStrategy: MemoryRecallStrategy
-    enableKeywordFallback: boolean
     debug: boolean
 }
 

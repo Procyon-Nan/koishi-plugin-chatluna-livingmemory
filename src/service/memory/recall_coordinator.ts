@@ -11,6 +11,7 @@ import {
 } from './helpers'
 import { LivingMemoryJobTracker } from './job_tracker'
 import { LivingMemorySnapshotCache } from './snapshot_cache'
+import { memoryRecallStrategy } from '../../types'
 import type {
     LivingMemoryConfig,
     LivingMemoryTranscriptMessage,
@@ -167,7 +168,7 @@ export class LivingMemoryRecallCoordinator {
 
             await this.repository.upsertSnapshot(
                 scope,
-                this.config.recallStrategy,
+                memoryRecallStrategy,
                 input,
                 items.map((item) => ({
                     memoryId: item.id,
