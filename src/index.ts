@@ -107,6 +107,12 @@ export const Config: Schema<Config> = Schema.object({
         .step(1)
         .description('每次召回时返回的最相关记忆条数上限。')
         .default(5),
+    memorySearchToolMaxResults: Schema.number()
+        .min(1)
+        .max(60)
+        .step(1)
+        .description('living_memory_search 查询工具每次最多返回的记忆条数。')
+        .default(30),
     debug: Schema.boolean()
         .description('输出记忆召回、记忆总结和触发诊断日志。')
         .default(false)

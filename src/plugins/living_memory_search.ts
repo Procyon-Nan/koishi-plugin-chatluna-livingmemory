@@ -109,7 +109,7 @@ class LivingMemorySearchTool extends StructuredTool {
             {
                 searchTexts: input.searchTexts,
                 memoryTypes: input.memoryTypes,
-                maxCandidates: this.config.recallTopK
+                maxCandidates: this.config.memorySearchToolMaxResults
             }
         )
 
