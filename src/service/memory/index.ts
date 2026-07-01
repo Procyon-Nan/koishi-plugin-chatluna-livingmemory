@@ -357,7 +357,8 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         const items = await this.repository.listEntriesByPreset(presetId)
         return searchLivingMemoryEntries(items, {
             maxCandidates: options.maxCandidates,
-            searchTexts: options.searchTexts,
+            broadSearchTexts: options.broadSearchTexts,
+            specificSearchTexts: options.specificSearchTexts,
             memoryTypes: options.memoryTypes
         })
     }

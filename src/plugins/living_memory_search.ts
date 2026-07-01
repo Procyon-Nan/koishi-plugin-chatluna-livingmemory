@@ -9,19 +9,29 @@ const livingMemorySearchToolName = 'living_memory_search'
 
 const toolDescription = `Search active memories in the current preset by lexical phrase matching.
 
-Use this tool when you need to look up existing memories by short search phrases.
-- searchTexts: 1 to 5 query phrases. Each phrase must be 2 to 6 characters after trimming.
+Use this tool when you need to look up existing memories by both broad and specific search phrases.
+- broadSearchTexts: 1 to 5 short, broad phrases. Each phrase must be 2 to 6 characters after trimming. Use broad topics, categories, or general needs.
+- specificSearchTexts: 1 to 5 longer, specific phrases. Each phrase must be 7 to 20 characters after trimming.
+  Use concrete constraints, entities, preferences, or short factual phrases.
 - memoryTypes: memory categories to search, or ["all"] to search every category.
 - The tool only searches active memories owned by the current preset.
+- Specific phrase matches receive higher score than broad phrase matches. Memories matching multiple phrases receive additional score.
 - The result is a JSON array of memory records sorted by lexical relevance, importance, then recent update time.`
 
 const searchSchema = z.object({
-    searchTexts: z
+    broadSearchTexts: z
         .array(z.string())
         .min(1)
         .max(5)
         .describe(
-            'Search phrases. Provide 1 to 5 phrases, each 2 to 6 characters after trimming.'
+            'Short broad search phrases. Provide 1 to 5 phrases, each 2 to 6 characters after trimming.'
+        ),
+    specificSearchTexts: z
+        .array(z.string())
+        .min(1)
+        .max(5)
+        .describe(
+            'Longer specific search phrases. Provide 1 to 5 phrases, each 7 to 20 characters after trimming.'
         ),
     memoryTypes: z
         .array(z.enum(livingMemorySearchMemoryTypes))
@@ -107,7 +117,8 @@ class LivingMemorySearchTool extends StructuredTool {
         const results = await this.ctx.chatluna_living_memory.searchMemories(
             presetId,
             {
-                searchTexts: input.searchTexts,
+                broadSearchTexts: input.broadSearchTexts,
+                specificSearchTexts: input.specificSearchTexts,
                 memoryTypes: input.memoryTypes,
                 maxCandidates: this.config.memorySearchToolMaxResults
             }

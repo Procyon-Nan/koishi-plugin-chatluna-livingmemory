@@ -12,9 +12,17 @@ const searchFieldWeights = {
     content: 1
 } as const
 
+const queryTypeWeights = {
+    broad: 1,
+    specific: 2
+} as const
+
+const multiSearchTextMatchBonus = 1
 const maxSearchTextCount = 5
-const minSearchTextLength = 2
-const maxSearchTextLength = 6
+const broadSearchTextMinLength = 2
+const broadSearchTextMaxLength = 6
+const specificSearchTextMinLength = 7
+const specificSearchTextMaxLength = 20
 
 export const normalizeSearchText = (value: string) => {
     return value.replace(/\s+/gu, ' ').trim().toLowerCase()
@@ -28,13 +36,18 @@ const isMemoryEntryType = (
     return (memoryEntryTypes as readonly string[]).includes(value)
 }
 
-const ensureSearchTexts = (searchTexts: string[]) => {
+const ensureSearchTexts = (
+    fieldName: string,
+    searchTexts: string[],
+    minLength: number,
+    maxLength: number
+) => {
     if (!Array.isArray(searchTexts) || searchTexts.length === 0) {
-        throw new Error('searchTexts must not be empty.')
+        throw new Error(`${fieldName} must not be empty.`)
     }
 
     if (searchTexts.length > maxSearchTextCount) {
-        throw new Error('searchTexts accepts at most 5 query phrases.')
+        throw new Error(`${fieldName} accepts at most 5 query phrases.`)
     }
 
     const normalized: string[] = []
@@ -42,14 +55,14 @@ const ensureSearchTexts = (searchTexts: string[]) => {
 
     for (const rawText of searchTexts) {
         if (typeof rawText !== 'string') {
-            throw new Error('searchTexts must contain only strings.')
+            throw new Error(`${fieldName} must contain only strings.`)
         }
 
         const text = normalizeSearchText(rawText)
         const length = textLength(text)
-        if (length < minSearchTextLength || length > maxSearchTextLength) {
+        if (length < minLength || length > maxLength) {
             throw new Error(
-                'Each searchTexts item must be 2 to 6 characters after trimming.'
+                `Each ${fieldName} item must be ${minLength} to ${maxLength} characters after trimming.`
             )
         }
 
@@ -62,7 +75,7 @@ const ensureSearchTexts = (searchTexts: string[]) => {
     }
 
     if (normalized.length === 0) {
-        throw new Error('searchTexts must not be empty.')
+        throw new Error(`${fieldName} must not be empty.`)
     }
 
     return normalized
@@ -110,7 +123,11 @@ const normalizeTimestamp = (
     return Math.max(entry.createdAt.getTime(), entry.updatedAt.getTime())
 }
 
-const scoreSearchText = (entry: MemoryEntryRecord, searchText: string) => {
+const scoreSearchText = (
+    entry: MemoryEntryRecord,
+    searchText: string,
+    queryType: keyof typeof queryTypeWeights
+) => {
     let score = 0
 
     if (
@@ -131,7 +148,7 @@ const scoreSearchText = (entry: MemoryEntryRecord, searchText: string) => {
         score += searchFieldWeights.content
     }
 
-    return score
+    return score * queryTypeWeights[queryType]
 }
 
 const pickSearchResult = (
@@ -163,7 +180,18 @@ export function searchLivingMemoryEntries(
         throw new Error('maxCandidates must be a positive integer.')
     }
 
-    const searchTexts = ensureSearchTexts(options.searchTexts)
+    const broadSearchTexts = ensureSearchTexts(
+        'broadSearchTexts',
+        options.broadSearchTexts,
+        broadSearchTextMinLength,
+        broadSearchTextMaxLength
+    )
+    const specificSearchTexts = ensureSearchTexts(
+        'specificSearchTexts',
+        options.specificSearchTexts,
+        specificSearchTextMinLength,
+        specificSearchTextMaxLength
+    )
     const memoryTypes = ensureMemoryTypes(options.memoryTypes)
 
     const scoredItems = items
@@ -172,18 +200,33 @@ export function searchLivingMemoryEntries(
             memoryTypes == null ? true : memoryTypes.has(item.type)
         )
         .map((item) => {
-            let bestScore = 0
+            let relevanceScore = 0
+            let matchedSearchTextCount = 0
 
-            for (const searchText of searchTexts) {
-                const score = scoreSearchText(item, searchText)
-                if (score > bestScore) {
-                    bestScore = score
+            for (const searchText of broadSearchTexts) {
+                const score = scoreSearchText(item, searchText, 'broad')
+                if (score > 0) {
+                    relevanceScore += score
+                    matchedSearchTextCount += 1
                 }
+            }
+
+            for (const searchText of specificSearchTexts) {
+                const score = scoreSearchText(item, searchText, 'specific')
+                if (score > 0) {
+                    relevanceScore += score
+                    matchedSearchTextCount += 1
+                }
+            }
+
+            if (matchedSearchTextCount > 1) {
+                relevanceScore +=
+                    (matchedSearchTextCount - 1) * multiSearchTextMatchBonus
             }
 
             return {
                 entry: item,
-                relevanceScore: bestScore
+                relevanceScore
             }
         })
         .filter((item) => item.relevanceScore > 0)

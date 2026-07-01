@@ -45,7 +45,8 @@ export type LivingMemorySearchMemoryType =
     (typeof livingMemorySearchMemoryTypes)[number]
 
 export interface LivingMemorySearchInput {
-    searchTexts: string[]
+    broadSearchTexts: string[]
+    specificSearchTexts: string[]
     memoryTypes: LivingMemorySearchMemoryType[]
 }
 
