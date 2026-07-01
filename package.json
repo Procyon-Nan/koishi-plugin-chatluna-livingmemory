@@ -35,7 +35,8 @@
     "memory"
   ],
   "dependencies": {
-    "@langchain/core": "0.3.62"
+    "@langchain/core": "0.3.62",
+    "zod": "3.25.76"
   },
   "resolutions": {
     "@langchain/core": "0.3.62",

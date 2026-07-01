@@ -36,6 +36,32 @@ export type MemoryRecallStrategy = typeof memoryRecallStrategy
 export type MemoryJobKind = (typeof memoryJobKinds)[number]
 export type MemoryJobStatus = (typeof memoryJobStatuses)[number]
 
+export const livingMemorySearchMemoryTypes = [
+    ...memoryEntryTypes,
+    'all'
+] as const
+
+export type LivingMemorySearchMemoryType =
+    (typeof livingMemorySearchMemoryTypes)[number]
+
+export interface LivingMemorySearchInput {
+    searchTexts: string[]
+    memoryTypes: LivingMemorySearchMemoryType[]
+}
+
+export interface LivingMemorySearchResult extends Pick<
+    MemoryEntryRecord,
+    | 'id'
+    | 'type'
+    | 'status'
+    | 'content'
+    | 'keywords'
+    | 'summary'
+    | 'importance'
+    | 'createdAt'
+    | 'updatedAt'
+> {}
+
 export interface MemoryReference {
     memoryId: string
     score?: number | null
