@@ -1,5 +1,6 @@
 import { StructuredTool } from '@langchain/core/tools'
-import type { Context } from 'koishi'
+import type { ToolRunnableConfig } from '@langchain/core/tools'
+import type { Context, Logger } from 'koishi'
 import type { ChatLunaTool } from 'koishi-plugin-chatluna/llm-core/platform/types'
 import { z } from 'zod'
 import { livingMemorySearchMemoryTypes } from '../types'
@@ -42,12 +43,6 @@ const searchSchema = z.object({
             'Memory categories to search. Use concrete categories or all.'
         )
 })
-
-interface LivingMemorySearchRunConfig {
-    configurable?: {
-        preset?: unknown
-    }
-}
 
 type ChatLunaStructuredTool = ReturnType<ChatLunaTool['createTool']>
 
@@ -98,20 +93,41 @@ class LivingMemorySearchTool extends StructuredTool {
     description = toolDescription
 
     schema = searchSchema
+    private readonly logger: Logger
 
     constructor(
         private readonly ctx: Context,
         private readonly config: Config
     ) {
         super()
+        this.logger = ctx.logger('chatluna-livingmemory')
+    }
+
+    private debug(message: string) {
+        if (this.config.debug) {
+            this.logger.info(message)
+        }
     }
 
     async _call(
         input: z.infer<typeof searchSchema>,
         _runManager: unknown,
-        runConfig?: LivingMemorySearchRunConfig
+        runConfig?: ToolRunnableConfig
     ) {
-        const presetId = runConfig?.configurable?.preset
+        const configurable = runConfig?.configurable
+        const presetId = configurable?.preset
+
+        this.debug(
+            [
+                'living_memory_search input:',
+                `presetId=${configurable?.preset ?? ''}`,
+                `conversationId=${configurable?.conversationId ?? ''}`,
+                `userId=${configurable?.userId ?? ''}`,
+                `source=${configurable?.source ?? ''}`,
+                JSON.stringify(input, null, 2)
+            ].join('\n')
+        )
+
         if (typeof presetId !== 'string' || presetId.length === 0) {
             throw new Error('Missing preset in the current tool call.')
         }
@@ -126,6 +142,20 @@ class LivingMemorySearchTool extends StructuredTool {
             }
         )
 
-        return JSON.stringify(results, null, 2)
+        const output = JSON.stringify(results, null, 2)
+
+        this.debug(
+            [
+                'living_memory_search output:',
+                `presetId=${configurable?.preset ?? ''}`,
+                `conversationId=${configurable?.conversationId ?? ''}`,
+                `userId=${configurable?.userId ?? ''}`,
+                `source=${configurable?.source ?? ''}`,
+                `resultCount=${results.length}`,
+                output
+            ].join('\n')
+        )
+
+        return output
     }
 }
