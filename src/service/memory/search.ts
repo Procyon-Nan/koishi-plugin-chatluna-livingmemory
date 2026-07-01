@@ -17,6 +17,7 @@ const queryTypeWeights = {
     specific: 2
 } as const
 
+const specificSearchTextMatchBonus = 2
 const multiSearchTextMatchBonus = 1
 const maxSearchTextCount = 5
 const broadSearchTextMinLength = 2
@@ -40,9 +41,14 @@ const ensureSearchTexts = (
     fieldName: string,
     searchTexts: string[],
     minLength: number,
-    maxLength: number
+    maxLength: number,
+    options: { allowEmpty?: boolean } = {}
 ) => {
     if (!Array.isArray(searchTexts) || searchTexts.length === 0) {
+        if (options.allowEmpty === true) {
+            return []
+        }
+
         throw new Error(`${fieldName} must not be empty.`)
     }
 
@@ -152,17 +158,19 @@ const scoreSearchText = (
 }
 
 const pickSearchResult = (
-    entry: MemoryEntryRecord
+    entry: MemoryEntryRecord,
+    matchedBroadSearchTexts: string[],
+    matchedSpecificSearchTexts: string[]
 ): LivingMemorySearchResult => ({
-    id: entry.id,
     type: entry.type,
-    status: entry.status,
     content: entry.content,
     keywords: [...entry.keywords],
     summary: entry.summary,
     importance: entry.importance,
     createdAt: entry.createdAt,
-    updatedAt: entry.updatedAt
+    updatedAt: entry.updatedAt,
+    matchedBroadSearchTexts,
+    matchedSpecificSearchTexts
 })
 
 export interface LivingMemorySearchOptions extends LivingMemorySearchInput {
@@ -188,9 +196,10 @@ export function searchLivingMemoryEntries(
     )
     const specificSearchTexts = ensureSearchTexts(
         'specificSearchTexts',
-        options.specificSearchTexts,
+        options.specificSearchTexts ?? [],
         specificSearchTextMinLength,
-        specificSearchTextMaxLength
+        specificSearchTextMaxLength,
+        { allowEmpty: true }
     )
     const memoryTypes = ensureMemoryTypes(options.memoryTypes)
 
@@ -202,20 +211,24 @@ export function searchLivingMemoryEntries(
         .map((item) => {
             let relevanceScore = 0
             let matchedSearchTextCount = 0
+            const matchedBroadSearchTexts: string[] = []
+            const matchedSpecificSearchTexts: string[] = []
 
             for (const searchText of broadSearchTexts) {
                 const score = scoreSearchText(item, searchText, 'broad')
                 if (score > 0) {
                     relevanceScore += score
                     matchedSearchTextCount += 1
+                    matchedBroadSearchTexts.push(searchText)
                 }
             }
 
             for (const searchText of specificSearchTexts) {
                 const score = scoreSearchText(item, searchText, 'specific')
                 if (score > 0) {
-                    relevanceScore += score
+                    relevanceScore += score + specificSearchTextMatchBonus
                     matchedSearchTextCount += 1
+                    matchedSpecificSearchTexts.push(searchText)
                 }
             }
 
@@ -226,7 +239,9 @@ export function searchLivingMemoryEntries(
 
             return {
                 entry: item,
-                relevanceScore
+                relevanceScore,
+                matchedBroadSearchTexts,
+                matchedSpecificSearchTexts
             }
         })
         .filter((item) => item.relevanceScore > 0)
@@ -247,5 +262,11 @@ export function searchLivingMemoryEntries(
 
     return scoredItems
         .slice(0, options.maxCandidates)
-        .map(({ entry }) => pickSearchResult(entry))
+        .map(({ entry, matchedBroadSearchTexts, matchedSpecificSearchTexts }) =>
+            pickSearchResult(
+                entry,
+                matchedBroadSearchTexts,
+                matchedSpecificSearchTexts
+            )
+        )
 }

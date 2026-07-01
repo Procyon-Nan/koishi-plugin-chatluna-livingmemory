@@ -46,22 +46,23 @@ export type LivingMemorySearchMemoryType =
 
 export interface LivingMemorySearchInput {
     broadSearchTexts: string[]
-    specificSearchTexts: string[]
+    specificSearchTexts?: string[]
     memoryTypes: LivingMemorySearchMemoryType[]
 }
 
 export interface LivingMemorySearchResult extends Pick<
     MemoryEntryRecord,
-    | 'id'
     | 'type'
-    | 'status'
     | 'content'
     | 'keywords'
     | 'summary'
     | 'importance'
     | 'createdAt'
     | 'updatedAt'
-> {}
+> {
+    matchedBroadSearchTexts: string[]
+    matchedSpecificSearchTexts: string[]
+}
 
 export interface MemoryReference {
     memoryId: string
