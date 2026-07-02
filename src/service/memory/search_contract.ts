@@ -73,7 +73,31 @@ export const livingMemorySearchInputSchema = z.object({
     memoryTypes: z
         .array(z.enum(livingMemorySearchMemoryTypes))
         .min(1)
+        .refine(
+            (memoryTypes) =>
+                !memoryTypes.includes('all') || memoryTypes.length === 1,
+            {
+                message: 'memoryTypes cannot mix all with other types.'
+            }
+        )
         .describe(
             'Memory categories to search. Use concrete categories or all.'
+        )
+})
+
+export const livingMemorySearchToolInputSchema = z.object({
+    broadSearchTexts: z
+        .unknown()
+        .optional()
+        .describe(broadSearchTextDescription),
+    specificSearchTexts: z
+        .unknown()
+        .optional()
+        .describe(specificSearchTextDescription),
+    memoryTypes: z
+        .unknown()
+        .optional()
+        .describe(
+            `Memory categories to search. Use concrete categories or all. Supported values: ${livingMemorySearchMemoryTypes.join(', ')}.`
         )
 })
