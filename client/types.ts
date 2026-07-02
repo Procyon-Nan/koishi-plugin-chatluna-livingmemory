@@ -14,6 +14,9 @@ export const memoryEntryTypes = [
 export type MemoryEntryType = (typeof memoryEntryTypes)[number]
 
 export type MemoryEntryStatus = 'active' | 'archived'
+export type MemoryRecallStrategy = 'embedding-rerank' | 'agentic-tool-search'
+
+export type LivingMemorySearchMemoryType = MemoryEntryType | 'all'
 
 export interface MemorySourceMessage {
     role: 'user' | 'assistant' | 'system'
@@ -44,9 +47,9 @@ export interface MemorySnapshotRecord {
     id: string
     presetId: string
     conversationId: string
-    strategy: string
+    strategy: MemoryRecallStrategy
     query: string
-    items: MemoryReference[]
+    items: MemorySnapshotItem[]
     resolvedItems: MemorySnapshotResolvedItem[]
     createdAt: Date
 }
@@ -61,11 +64,41 @@ export interface MemorySnapshotResolvedItem extends MemoryReference {
     missing: boolean
 }
 
+export interface AgenticMemorySearchToolCallSummary {
+    broadSearchTexts: string[]
+    specificSearchTexts?: string[]
+    memoryTypes: LivingMemorySearchMemoryType[]
+    maxCandidates: number
+}
+
+export interface AgenticMemorySnapshotMemoryItem {
+    type: MemoryEntryType
+    content: string
+    keywords: string[]
+    summary: string | null
+    importance: number | null
+    createdAt: Date
+    updatedAt: Date
+    matchedBroadSearchTexts: string[]
+    matchedSpecificSearchTexts: string[]
+}
+
+export interface AgenticMemorySnapshotItem {
+    finalText: string
+    toolCallSummary: AgenticMemorySearchToolCallSummary
+    matchedBroadSearchTexts: string[]
+    matchedSpecificSearchTexts: string[]
+    matchedMemories: AgenticMemorySnapshotMemoryItem[]
+}
+
+export type MemorySnapshotItem = MemoryReference | AgenticMemorySnapshotItem
+
 export interface MemoryJobRecord {
     id: string
     presetId: string
     conversationId: string
     kind: string
+    recallStrategy: MemoryRecallStrategy | null
     status: string
     createdAt: Date
     updatedAt: Date
@@ -94,6 +127,7 @@ export type MemoryConfigWarningCode =
     | 'rerank-model-missing'
     | 'extract-model-missing'
     | 'recall-rewrite-model-missing'
+    | 'agentic-recall-model-missing'
 
 export interface MemoryConfigWarning {
     code: MemoryConfigWarningCode

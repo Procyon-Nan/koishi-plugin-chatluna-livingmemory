@@ -351,7 +351,7 @@
                                     <el-table-column prop="strategy" label="策略" width="140" align="center" header-align="center" />
                                     <el-table-column prop="query" label="查询" min-width="180" header-align="center" show-overflow-tooltip />
                                     <el-table-column label="命中" width="80" align="center" header-align="center">
-                                        <template #default="scope">{{ scope.row.resolvedItems.length }}</template>
+                                        <template #default="scope">{{ snapshotHitCount(scope.row) }}</template>
                                     </el-table-column>
                                     <el-table-column label="创建时间" min-width="160" align="center" header-align="center">
                                         <template #default="scope">{{ formatTime(scope.row.createdAt) }}</template>
@@ -406,6 +406,11 @@
                                     <el-table-column label="类型" width="120" align="center" header-align="center">
                                         <template #default="scope">
                                             {{ getJobKindLabel(scope.row.kind) }}
+                                        </template>
+                                    </el-table-column>
+                                    <el-table-column label="召回策略" width="150" align="center" header-align="center">
+                                        <template #default="scope">
+                                            {{ formatJobRecallStrategy(scope.row.recallStrategy) }}
                                         </template>
                                     </el-table-column>
                                     <el-table-column label="状态" width="120" align="center" header-align="center">
@@ -558,7 +563,7 @@
                 </div>
                 <div>
                     <span class="snapshot-dialog-label">命中</span>
-                    <span>{{ selectedSnapshot.resolvedItems.length }}</span>
+                    <span>{{ snapshotHitCount(selectedSnapshot) }}</span>
                 </div>
                 <div>
                     <span class="snapshot-dialog-label">创建时间</span>
@@ -570,12 +575,86 @@
                 </div>
             </div>
 
-            <el-empty
-                v-if="selectedSnapshot.resolvedItems.length === 0"
-                description="该快照没有命中记忆"
-                :image-size="64"
-            />
-            <div v-else class="snapshot-memory-list">
+            <template v-if="isAgenticSnapshot(selectedSnapshot)">
+                <div
+                    v-for="(item, index) in snapshotAgenticItems(selectedSnapshot)"
+                    :key="index"
+                    class="snapshot-agentic-item"
+                >
+                    <div v-if="item.finalText" class="snapshot-final-text">
+                        {{ item.finalText }}
+                    </div>
+                    <div class="snapshot-tool-summary">
+                        <span>短查询：{{ formatSearchTexts(item.toolCallSummary.broadSearchTexts) }}</span>
+                        <span>长查询：{{ formatSearchTexts(item.toolCallSummary.specificSearchTexts) }}</span>
+                        <span>类别：{{ formatSearchTexts(item.toolCallSummary.memoryTypes) }}</span>
+                        <span>上限：{{ item.toolCallSummary.maxCandidates }}</span>
+                    </div>
+                    <el-empty
+                        v-if="item.matchedMemories.length === 0"
+                        description="该快照没有命中记忆"
+                        :image-size="64"
+                    />
+                    <div v-else class="snapshot-memory-list">
+                        <div
+                            v-for="(memory, memoryIndex) in item.matchedMemories"
+                            :key="memoryIndex"
+                            class="snapshot-memory-item"
+                        >
+                            <div class="snapshot-memory-header">
+                                <el-tag
+                                    :type="getMemoryTagType(memory.type)"
+                                    size="small"
+                                    effect="plain"
+                                >
+                                    {{ getMemoryTypeLabel(memory.type) }}
+                                </el-tag>
+                                <span class="snapshot-memory-score">
+                                    重要度 {{ formatImportance(memory.importance) || '-' }}
+                                </span>
+                            </div>
+                            <div class="snapshot-memory-content">
+                                {{ memory.content }}
+                            </div>
+                            <div class="snapshot-memory-meta">
+                                <span>记录于：{{ formatTime(memory.createdAt) }}</span>
+                                <span>更新于：{{ formatTime(memory.updatedAt) }}</span>
+                            </div>
+                            <div
+                                v-if="memory.summary"
+                                class="snapshot-memory-summary"
+                            >
+                                摘要：{{ memory.summary }}
+                            </div>
+                            <div class="snapshot-match-texts">
+                                <span>短命中：{{ formatSearchTexts(memory.matchedBroadSearchTexts) }}</span>
+                                <span>长命中：{{ formatSearchTexts(memory.matchedSpecificSearchTexts) }}</span>
+                            </div>
+                            <el-space
+                                v-if="memory.keywords.length > 0"
+                                wrap
+                                class="snapshot-memory-keywords"
+                            >
+                                <el-tag
+                                    v-for="kw in memory.keywords"
+                                    :key="kw"
+                                    size="small"
+                                    effect="plain"
+                                >
+                                    {{ kw }}
+                                </el-tag>
+                            </el-space>
+                        </div>
+                    </div>
+                </div>
+            </template>
+            <template v-else>
+                <el-empty
+                    v-if="selectedSnapshot.resolvedItems.length === 0"
+                    description="该快照没有命中记忆"
+                    :image-size="64"
+                />
+                <div v-else class="snapshot-memory-list">
                 <div
                     v-for="item in selectedSnapshot.resolvedItems"
                     :key="item.memoryId"
@@ -630,7 +709,8 @@
                         记忆已删除或不可用
                     </div>
                 </div>
-            </div>
+                </div>
+            </template>
         </template>
     </el-dialog>
 </template>
@@ -641,6 +721,7 @@ import { useColorMode } from '@koishijs/client'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as api from './api'
 import type {
+    AgenticMemorySnapshotItem,
     MemoryEntryRecord,
     MemorySnapshotRecord,
     MemorySnapshotResolvedItem,
@@ -674,6 +755,43 @@ const formatImportance = (value: number | null | undefined): string => {
 const formatScore = (value: number | null | undefined): string => {
     if (value == null) return '-'
     return Number.isFinite(value) ? value.toFixed(4) : String(value)
+}
+
+const isAgenticSnapshotItem = (
+    item: MemorySnapshotRecord['items'][number]
+): item is AgenticMemorySnapshotItem => {
+    return 'finalText' in item
+}
+
+const snapshotAgenticItems = (
+    snapshot: MemorySnapshotRecord
+): AgenticMemorySnapshotItem[] => {
+    return snapshot.items.filter(isAgenticSnapshotItem)
+}
+
+const isAgenticSnapshot = (snapshot: MemorySnapshotRecord): boolean => {
+    return snapshot.strategy === 'agentic-tool-search'
+}
+
+const snapshotHitCount = (snapshot: MemorySnapshotRecord): number => {
+    if (isAgenticSnapshot(snapshot)) {
+        return snapshotAgenticItems(snapshot).reduce(
+            (total, item) => total + item.matchedMemories.length,
+            0
+        )
+    }
+
+    return snapshot.resolvedItems.length
+}
+
+const formatSearchTexts = (
+    value: readonly string[] | null | undefined
+): string => {
+    if (value == null || value.length === 0) {
+        return '-'
+    }
+
+    return value.join('、')
 }
 
 const snapshotItemStatusLabel = (item: MemorySnapshotResolvedItem): string => {
@@ -907,6 +1025,12 @@ const getJobKindLabel = (kind: string): string => {
         clear: '数据清理'
     }
     return labels[kind] || kind
+}
+
+const formatJobRecallStrategy = (
+    strategy: MemoryJobRecord['recallStrategy']
+): string => {
+    return strategy ?? '-'
 }
 
 const getJobStatusLabel = (status: string): string => {
@@ -2672,6 +2796,31 @@ onMounted(() => {
     display: flex;
     flex-direction: column;
     gap: 12px;
+}
+
+.snapshot-agentic-item {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.snapshot-final-text {
+    padding: 12px;
+    border-radius: 4px;
+    background-color: var(--lm-bg-secondary);
+    color: var(--lm-text-primary) !important;
+    white-space: pre-wrap;
+    line-height: 1.7;
+}
+
+.snapshot-tool-summary,
+.snapshot-match-texts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    color: var(--lm-text-tertiary) !important;
+    font-size: 12px !important;
+    font-family: var(--lm-font-mono);
 }
 
 .snapshot-memory-item {

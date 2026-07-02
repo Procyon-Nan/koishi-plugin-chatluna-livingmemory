@@ -11,7 +11,7 @@ import {
 } from './helpers'
 import { LivingMemoryJobTracker } from './job_tracker'
 import { LivingMemorySnapshotCache } from './snapshot_cache'
-import { memoryRecallStrategy } from '../../types'
+import { LivingMemoryAgenticRecallExecutor } from './agentic_recall'
 import type {
     LivingMemoryConfig,
     LivingMemoryTranscriptMessage,
@@ -26,6 +26,7 @@ export class LivingMemoryRecallCoordinator {
         private readonly repository: LivingMemoryRepository,
         private readonly recallQuery: LivingMemoryRecallQueryBuilder,
         private readonly retriever: LivingMemoryRetriever,
+        private readonly agenticRecall: LivingMemoryAgenticRecallExecutor,
         private readonly snapshotCache: LivingMemorySnapshotCache,
         private readonly jobTracker: LivingMemoryJobTracker,
         private readonly logger: Logger,
@@ -80,6 +81,19 @@ export class LivingMemoryRecallCoordinator {
             )
         }
 
+        if (this.config.recallStrategy === 'agentic-tool-search') {
+            await this.runAgentic(scope, currentMessage, historyMessages)
+            return
+        }
+
+        await this.runEmbeddingRerank(scope, currentMessage, historyMessages)
+    }
+
+    private async runEmbeddingRerank(
+        scope: MemoryScope,
+        currentMessage: LivingMemoryTranscriptMessage,
+        historyMessages: LivingMemoryTranscriptMessage[]
+    ) {
         const query = await this.recallQuery.resolve(
             scope,
             currentMessage,
@@ -148,7 +162,12 @@ export class LivingMemoryRecallCoordinator {
             return
         }
 
-        const job = await this.repository.createJob(scope, 'recall', input)
+        const job = await this.repository.createJob(
+            scope,
+            'recall',
+            input,
+            'embedding-rerank'
+        )
 
         try {
             await this.jobTracker.markRunning(job.id)
@@ -168,7 +187,7 @@ export class LivingMemoryRecallCoordinator {
 
             await this.repository.upsertSnapshot(
                 scope,
-                memoryRecallStrategy,
+                'embedding-rerank',
                 input,
                 items.map((item) => ({
                     memoryId: item.id,
@@ -180,6 +199,52 @@ export class LivingMemoryRecallCoordinator {
             await this.jobTracker.markCompleted(
                 job.id,
                 `matched ${items.length} memories`
+            )
+        } catch (error) {
+            await this.jobTracker.markFailed(job.id, error)
+            throw error
+        }
+    }
+
+    private async runAgentic(
+        scope: MemoryScope,
+        currentMessage: LivingMemoryTranscriptMessage,
+        historyMessages: LivingMemoryTranscriptMessage[]
+    ) {
+        const input = normalizeText(currentMessage.contentLines.join('\n'))
+        if (input.length === 0) {
+            return
+        }
+
+        const job = await this.repository.createJob(
+            scope,
+            'recall',
+            input,
+            'agentic-tool-search'
+        )
+
+        try {
+            await this.jobTracker.markRunning(job.id)
+
+            const trace = await this.agenticRecall.run(
+                scope,
+                currentMessage,
+                historyMessages
+            )
+
+            const query = JSON.stringify(trace.item.toolCallSummary)
+
+            await this.repository.upsertSnapshot(
+                scope,
+                'agentic-tool-search',
+                query,
+                [trace.item]
+            )
+            await this.snapshotCache.hydrate(scope)
+
+            await this.jobTracker.markCompleted(
+                job.id,
+                `matched ${trace.item.matchedMemories.length} memories`
             )
         } catch (error) {
             await this.jobTracker.markFailed(job.id, error)

@@ -25,18 +25,29 @@ tree whenever architecture, data contracts, or workflow boundaries change.
   override.
 - `src/plugins/webui.ts` is the console RPC boundary. Keep it synchronized with
   `src/types.ts`, `client/api.ts`, and `client/dashboard.vue`.
+- `src/plugins/living_memory_search.ts` registers the model-facing
+  `living_memory_search` tool. Its input schema must stay aligned with
+  `src/service/memory/search_contract.ts` and `src/service/memory/search.ts`.
 - `client/api.ts`, `client/types.ts`, and `client/dashboard.vue` implement the
   WebUI surface for memories, user profiles, snapshots, jobs, Dream execution,
   and preset data cleanup.
 - `src/service/memory/index.ts` is the service facade. It constructs the
-  repository, retriever, extractor, recall query builder, user profile service,
-  Dream service, job tracker, snapshot cache, preset catalog, and coordinators.
+  repository, retriever, extractor, recall query builder, agentic recall
+  executor, user profile service, Dream service, job tracker, snapshot cache,
+  preset catalog, and coordinators.
 - `src/service/memory/*_coordinator.ts` contains async orchestration, job state
   handling, in-memory locks, snapshot cache refreshes, and extraction baselines.
+- `src/service/memory/search_contract.ts` centralizes lexical memory-search
+  tool name, query text length limits, and schema rules used by the tool,
+  agentic recall, prompts, and search implementation.
 - `src/service/repository.ts` owns Koishi database table definitions and all
   persistence methods.
 - `src/service/recall_query.ts` and `src/service/retriever.ts` own query
   normalization/rewrite handling and embedding-rerank retrieval.
+- `src/service/memory/agentic_recall.ts` owns the agentic-tool-search recall
+  executor. It plans lexical memory-search parameters, calls the same search
+  implementation as the tool, and asks the recall model to produce final plain
+  memory text for snapshot injection.
 - `src/service/extractor.ts`, `src/service/message_formatter.ts`, and the
   transcript adapters convert chat history into extraction-ready records and
   parse model output.
@@ -70,11 +81,22 @@ tree whenever architecture, data contracts, or workflow boundaries change.
   `characterPresetSuffix`. Character prompt injection happens through the
   `{living_memory}` function provider rather than ChatLuna core context
   injection.
-- Recall is serialized per scope. Empty cleaned queries are skipped; disabled or
-  failed rewrite paths record their reason and use the normalized current query
-  when possible.
-- Retrieval uses `embedding-rerank` only. Missing or unavailable embedding and
-  rerank dependencies fail the recall job instead of switching strategy.
+- Recall is serialized per scope and remains asynchronous: the current chat turn
+  injects the previous hydrated snapshot, while the recall job produced by the
+  current turn is used by later turns.
+- `embedding-rerank` recall uses query rewrite when enabled. Empty cleaned
+  queries are skipped; disabled or failed rewrite paths record their reason and
+  use the normalized current query when possible.
+- `agentic-tool-search` recall is a separate selectable strategy. It uses
+  `recallHistoryWindowRounds` for its history window, has its own
+  `agenticRecallModel`, writes agentic snapshot items containing final memory
+  text plus search parameters and matched memories, and fails the recall job
+  rather than switching strategy when required model/search validation fails.
+- `living_memory_job.recallStrategy` records the selected recall strategy for
+  recall jobs. Non-recall jobs and pre-existing rows may have `null`.
+- `living_memory_snapshot.strategy` distinguishes snapshot item semantics:
+  `embedding-rerank` stores memory references, while `agentic-tool-search`
+  stores agentic snapshot items rendered directly as final memory text.
 - Extraction uses an interval baseline per scope. Parse failures mark the job as
   failed; valid empty arrays mark a completed extraction with zero memories.
 - Dream active-stage operations allow keep, update, merge, and archive. Archived

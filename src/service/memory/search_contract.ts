@@ -1,0 +1,79 @@
+import { z } from 'zod'
+import { livingMemorySearchMemoryTypes } from '../../types'
+
+export const livingMemorySearchToolName = 'living_memory_search'
+
+export const memorySearchMaxTextCount = 5
+
+export const broadSearchTextRule = {
+    fieldName: 'broadSearchTexts',
+    minLength: 2,
+    maxLength: 6
+} as const
+
+export const specificSearchTextRule = {
+    fieldName: 'specificSearchTexts',
+    minLength: 7,
+    maxLength: 20
+} as const
+
+export type MemorySearchTextRule =
+    | typeof broadSearchTextRule
+    | typeof specificSearchTextRule
+
+export const normalizeSearchText = (value: string) => {
+    return value.replace(/\s+/gu, ' ').trim().toLowerCase()
+}
+
+export const countSearchTextCharacters = (value: string) => {
+    return Array.from(normalizeSearchText(value)).length
+}
+
+export const formatSearchTextLengthRange = (rule: MemorySearchTextRule) => {
+    return `${rule.minLength} to ${rule.maxLength}`
+}
+
+export const formatSearchTextLengthError = (rule: MemorySearchTextRule) => {
+    return `Each ${rule.fieldName} item must be ${formatSearchTextLengthRange(rule)} characters after trimming.`
+}
+
+const createSearchTextSchema = (rule: MemorySearchTextRule) =>
+    z.string().refine(
+        (value) => {
+            const length = countSearchTextCharacters(value)
+            return length >= rule.minLength && length <= rule.maxLength
+        },
+        {
+            message: formatSearchTextLengthError(rule)
+        }
+    )
+
+const broadSearchTextDescription =
+    `Short broad search phrases. Provide 1 to ${memorySearchMaxTextCount} ` +
+    `phrases, each ${formatSearchTextLengthRange(broadSearchTextRule)} ` +
+    'characters after trimming.'
+
+const specificSearchTextDescription =
+    `Optional longer specific search phrases. Provide 1 to ${memorySearchMaxTextCount} ` +
+    `phrases, each ${formatSearchTextLengthRange(specificSearchTextRule)} ` +
+    'characters after trimming.'
+
+export const livingMemorySearchInputSchema = z.object({
+    broadSearchTexts: z
+        .array(createSearchTextSchema(broadSearchTextRule))
+        .min(1)
+        .max(memorySearchMaxTextCount)
+        .describe(broadSearchTextDescription),
+    specificSearchTexts: z
+        .array(createSearchTextSchema(specificSearchTextRule))
+        .min(1)
+        .max(memorySearchMaxTextCount)
+        .optional()
+        .describe(specificSearchTextDescription),
+    memoryTypes: z
+        .array(z.enum(livingMemorySearchMemoryTypes))
+        .min(1)
+        .describe(
+            'Memory categories to search. Use concrete categories or all.'
+        )
+})

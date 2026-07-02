@@ -51,6 +51,12 @@ export const Config: Schema<Config> = Schema.object({
     enableUserProfileInjection: Schema.boolean()
         .description('开启用户画像注入。')
         .default(false),
+    recallStrategy: Schema.union([
+        'embedding-rerank',
+        'agentic-tool-search'
+    ] as const)
+        .description('记忆召回策略。')
+        .default('embedding-rerank'),
     extractModel: Schema.dynamic('model')
         .description('用于从对话中提取记忆的 LLM 模型。')
         .default('无'),
@@ -66,18 +72,21 @@ export const Config: Schema<Config> = Schema.object({
     enableRecallQueryRewrite: Schema.boolean()
         .description('是否在召回前使用 LLM 根据历史信息改写检索的查询文本。')
         .default(false),
-    recallRewriteRounds: Schema.number()
+    recallHistoryWindowRounds: Schema.number()
         .min(1)
         .max(12)
         .step(1)
         .description(
-            '召回查询改写时使用的最近对话轮数（1 轮 = 1 次用户消息 + 1 次助手回复）。'
+            '记忆召回流程使用的最近对话轮数，用于查询改写和 agentic 召回规划（1 轮 = 1 次用户消息 + 1 次助手回复）。'
         )
         .default(3),
     recallRewriteModel: Schema.dynamic('model')
         .description(
             '用于记忆召回查询改写的 LLM 模型。仅在启用召回查询改写时使用。'
         )
+        .default('无'),
+    agenticRecallModel: Schema.dynamic('model')
+        .description('用于 agentic-tool-search 记忆召回策略的 LLM 模型。')
         .default('无'),
     embeddingModel: Schema.dynamic('embeddings')
         .description('用于记忆向量化检索的嵌入模型。记忆召回需要配置。')

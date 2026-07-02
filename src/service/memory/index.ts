@@ -45,6 +45,8 @@ import { LivingMemoryJobTracker } from './job_tracker'
 import { LivingMemoryPresetCatalog } from './preset_catalog'
 import { LivingMemoryRecallCoordinator } from './recall_coordinator'
 import { LivingMemorySnapshotCache } from './snapshot_cache'
+import { LivingMemoryAgenticRecallExecutor } from './agentic_recall'
+import { isMemoryReferenceItem } from './snapshot_items'
 import type { QueueExtractionOptions } from './helpers'
 
 export type { QueueExtractionOptions } from './helpers'
@@ -76,6 +78,12 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         const extractor = new LivingMemoryExtractor(ctx, config.extractModel)
         const formatter = new LivingMemoryMessageFormatter()
         const recallQuery = new LivingMemoryRecallQueryBuilder(ctx, config)
+        const agenticRecall = new LivingMemoryAgenticRecallExecutor(
+            ctx,
+            config,
+            this.repository,
+            debug
+        )
         this.userProfiles = new LivingMemoryUserProfileService(
             ctx,
             config,
@@ -96,6 +104,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             this.repository,
             recallQuery,
             retriever,
+            agenticRecall,
             this.snapshotCache,
             jobTracker,
             this.serviceLogger,
@@ -159,14 +168,20 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     validateConfig(): MemoryConfigWarning[] {
         const warnings: MemoryConfigWarning[] = []
 
-        if (!isModelConfigured(this.config.embeddingModel)) {
+        if (
+            this.config.recallStrategy === 'embedding-rerank' &&
+            !isModelConfigured(this.config.embeddingModel)
+        ) {
             warnings.push({
                 code: 'embedding-model-missing',
                 field: 'embeddingModel',
                 message: '未配置 embeddingModel；记忆召回将失败。'
             })
         }
-        if (!isModelConfigured(this.config.rerankModel)) {
+        if (
+            this.config.recallStrategy === 'embedding-rerank' &&
+            !isModelConfigured(this.config.rerankModel)
+        ) {
             warnings.push({
                 code: 'rerank-model-missing',
                 field: 'rerankModel',
@@ -187,6 +202,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         }
 
         if (
+            this.config.recallStrategy === 'embedding-rerank' &&
             this.config.enableRecallQueryRewrite &&
             !isModelConfigured(this.config.recallRewriteModel)
         ) {
@@ -195,6 +211,18 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
                 field: 'recallRewriteModel',
                 message:
                     '召回查询改写已启用，但未配置 recallRewriteModel；将回退到原始查询。'
+            })
+        }
+
+        if (
+            this.config.recallStrategy === 'agentic-tool-search' &&
+            !isModelConfigured(this.config.agenticRecallModel)
+        ) {
+            warnings.push({
+                code: 'agentic-recall-model-missing',
+                field: 'agenticRecallModel',
+                message:
+                    'agentic-tool-search 已启用，但未配置 agenticRecallModel；记忆召回将失败。'
             })
         }
 
@@ -396,7 +424,9 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         const memoryIds = [
             ...new Set(
                 page.items.flatMap((snapshot) =>
-                    snapshot.items.map((item) => item.memoryId)
+                    snapshot.items.flatMap((item) =>
+                        isMemoryReferenceItem(item) ? [item.memoryId] : []
+                    )
                 )
             )
         ]
@@ -407,14 +437,16 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             ...page,
             items: page.items.map((snapshot) => ({
                 ...snapshot,
-                resolvedItems: snapshot.items.map((item) => {
-                    const memory = recordById.get(item.memoryId) ?? null
-                    return {
-                        ...item,
-                        memory,
-                        missing: memory == null
-                    }
-                })
+                resolvedItems: snapshot.items
+                    .filter(isMemoryReferenceItem)
+                    .map((item) => {
+                        const memory = recordById.get(item.memoryId) ?? null
+                        return {
+                            ...item,
+                            memory,
+                            missing: memory == null
+                        }
+                    })
             }))
         }
     }

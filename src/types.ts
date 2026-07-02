@@ -17,7 +17,10 @@ export const memoryEntryTypes = [
     'other'
 ] as const
 
-export const memoryRecallStrategy = 'embedding-rerank' as const
+export const memoryRecallStrategies = [
+    'embedding-rerank',
+    'agentic-tool-search'
+] as const
 
 export const memoryJobKinds = ['recall', 'extract', 'dream'] as const
 
@@ -32,7 +35,7 @@ export const memoryEntryStatuses = ['active', 'archived'] as const
 
 export type MemoryEntryType = (typeof memoryEntryTypes)[number]
 export type MemoryEntryStatus = (typeof memoryEntryStatuses)[number]
-export type MemoryRecallStrategy = typeof memoryRecallStrategy
+export type MemoryRecallStrategy = (typeof memoryRecallStrategies)[number]
 export type MemoryJobKind = (typeof memoryJobKinds)[number]
 export type MemoryJobStatus = (typeof memoryJobStatuses)[number]
 
@@ -68,6 +71,41 @@ export interface MemoryReference {
     memoryId: string
     score?: number | null
 }
+
+export interface MemorySnapshotResolvedReference extends MemoryReference {
+    memory: MemoryEntryRecord | null
+    missing: boolean
+}
+
+export interface AgenticMemorySearchToolCallSummary {
+    broadSearchTexts: string[]
+    specificSearchTexts?: string[]
+    memoryTypes: LivingMemorySearchMemoryType[]
+    maxCandidates: number
+}
+
+export interface AgenticMemorySnapshotMemoryItem extends Pick<
+    LivingMemorySearchResult,
+    | 'type'
+    | 'content'
+    | 'keywords'
+    | 'summary'
+    | 'importance'
+    | 'createdAt'
+    | 'updatedAt'
+    | 'matchedBroadSearchTexts'
+    | 'matchedSpecificSearchTexts'
+> {}
+
+export interface AgenticMemorySnapshotItem {
+    finalText: string
+    toolCallSummary: AgenticMemorySearchToolCallSummary
+    matchedBroadSearchTexts: string[]
+    matchedSpecificSearchTexts: string[]
+    matchedMemories: AgenticMemorySnapshotMemoryItem[]
+}
+
+export type MemorySnapshotItem = MemoryReference | AgenticMemorySnapshotItem
 
 export interface MemoryScope {
     conversationId: string
@@ -121,7 +159,7 @@ export interface MemorySnapshotRecord {
     conversationId: string
     strategy: MemoryRecallStrategy
     query: string
-    items: MemoryReference[]
+    items: MemorySnapshotItem[]
     createdAt: Date
 }
 
@@ -139,6 +177,7 @@ export interface MemoryJobRecord {
     presetId: string
     conversationId: string
     kind: MemoryJobKind
+    recallStrategy: MemoryRecallStrategy | null
     status: MemoryJobStatus
     input: string
     detail: string | null
@@ -196,6 +235,7 @@ export type MemoryConfigWarningCode =
     | 'rerank-model-missing'
     | 'extract-model-missing'
     | 'recall-rewrite-model-missing'
+    | 'agentic-recall-model-missing'
 
 export interface MemoryConfigWarning {
     code: MemoryConfigWarningCode
@@ -241,12 +281,14 @@ export interface ExtractionPayload {
 export interface LivingMemoryConfig {
     enableSnapshotInjection: boolean
     enableUserProfileInjection: boolean
+    recallStrategy: MemoryRecallStrategy
     extractModel: string
     dreamModel: string
     userProfileMemoryLimit: number
     enableRecallQueryRewrite: boolean
-    recallRewriteRounds: number
+    recallHistoryWindowRounds: number
     recallRewriteModel: string
+    agenticRecallModel: string
     embeddingModel: string
     rerankModel: string
     extractionRounds: number
@@ -277,7 +319,7 @@ export interface SnapshotRepository {
         scope: MemoryScope,
         strategy: MemoryRecallStrategy,
         query: string,
-        items: MemoryReference[]
+        items: MemorySnapshotItem[]
     ): Promise<void>
     deleteSnapshot(
         snapshotId: string
@@ -291,7 +333,8 @@ export interface JobRepository {
     createJob(
         scope: MemoryScope,
         kind: MemoryJobKind,
-        input: string
+        input: string,
+        recallStrategy?: MemoryRecallStrategy | null
     ): Promise<MemoryJobRecord>
     updateJob(id: string, patch: Partial<MemoryJobRecord>): Promise<void>
     listJobsByPreset(presetId: string): Promise<MemoryJobRecord[]>

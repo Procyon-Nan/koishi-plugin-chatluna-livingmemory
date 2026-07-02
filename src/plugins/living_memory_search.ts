@@ -2,47 +2,33 @@ import { StructuredTool } from '@langchain/core/tools'
 import type { ToolRunnableConfig } from '@langchain/core/tools'
 import type { Context, Logger } from 'koishi'
 import type { ChatLunaTool } from 'koishi-plugin-chatluna/llm-core/platform/types'
-import { z } from 'zod'
-import { livingMemorySearchMemoryTypes } from '../types'
+import type { z } from 'zod'
 import type { Config } from '../index'
+import {
+    broadSearchTextRule,
+    formatSearchTextLengthRange,
+    livingMemorySearchInputSchema,
+    livingMemorySearchToolName,
+    memorySearchMaxTextCount,
+    specificSearchTextRule
+} from '../service/memory/search_contract'
 
-const livingMemorySearchToolName = 'living_memory_search'
-
-const toolDescription = `Search active memories in the current preset by lexical phrase matching.
-
-Use this tool when you need to look up existing memories by both broad and specific search phrases.
-- broadSearchTexts: 1 to 5 short, broad phrases. Each phrase must be 2 to 6 characters after trimming. Use broad topics, categories, or general needs.
-- specificSearchTexts: optional but recommended, 1 to 5 longer, specific phrases. Each phrase must be 7 to 20 characters after trimming when provided.
-  Use concrete constraints, entities, preferences, or short factual phrases.
-- memoryTypes: memory categories to search, or ["all"] to search every category.
-- The tool only searches active memories owned by the current preset.
-- Specific phrase matches receive higher score than broad phrase matches. Memories matching multiple phrases receive additional score.
-- Each result includes matchedBroadSearchTexts and matchedSpecificSearchTexts so you can see which query phrases matched that memory.
-- The result is a JSON array of memory records sorted by lexical relevance, importance, then recent update time.`
-
-const searchSchema = z.object({
-    broadSearchTexts: z
-        .array(z.string())
-        .min(1)
-        .max(5)
-        .describe(
-            'Short broad search phrases. Provide 1 to 5 phrases, each 2 to 6 characters after trimming.'
-        ),
-    specificSearchTexts: z
-        .array(z.string())
-        .min(1)
-        .max(5)
-        .optional()
-        .describe(
-            'Optional longer specific search phrases. Provide 1 to 5 phrases, each 7 to 20 characters after trimming.'
-        ),
-    memoryTypes: z
-        .array(z.enum(livingMemorySearchMemoryTypes))
-        .min(1)
-        .describe(
-            'Memory categories to search. Use concrete categories or all.'
-        )
-})
+const toolDescription = [
+    'Search active memories in the current preset by lexical phrase matching.',
+    '',
+    'Use this tool when you need to look up existing memories by both broad and specific search phrases.',
+    `- broadSearchTexts: 1 to ${memorySearchMaxTextCount} short, broad phrases. ` +
+        `Each phrase must be ${formatSearchTextLengthRange(broadSearchTextRule)} characters after trimming. ` +
+        'Use broad topics, categories, or general needs.',
+    `- specificSearchTexts: optional but recommended, 1 to ${memorySearchMaxTextCount} longer, specific phrases. ` +
+        `Each phrase must be ${formatSearchTextLengthRange(specificSearchTextRule)} characters after trimming when provided.`,
+    '  Use concrete constraints, entities, preferences, or short factual phrases.',
+    '- memoryTypes: memory categories to search, or ["all"] to search every category.',
+    '- The tool only searches active memories owned by the current preset.',
+    '- Specific phrase matches receive higher score than broad phrase matches. Memories matching multiple phrases receive additional score.',
+    '- Each result includes matchedBroadSearchTexts and matchedSpecificSearchTexts so you can see which query phrases matched that memory.',
+    '- The result is a JSON array of memory records sorted by lexical relevance, importance, then recent update time.'
+].join('\n')
 
 type ChatLunaStructuredTool = ReturnType<ChatLunaTool['createTool']>
 
@@ -92,7 +78,7 @@ class LivingMemorySearchTool extends StructuredTool {
     name = livingMemorySearchToolName
     description = toolDescription
 
-    schema = searchSchema
+    schema = livingMemorySearchInputSchema
     private readonly logger: Logger
 
     constructor(
@@ -110,7 +96,7 @@ class LivingMemorySearchTool extends StructuredTool {
     }
 
     async _call(
-        input: z.infer<typeof searchSchema>,
+        input: z.infer<typeof livingMemorySearchInputSchema>,
         _runManager: unknown,
         runConfig?: ToolRunnableConfig
     ) {

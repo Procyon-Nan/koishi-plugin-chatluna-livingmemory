@@ -1,6 +1,10 @@
 import { LivingMemoryRepository } from '../repository'
 import { formatDateOnly } from '../shared/utils'
 import { scopeKey } from './helpers'
+import {
+    isAgenticMemorySnapshotItem,
+    isMemoryReferenceItem
+} from './snapshot_items'
 import type { MemoryScope, MemorySnapshotRecord } from '../../types'
 
 export class LivingMemorySnapshotCache {
@@ -30,24 +34,45 @@ export class LivingMemorySnapshotCache {
 
     async hydrate(scope: Pick<MemoryScope, 'presetId' | 'conversationId'>) {
         const snapshot = await this.repository.getLatestSnapshotByScope(scope)
-        const rendered = await this.renderItems(snapshot?.items ?? [])
+        const rendered = await this.renderSnapshot(snapshot)
         this.snapshotVariableByScope.set(scopeKey(scope), rendered)
         return rendered
     }
 
-    private async renderItems(items: MemorySnapshotRecord['items']) {
-        if (items.length === 0) {
+    private async renderSnapshot(snapshot: MemorySnapshotRecord | undefined) {
+        if (snapshot == null) {
+            return ''
+        }
+
+        if (snapshot.strategy === 'agentic-tool-search') {
+            return this.renderAgenticItems(snapshot.items)
+        }
+
+        return await this.renderReferenceItems(snapshot.items)
+    }
+
+    private renderAgenticItems(items: MemorySnapshotRecord['items']) {
+        return items
+            .filter(isAgenticMemorySnapshotItem)
+            .map((item) => item.finalText.trim())
+            .filter((text) => text.length > 0)
+            .join('\n')
+    }
+
+    private async renderReferenceItems(items: MemorySnapshotRecord['items']) {
+        const references = items.filter(isMemoryReferenceItem)
+        if (references.length === 0) {
             return ''
         }
 
         const records = await this.repository.getEntriesByIds(
-            items.map((item) => item.memoryId)
+            references.map((item) => item.memoryId)
         )
         if (records.length === 0) {
             return ''
         }
 
-        const ordered = items
+        const ordered = references
             .map((item) =>
                 records.find((record) => record.id === item.memoryId)
             )

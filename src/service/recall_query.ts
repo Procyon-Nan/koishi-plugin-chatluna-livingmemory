@@ -279,7 +279,7 @@ export class LivingMemoryRecallQueryBuilder {
         const presetLabel = toPresetLabel(scope)
         const recentMessages = this.formatter.takeRecentRounds(
             historyMessages,
-            this.config.recallRewriteRounds
+            this.config.recallHistoryWindowRounds
         )
         const history = recentMessages.length
             ? this.formatter.toExtractionPayload(recentMessages).input

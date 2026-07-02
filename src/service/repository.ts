@@ -10,8 +10,8 @@ import type {
     MemoryJobRecord,
     MemoryMutationInput,
     MemoryRecallStrategy,
-    MemoryReference,
     MemoryScope,
+    MemorySnapshotItem,
     MemorySnapshotRecord,
     PresetSpeakerInput,
     PresetSpeakerRecord,
@@ -201,6 +201,12 @@ export class LivingMemoryRepository
                 presetId: 'string(255)',
                 conversationId: 'string(255)',
                 kind: 'string(16)',
+                recallStrategy: {
+                    type: 'string',
+                    length: 32,
+                    nullable: true,
+                    initial: null
+                },
                 status: 'string(16)',
                 input: 'text',
                 detail: 'text',
@@ -324,7 +330,7 @@ export class LivingMemoryRepository
         scope: MemoryScope,
         strategy: MemoryRecallStrategy,
         query: string,
-        items: MemoryReference[]
+        items: MemorySnapshotItem[]
     ) {
         const createdAt = new Date()
         const existing = await this.ctx.database.get('living_memory_snapshot', {
@@ -419,7 +425,8 @@ export class LivingMemoryRepository
     async createJob(
         scope: MemoryScope,
         kind: MemoryJobKind,
-        input: string
+        input: string,
+        recallStrategy: MemoryRecallStrategy | null = null
     ): Promise<MemoryJobRecord> {
         const now = new Date()
         const job: MemoryJobRecord = {
@@ -427,6 +434,7 @@ export class LivingMemoryRepository
             presetId: scope.presetId,
             conversationId: scope.conversationId,
             kind,
+            recallStrategy,
             status: 'pending',
             input,
             detail: null,

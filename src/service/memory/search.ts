@@ -5,6 +5,15 @@ import type {
     MemoryEntryRecord
 } from '../../types'
 import { memoryEntryTypes } from '../../types'
+import type { MemorySearchTextRule } from './search_contract'
+import {
+    broadSearchTextRule,
+    countSearchTextCharacters,
+    formatSearchTextLengthError,
+    memorySearchMaxTextCount,
+    normalizeSearchText,
+    specificSearchTextRule
+} from './search_contract'
 
 const searchFieldWeights = {
     keywords: 3,
@@ -19,17 +28,6 @@ const queryTypeWeights = {
 
 const specificSearchTextMatchBonus = 2
 const multiSearchTextMatchBonus = 1
-const maxSearchTextCount = 5
-const broadSearchTextMinLength = 2
-const broadSearchTextMaxLength = 6
-const specificSearchTextMinLength = 7
-const specificSearchTextMaxLength = 20
-
-export const normalizeSearchText = (value: string) => {
-    return value.replace(/\s+/gu, ' ').trim().toLowerCase()
-}
-
-const textLength = (value: string) => Array.from(value).length
 
 const isMemoryEntryType = (
     value: LivingMemorySearchMemoryType
@@ -38,10 +36,8 @@ const isMemoryEntryType = (
 }
 
 const ensureSearchTexts = (
-    fieldName: string,
+    rule: MemorySearchTextRule,
     searchTexts: string[],
-    minLength: number,
-    maxLength: number,
     options: { allowEmpty?: boolean } = {}
 ) => {
     if (!Array.isArray(searchTexts) || searchTexts.length === 0) {
@@ -49,11 +45,13 @@ const ensureSearchTexts = (
             return []
         }
 
-        throw new Error(`${fieldName} must not be empty.`)
+        throw new Error(`${rule.fieldName} must not be empty.`)
     }
 
-    if (searchTexts.length > maxSearchTextCount) {
-        throw new Error(`${fieldName} accepts at most 5 query phrases.`)
+    if (searchTexts.length > memorySearchMaxTextCount) {
+        throw new Error(
+            `${rule.fieldName} accepts at most ${memorySearchMaxTextCount} query phrases.`
+        )
     }
 
     const normalized: string[] = []
@@ -61,16 +59,14 @@ const ensureSearchTexts = (
 
     for (const rawText of searchTexts) {
         if (typeof rawText !== 'string') {
-            throw new Error(`${fieldName} must contain only strings.`)
+            throw new Error(`${rule.fieldName} must contain only strings.`)
         }
 
-        const text = normalizeSearchText(rawText)
-        const length = textLength(text)
-        if (length < minLength || length > maxLength) {
-            throw new Error(
-                `Each ${fieldName} item must be ${minLength} to ${maxLength} characters after trimming.`
-            )
+        const length = countSearchTextCharacters(rawText)
+        if (length < rule.minLength || length > rule.maxLength) {
+            throw new Error(formatSearchTextLengthError(rule))
         }
+        const text = normalizeSearchText(rawText)
 
         if (seen.has(text)) {
             continue
@@ -81,7 +77,7 @@ const ensureSearchTexts = (
     }
 
     if (normalized.length === 0) {
-        throw new Error(`${fieldName} must not be empty.`)
+        throw new Error(`${rule.fieldName} must not be empty.`)
     }
 
     return normalized
@@ -189,16 +185,12 @@ export function searchLivingMemoryEntries(
     }
 
     const broadSearchTexts = ensureSearchTexts(
-        'broadSearchTexts',
-        options.broadSearchTexts,
-        broadSearchTextMinLength,
-        broadSearchTextMaxLength
+        broadSearchTextRule,
+        options.broadSearchTexts
     )
     const specificSearchTexts = ensureSearchTexts(
-        'specificSearchTexts',
+        specificSearchTextRule,
         options.specificSearchTexts ?? [],
-        specificSearchTextMinLength,
-        specificSearchTextMaxLength,
         { allowEmpty: true }
     )
     const memoryTypes = ensureMemoryTypes(options.memoryTypes)
