@@ -3,13 +3,10 @@ export type { ExtractionPromptInput } from './extraction'
 export { buildRecallRewritePrompt } from './recall_query'
 export type { RecallRewritePromptInput } from './recall_query'
 export {
-    buildAgenticRecallFinalPrompt,
-    buildAgenticRecallPlanPrompt
+    agenticRecallNoMemoryOutput,
+    buildAgenticRecallPrompt
 } from './agentic_recall'
-export type {
-    AgenticRecallFinalPromptInput,
-    AgenticRecallPlanPromptInput
-} from './agentic_recall'
+export type { AgenticRecallPromptInput } from './agentic_recall'
 export { buildDreamPrompt } from './dream'
 export { buildUserProfilePrompt } from './user_profile'
 export type {

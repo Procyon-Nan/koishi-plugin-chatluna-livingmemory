@@ -81,7 +81,6 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         const agenticRecall = new LivingMemoryAgenticRecallExecutor(
             ctx,
             config,
-            this.repository,
             debug
         )
         this.userProfiles = new LivingMemoryUserProfileService(
