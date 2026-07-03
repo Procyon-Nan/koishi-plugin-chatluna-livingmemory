@@ -26,8 +26,8 @@ tree whenever architecture, data contracts, or workflow boundaries change.
 - `src/plugins/webui.ts` is the console RPC boundary. Keep it synchronized with
   `src/types.ts`, `client/api.ts`, and `client/dashboard.vue`.
 - `src/plugins/living_memory_search.ts` registers the model-facing
-  `living_memory_search` tool. Its input schema must stay aligned with
-  `src/service/memory/search_contract.ts` and `src/service/memory/search.ts`.
+  `living_memory_search` tool with ChatLuna. It delegates runtime behavior to
+  `src/service/memory/search_tool.ts`.
 - `client/api.ts`, `client/types.ts`, and `client/dashboard.vue` implement the
   WebUI surface for memories, user profiles, snapshots, jobs, Dream execution,
   and preset data cleanup.
@@ -40,14 +40,18 @@ tree whenever architecture, data contracts, or workflow boundaries change.
 - `src/service/memory/search_contract.ts` centralizes lexical memory-search
   tool name, query text length limits, and schema rules used by the tool,
   agentic recall, prompts, and search implementation.
+- `src/service/memory/search_tool.ts` owns the reusable `living_memory_search`
+  tool implementation, including input validation, runtime scope resolution,
+  debug logging, invalid-argument retry limits, and result serialization.
 - `src/service/repository.ts` owns Koishi database table definitions and all
   persistence methods.
 - `src/service/recall_query.ts` and `src/service/retriever.ts` own query
   normalization/rewrite handling and embedding-rerank retrieval.
 - `src/service/memory/agentic_recall.ts` owns the agentic-tool-search recall
-  executor. It plans lexical memory-search parameters, calls the same search
-  implementation as the tool, and asks the recall model to produce final plain
-  memory text for snapshot injection.
+  executor. It drives the recall model through a bounded tool-call loop, exposes
+  `living_memory_search` as the available tool, aggregates tool-call summaries
+  and matched memories, and returns final plain memory text for snapshot
+  injection.
 - `src/service/extractor.ts`, `src/service/message_formatter.ts`, and the
   transcript adapters convert chat history into extraction-ready records and
   parse model output.
@@ -57,7 +61,8 @@ tree whenever architecture, data contracts, or workflow boundaries change.
 - `src/service/user_profile.ts` owns preset speaker normalization, user profile
   generation, profile rendering, and profile source-memory selection.
 - `src/service/prompts/` and `src/service/prompts.ts` are the prompt/schema
-  source of truth for extraction, recall rewrite, Dream, and user profiles.
+  source of truth for extraction, recall rewrite, agentic recall, Dream, and
+  user profiles.
 - `lib/` and `dist/` are build outputs. Do not edit them unless the task
   explicitly asks for generated artifacts.
 - `tmp/` is the local planning workspace for each new feature design or bug-fix
@@ -89,9 +94,13 @@ tree whenever architecture, data contracts, or workflow boundaries change.
   use the normalized current query when possible.
 - `agentic-tool-search` recall is a separate selectable strategy. It uses
   `recallHistoryWindowRounds` for its history window, has its own
-  `agenticRecallModel`, writes agentic snapshot items containing final memory
-  text plus search parameters and matched memories, and fails the recall job
-  rather than switching strategy when required model/search validation fails.
+  `agenticRecallModel`, asks the model to call `living_memory_search`, writes
+  agentic snapshot items containing final memory text plus search parameters and
+  matched memories, and fails the recall job rather than switching strategy when
+  required model/search validation fails.
+- When agentic recall finishes with `<NO_MEMORY>`, the recall job is completed
+  but no snapshot is written or hydrated. The previous snapshot remains the next
+  injectable memory context.
 - `living_memory_job.recallStrategy` records the selected recall strategy for
   recall jobs. Non-recall jobs and pre-existing rows may have `null`.
 - `living_memory_snapshot.strategy` distinguishes snapshot item semantics:
@@ -147,7 +156,11 @@ tree whenever architecture, data contracts, or workflow boundaries change.
 ## Change Guidance
 
 - For recall changes, distinguish rewrite-disabled, rewrite-failure,
-  empty cleaned query, and empty final query behavior before editing.
+  empty cleaned query, empty final query, and agentic `<NO_MEMORY>` behavior
+  before editing.
+- For `living_memory_search` changes, keep `search_contract.ts`,
+  `search_tool.ts`, `search.ts`, `src/plugins/living_memory_search.ts`, and
+  agentic recall prompt rules aligned.
 - For extraction changes, preserve interval baseline handling, lock behavior,
   job state transitions, prompt rendering fallback, and parse-error semantics.
 - For Dream changes, preserve stage-specific action allowlists, touched-memory

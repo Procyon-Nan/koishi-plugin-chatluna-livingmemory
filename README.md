@@ -6,13 +6,13 @@
 
 ## 功能
 
-- 标准 ChatLuna 会话在请求中的用户消息末尾注入记忆快照
-- character（伪装）插件通过预设中的 `{living_memory}` 变量注入记忆快照
-- 按预设（preset）分区保存记忆，支持同一预设跨会话共享长期记忆
-- 异步进行记忆检索与召回，并把召回结果写入记忆快照，供下一轮对话使用
-- 异步进行记忆总结与存储，将对话转化为符合预设角色风格的第一人称叙事记忆
-- 提供独立的记忆整理流程，用于合并相似记忆、归档过时记忆和减少重复项
-- 提供 Koishi Console WebUI，方便手动查看、创建、编辑、删除记忆和快照
+- 以预设（preset）为核心，全自动、异步地进行长期记忆的生成与召回
+- 标准 ChatLuna 会话在请求中的用户消息末尾注入记忆快照；character（伪装）插件通过预设中的 `{living_memory}` 变量注入记忆快照
+- 提供 `embedding-rerank` 与 `agentic-tool-search（实验性）` 两种记忆召回策略
+- 提供 `living_memory_search` 记忆查询工具，供模型按查询词和记忆类别查询记忆
+- 通过以 `Dream` 命名的记忆整理流程来执行记忆库的合并、更新与归档
+- 根据记忆内容形成用户画像，并在对话中实时注入
+- 提供 Koishi Console WebUI，方便手动查看、创建、编辑、删除记忆和快照等数据
 
 ## 安装方式
 
@@ -40,13 +40,14 @@ yarn build chatluna-livingmemory
 
 2. 配置模型：
 
-| 模型类型 | 用途 | 是否必需 |
+| 模型类型 | 模型用途 | 是否必需 |
 | --- | --- | --- |
-| LLM 模型 | 从对话中提取记忆 | 必需 |
-| Dream LLM 模型 | 进行 Dream 记忆整理与合并决策 | 必需 |
-| 召回查询改写 LLM 模型 | 在召回前改写检索查询 | 可选 |
-| Embedding 嵌入模型 | 进行记忆向量化检索 | 必需 |
-| Reranker 重排序模型 | 对召回结果重排序 | 必需 |
+| extractModel | 从历史对话中提取并生成记忆内容 | 必需 |
+| dreamModel | 在 `Deeam` 记忆整理流程中进行决策 | 必需 |
+| recallRewriteModel | 在 `embedding-rerank` 策略中生成更合适的查询文本 | 可选 |
+| agenticRecallModel | 在 `agentic-tool-search` 策略中完成记忆的召回 | `agentic-tool-search` 必需 |
+| embeddingModel | 使用 `embedding-rerank` 策略中对文本进行向量化 | `embedding-rerank` 必需 |
+| rerankerModel | 使用 `embedding-rerank` 策略中进行召回结果的重排序 | `embedding-rerank` 必需 |
 
 如果你不知道应该如何配置 Embedding 嵌入模型 和 Reranker 重排序模型，请参考[此文档](https://github.com/Procyon-Nan/koishi-plugin-chatluna-livingmemory/blob/main/docs/embedding-reranker-guide.md)进行配置
 
@@ -56,9 +57,16 @@ yarn build chatluna-livingmemory
 - Embedding 模型：`bce-embedding-base_v1`
 - Reranker 模型：`bce-reranker-base_v1`
 
-3. 对于 ChatLuna 主插件，在插件配置中开启 `开启记忆快照注入`。开启后，会在当前用户消息之后自动注入最近一次成功召回的记忆快照
+3. 在插件配置中选择记忆召回策略：
 
-4. 对于 Character（伪装）插件，需要在 Character 的预设文件 input 中写入变量以进行记忆快照的注入，例如：
+   - `embedding-rerank`：使用 embedding 检索候选记忆，并通过 reranker 重排序后取 top_k 写入记忆快照。
+
+   - `agentic-tool-search（实验性）`：由 recall agent 结合近期对话和最后一条信息，调用 `living_memory_search` 工具查询记忆，再生成纯文本记忆内容写入记忆快照。
+
+
+5. 对于 ChatLuna 主插件，在插件配置中开启 `开启记忆快照注入`。开启后，会在当前用户消息之后自动注入最近一次成功召回的记忆快照
+
+6. 对于 Character（伪装）插件，需要在 Character 的预设文件 input 中写入变量以进行记忆快照的注入，例如：
 
 ```text
 input: |
@@ -66,7 +74,7 @@ input: |
     {living_memory}
 ```
 
-5. 在 Koishi Console 侧边栏进入 livingmemory WebUI，进行记忆的查看和管理。
+7. 在 Koishi Console 侧边栏进入 livingmemory WebUI，进行记忆的查看和管理。
 
 ## 记忆隔离机制
 
@@ -79,4 +87,18 @@ input: |
 | ChatLuna 主插件 | 原始 preset 名 | `conversationId` |
 | Character（伪装） | `预设名（Character）` | `private:{userId}` 或 `group:{guildId}` 形式的 `sessionKey` |
 
-这意味着：同一预设在不同会话中会共享长期记忆，但每个会话会使用各自的记忆快照，避免召回结果直接串到其他会话。
+这意味着同一预设在不同会话中会共享长期记忆，但每个会话会使用各自的记忆快照，避免召回结果直接串到其他会话。
+
+## 记忆查询工具
+
+`living_memory_search` 是提供给模型调用的记忆查询工具。它会在当前预设的 active 记忆中进行词面检索，并按匹配相关度、重要度和更新时间排序返回结果。
+
+模型可填写的工具参数包括：
+
+| 字段 | 说明 |
+| --- | --- |
+| `broadSearchTexts` | 必填，1 到 5 个短查询词，每个查询词 2 到 6 个字符 |
+| `specificSearchTexts` | 可选，1 到 5 个长查询词，每个查询词 7 到 20 个字符 |
+| `memoryTypes` | 必填，记忆类别，可选 `identity`、`preference`、`fact`、`plan`、`context`、`other`，或单独使用 `all` |
+
+工具返回结果包含记忆内容、摘要、关键词、重要度、创建时间、更新时间，以及命中的 `broadSearchTexts` / `specificSearchTexts`。返回结果不会包含记忆 `id` 和 `status`。启用 `debug` 后，插件会输出工具调用输入和工具调用输出，便于排查模型调用流程。
