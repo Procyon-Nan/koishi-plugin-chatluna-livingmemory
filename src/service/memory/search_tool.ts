@@ -22,7 +22,7 @@ export const livingMemorySearchToolDescription = [
         'Use broad topics, categories, or general needs.',
     `- specificSearchTexts: optional but recommended, 1 to ${memorySearchMaxTextCount} longer, specific phrases. ` +
         `Each phrase must be ${formatSearchTextLengthRange(specificSearchTextRule)} characters after trimming when provided.`,
-    '  Use concrete constraints, entities, preferences, or short factual phrases.',
+    '  Use concrete constraints, entities, preferences, or factual phrases.',
     '- memoryTypes: memory categories to search, or ["all"] to search every category.',
     '- The tool only searches active memories owned by the current preset.',
     '- Specific phrase matches receive higher score than broad phrase matches. Memories matching multiple phrases receive additional score.',
