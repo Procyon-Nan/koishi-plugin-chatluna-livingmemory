@@ -214,14 +214,14 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         }
 
         if (
-            this.config.recallStrategy === 'agentic-tool-search' &&
+            this.config.recallStrategy === 'agentic-recall' &&
             !isModelConfigured(this.config.agenticRecallModel)
         ) {
             warnings.push({
                 code: 'agentic-recall-model-missing',
                 field: 'agenticRecallModel',
                 message:
-                    'agentic-tool-search 已启用，但未配置 agenticRecallModel；记忆召回将失败。'
+                    'agentic-recall 已启用，但未配置 agenticRecallModel；记忆召回将失败。'
             })
         }
 

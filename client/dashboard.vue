@@ -770,7 +770,7 @@ const snapshotAgenticItems = (
 }
 
 const isAgenticSnapshot = (snapshot: MemorySnapshotRecord): boolean => {
-    return snapshot.strategy === 'agentic-tool-search'
+    return snapshot.strategy === 'agentic-recall'
 }
 
 const snapshotHitCount = (snapshot: MemorySnapshotRecord): number => {

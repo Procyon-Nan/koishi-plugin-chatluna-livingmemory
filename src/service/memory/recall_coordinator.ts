@@ -81,7 +81,7 @@ export class LivingMemoryRecallCoordinator {
             )
         }
 
-        if (this.config.recallStrategy === 'agentic-tool-search') {
+        if (this.config.recallStrategy === 'agentic-recall') {
             await this.runAgentic(scope, currentMessage, historyMessages)
             return
         }
@@ -220,7 +220,7 @@ export class LivingMemoryRecallCoordinator {
             scope,
             'recall',
             input,
-            'agentic-tool-search'
+            'agentic-recall'
         )
 
         try {
@@ -252,7 +252,7 @@ export class LivingMemoryRecallCoordinator {
             const query = JSON.stringify(trace.item.toolCallSummary)
             await this.repository.upsertSnapshot(
                 scope,
-                'agentic-tool-search',
+                'agentic-recall',
                 query,
                 [trace.item]
             )

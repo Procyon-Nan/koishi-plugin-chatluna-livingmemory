@@ -8,7 +8,7 @@
 
 - 以预设（preset）为核心，全自动、异步地进行长期记忆的生成与召回
 - 标准 ChatLuna 会话在请求中的用户消息末尾注入记忆快照；character（伪装）插件通过预设中的 `{living_memory}` 变量注入记忆快照
-- 提供 `embedding-rerank` 与 `agentic-tool-search（实验性）` 两种记忆召回策略
+- 提供 `embedding-rerank` 与 `agentic-recall（实验性）` 两种记忆召回策略
 - 提供 `living_memory_search` 记忆查询工具，供模型按查询词和记忆类别查询记忆
 - 通过以 `Dream` 命名的记忆整理流程来执行记忆库的合并、更新与归档
 - 根据记忆内容形成用户画像，并在对话中实时注入
@@ -45,7 +45,7 @@ yarn build chatluna-livingmemory
 | extractModel | 从历史对话中提取并生成记忆内容 | 必需 |
 | dreamModel | 在 `Deeam` 记忆整理流程中进行决策 | 必需 |
 | recallRewriteModel | 在 `embedding-rerank` 策略中生成更合适的查询文本 | 可选 |
-| agenticRecallModel | 在 `agentic-tool-search` 策略中完成记忆的召回 | `agentic-tool-search` 必需 |
+| agenticRecallModel | 在 `agentic-recall` 策略中完成记忆的召回 | `agentic-recall` 必需 |
 | embeddingModel | 使用 `embedding-rerank` 策略中对文本进行向量化 | `embedding-rerank` 必需 |
 | rerankerModel | 使用 `embedding-rerank` 策略中进行召回结果的重排序 | `embedding-rerank` 必需 |
 
@@ -61,7 +61,7 @@ yarn build chatluna-livingmemory
 
    - `embedding-rerank`：使用 embedding 检索候选记忆，并通过 reranker 重排序后取 top_k 写入记忆快照。
 
-   - `agentic-tool-search（实验性）`：由 recall agent 结合近期对话和最后一条信息，调用 `living_memory_search` 工具查询记忆，再生成纯文本记忆内容写入记忆快照。
+   - `agentic-recall（实验性）`：由 recall agent 结合近期对话和最后一条信息，调用 `living_memory_search` 工具查询记忆，再生成纯文本记忆内容写入记忆快照。
 
 
 5. 对于 ChatLuna 主插件，在插件配置中开启 `开启记忆快照注入`。开启后，会在当前用户消息之后自动注入最近一次成功召回的记忆快照

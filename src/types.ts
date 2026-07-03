@@ -19,7 +19,7 @@ export const memoryEntryTypes = [
 
 export const memoryRecallStrategies = [
     'embedding-rerank',
-    'agentic-tool-search'
+    'agentic-recall'
 ] as const
 
 export const memoryJobKinds = ['recall', 'extract', 'dream'] as const

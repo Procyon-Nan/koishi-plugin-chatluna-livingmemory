@@ -14,7 +14,7 @@ export const memoryEntryTypes = [
 export type MemoryEntryType = (typeof memoryEntryTypes)[number]
 
 export type MemoryEntryStatus = 'active' | 'archived'
-export type MemoryRecallStrategy = 'embedding-rerank' | 'agentic-tool-search'
+export type MemoryRecallStrategy = 'embedding-rerank' | 'agentic-recall'
 
 export type LivingMemorySearchMemoryType = MemoryEntryType | 'all'
 

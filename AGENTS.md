@@ -47,7 +47,7 @@ tree whenever architecture, data contracts, or workflow boundaries change.
   persistence methods.
 - `src/service/recall_query.ts` and `src/service/retriever.ts` own query
   normalization/rewrite handling and embedding-rerank retrieval.
-- `src/service/memory/agentic_recall.ts` owns the agentic-tool-search recall
+- `src/service/memory/agentic_recall.ts` owns the agentic-recall recall
   executor. It drives the recall model through a bounded tool-call loop, exposes
   `living_memory_search` as the available tool, aggregates tool-call summaries
   and matched memories, and returns final plain memory text for snapshot
@@ -92,7 +92,7 @@ tree whenever architecture, data contracts, or workflow boundaries change.
 - `embedding-rerank` recall uses query rewrite when enabled. Empty cleaned
   queries are skipped; disabled or failed rewrite paths record their reason and
   use the normalized current query when possible.
-- `agentic-tool-search` recall is a separate selectable strategy. It uses
+- `agentic-recall` recall is a separate selectable strategy. It uses
   `recallHistoryWindowRounds` for its history window, has its own
   `agenticRecallModel`, asks the model to call `living_memory_search`, writes
   agentic snapshot items containing final memory text plus search parameters and
@@ -104,7 +104,7 @@ tree whenever architecture, data contracts, or workflow boundaries change.
 - `living_memory_job.recallStrategy` records the selected recall strategy for
   recall jobs. Non-recall jobs and pre-existing rows may have `null`.
 - `living_memory_snapshot.strategy` distinguishes snapshot item semantics:
-  `embedding-rerank` stores memory references, while `agentic-tool-search`
+  `embedding-rerank` stores memory references, while `agentic-recall`
   stores agentic snapshot items rendered directly as final memory text.
 - Extraction uses an interval baseline per scope. Parse failures mark the job as
   failed; valid empty arrays mark a completed extraction with zero memories.

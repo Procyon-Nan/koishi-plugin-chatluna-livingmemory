@@ -44,7 +44,7 @@ export class LivingMemorySnapshotCache {
             return ''
         }
 
-        if (snapshot.strategy === 'agentic-tool-search') {
+        if (snapshot.strategy === 'agentic-recall') {
             return this.renderAgenticItems(snapshot.items)
         }
 
