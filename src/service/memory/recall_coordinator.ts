@@ -231,9 +231,25 @@ export class LivingMemoryRecallCoordinator {
                 currentMessage,
                 historyMessages
             )
+            const matchedCount = trace.item.matchedMemories.length
+
+            if (trace.item.finalText.trim().length === 0) {
+                this.debug(
+                    [
+                        `memory agentic recall no memory selected: conversationId=${scope.conversationId}`,
+                        `presetId=${scope.presetId}`,
+                        `matched=${matchedCount}`,
+                        'snapshot=unchanged'
+                    ].join(' ')
+                )
+                await this.jobTracker.markCompleted(
+                    job.id,
+                    'no memory selected; snapshot unchanged'
+                )
+                return
+            }
 
             const query = JSON.stringify(trace.item.toolCallSummary)
-
             await this.repository.upsertSnapshot(
                 scope,
                 'agentic-tool-search',
@@ -244,7 +260,7 @@ export class LivingMemoryRecallCoordinator {
 
             await this.jobTracker.markCompleted(
                 job.id,
-                `matched ${trace.item.matchedMemories.length} memories`
+                `matched ${matchedCount} memories`
             )
         } catch (error) {
             await this.jobTracker.markFailed(job.id, error)
