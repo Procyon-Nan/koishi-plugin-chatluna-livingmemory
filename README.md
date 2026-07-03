@@ -7,7 +7,7 @@
 ## 功能
 
 - 以预设（preset）为核心，全自动、异步地进行长期记忆的生成与召回
-- 标准 ChatLuna 会话在请求中的用户消息末尾注入记忆快照；character（伪装）插件通过预设中的 `{living_memory}` 变量注入记忆快照
+- 标准 ChatLuna 会话会在系统提示词后注入用户画像，并在历史上下文之后、当前用户输入之前注入记忆快照；character（伪装）插件通过预设中的 `{living_memory}` 变量注入记忆快照
 - 提供 `embedding-rerank` 与 `agentic-recall（实验性）` 两种记忆召回策略
 - 提供 `living_memory_search` 记忆查询工具，供模型按查询词和记忆类别查询记忆
 - 通过以 `Dream` 命名的记忆整理流程来执行记忆库的合并、更新与归档
@@ -64,7 +64,7 @@ yarn build chatluna-livingmemory
    - `agentic-recall（实验性）`：由 recall agent 结合近期对话和最后一条信息，调用 `living_memory_search` 工具查询记忆，再生成纯文本记忆内容写入记忆快照。
 
 
-5. 对于 ChatLuna 主插件，在插件配置中开启 `开启记忆快照注入`。开启后，会在当前用户消息之后自动注入最近一次成功召回的记忆快照
+5. 对于 ChatLuna 主插件，在插件配置中开启 `开启记忆快照注入`。开启后，会在历史上下文之后、当前用户输入之前自动注入最近一次成功召回的记忆快照。开启用户画像注入后，相关用户画像会以 system 语义插入在系统提示词之后
 
 6. 对于 Character（伪装）插件，需要在 Character 的预设文件 input 中写入变量以进行记忆快照的注入，例如：
 

@@ -1,5 +1,9 @@
 import { Context, type Session } from 'koishi'
-import type { HumanMessage } from '@langchain/core/messages'
+import {
+    AIMessage,
+    type HumanMessage,
+    SystemMessage
+} from '@langchain/core/messages'
 import type { Config } from '../index'
 import {
     setLivingMemoryRawContent,
@@ -8,11 +12,6 @@ import {
 } from '../service/chatluna_transcript_adapter'
 import { collectUserProfileSpeakerLabels } from '../service/user_profile'
 import type { LivingMemoryTranscriptMessage } from '../types'
-
-type PromptSections = {
-    snapshot: string
-    userProfiles: string
-}
 
 const toNonEmptyString = (value: unknown) => {
     return typeof value === 'string' && value.trim().length > 0
@@ -61,32 +60,69 @@ const writeRawUserContent = (
     setLivingMemoryRawContent(message, rawContent)
 }
 
-const formatPromptInjection = (sections: PromptSections) => {
-    const snapshot = sections.snapshot.trim()
-    const userProfiles = sections.userProfiles.trim()
-    const parts: string[] = []
+const formatUserProfileInjection = (userProfiles: string) => {
+    const text = userProfiles.trim()
+    return text.length > 0 ? `【用户画像】\n${text}` : null
+}
 
-    if (snapshot.length > 0) {
-        parts.push(`【你的记忆】\n${snapshot}`)
-    }
-    if (userProfiles.length > 0) {
-        parts.push(`【相关用户画像】\n${userProfiles}`)
-    }
-
-    if (parts.length === 0) {
-        return null
-    }
-
-    return parts.join('\n\n')
+const formatSnapshotInjection = (snapshot: string) => {
+    const text = snapshot.trim()
+    return text.length > 0 ? `【我的记忆】\n${text}` : null
 }
 
 export async function apply(ctx: Context, config: Config) {
     const logger = ctx.logger('chatluna-livingmemory')
+    const pendingUserProfiles = new Map<string, string>()
+    const pendingSnapshots = new Map<string, string>()
     const debug = (message: string) => {
         if (config.debug) {
             logger.info(message)
         }
     }
+
+    ctx.effect(() =>
+        ctx.chatluna.contextManager.pipeline(
+            'after_system_prompts',
+            async (runtime, next) => {
+                const conversationId = runtime.configurable?.conversationId
+                if (typeof conversationId === 'string') {
+                    const injection = pendingUserProfiles.get(conversationId)
+                    if (injection != null) {
+                        pendingUserProfiles.delete(conversationId)
+                        runtime.result.push(new SystemMessage(injection))
+                        runtime.usedTokens +=
+                            (await runtime.tokenCounter(injection)) +
+                            (await runtime.tokenCounter('system'))
+                    }
+                }
+
+                await next()
+            },
+            0
+        )
+    )
+
+    ctx.effect(() =>
+        ctx.chatluna.contextManager.pipeline(
+            'injections',
+            async (runtime, next) => {
+                const conversationId = runtime.configurable?.conversationId
+                if (typeof conversationId === 'string') {
+                    const injection = pendingSnapshots.get(conversationId)
+                    if (injection != null) {
+                        pendingSnapshots.delete(conversationId)
+                        runtime.result.push(new AIMessage(injection))
+                        runtime.usedTokens +=
+                            (await runtime.tokenCounter(injection)) +
+                            (await runtime.tokenCounter('assistant'))
+                    }
+                }
+
+                await next()
+            },
+            -10
+        )
+    )
 
     ctx.on(
         'chatluna/before-chat',
@@ -211,22 +247,39 @@ export async function apply(ctx: Context, config: Config) {
                                 speakerLabels
                             }
                         )
-                    const injection = formatPromptInjection(sections)
-                    if (injection != null) {
-                        ctx.chatluna.contextManager.inject({
+                    const userProfileInjection = formatUserProfileInjection(
+                        sections.userProfiles
+                    )
+                    if (userProfileInjection != null) {
+                        pendingUserProfiles.set(
                             conversationId,
-                            name: 'after_user_message',
-                            // 交给 ChatLuna core 转成 HumanMessage，避免不同
-                            // @langchain/core 实例导致 instanceof 失效。
-                            value: injection,
-                            once: true
-                        })
+                            userProfileInjection
+                        )
                         debug(
                             [
-                                'before-chat prompt injection queued:',
+                                'before-chat user profile injection queued:',
                                 `conversationId=${conversationId}`,
                                 `presetId=${presetId}`,
-                                `injectionLength=${injection.length}`
+                                'stage=after_system_prompts',
+                                'role=system',
+                                `injectionLength=${userProfileInjection.length}`
+                            ].join(' ')
+                        )
+                    }
+
+                    const snapshotInjection = formatSnapshotInjection(
+                        sections.snapshot
+                    )
+                    if (snapshotInjection != null) {
+                        pendingSnapshots.set(conversationId, snapshotInjection)
+                        debug(
+                            [
+                                'before-chat snapshot injection queued:',
+                                `conversationId=${conversationId}`,
+                                `presetId=${presetId}`,
+                                'stage=injections',
+                                'role=assistant',
+                                `injectionLength=${snapshotInjection.length}`
                             ].join(' ')
                         )
                     }
@@ -351,6 +404,8 @@ export async function apply(ctx: Context, config: Config) {
     )
 
     ctx.on('chatluna/clear-chat-history', async (conversationId) => {
+        pendingUserProfiles.delete(conversationId)
+        pendingSnapshots.delete(conversationId)
         await ctx.chatluna_living_memory.cleanupConversation(conversationId)
     })
 }
