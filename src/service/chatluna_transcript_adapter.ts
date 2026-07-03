@@ -1,29 +1,13 @@
 import type { BaseMessage } from '@langchain/core/messages'
-import type { LivingMemoryTranscriptMessage, MemoryScope } from '../types'
+import type { MemoryScope } from '../types'
 import {
     createLivingMemoryTranscriptMessageResult,
-    type LivingMemoryTranscriptMessageInvalidReason,
     parseLivingMemorySpeakerLine,
     toLivingMemoryDate,
     toNonEmptyString
 } from './transcript_message'
 
 export const livingMemoryRawContentKey = 'living_memory_raw_content'
-
-export type ChatLunaTranscriptDiagnosticReason =
-    | LivingMemoryTranscriptMessageInvalidReason
-    | 'unsupported-role'
-
-export interface ChatLunaTranscriptDiagnostic {
-    index: number
-    role: string
-    reason: ChatLunaTranscriptDiagnosticReason
-}
-
-export interface ChatLunaTranscriptBatchResult {
-    messages: LivingMemoryTranscriptMessage[]
-    diagnostics: ChatLunaTranscriptDiagnostic[]
-}
 
 const rawContentByMessage = new WeakMap<BaseMessage, string>()
 
@@ -194,46 +178,9 @@ export const toChatLunaTranscriptMessages = (
     scope: MemoryScope,
     messages: BaseMessage[]
 ) => {
-    return toChatLunaTranscriptMessagesWithDiagnostics(scope, messages).messages
-}
-
-export const toChatLunaTranscriptMessagesWithDiagnostics = (
-    scope: MemoryScope,
-    messages: BaseMessage[]
-): ChatLunaTranscriptBatchResult => {
-    const result: ChatLunaTranscriptBatchResult = {
-        messages: [],
-        diagnostics: []
-    }
-
-    messages.forEach((message, index) => {
-        const converted = toChatLunaTranscriptMessageResult(scope, message)
-        if (converted.message != null) {
-            result.messages.push(converted.message)
-            return
-        }
-
-        result.diagnostics.push({
-            index,
-            role: message.getType(),
-            reason: converted.reason
-        })
-    })
-
-    return result
-}
-
-export const formatChatLunaTranscriptDiagnostics = (
-    diagnostics: ChatLunaTranscriptDiagnostic[]
-) => {
-    if (diagnostics.length === 0) {
-        return ''
-    }
-
-    return diagnostics
-        .map(
-            (diagnostic) =>
-                `${diagnostic.index}:${diagnostic.role}:${diagnostic.reason}`
+    return messages
+        .map((message) => toChatLunaTranscriptMessageResult(scope, message))
+        .flatMap((converted) =>
+            converted.message == null ? [] : [converted.message]
         )
-        .join(', ')
 }

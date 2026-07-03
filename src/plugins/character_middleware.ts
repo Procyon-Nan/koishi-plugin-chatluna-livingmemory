@@ -3,12 +3,11 @@ import type { Config } from '../index'
 import {
     type CharacterTranscriptSourceMessage,
     countCharacterCompletedRounds,
-    formatCharacterTranscriptDiagnostics,
     isCharacterBotMessage,
     isSameCharacterMessage,
     resolveCharacterScopeSpeakerName,
     toCharacterTranscriptMessageResult,
-    toCharacterTranscriptMessagesWithDiagnostics
+    toCharacterTranscriptMessages
 } from '../service/character_transcript_adapter'
 import { takeRecentRounds } from '../service/shared/rounds'
 import { collectUserProfileSpeakerLabels } from '../service/user_profile'
@@ -306,28 +305,15 @@ export async function apply(ctx: Context, config: Config) {
                 (message) =>
                     !isSameCharacterMessage(message, payload.focusMessage)
             )
-            const history = toCharacterTranscriptMessagesWithDiagnostics(
+            const history = toCharacterTranscriptMessages(
                 scope,
                 payload.session,
                 historyMessages
             )
-            if (history.diagnostics.length > 0) {
-                debug(
-                    [
-                        'character before-chat history transcript diagnostics:',
-                        `conversationId=${scope.conversationId}`,
-                        `presetId=${scope.presetId}`,
-                        `dropped=${history.diagnostics.length}`,
-                        formatCharacterTranscriptDiagnostics(
-                            history.diagnostics
-                        )
-                    ].join(' ')
-                )
-            }
             profileSpeakerLabelsByScope.set(
                 toScopeKey(scope),
                 collectUserProfileSpeakerLabels([
-                    ...history.messages,
+                    ...history,
                     currentTranscript.message
                 ])
             )
@@ -335,7 +321,7 @@ export async function apply(ctx: Context, config: Config) {
             await ctx.chatluna_living_memory.queueRecall(
                 scope,
                 currentTranscript.message,
-                async () => history.messages
+                async () => history
             )
         }
     )
@@ -344,25 +330,11 @@ export async function apply(ctx: Context, config: Config) {
         'chatluna_character/after-chat',
         async (payload: CharacterAfterChatEventPayload) => {
             const scope = createCharacterScope(ctx, payload)
-            const transcript = toCharacterTranscriptMessagesWithDiagnostics(
+            const messages = toCharacterTranscriptMessages(
                 scope,
                 payload.session,
                 payload.messages
             )
-            if (transcript.diagnostics.length > 0) {
-                debug(
-                    [
-                        'character after-chat transcript diagnostics:',
-                        `conversationId=${scope.conversationId}`,
-                        `presetId=${scope.presetId}`,
-                        `dropped=${transcript.diagnostics.length}`,
-                        formatCharacterTranscriptDiagnostics(
-                            transcript.diagnostics
-                        )
-                    ].join(' ')
-                )
-            }
-            const messages = transcript.messages
             const scopeKey = toScopeKey(scope)
             profileSpeakerLabelsByScope.set(
                 scopeKey,
@@ -398,7 +370,6 @@ export async function apply(ctx: Context, config: Config) {
                     `chatCount=${chatCount}`,
                     `messagesLength=${payload.messages.length}`,
                     `transcriptMessagesLength=${messages.length}`,
-                    `transcriptDiagnosticsLength=${transcript.diagnostics.length}`,
                     `extractionMessagesLength=${extractionMessages.length}`
                 ].join(' ')
             )

@@ -80,8 +80,8 @@ tree whenever architecture, data contracts, or workflow boundaries change.
 - Main ChatLuna `before-chat` builds a scope, records the current speaker, loads
   history only when needed, hydrates prompt sections, injects snapshot/profile
   text into ChatLuna core, and queues recall.
-- Main ChatLuna `after-chat` converts history to transcript messages, reports
-  diagnostics in debug mode, and queues extraction based on chat count.
+- Main ChatLuna `after-chat` converts history to transcript messages and queues
+  extraction based on chat count.
 - Character integration uses a separate preset id based on
   `characterPresetSuffix`. Character prompt injection happens through the
   `{living_memory}` function provider rather than ChatLuna core context

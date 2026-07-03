@@ -1,9 +1,6 @@
 import type { Session } from 'koishi'
 import type { LivingMemoryTranscriptMessage, MemoryScope } from '../types'
-import {
-    createLivingMemoryTranscriptMessageResult,
-    type LivingMemoryTranscriptMessageInvalidReason
-} from './transcript_message'
+import { createLivingMemoryTranscriptMessageResult } from './transcript_message'
 
 export interface CharacterTranscriptSourceMessage {
     content: string
@@ -11,20 +8,6 @@ export interface CharacterTranscriptSourceMessage {
     id?: string
     messageId?: string
     timestamp?: number
-}
-
-export type CharacterTranscriptDiagnosticReason =
-    LivingMemoryTranscriptMessageInvalidReason
-
-export interface CharacterTranscriptDiagnostic {
-    index: number
-    role: LivingMemoryTranscriptMessage['role']
-    reason: CharacterTranscriptDiagnosticReason
-}
-
-export interface CharacterTranscriptBatchResult {
-    messages: LivingMemoryTranscriptMessage[]
-    diagnostics: CharacterTranscriptDiagnostic[]
 }
 
 const toNonEmptyString = (value: unknown) => {
@@ -188,59 +171,13 @@ export const toCharacterTranscriptMessages = (
     session: Session,
     messages: CharacterTranscriptSourceMessage[]
 ) => {
-    return toCharacterTranscriptMessagesWithDiagnostics(
-        scope,
-        session,
-        messages
-    ).messages
-}
-
-export const toCharacterTranscriptMessagesWithDiagnostics = (
-    scope: MemoryScope,
-    session: Session,
-    messages: CharacterTranscriptSourceMessage[]
-): CharacterTranscriptBatchResult => {
-    const result: CharacterTranscriptBatchResult = {
-        messages: [],
-        diagnostics: []
-    }
-
-    messages.forEach((message, index) => {
-        const converted = toCharacterTranscriptMessageResult(
-            scope,
-            session,
-            message
+    return messages
+        .map((message) =>
+            toCharacterTranscriptMessageResult(scope, session, message)
         )
-        if (converted.message != null) {
-            result.messages.push(converted.message)
-            return
-        }
-
-        result.diagnostics.push({
-            index,
-            role: isCharacterBotMessage(session, message)
-                ? 'assistant'
-                : 'user',
-            reason: converted.reason
-        })
-    })
-
-    return result
-}
-
-export const formatCharacterTranscriptDiagnostics = (
-    diagnostics: CharacterTranscriptDiagnostic[]
-) => {
-    if (diagnostics.length === 0) {
-        return ''
-    }
-
-    return diagnostics
-        .map(
-            (diagnostic) =>
-                `${diagnostic.index}:${diagnostic.role}:${diagnostic.reason}`
+        .flatMap((converted) =>
+            converted.message == null ? [] : [converted.message]
         )
-        .join(', ')
 }
 
 export const countCharacterCompletedRounds = (

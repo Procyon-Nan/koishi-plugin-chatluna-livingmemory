@@ -2,10 +2,9 @@ import { Context, type Session } from 'koishi'
 import type { HumanMessage } from '@langchain/core/messages'
 import type { Config } from '../index'
 import {
-    formatChatLunaTranscriptDiagnostics,
     setLivingMemoryRawContent,
     toChatLunaTranscriptMessageResult,
-    toChatLunaTranscriptMessagesWithDiagnostics
+    toChatLunaTranscriptMessages
 } from '../service/chatluna_transcript_adapter'
 import { collectUserProfileSpeakerLabels } from '../service/user_profile'
 import type { LivingMemoryTranscriptMessage } from '../types'
@@ -178,25 +177,10 @@ export async function apply(ctx: Context, config: Config) {
             > | null = null
             const loadHistoryMessages = () => {
                 historyMessagesPromise ??= (async () => {
-                    const history = toChatLunaTranscriptMessagesWithDiagnostics(
+                    return toChatLunaTranscriptMessages(
                         scope,
                         await chatInterface.chatHistory.getMessages()
                     )
-                    if (history.diagnostics.length > 0) {
-                        debug(
-                            [
-                                'before-chat recall history transcript diagnostics:',
-                                `conversationId=${conversationId}`,
-                                `presetId=${presetId}`,
-                                `dropped=${history.diagnostics.length}`,
-                                formatChatLunaTranscriptDiagnostics(
-                                    history.diagnostics
-                                )
-                            ].join(' ')
-                        )
-                    }
-
-                    return history.messages
                 })()
 
                 return historyMessagesPromise
@@ -336,7 +320,7 @@ export async function apply(ctx: Context, config: Config) {
             )
 
             const messages = await chatInterface.chatHistory.getMessages()
-            const transcript = toChatLunaTranscriptMessagesWithDiagnostics(
+            const transcriptMessages = toChatLunaTranscriptMessages(
                 scope,
                 messages
             )
@@ -352,28 +336,14 @@ export async function apply(ctx: Context, config: Config) {
                     `presetId=${presetId}`,
                     `chatCount=${chatCount}`,
                     `messagesLength=${messages.length}`,
-                    `transcriptMessagesLength=${transcript.messages.length}`,
-                    `transcriptDiagnosticsLength=${transcript.diagnostics.length}`
+                    `transcriptMessagesLength=${transcriptMessages.length}`
                 ].join(' ')
             )
-            if (transcript.diagnostics.length > 0) {
-                debug(
-                    [
-                        'after-chat extraction transcript diagnostics:',
-                        `conversationId=${conversationId}`,
-                        `presetId=${presetId}`,
-                        `dropped=${transcript.diagnostics.length}`,
-                        formatChatLunaTranscriptDiagnostics(
-                            transcript.diagnostics
-                        )
-                    ].join(' ')
-                )
-            }
 
             await ctx.chatluna_living_memory.queueExtraction(
                 scope,
                 chatCount,
-                transcript.messages,
+                transcriptMessages,
                 chatInterface.preset.value,
                 promptVariables
             )
