@@ -228,8 +228,15 @@ export async function apply(ctx: Context, config: Config) {
                 }
 
                 try {
-                    const speakerLabels =
-                        profileSpeakerLabelsByScope.get(toScopeKey(scope)) ?? []
+                    const userProfileInjectionEnabled =
+                        config.enableUserProfileInjection === true
+                    let speakerLabels: string[] = []
+                    if (userProfileInjectionEnabled) {
+                        const profileScopeKey = toScopeKey(scope)
+                        speakerLabels =
+                            profileSpeakerLabelsByScope.get(profileScopeKey) ??
+                            []
+                    }
                     const sections =
                         await ctx.chatluna_living_memory.hydratePromptSections(
                             scope,
@@ -243,6 +250,7 @@ export async function apply(ctx: Context, config: Config) {
                             `conversationId=${scope.conversationId}`,
                             `presetId=${scope.presetId}`,
                             `snapshotLength=${sections.snapshot.length}`,
+                            `userProfileInjection=${userProfileInjectionEnabled ? 'enabled' : 'disabled'}`,
                             `userProfilesLength=${sections.userProfiles.length}`
                         ].join(' ')
                     )
