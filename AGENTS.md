@@ -15,10 +15,10 @@ tree whenever architecture, data contracts, or workflow boundaries change.
 - `src/query.ts` contains list filtering and pagination helpers used by WebUI
   calls for memories, snapshots, jobs, and user profiles.
 - `src/plugins/chat_middleware.ts` handles main ChatLuna events. It resolves
-  preset scope, records preset speakers, injects user profiles after system
-  prompts, injects memory snapshots before the current user input, queues recall
-  before chat, queues extraction after chat, and cleans conversation caches on
-  history clear.
+  preset scope, records preset speakers, keeps request-scoped user profile and
+  memory snapshot injections active across the main agent's tool-call turns,
+  queues recall before chat, queues extraction after chat, and cleans
+  conversation caches on history clear.
 - `src/plugins/character_middleware.ts` handles ChatLuna Character events. It
   uses `characterPresetSuffix` from `src/service/memory/helpers.ts`, registers
   the `{living_memory}` prompt function provider, tracks speaker labels by
@@ -79,10 +79,12 @@ tree whenever architecture, data contracts, or workflow boundaries change.
 - Service startup recovers stale pending/running jobs and emits config warnings.
   Job rows are audit records, not durable schedulers.
 - Main ChatLuna `before-chat` builds a scope, records the current speaker, loads
-  history only when needed, hydrates prompt sections, queues user profiles as a
-  system-role block after system prompts, queues memory snapshots as an
-  assistant-role block after history and before the current user input, and
-  queues recall.
+  history only when needed, hydrates prompt sections, activates request-scoped
+  user profiles as a system-role block after system prompts, activates
+  request-scoped memory snapshots as an assistant-role block after history and
+  before the current user input, and queues recall. These request-scoped
+  injections remain available across the main agent's tool-call turns and are
+  cleared on `after-chat`, `after-chat-error`, or history clear.
 - Main ChatLuna `after-chat` converts history to transcript messages and queues
   extraction based on chat count.
 - Character integration uses a separate preset id based on

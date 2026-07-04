@@ -70,14 +70,25 @@ const formatSnapshotInjection = (snapshot: string) => {
     return text.length > 0 ? `【我的记忆】\n${text}` : null
 }
 
+const isSubagentPrompt = (agentContext: unknown) => {
+    return (
+        (agentContext as { kind?: unknown } | null | undefined)?.kind ===
+        'subagent'
+    )
+}
+
 export async function apply(ctx: Context, config: Config) {
     const logger = ctx.logger('chatluna-livingmemory')
-    const pendingUserProfiles = new Map<string, string>()
-    const pendingSnapshots = new Map<string, string>()
+    const activeUserProfileInjections = new Map<string, string>()
+    const activeSnapshotInjections = new Map<string, string>()
     const debug = (message: string) => {
         if (config.debug) {
             logger.info(message)
         }
+    }
+    const clearActiveInjections = (conversationId: string) => {
+        activeUserProfileInjections.delete(conversationId)
+        activeSnapshotInjections.delete(conversationId)
     }
 
     ctx.effect(() =>
@@ -85,10 +96,13 @@ export async function apply(ctx: Context, config: Config) {
             'after_system_prompts',
             async (runtime, next) => {
                 const conversationId = runtime.configurable?.conversationId
-                if (typeof conversationId === 'string') {
-                    const injection = pendingUserProfiles.get(conversationId)
+                if (
+                    typeof conversationId === 'string' &&
+                    !isSubagentPrompt(runtime.configurable?.agentContext)
+                ) {
+                    const injection =
+                        activeUserProfileInjections.get(conversationId)
                     if (injection != null) {
-                        pendingUserProfiles.delete(conversationId)
                         runtime.result.push(new SystemMessage(injection))
                         runtime.usedTokens +=
                             (await runtime.tokenCounter(injection)) +
@@ -107,10 +121,13 @@ export async function apply(ctx: Context, config: Config) {
             'injections',
             async (runtime, next) => {
                 const conversationId = runtime.configurable?.conversationId
-                if (typeof conversationId === 'string') {
-                    const injection = pendingSnapshots.get(conversationId)
+                if (
+                    typeof conversationId === 'string' &&
+                    !isSubagentPrompt(runtime.configurable?.agentContext)
+                ) {
+                    const injection =
+                        activeSnapshotInjections.get(conversationId)
                     if (injection != null) {
-                        pendingSnapshots.delete(conversationId)
                         runtime.result.push(new AIMessage(injection))
                         runtime.usedTokens +=
                             (await runtime.tokenCounter(injection)) +
@@ -133,6 +150,7 @@ export async function apply(ctx: Context, config: Config) {
             chatInterface,
             session
         ) => {
+            clearActiveInjections(conversationId)
             debug(
                 `before-chat: conversationId=${conversationId}, isDirect=${session.isDirect}`
             )
@@ -251,13 +269,13 @@ export async function apply(ctx: Context, config: Config) {
                         sections.userProfiles
                     )
                     if (userProfileInjection != null) {
-                        pendingUserProfiles.set(
+                        activeUserProfileInjections.set(
                             conversationId,
                             userProfileInjection
                         )
                         debug(
                             [
-                                'before-chat user profile injection queued:',
+                                'before-chat user profile injection activated:',
                                 `conversationId=${conversationId}`,
                                 `presetId=${presetId}`,
                                 'stage=after_system_prompts',
@@ -271,10 +289,13 @@ export async function apply(ctx: Context, config: Config) {
                         sections.snapshot
                     )
                     if (snapshotInjection != null) {
-                        pendingSnapshots.set(conversationId, snapshotInjection)
+                        activeSnapshotInjections.set(
+                            conversationId,
+                            snapshotInjection
+                        )
                         debug(
                             [
-                                'before-chat snapshot injection queued:',
+                                'before-chat snapshot injection activated:',
                                 `conversationId=${conversationId}`,
                                 `presetId=${presetId}`,
                                 'stage=injections',
@@ -325,6 +346,7 @@ export async function apply(ctx: Context, config: Config) {
             chatInterface,
             session
         ) => {
+            clearActiveInjections(conversationId)
             debug(
                 `after-chat: conversationId=${conversationId}, isDirect=${session.isDirect}`
             )
@@ -403,9 +425,12 @@ export async function apply(ctx: Context, config: Config) {
         }
     )
 
+    ctx.on('chatluna/after-chat-error', async (_error, conversationId) => {
+        clearActiveInjections(conversationId)
+    })
+
     ctx.on('chatluna/clear-chat-history', async (conversationId) => {
-        pendingUserProfiles.delete(conversationId)
-        pendingSnapshots.delete(conversationId)
+        clearActiveInjections(conversationId)
         await ctx.chatluna_living_memory.cleanupConversation(conversationId)
     })
 }
