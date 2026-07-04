@@ -177,11 +177,11 @@ const formatPromptVariable = (sections: PromptSections) => {
     const userProfiles = sections.userProfiles.trim()
     const parts: string[] = []
 
-    if (snapshot.length > 0) {
-        parts.push(snapshot)
-    }
     if (userProfiles.length > 0) {
-        parts.push(`【相关用户画像】\n${userProfiles}`)
+        parts.push(`【用户画像】\n${userProfiles}`)
+    }
+    if (snapshot.length > 0) {
+        parts.push(`【你的记忆】\n''${snapshot}''`)
     }
 
     return parts.join('\n\n')
