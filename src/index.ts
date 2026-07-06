@@ -72,7 +72,7 @@ export const Config: Schema<Config> = Schema.intersect([
             .default(20),
         extractionRounds: Schema.number()
             .min(1)
-            .max(12)
+            .max(100)
             .step(1)
             .description(
                 '每次提取时使用的最近对话轮数（1 轮 = 1 次用户消息 + 1 次AI回复）。'
@@ -80,7 +80,7 @@ export const Config: Schema<Config> = Schema.intersect([
             .default(10),
         extractionInterval: Schema.number()
             .min(0)
-            .max(500)
+            .max(100)
             .step(1)
             .description(
                 '每隔多少轮对话触发一次记忆提取；设为 0 时不执行自动记忆提取。'
