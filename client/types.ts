@@ -128,6 +128,7 @@ export type MemoryConfigWarningCode =
     | 'extract-model-missing'
     | 'recall-rewrite-model-missing'
     | 'agentic-recall-model-missing'
+    | 'auto-dream-model-missing'
 
 export interface MemoryConfigWarning {
     code: MemoryConfigWarningCode

@@ -109,6 +109,15 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             this.serviceLogger,
             debug
         )
+        this.dreamCoordinator = new LivingMemoryDreamCoordinator(
+            config,
+            dream,
+            this.repository,
+            this.snapshotCache,
+            jobTracker,
+            this.serviceLogger,
+            debug
+        )
         this.extractionCoordinator = new LivingMemoryExtractionCoordinator(
             ctx,
             config,
@@ -116,14 +125,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             formatter,
             extractor,
             jobTracker,
-            this.serviceLogger,
-            debug
-        )
-        this.dreamCoordinator = new LivingMemoryDreamCoordinator(
-            dream,
-            this.repository,
-            this.snapshotCache,
-            jobTracker,
+            (presetId) => this.queueAutoDreamIfThresholdReached(presetId),
             this.serviceLogger,
             debug
         )
@@ -225,6 +227,18 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             })
         }
 
+        if (
+            this.config.enableAutoDream &&
+            !isModelConfigured(this.config.dreamModel)
+        ) {
+            warnings.push({
+                code: 'auto-dream-model-missing',
+                field: 'dreamModel',
+                message:
+                    '自动 Dream 已启用，但未配置 dreamModel；自动 Dream 任务将不会创建。'
+            })
+        }
+
         return warnings
     }
 
@@ -238,6 +252,14 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         if (this.config.debug) {
             this.serviceLogger.info(message)
         }
+    }
+
+    private queueAutoDreamIfThresholdReached(presetId: string) {
+        this.dreamCoordinator
+            .queueAutoIfThresholdReached(presetId)
+            .catch((error) => {
+                this.serviceLogger.warn(error)
+            })
     }
 
     shouldHandleSession(isDirect: boolean) {
@@ -395,7 +417,9 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     }
 
     async createMemory(scope: MemoryScope, input: MemoryMutationInput) {
-        return await this.repository.createMemory(scope, input)
+        const memory = await this.repository.createMemory(scope, input)
+        this.queueAutoDreamIfThresholdReached(scope.presetId)
+        return memory
     }
 
     async updateMemory(memoryId: string, patch: Partial<MemoryMutationInput>) {

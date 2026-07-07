@@ -29,6 +29,7 @@ export class LivingMemoryExtractionCoordinator {
         private readonly formatter: LivingMemoryMessageFormatter,
         private readonly extractor: LivingMemoryExtractor,
         private readonly jobTracker: LivingMemoryJobTracker,
+        private readonly queueAutoDream: (presetId: string) => void,
         private readonly logger: Logger,
         private readonly debug: DebugLogger
     ) {}
@@ -277,6 +278,9 @@ export class LivingMemoryExtractionCoordinator {
             this.debug(
                 `runExtraction completed: jobId=${job.id}, extracted=${extracted.length}`
             )
+            if (extracted.length > 0) {
+                this.queueAutoDream(scope.presetId)
+            }
         } catch (error) {
             await this.jobTracker.markFailed(job.id, error)
             throw error

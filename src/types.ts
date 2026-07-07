@@ -236,6 +236,7 @@ export type MemoryConfigWarningCode =
     | 'extract-model-missing'
     | 'recall-rewrite-model-missing'
     | 'agentic-recall-model-missing'
+    | 'auto-dream-model-missing'
 
 export interface MemoryConfigWarning {
     code: MemoryConfigWarningCode
@@ -284,6 +285,8 @@ export interface LivingMemoryConfig {
     recallStrategy: MemoryRecallStrategy
     extractModel: string
     dreamModel: string
+    enableAutoDream: boolean
+    autoDreamMemoryGrowthThreshold: number
     userProfileMemoryLimit: number
     enableRecallQueryRewrite: boolean
     recallHistoryWindowRounds: number
@@ -338,6 +341,10 @@ export interface JobRepository {
     ): Promise<MemoryJobRecord>
     updateJob(id: string, patch: Partial<MemoryJobRecord>): Promise<void>
     listJobsByPreset(presetId: string): Promise<MemoryJobRecord[]>
+    getLatestJobByPresetAndKind(
+        presetId: string,
+        kind: MemoryJobKind
+    ): Promise<MemoryJobRecord | undefined>
     markStaleRunningJobsAsFailed(
         options?: { presetId?: string; kind?: MemoryJobKind },
         reason?: string

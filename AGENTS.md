@@ -115,6 +115,10 @@ tree whenever architecture, data contracts, or workflow boundaries change.
   failed; valid empty arrays mark a completed extraction with zero memories.
 - Dream active-stage operations allow keep, update, merge, and archive. Archived
   stage operations allow keep, update, merge, and deleteSource.
+- Automatic Dream is optional and preset-scoped. When enabled, successful
+  memory creation checks how many entries were created for that preset after
+  the latest `dream` job; if the configured threshold is reached, it reuses the
+  normal Dream coordinator for that preset instead of running a global schedule.
 - Dream-generated update and merge content must include complete metadata:
   type, content, summary, keywords, sentiment, and importance.
 - User profile generation and rendering must honor `enableUserProfileInjection`.

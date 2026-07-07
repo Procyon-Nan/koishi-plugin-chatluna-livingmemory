@@ -64,6 +64,19 @@ export const Config: Schema<Config> = Schema.intersect([
         dreamModel: Schema.dynamic('model')
             .description('用于 Dream 记忆整理与合并决策的 LLM 模型。')
             .default('无'),
+        enableAutoDream: Schema.boolean()
+            .description(
+                '当某个预设自上次 Dream 后新增记忆达到阈值时，自动触发该预设的 Dream。'
+            )
+            .default(false),
+        autoDreamMemoryGrowthThreshold: Schema.number()
+            .min(10)
+            .max(200)
+            .step(1)
+            .description(
+                '自动 Dream 的新增记忆阈值。预设从未执行过 Dream 时，从该预设全部记忆开始计数。'
+            )
+            .default(30),
         userProfileMemoryLimit: Schema.number()
             .min(5)
             .max(100)

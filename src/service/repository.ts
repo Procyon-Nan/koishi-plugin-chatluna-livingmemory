@@ -271,6 +271,23 @@ export class LivingMemoryRepository
         return entries.map(normalizeEntryRecord)
     }
 
+    async countEntriesCreatedAfter(
+        presetId: string,
+        createdAfter?: Date
+    ): Promise<number> {
+        const query: Record<string, unknown> = { presetId }
+        if (createdAfter != null) {
+            query.createdAt = { $gt: createdAfter }
+        }
+
+        const entries = await this.ctx.database.get(
+            'living_memory_entry',
+            query,
+            ['id']
+        )
+        return entries.length
+    }
+
     async getEntryById(id: string): Promise<MemoryEntryRecord | undefined> {
         const record = (
             await this.ctx.database.get('living_memory_entry', {
@@ -462,6 +479,18 @@ export class LivingMemoryRepository
         })
 
         return jobs.sort((left, right) => +right.createdAt - +left.createdAt)
+    }
+
+    async getLatestJobByPresetAndKind(
+        presetId: string,
+        kind: MemoryJobKind
+    ): Promise<MemoryJobRecord | undefined> {
+        const jobs = await this.ctx.database.get('living_memory_job', {
+            presetId,
+            kind
+        })
+
+        return jobs.sort((left, right) => +right.createdAt - +left.createdAt)[0]
     }
 
     async markStaleRunningJobsAsFailed(

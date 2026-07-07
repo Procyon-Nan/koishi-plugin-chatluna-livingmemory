@@ -1,15 +1,21 @@
 import { Logger } from 'koishi'
 import { LivingMemoryRepository } from '../repository'
 import { LivingMemoryDreamService } from '../dream'
+import { isModelConfigured } from '../shared/utils'
 import { type DebugLogger } from './helpers'
 import { LivingMemoryJobTracker } from './job_tracker'
 import { LivingMemorySnapshotCache } from './snapshot_cache'
-import type { DreamTriggerResult, MemoryScope } from '../../types'
+import type {
+    DreamTriggerResult,
+    LivingMemoryConfig,
+    MemoryScope
+} from '../../types'
 
 export class LivingMemoryDreamCoordinator {
     private readonly dreamLockByPreset = new Map<string, string>()
 
     constructor(
+        private readonly config: LivingMemoryConfig,
         private readonly dream: LivingMemoryDreamService,
         private readonly repository: LivingMemoryRepository,
         private readonly snapshotCache: LivingMemorySnapshotCache,
@@ -17,6 +23,55 @@ export class LivingMemoryDreamCoordinator {
         private readonly logger: Logger,
         private readonly debug: DebugLogger
     ) {}
+
+    async queueAutoIfThresholdReached(presetId: string) {
+        if (!this.config.enableAutoDream) {
+            return
+        }
+
+        if (!isModelConfigured(this.config.dreamModel)) {
+            this.debug(
+                [
+                    'memory auto dream skipped:',
+                    `presetId=${presetId}`,
+                    'reason=model-not-configured'
+                ].join(' ')
+            )
+            return
+        }
+
+        const latestDreamJob =
+            await this.repository.getLatestJobByPresetAndKind(presetId, 'dream')
+        const newMemoryCount = await this.repository.countEntriesCreatedAfter(
+            presetId,
+            latestDreamJob?.createdAt
+        )
+        const threshold = this.config.autoDreamMemoryGrowthThreshold
+
+        if (newMemoryCount < threshold) {
+            this.debug(
+                [
+                    'memory auto dream skipped:',
+                    `presetId=${presetId}`,
+                    `newMemories=${newMemoryCount}`,
+                    `threshold=${threshold}`
+                ].join(' ')
+            )
+            return
+        }
+
+        const result = await this.run(presetId)
+        const reason = result.reason == null ? '' : ` reason=${result.reason}`
+        this.debug(
+            [
+                'memory auto dream triggered:',
+                `presetId=${presetId}`,
+                `newMemories=${newMemoryCount}`,
+                `threshold=${threshold}`,
+                `started=${result.started}`
+            ].join(' ') + reason
+        )
+    }
 
     async run(presetId: string): Promise<DreamTriggerResult> {
         if (this.dreamLockByPreset.has(presetId)) {
@@ -52,6 +107,11 @@ export class LivingMemoryDreamCoordinator {
                 .finally(() => {
                     if (this.dreamLockByPreset.get(presetId) === job.id) {
                         this.dreamLockByPreset.delete(presetId)
+                        this.queueAutoIfThresholdReached(presetId).catch(
+                            (error) => {
+                                this.logger.warn(error)
+                            }
+                        )
                     }
                 })
 
