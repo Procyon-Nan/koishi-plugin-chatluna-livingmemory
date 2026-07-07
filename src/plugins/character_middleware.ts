@@ -104,7 +104,7 @@ const toCharacterSessionKey = (session: Session) => {
     return `${session.isDirect ? 'private' : 'group'}:${id}`
 }
 
-const createCharacterScope = (
+const createCharacterScope = async (
     ctx: Context,
     payload: {
         session: Session
@@ -116,7 +116,7 @@ const createCharacterScope = (
     const speakerId =
         toNonEmptyString(payload.focusMessage?.id) ??
         toNonEmptyString(payload.session.userId)
-    const speakerName = resolveCharacterScopeSpeakerName(
+    const speakerName = await resolveCharacterScopeSpeakerName(
         payload.session,
         payload.focusMessage
     )
@@ -267,7 +267,7 @@ export async function apply(ctx: Context, config: Config) {
     events.on(
         'chatluna_character/before-chat',
         async (payload: CharacterBeforeChatEventPayload) => {
-            const scope = createCharacterScope(ctx, payload)
+            const scope = await createCharacterScope(ctx, payload)
 
             debug(
                 [
@@ -284,7 +284,7 @@ export async function apply(ctx: Context, config: Config) {
                 return
             }
 
-            const currentTranscript = toCharacterTranscriptMessageResult(
+            const currentTranscript = await toCharacterTranscriptMessageResult(
                 scope,
                 payload.session,
                 payload.focusMessage
@@ -313,7 +313,7 @@ export async function apply(ctx: Context, config: Config) {
                 (message) =>
                     !isSameCharacterMessage(message, payload.focusMessage)
             )
-            const history = toCharacterTranscriptMessages(
+            const history = await toCharacterTranscriptMessages(
                 scope,
                 payload.session,
                 historyMessages
@@ -337,8 +337,8 @@ export async function apply(ctx: Context, config: Config) {
     events.on(
         'chatluna_character/after-chat',
         async (payload: CharacterAfterChatEventPayload) => {
-            const scope = createCharacterScope(ctx, payload)
-            const messages = toCharacterTranscriptMessages(
+            const scope = await createCharacterScope(ctx, payload)
+            const messages = await toCharacterTranscriptMessages(
                 scope,
                 payload.session,
                 payload.messages
