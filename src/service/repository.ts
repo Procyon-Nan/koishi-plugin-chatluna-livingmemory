@@ -14,6 +14,7 @@ import type {
     MemorySnapshotItem,
     MemorySnapshotRecord,
     MemorySourceMessage,
+    MemorySourceOrigin,
     PresetSpeakerInput,
     PresetSpeakerRecord,
     RecallRepository,
@@ -660,6 +661,20 @@ export class LivingMemoryRepository
                 ...(semanticChanged
                     ? { embedding: null, embeddingModelId: null }
                     : {}),
+                updatedAt: new Date()
+            }
+        )
+    }
+
+    async updateMemorySourceOrigins(
+        id: string,
+        sourceOrigins: MemorySourceOrigin[]
+    ) {
+        await this.ctx.database.set(
+            'living_memory_entry',
+            { id },
+            {
+                sourceOrigins: normalizeMemorySourceOrigins(sourceOrigins),
                 updatedAt: new Date()
             }
         )

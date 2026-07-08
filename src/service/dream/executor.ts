@@ -1,4 +1,5 @@
 import type { MemoryEntryRecord, MemoryMutationInput } from '../../types'
+import { mergeMemorySourceOrigins } from '../memory/source_origins'
 import type { LivingMemoryRepository } from '../repository'
 import { createEmptyStats } from './stats'
 import type {
@@ -205,17 +206,17 @@ export class DreamExecutor {
                     : []),
                 ...(Array.isArray(operation.memoryIds)
                     ? operation.memoryIds
-                    : []),
-                targetId
+                    : [])
             ].filter((id): id is string => typeof id === 'string')
-        )
+        ).filter((id) => id !== targetId)
         const sources = sourceIds
             .map((id) => entryById.get(id))
             .filter((entry): entry is MemoryEntryRecord => entry != null)
 
         if (
             target == null ||
-            sources.length < 2 ||
+            touchedMemoryIds.has(target.id) ||
+            sources.length === 0 ||
             sources.some((entry) => touchedMemoryIds.has(entry.id))
         ) {
             stats.skipped++
@@ -224,19 +225,20 @@ export class DreamExecutor {
 
         const patch = this.sanitizeMemoryPatch(operation.memory)
         this.assertCompleteMetadataForNewContent(operation, patch)
+        const sourceOrigins = mergeMemorySourceOrigins([target, ...sources])
 
         await this.repository.updateMemory(
             target.id,
             this.prepareStagePatch(stage, patch)
         )
+        await this.repository.updateMemorySourceOrigins(
+            target.id,
+            sourceOrigins
+        )
         touchedMemoryIds.add(target.id)
         stats.merged++
 
         for (const source of sources) {
-            if (source.id === target.id || touchedMemoryIds.has(source.id)) {
-                continue
-            }
-
             if (stage === 'archived') {
                 await this.repository.deleteMemory(source.id)
                 touchedMemoryIds.add(source.id)

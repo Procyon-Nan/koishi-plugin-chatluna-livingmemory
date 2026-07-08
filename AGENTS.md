@@ -49,8 +49,9 @@ tree whenever architecture, data contracts, or workflow boundaries change.
 - `src/service/memory/tool_runtime.ts` owns shared model-facing tool runtime
   behavior, including runtime scope resolution, debug logging,
   invalid-argument retry limits, and result serialization.
-- `src/service/memory/source_origins.ts` owns creation, cloning, and
-  normalization helpers for memory source-origin groups.
+- `src/service/memory/source_origins.ts` owns creation, cloning,
+  normalization, and deterministic merge helpers for memory source-origin
+  groups.
 - `src/service/repository.ts` owns Koishi database table definitions and all
   persistence methods.
 - `src/service/recall_query.ts` and `src/service/retriever.ts` own query
@@ -122,6 +123,9 @@ tree whenever architecture, data contracts, or workflow boundaries change.
   failed; valid empty arrays mark a completed extraction with zero memories.
 - Dream active-stage operations allow keep, update, merge, and archive. Archived
   stage operations allow keep, update, merge, and deleteSource.
+- Dream merge preserves source-origin groups by combining the target memory
+  first, then source memories in operation order. Dream update and archive do
+  not change source-origin groups.
 - Automatic Dream is optional and preset-scoped. When enabled, successful
   memory creation checks how many entries were created for that preset after
   the latest `dream` job; if the configured threshold is reached, it reuses the
@@ -184,7 +188,8 @@ tree whenever architecture, data contracts, or workflow boundaries change.
 - For extraction changes, preserve interval baseline handling, lock behavior,
   job state transitions, prompt rendering fallback, and parse-error semantics.
 - For Dream changes, preserve stage-specific action allowlists, touched-memory
-  guards, complete metadata validation, and profile regeneration gating.
+  guards, complete metadata validation, source-origin merge behavior, and
+  profile regeneration gating.
 - For user profile changes, keep speaker key normalization, selected memory
   limits, source memory id validation, and prompt rendering fallbacks explicit.
 - For Character integration changes, keep the main ChatLuna and Character

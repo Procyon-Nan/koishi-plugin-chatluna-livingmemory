@@ -1,4 +1,8 @@
-import type { MemorySourceMessage, MemorySourceOrigin } from '../../types'
+import type {
+    MemoryEntryRecord,
+    MemorySourceMessage,
+    MemorySourceOrigin
+} from '../../types'
 
 const cloneStringArray = (value: string[] | undefined) =>
     Array.isArray(value) ? [...value] : undefined
@@ -90,6 +94,41 @@ export const createSourceOriginsFromMessages = (
               }
           ]
         : []
+}
+
+const fingerprintSourceOrigin = (origin: MemorySourceOrigin) => {
+    return JSON.stringify(
+        origin.messages.map((message) => ({
+            role: message.role,
+            speakerLabel: message.speakerLabel ?? '',
+            createdAt: message.createdAt ?? '',
+            contentLines: message.contentLines ?? [],
+            content: message.content
+        }))
+    )
+}
+
+export const mergeMemorySourceOrigins = (
+    entries: Pick<MemoryEntryRecord, 'sourceOrigins'>[]
+): MemorySourceOrigin[] => {
+    const seen = new Set<string>()
+    const merged: MemorySourceOrigin[] = []
+
+    for (const entry of entries) {
+        for (const origin of entry.sourceOrigins) {
+            const fingerprint = fingerprintSourceOrigin(origin)
+            if (seen.has(fingerprint)) {
+                continue
+            }
+
+            seen.add(fingerprint)
+            merged.push({
+                messages: origin.messages.map(cloneSourceMessage)
+            })
+        }
+    }
+
+    return merged
 }
 
 export const normalizeMemorySourceOrigins = (
