@@ -20,7 +20,7 @@ export class LivingMemoryMessageFormatter implements MessageFormatter {
     ): ExtractionPayload {
         return {
             input: renderLivingMemoryTranscript(messages),
-            sourceMessages: serializeLivingMemorySourceMessages(messages)
+            sourceOriginMessages: serializeLivingMemorySourceMessages(messages)
         }
     }
 }

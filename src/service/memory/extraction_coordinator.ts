@@ -184,7 +184,7 @@ export class LivingMemoryExtractionCoordinator {
                 `runExtraction started: jobId=${job.id}`,
                 `conversationId=${scope.conversationId}`,
                 `presetId=${scope.presetId}`,
-                `sourceMessages=${payload.sourceMessages.length}`,
+                `sourceOriginMessages=${payload.sourceOriginMessages.length}`,
                 `inputLength=${payload.input.length}`
             ].join(' ')
         )
@@ -266,7 +266,7 @@ export class LivingMemoryExtractionCoordinator {
             if (extracted.length > 0) {
                 await this.repository.appendMemories(
                     scope,
-                    payload.sourceMessages,
+                    payload.sourceOriginMessages,
                     extracted
                 )
             }

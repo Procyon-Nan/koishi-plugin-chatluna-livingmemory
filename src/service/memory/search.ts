@@ -158,6 +158,7 @@ const pickSearchResult = (
     matchedBroadSearchTexts: string[],
     matchedSpecificSearchTexts: string[]
 ): LivingMemorySearchResult => ({
+    id: entry.id,
     type: entry.type,
     content: entry.content,
     keywords: [...entry.keywords],

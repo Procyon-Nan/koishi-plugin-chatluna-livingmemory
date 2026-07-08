@@ -9,7 +9,7 @@
 - 以预设（preset）为核心，全自动、异步地进行长期记忆的生成与召回
 - 标准 ChatLuna 会话会在系统提示词后注入用户画像，并在历史上下文之后、当前用户输入之前注入记忆快照；character（伪装）插件通过预设中的 `{living_memory}` 变量注入记忆快照
 - 提供 `embedding-rerank` 与 `agentic-recall（实验性）` 两种记忆召回策略
-- 提供 `living_memory_search` 记忆查询工具，供模型按查询词和记忆类别查询记忆
+- 提供 `living_memory_search` 与 `living_memory_get_messages` 记忆工具，供模型查询记忆并按记忆 id 查看来源消息
 - 通过以 `Dream` 命名的记忆整理流程来执行记忆库的合并、更新与归档
 - 根据记忆内容形成用户画像，并在对话中实时注入
 - 提供 Koishi Console WebUI，方便手动查看、创建、编辑、删除记忆和快照等数据
@@ -101,4 +101,8 @@ input: |
 | `specificSearchTexts` | 可选，1 到 5 个长查询词，每个查询词 7 到 20 个字符 |
 | `memoryTypes` | 必填，记忆类别，可选 `identity`、`preference`、`fact`、`plan`、`context`、`other`，或单独使用 `all` |
 
-工具返回结果包含记忆内容、摘要、关键词、重要度、创建时间、更新时间，以及命中的 `broadSearchTexts` / `specificSearchTexts`。返回结果不会包含记忆 `id` 和 `status`。启用 `debug` 后，插件会输出工具调用输入和工具调用输出，便于排查模型调用流程。
+工具返回结果包含记忆 `id`、记忆内容、摘要、关键词、重要度、创建时间、更新时间，以及命中的 `broadSearchTexts` / `specificSearchTexts`。返回结果不会包含 `status` 或来源消息。
+
+`living_memory_get_messages` 用于在当前预设内按记忆 `id` 批量查看来源消息。它只接受 `living_memory_search` 返回的记忆 `id`，每次最多查询 10 条记忆。返回结果包含目标记忆的基本信息、按 `originIndex` 编号的 `sourceOrigins`，以及未找到或不属于当前预设的 `notFoundMemoryIds`。
+
+启用 `debug` 后，插件会输出工具调用输入和工具调用输出，便于排查模型调用流程。

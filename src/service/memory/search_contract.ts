@@ -2,8 +2,10 @@ import { z } from 'zod'
 import { livingMemorySearchMemoryTypes } from '../../types'
 
 export const livingMemorySearchToolName = 'living_memory_search'
+export const livingMemoryGetMessagesToolName = 'living_memory_get_messages'
 
 export const memorySearchMaxTextCount = 5
+export const memoryGetMessagesMaxIdCount = 10
 
 export const broadSearchTextRule = {
     fieldName: 'broadSearchTexts',
@@ -100,4 +102,20 @@ export const livingMemorySearchToolInputSchema = z.object({
         .describe(
             `Memory categories to search. Use concrete categories or all. Supported values: ${livingMemorySearchMemoryTypes.join(', ')}.`
         )
+})
+
+const memoryIdsDescription =
+    `Memory ids to inspect. Provide 1 to ${memoryGetMessagesMaxIdCount} ids ` +
+    'from living_memory_search results.'
+
+export const livingMemoryGetMessagesInputSchema = z.object({
+    memoryIds: z
+        .array(z.string().trim().min(1))
+        .min(1)
+        .max(memoryGetMessagesMaxIdCount)
+        .describe(memoryIdsDescription)
+})
+
+export const livingMemoryGetMessagesToolInputSchema = z.object({
+    memoryIds: z.unknown().optional().describe(memoryIdsDescription)
 })

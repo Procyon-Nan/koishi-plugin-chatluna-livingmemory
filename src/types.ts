@@ -55,6 +55,7 @@ export interface LivingMemorySearchInput {
 
 export interface LivingMemorySearchResult extends Pick<
     MemoryEntryRecord,
+    | 'id'
     | 'type'
     | 'content'
     | 'keywords'
@@ -128,6 +129,29 @@ export interface MemorySourceMessage {
     content: string
 }
 
+export interface MemorySourceOrigin {
+    messages: MemorySourceMessage[]
+}
+
+export interface LivingMemoryGetMessagesSourceOrigin {
+    originIndex: number
+    messages: MemorySourceMessage[]
+}
+
+export interface LivingMemoryGetMessagesMemory extends Pick<
+    MemoryEntryRecord,
+    'id' | 'type' | 'content' | 'keywords' | 'summary' | 'importance'
+> {
+    createdAt: string
+    updatedAt: string
+    sourceOrigins: LivingMemoryGetMessagesSourceOrigin[]
+}
+
+export interface LivingMemoryGetMessagesOutput {
+    memories: LivingMemoryGetMessagesMemory[]
+    notFoundMemoryIds: string[]
+}
+
 export interface LivingMemoryTranscriptMessage {
     role: 'user' | 'assistant'
     speakerLabel: string
@@ -146,7 +170,7 @@ export interface MemoryEntryRecord {
     sentiment: string | null
     importance: number | null
     sourceConversationId: string | null
-    sourceMessages: MemorySourceMessage[]
+    sourceOrigins: MemorySourceOrigin[]
     embedding: number[] | null
     embeddingModelId: string | null
     createdAt: Date
@@ -276,7 +300,7 @@ export interface RetrievedMemoryItem {
 
 export interface ExtractionPayload {
     input: string
-    sourceMessages: MemorySourceMessage[]
+    sourceOriginMessages: MemorySourceMessage[]
 }
 
 export interface LivingMemoryConfig {
@@ -354,13 +378,12 @@ export interface JobRepository {
 export interface ExtractionRepository {
     appendMemories(
         scope: MemoryScope,
-        sourceMessages: MemorySourceMessage[],
+        sourceOriginMessages: MemorySourceMessage[],
         extracted: ExtractedMemoryItem[]
     ): Promise<void>
     createMemory(
         scope: MemoryScope,
-        input: MemoryMutationInput,
-        sourceMessages?: MemorySourceMessage[]
+        input: MemoryMutationInput
     ): Promise<MemoryEntryRecord>
     updateMemory(id: string, patch: Partial<MemoryMutationInput>): Promise<void>
     deleteMemory(id: string): Promise<void>

@@ -26,9 +26,9 @@ tree whenever architecture, data contracts, or workflow boundaries change.
   override.
 - `src/plugins/webui.ts` is the console RPC boundary. Keep it synchronized with
   `src/types.ts`, `client/api.ts`, and `client/dashboard.vue`.
-- `src/plugins/living_memory_search.ts` registers the model-facing
-  `living_memory_search` tool with ChatLuna. It delegates runtime behavior to
-  `src/service/memory/search_tool.ts`.
+- `src/plugins/living_memory_tools.ts` registers the model-facing
+  living-memory tools with ChatLuna, including `living_memory_search` and
+  `living_memory_get_messages`.
 - `client/api.ts`, `client/types.ts`, and `client/dashboard.vue` implement the
   WebUI surface for memories, user profiles, snapshots, jobs, Dream execution,
   and preset data cleanup.
@@ -42,8 +42,15 @@ tree whenever architecture, data contracts, or workflow boundaries change.
   tool name, query text length limits, and schema rules used by the tool,
   agentic recall, prompts, and search implementation.
 - `src/service/memory/search_tool.ts` owns the reusable `living_memory_search`
-  tool implementation, including input validation, runtime scope resolution,
-  debug logging, invalid-argument retry limits, and result serialization.
+  tool implementation.
+- `src/service/memory/get_messages_tool.ts` owns the
+  `living_memory_get_messages` tool implementation for retrieving source
+  conversation messages by memory id.
+- `src/service/memory/tool_runtime.ts` owns shared model-facing tool runtime
+  behavior, including runtime scope resolution, debug logging,
+  invalid-argument retry limits, and result serialization.
+- `src/service/memory/source_origins.ts` owns creation, cloning, and
+  normalization helpers for memory source-origin groups.
 - `src/service/repository.ts` owns Koishi database table definitions and all
   persistence methods.
 - `src/service/recall_query.ts` and `src/service/retriever.ts` own query
@@ -168,8 +175,12 @@ tree whenever architecture, data contracts, or workflow boundaries change.
   empty cleaned query, empty final query, and agentic `<NO_MEMORY>` behavior
   before editing.
 - For `living_memory_search` changes, keep `search_contract.ts`,
-  `search_tool.ts`, `search.ts`, `src/plugins/living_memory_search.ts`, and
+  `search_tool.ts`, `search.ts`, `src/plugins/living_memory_tools.ts`, and
   agentic recall prompt rules aligned.
+- For `living_memory_get_messages` changes, keep `search_contract.ts`,
+  `get_messages_tool.ts`, `tool_runtime.ts`,
+  `src/plugins/living_memory_tools.ts`, and service/repository source-origin
+  contracts aligned.
 - For extraction changes, preserve interval baseline handling, lock behavior,
   job state transitions, prompt rendering fallback, and parse-error semantics.
 - For Dream changes, preserve stage-specific action allowlists, touched-memory

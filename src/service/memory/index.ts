@@ -31,6 +31,7 @@ import {
 import type {
     DreamTriggerResult,
     LivingMemoryConfig,
+    LivingMemoryGetMessagesOutput,
     LivingMemorySearchResult,
     LivingMemoryTranscriptMessage,
     MemoryConfigWarning,
@@ -48,6 +49,7 @@ import { LivingMemorySnapshotCache } from './snapshot_cache'
 import { LivingMemoryAgenticRecallExecutor } from './agentic_recall'
 import { isMemoryReferenceItem } from './snapshot_items'
 import type { QueueExtractionOptions } from './helpers'
+import { cloneSourceMessage } from './source_origins'
 
 export type { QueueExtractionOptions } from './helpers'
 
@@ -414,6 +416,48 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
 
     async getMemory(memoryId: string) {
         return await this.repository.getEntryById(memoryId)
+    }
+
+    async getMemorySourceMessages(
+        presetId: string,
+        memoryIds: string[]
+    ): Promise<LivingMemoryGetMessagesOutput> {
+        const orderedIds = [...new Set(memoryIds)]
+        const entries = await this.repository.getEntriesByPresetAndIds(
+            presetId,
+            orderedIds
+        )
+        const entryById = new Map(entries.map((entry) => [entry.id, entry]))
+
+        return {
+            memories: orderedIds.flatMap((id) => {
+                const entry = entryById.get(id)
+                if (entry == null) {
+                    return []
+                }
+
+                return [
+                    {
+                        id: entry.id,
+                        type: entry.type,
+                        content: entry.content,
+                        keywords: [...entry.keywords],
+                        summary: entry.summary,
+                        importance: entry.importance,
+                        createdAt: entry.createdAt.toISOString(),
+                        updatedAt: entry.updatedAt.toISOString(),
+                        sourceOrigins: entry.sourceOrigins.map(
+                            (origin, originIndex) => ({
+                                originIndex,
+                                messages:
+                                    origin.messages.map(cloneSourceMessage)
+                            })
+                        )
+                    }
+                ]
+            }),
+            notFoundMemoryIds: orderedIds.filter((id) => !entryById.has(id))
+        }
     }
 
     async createMemory(scope: MemoryScope, input: MemoryMutationInput) {

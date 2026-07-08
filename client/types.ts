@@ -27,6 +27,10 @@ export interface MemorySourceMessage {
     content: string
 }
 
+export interface MemorySourceOrigin {
+    messages: MemorySourceMessage[]
+}
+
 export interface MemoryEntryRecord {
     id: string
     presetId: string
@@ -38,7 +42,7 @@ export interface MemoryEntryRecord {
     sentiment: string | null
     importance: number | null
     sourceConversationId: string | null
-    sourceMessages: MemorySourceMessage[]
+    sourceOrigins: MemorySourceOrigin[]
     createdAt: Date
     updatedAt: Date
 }

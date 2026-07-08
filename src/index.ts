@@ -3,7 +3,7 @@ import {} from 'koishi-plugin-chatluna/services/chat'
 import type {} from '@koishijs/plugin-console'
 import { apply as characterMiddlewarePlugin } from './plugins/character_middleware'
 import { apply as chatMiddlewarePlugin } from './plugins/chat_middleware'
-import { apply as livingMemorySearchPlugin } from './plugins/living_memory_search'
+import { apply as livingMemoryToolsPlugin } from './plugins/living_memory_tools'
 import {
     registerEntry as registerWebUIEntry,
     apply as webuiPlugin
@@ -26,7 +26,7 @@ export function apply(ctx: Context, config: Config) {
 
     ctx.inject(['chatluna_living_memory'], (ctx) => {
         chatMiddlewarePlugin(ctx, config)
-        livingMemorySearchPlugin(ctx, config)
+        livingMemoryToolsPlugin(ctx, config)
 
         ctx.inject(['chatluna_character'], (ctx) => {
             characterMiddlewarePlugin(ctx, config)

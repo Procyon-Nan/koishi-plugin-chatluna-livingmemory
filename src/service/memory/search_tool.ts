@@ -1,6 +1,6 @@
 import { StructuredTool } from '@langchain/core/tools'
 import type { ToolRunnableConfig } from '@langchain/core/tools'
-import type { Context, Logger } from 'koishi'
+import type { Context } from 'koishi'
 import type { z } from 'zod'
 import type { LivingMemoryConfig } from '../../types'
 import {
@@ -12,6 +12,10 @@ import {
     memorySearchMaxTextCount,
     specificSearchTextRule
 } from './search_contract'
+import {
+    getLivingMemoryToolConfigurable,
+    LivingMemoryToolRuntime
+} from './tool_runtime'
 
 export const livingMemorySearchToolDescription = [
     'Search active memories in the current preset by lexical phrase matching.',
@@ -26,6 +30,7 @@ export const livingMemorySearchToolDescription = [
     '- memoryTypes: memory categories to search, or ["all"] to search every category.',
     '- The tool only searches active memories owned by the current preset.',
     '- Specific phrase matches receive higher score than broad phrase matches. Memories matching multiple phrases receive additional score.',
+    '- Each result includes id. Use living_memory_get_messages with these ids when you need source conversation messages.',
     '- Each result includes matchedBroadSearchTexts and matchedSpecificSearchTexts so you can see which query phrases matched that memory.',
     '- The result is a JSON array of memory records sorted by lexical relevance, importance, then recent update time.'
 ].join('\n')
@@ -34,23 +39,6 @@ type LivingMemorySearchToolInput = z.infer<
     typeof livingMemorySearchToolInputSchema
 >
 
-type SearchToolConfigurable = {
-    preset?: unknown
-    conversationId?: unknown
-    userId?: unknown
-    source?: unknown
-    agentContext?: {
-        requestId?: unknown
-    }
-}
-
-interface SearchToolValidationError {
-    path: string
-    message: string
-}
-
-const invalidArgumentRetryLimit = 3
-const invalidArgumentRetryCounts = new WeakMap<object, number>()
 const invalidArgumentRetryMessage =
     'living_memory_search input is invalid. Correct the arguments and call this tool again.'
 const toolCallFailedMessage =
@@ -63,119 +51,22 @@ export class LivingMemorySearchTool extends StructuredTool {
     description = livingMemorySearchToolDescription
 
     schema = livingMemorySearchToolInputSchema
-    private readonly logger: Logger
+    private readonly runtime: LivingMemoryToolRuntime
 
     constructor(
         private readonly ctx: Context,
         private readonly config: LivingMemoryConfig
     ) {
         super()
-        this.logger = ctx.logger('chatluna-livingmemory')
-    }
-
-    private debug(message: string) {
-        if (this.config.debug) {
-            this.logger.info(message)
-        }
-    }
-
-    private logContext(configurable: SearchToolConfigurable | undefined) {
-        return [
-            `presetId=${configurable?.preset ?? ''}`,
-            `conversationId=${configurable?.conversationId ?? ''}`,
-            `userId=${configurable?.userId ?? ''}`,
-            `source=${configurable?.source ?? ''}`,
-            `requestId=${configurable?.agentContext?.requestId ?? ''}`
-        ]
-    }
-
-    private getRetryScope(configurable: SearchToolConfigurable | undefined) {
-        const agentContext = configurable?.agentContext
-
-        if (agentContext != null) {
-            return agentContext
-        }
-
-        return this
-    }
-
-    private formatValidationErrors(
-        error: z.ZodError
-    ): SearchToolValidationError[] {
-        return error.issues.map((issue) => ({
-            path: issue.path.length > 0 ? issue.path.join('.') : '(root)',
-            message: issue.message
-        }))
-    }
-
-    private createArgumentFailureOutput(
-        configurable: SearchToolConfigurable | undefined,
-        errors: SearchToolValidationError[],
-        retryCount: number,
-        failed: boolean
-    ) {
-        const output = JSON.stringify(
+        this.runtime = new LivingMemoryToolRuntime(
             {
-                status: failed ? 'tool_call_failed' : 'invalid_arguments',
-                message: failed
-                    ? toolCallFailedMessage
-                    : invalidArgumentRetryMessage,
-                retryCount,
-                remainingRetries: Math.max(
-                    invalidArgumentRetryLimit - retryCount,
-                    0
-                ),
-                errors
+                toolName: livingMemorySearchToolName,
+                logger: ctx.logger('chatluna-livingmemory'),
+                isDebugEnabled: () => this.config.debug,
+                invalidArgumentRetryMessage,
+                toolCallFailedMessage
             },
-            null,
-            2
-        )
-
-        this.debug(
-            [
-                'living_memory_search output:',
-                ...this.logContext(configurable),
-                failed ? 'status=tool_call_failed' : 'status=invalid_arguments',
-                output
-            ].join('\n')
-        )
-
-        return output
-    }
-
-    private createInvalidArgumentOutput(
-        configurable: SearchToolConfigurable | undefined,
-        errors: SearchToolValidationError[]
-    ) {
-        const retryScope = this.getRetryScope(configurable)
-        const retryCount = Math.min(
-            (invalidArgumentRetryCounts.get(retryScope) ?? 0) + 1,
-            invalidArgumentRetryLimit
-        )
-        invalidArgumentRetryCounts.set(retryScope, retryCount)
-
-        return this.createArgumentFailureOutput(
-            configurable,
-            errors,
-            retryCount,
-            retryCount >= invalidArgumentRetryLimit
-        )
-    }
-
-    private createRetryLimitOutput(
-        configurable: SearchToolConfigurable | undefined
-    ) {
-        return this.createArgumentFailureOutput(
-            configurable,
-            [
-                {
-                    path: '(root)',
-                    message:
-                        'The invalid argument retry limit for this request has already been reached.'
-                }
-            ],
-            invalidArgumentRetryLimit,
-            true
+            this
         )
     }
 
@@ -184,34 +75,24 @@ export class LivingMemorySearchTool extends StructuredTool {
         _runManager: unknown,
         runConfig?: ToolRunnableConfig
     ) {
-        const configurable = runConfig?.configurable as
-            | SearchToolConfigurable
-            | undefined
+        const configurable = getLivingMemoryToolConfigurable(runConfig)
         const presetId = configurable?.preset
 
-        this.debug(
-            [
-                'living_memory_search input:',
-                ...this.logContext(configurable),
-                JSON.stringify(input, null, 2)
-            ].join('\n')
-        )
+        this.runtime.logInput(configurable, input)
 
         if (typeof presetId !== 'string' || presetId.length === 0) {
             throw new Error('Missing preset in the current tool call.')
         }
 
-        const retryScope = this.getRetryScope(configurable)
-        const retryCount = invalidArgumentRetryCounts.get(retryScope) ?? 0
-        if (retryCount >= invalidArgumentRetryLimit) {
-            return this.createRetryLimitOutput(configurable)
+        if (this.runtime.hasReachedRetryLimit(configurable)) {
+            return this.runtime.createRetryLimitOutput(configurable)
         }
 
         const parsedInput = livingMemorySearchInputSchema.safeParse(input)
         if (!parsedInput.success) {
-            return this.createInvalidArgumentOutput(
+            return this.runtime.createInvalidArgumentOutput(
                 configurable,
-                this.formatValidationErrors(parsedInput.error)
+                this.runtime.formatValidationErrors(parsedInput.error)
             )
         }
 
@@ -222,18 +103,13 @@ export class LivingMemorySearchTool extends StructuredTool {
             memoryTypes: parsedInput.data.memoryTypes,
             maxCandidates: this.config.memorySearchToolMaxResults
         })
-        invalidArgumentRetryCounts.delete(this.getRetryScope(configurable))
+        this.runtime.clearInvalidArgumentRetry(configurable)
 
         const output = JSON.stringify(results, null, 2)
 
-        this.debug(
-            [
-                'living_memory_search output:',
-                ...this.logContext(configurable),
-                `resultCount=${results.length}`,
-                output
-            ].join('\n')
-        )
+        this.runtime.logOutput(configurable, output, [
+            `resultCount=${results.length}`
+        ])
 
         return output
     }

@@ -13,6 +13,7 @@ import type {
     MemoryScope,
     MemorySnapshotItem,
     MemorySnapshotRecord,
+    MemorySourceMessage,
     PresetSpeakerInput,
     PresetSpeakerRecord,
     RecallRepository,
@@ -21,6 +22,10 @@ import type {
     UserProfileRecord,
     UserProfileRepository
 } from '../types'
+import {
+    createSourceOriginsFromMessages,
+    normalizeMemorySourceOrigins
+} from './memory/source_origins'
 
 const keywordFingerprintSeparator = '\u0000'
 
@@ -78,6 +83,9 @@ const normalizeEntryRecord = (
     status: normalizeStatus(record.status),
     sentiment: normalizeSentiment(record.sentiment),
     importance: normalizeImportance(record.importance),
+    sourceOrigins: normalizeMemorySourceOrigins(
+        (record as { sourceOrigins?: unknown }).sourceOrigins
+    ),
     embedding: Array.isArray(record.embedding) ? record.embedding : null,
     embeddingModelId:
         typeof record.embeddingModelId === 'string' &&
@@ -156,7 +164,7 @@ export class LivingMemoryRepository
                     initial: null
                 },
                 sourceConversationId: 'string(255)',
-                sourceMessages: 'json',
+                sourceOrigins: 'json',
                 embedding: {
                     type: 'json',
                     nullable: true,
@@ -304,6 +312,24 @@ export class LivingMemoryRepository
         }
 
         const entries = await this.ctx.database.get('living_memory_entry', {
+            id: {
+                $in: ids
+            }
+        })
+
+        return entries.map(normalizeEntryRecord)
+    }
+
+    async getEntriesByPresetAndIds(
+        presetId: string,
+        ids: string[]
+    ): Promise<MemoryEntryRecord[]> {
+        if (ids.length === 0) {
+            return []
+        }
+
+        const entries = await this.ctx.database.get('living_memory_entry', {
+            presetId,
             id: {
                 $in: ids
             }
@@ -533,7 +559,7 @@ export class LivingMemoryRepository
 
     async appendMemories(
         scope: MemoryScope,
-        sourceMessages: MemoryEntryRecord['sourceMessages'],
+        sourceOriginMessages: MemorySourceMessage[],
         extracted: ExtractedMemoryItem[]
     ) {
         if (extracted.length === 0) {
@@ -541,6 +567,8 @@ export class LivingMemoryRepository
         }
 
         const now = new Date()
+        const sourceOrigins =
+            createSourceOriginsFromMessages(sourceOriginMessages)
         await this.ctx.database.upsert(
             'living_memory_entry',
             extracted.map((item) => ({
@@ -554,7 +582,7 @@ export class LivingMemoryRepository
                 sentiment: normalizeSentiment(item.sentiment),
                 importance: normalizeImportance(item.importance),
                 sourceConversationId: scope.conversationId,
-                sourceMessages,
+                sourceOrigins,
                 embedding: null,
                 embeddingModelId: null,
                 createdAt: now,
@@ -563,11 +591,7 @@ export class LivingMemoryRepository
         )
     }
 
-    async createMemory(
-        scope: MemoryScope,
-        input: MemoryMutationInput,
-        sourceMessages: MemoryEntryRecord['sourceMessages'] = []
-    ) {
+    async createMemory(scope: MemoryScope, input: MemoryMutationInput) {
         const now = new Date()
         const record: MemoryEntryRecord = {
             id: randomUUID(),
@@ -580,7 +604,7 @@ export class LivingMemoryRepository
             sentiment: normalizeSentiment(input.sentiment),
             importance: normalizeImportance(input.importance),
             sourceConversationId: scope.conversationId,
-            sourceMessages,
+            sourceOrigins: [],
             embedding: null,
             embeddingModelId: null,
             createdAt: now,
