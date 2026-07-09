@@ -43,7 +43,7 @@ yarn build chatluna-livingmemory
 | 模型类型 | 模型用途 | 是否必需 |
 | --- | --- | --- |
 | extractModel | 从历史对话中提取并生成记忆内容 | 必需 |
-| dreamModel | 在 `Deeam` 记忆整理流程中进行决策 | 必需 |
+| dreamModel | 在 `Dream` 记忆整理流程中进行决策 | 必需 |
 | recallRewriteModel | 在 `embedding-rerank` 策略中生成更合适的查询文本 | 可选 |
 | agenticRecallModel | 在 `agentic-recall` 策略中完成记忆的召回 | `agentic-recall` 必需 |
 | embeddingModel | 使用 `embedding-rerank` 策略中对文本进行向量化 | `embedding-rerank` 必需 |
