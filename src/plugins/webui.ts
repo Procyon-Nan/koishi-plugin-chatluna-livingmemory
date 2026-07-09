@@ -9,7 +9,7 @@ import type {
     SnapshotListQuery,
     UserProfileListQuery
 } from '../query'
-import type { ChatLunaLivingMemoryService } from '../service/memory'
+import type { ChatLunaLivingMemoryService } from '../service/app/living_memory_service'
 import type { MemoryMutationInput } from '../types'
 
 const packageName = 'koishi-plugin-chatluna-livingmemory'

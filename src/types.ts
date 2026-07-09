@@ -6,7 +6,7 @@ import type {
     UserProfileListQuery
 } from './query'
 import {} from 'koishi-plugin-chatluna/services/chat'
-import type { ChatLunaLivingMemoryService } from './service/memory'
+import type { ChatLunaLivingMemoryService } from './service/app/living_memory_service'
 
 export const memoryEntryTypes = [
     'identity',

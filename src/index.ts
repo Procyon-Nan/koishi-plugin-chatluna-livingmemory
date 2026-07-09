@@ -8,7 +8,7 @@ import {
     registerEntry as registerWebUIEntry,
     apply as webuiPlugin
 } from './plugins/webui'
-import { ChatLunaLivingMemoryService } from './service/memory'
+import { ChatLunaLivingMemoryService } from './service/app/living_memory_service'
 import type { LivingMemoryConfig } from './types'
 
 export type Config = LivingMemoryConfig
@@ -155,4 +155,4 @@ export const Config: Schema<Config> = Schema.intersect([
 ])
 
 export * from './types'
-export * from './service/memory'
+export * from './service/app/living_memory_service'

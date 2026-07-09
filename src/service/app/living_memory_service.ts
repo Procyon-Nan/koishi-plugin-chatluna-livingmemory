@@ -8,7 +8,7 @@ import { LivingMemoryRecallQueryBuilder } from '../workflows/recall/query_builde
 import {
     type LivingMemorySearchOptions,
     searchLivingMemoryEntries
-} from './tools/search'
+} from '../memory/tools/search'
 import { LivingMemoryRepository } from '../persistence/repository'
 import { LivingMemoryRetriever } from '../workflows/recall/retriever'
 import {
@@ -16,7 +16,6 @@ import {
     normalizeUserProfileSpeakerKey,
     normalizeUserProfileSpeakerLabel
 } from '../user_profile'
-import { isModelConfigured } from '../shared/utils'
 import {
     filterJobList,
     filterMemoryList,
@@ -43,15 +42,28 @@ import type {
 import { LivingMemoryDreamCoordinator } from '../workflows/dream/coordinator'
 import { LivingMemoryExtractionCoordinator } from '../workflows/extraction/coordinator'
 import { LivingMemoryJobTracker } from '../workflows/job_tracker'
-import { LivingMemoryPresetCatalog } from './preset_catalog'
+import { LivingMemoryPresetCatalog } from '../memory/preset_catalog'
 import { LivingMemoryRecallCoordinator } from '../workflows/recall/coordinator'
-import { LivingMemorySnapshotCache } from './snapshot/snapshot_cache'
+import { LivingMemorySnapshotCache } from '../memory/snapshot/snapshot_cache'
 import { LivingMemoryAgenticRecallExecutor } from '../workflows/recall/agentic_recall'
-import { isMemoryReferenceItem } from './snapshot/snapshot_items'
-import type { QueueExtractionOptions } from './helpers'
-import { cloneSourceMessage } from './origins/source_origins'
+import { isMemoryReferenceItem } from '../memory/snapshot/snapshot_items'
+import type { QueueExtractionOptions } from '../memory/helpers'
+import { cloneSourceMessage } from '../memory/origins/source_origins'
+import {
+    createLivingMemoryServiceStatus,
+    validateLivingMemoryConfig
+} from './config_status'
+import {
+    createLivingMemoryScope,
+    type CreateLivingMemoryScopeOptions
+} from './scope'
+import {
+    hydrateLivingMemoryPromptSections,
+    hydrateLivingMemoryPromptVariable,
+    type LivingMemoryPromptSectionsOptions
+} from './prompt_hydration'
 
-export type { QueueExtractionOptions } from './helpers'
+export type { QueueExtractionOptions } from '../memory/helpers'
 
 export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     private readonly serviceLogger: Logger
@@ -169,85 +181,11 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     }
 
     validateConfig(): MemoryConfigWarning[] {
-        const warnings: MemoryConfigWarning[] = []
-
-        if (
-            this.config.recallStrategy === 'embedding-rerank' &&
-            !isModelConfigured(this.config.embeddingModel)
-        ) {
-            warnings.push({
-                code: 'embedding-model-missing',
-                field: 'embeddingModel',
-                message: '未配置 embeddingModel；记忆召回将失败。'
-            })
-        }
-        if (
-            this.config.recallStrategy === 'embedding-rerank' &&
-            !isModelConfigured(this.config.rerankModel)
-        ) {
-            warnings.push({
-                code: 'rerank-model-missing',
-                field: 'rerankModel',
-                message: '未配置 rerankModel；记忆召回将失败。'
-            })
-        }
-
-        if (
-            this.config.extractionInterval > 0 &&
-            !isModelConfigured(this.config.extractModel)
-        ) {
-            warnings.push({
-                code: 'extract-model-missing',
-                field: 'extractModel',
-                message:
-                    '自动记忆提取已启用（extractionInterval > 0），但未配置 extractModel；提取流程将被跳过。'
-            })
-        }
-
-        if (
-            this.config.recallStrategy === 'embedding-rerank' &&
-            this.config.enableRecallQueryRewrite &&
-            !isModelConfigured(this.config.recallRewriteModel)
-        ) {
-            warnings.push({
-                code: 'recall-rewrite-model-missing',
-                field: 'recallRewriteModel',
-                message:
-                    '召回查询改写已启用，但未配置 recallRewriteModel；将回退到原始查询。'
-            })
-        }
-
-        if (
-            this.config.recallStrategy === 'agentic-recall' &&
-            !isModelConfigured(this.config.agenticRecallModel)
-        ) {
-            warnings.push({
-                code: 'agentic-recall-model-missing',
-                field: 'agenticRecallModel',
-                message:
-                    'agentic-recall 已启用，但未配置 agenticRecallModel；记忆召回将失败。'
-            })
-        }
-
-        if (
-            this.config.enableAutoDream &&
-            !isModelConfigured(this.config.dreamModel)
-        ) {
-            warnings.push({
-                code: 'auto-dream-model-missing',
-                field: 'dreamModel',
-                message:
-                    '自动 Dream 已启用，但未配置 dreamModel；自动 Dream 任务将不会创建。'
-            })
-        }
-
-        return warnings
+        return validateLivingMemoryConfig(this.config)
     }
 
     getStatus(): MemoryServiceStatus {
-        return {
-            warnings: this.validateConfig()
-        }
+        return createLivingMemoryServiceStatus(this.config)
     }
 
     private debug(message: string) {
@@ -289,24 +227,15 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         presetId: string,
         userId?: string,
         channelId?: string,
-        options: Partial<
-            Pick<
-                MemoryScope,
-                | 'guildId'
-                | 'isDirect'
-                | 'speakerId'
-                | 'speakerName'
-                | 'presetLabel'
-            >
-        > = {}
+        options: CreateLivingMemoryScopeOptions = {}
     ): MemoryScope {
-        return {
+        return createLivingMemoryScope(
             conversationId,
             presetId,
             userId,
             channelId,
-            ...options
-        }
+            options
+        )
     }
 
     async recordPresetSpeaker(
@@ -330,30 +259,24 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     async hydratePromptVariable(
         scope: Pick<MemoryScope, 'presetId' | 'conversationId'>
     ) {
-        return await this.snapshotCache.hydrate(scope)
+        return await hydrateLivingMemoryPromptVariable(
+            { snapshotCache: this.snapshotCache },
+            scope
+        )
     }
 
     async hydratePromptSections(
         scope: Pick<MemoryScope, 'presetId' | 'conversationId'>,
-        options: {
-            includeSnapshot?: boolean
-            speakerLabels?: string[]
-        } = {}
+        options: LivingMemoryPromptSectionsOptions = {}
     ) {
-        const [snapshot, userProfiles] = await Promise.all([
-            options.includeSnapshot === false
-                ? Promise.resolve('')
-                : this.snapshotCache.hydrate(scope),
-            this.userProfiles.renderForSpeakers(
-                scope.presetId,
-                options.speakerLabels ?? []
-            )
-        ])
-
-        return {
-            snapshot,
-            userProfiles
-        }
+        return await hydrateLivingMemoryPromptSections(
+            {
+                snapshotCache: this.snapshotCache,
+                userProfiles: this.userProfiles
+            },
+            scope,
+            options
+        )
     }
 
     async queueRecall(

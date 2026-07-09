@@ -32,10 +32,15 @@ tree whenever architecture, data contracts, or workflow boundaries change.
 - `client/api.ts`, `client/types.ts`, and `client/dashboard.vue` implement the
   WebUI surface for memories, user profiles, snapshots, jobs, Dream execution,
   and preset data cleanup.
-- `src/service/memory/index.ts` is the service facade. It constructs the
-  repository, retriever, extractor, recall query builder, agentic recall
-  executor, user profile service, Dream service, job tracker, snapshot cache,
-  preset catalog, and coordinators.
+- `src/service/app/living_memory_service.ts` is the service facade. It
+  constructs the repository, retriever, extractor, recall query builder,
+  agentic recall executor, user profile service, Dream service, job tracker,
+  snapshot cache, preset catalog, and coordinators.
+- `src/service/app/config_status.ts` owns config warning generation and service
+  status assembly.
+- `src/service/app/scope.ts` owns `MemoryScope` construction.
+- `src/service/app/prompt_hydration.ts` owns prompt hydration composition for
+  memory snapshots and user profiles.
 - `src/service/workflows/` contains async workflow orchestration for recall,
   extraction, and Dream. Coordinators own job state handling, in-memory locks,
   snapshot cache refreshes, and extraction baselines.
