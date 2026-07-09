@@ -1,16 +1,16 @@
 import { Context } from 'koishi'
-import type { LivingMemoryConfig, MemoryEntryRecord } from '../../types'
-import type { LivingMemoryRepository } from '../repository'
+import type { LivingMemoryConfig, MemoryEntryRecord } from '../../../types'
+import type { LivingMemoryRepository } from '../../repository'
 import {
     isModelConfigured,
     stringifyModelContent,
     summarizeError
-} from '../shared/utils'
+} from '../../shared/utils'
 import { DreamClusterer } from './clustering'
 import { DreamExecutor } from './executor'
-import { LivingMemoryUserProfileService } from '../user_profile'
+import { LivingMemoryUserProfileService } from '../../user_profile'
 import { parseDreamOperations } from './parser'
-import { buildDreamPrompt } from '../prompts'
+import { buildDreamPrompt } from '../../prompts'
 import {
     addStats,
     createEmptyStageResult,

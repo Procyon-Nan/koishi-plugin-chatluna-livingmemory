@@ -1,11 +1,11 @@
 import { memoryEntryTypes } from '../../types'
 import type { ExtractedMemoryItem, MemoryMutationInput } from '../../types'
-import type { DreamOperation } from '../dream/types'
+import type { DreamOperation } from '../workflows/dream/types'
 
 /**
  * 模型输出契约的单一真相源。
  *
- * 这里的示例对象与解析器（extractor 的 parse、dream/parser.ts）共同定义了
+ * 这里的示例对象与解析器（extractor 的 parse、workflows/dream/parser.ts）共同定义了
  * 模型应当返回的 JSON 形状。示例用带类型约束的普通对象描述，再由
  * JSON.stringify 生成提示词里展示的格式串，从而保证：
  *   1. 字段重命名/删除会在编译期报错（见下方 SchemaShape 约束），强制同步；

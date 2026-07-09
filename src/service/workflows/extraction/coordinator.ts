@@ -1,22 +1,22 @@
 import { Context, Logger } from 'koishi'
 import type { PresetTemplate } from 'koishi-plugin-chatluna/llm-core/prompt'
-import { LivingMemoryRepository } from '../repository'
-import { LivingMemoryExtractor } from '../extractor'
-import { LivingMemoryMessageFormatter } from '../message_formatter'
-import { summarizeError } from '../shared/utils'
+import { LivingMemoryRepository } from '../../repository'
+import { LivingMemoryExtractor } from './extractor'
+import { LivingMemoryMessageFormatter } from '../../transcript/message_formatter'
+import { summarizeError } from '../../shared/utils'
 import {
     type DebugLogger,
     formatMemoryItemsForLog,
     type QueueExtractionOptions,
     renderChatLunaPresetPrompt,
     scopeKey
-} from './helpers'
-import { LivingMemoryJobTracker } from './job_tracker'
+} from '../../memory/helpers'
+import { LivingMemoryJobTracker } from '../job_tracker'
 import type {
     LivingMemoryConfig,
     LivingMemoryTranscriptMessage,
     MemoryScope
-} from '../../types'
+} from '../../../types'
 
 export class LivingMemoryExtractionCoordinator {
     private readonly extractionLockByConversation = new Set<string>()

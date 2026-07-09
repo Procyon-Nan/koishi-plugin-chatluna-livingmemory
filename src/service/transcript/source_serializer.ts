@@ -1,7 +1,7 @@
 import type {
     LivingMemoryTranscriptMessage,
     MemorySourceMessage
-} from '../types'
+} from '../../types'
 import { renderLivingMemoryTranscriptLines } from './transcript_renderer'
 
 export const serializeLivingMemorySourceMessage = (

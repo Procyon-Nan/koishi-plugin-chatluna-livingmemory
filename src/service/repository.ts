@@ -26,7 +26,7 @@ import type {
 import {
     createSourceOriginsFromMessages,
     normalizeMemorySourceOrigins
-} from './memory/source_origins'
+} from './memory/origins/source_origins'
 
 const keywordFingerprintSeparator = '\u0000'
 

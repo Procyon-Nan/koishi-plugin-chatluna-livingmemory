@@ -1,5 +1,5 @@
-import type { MemoryEntryRecord, MemoryEntryType } from '../../types'
-import { memoryEntryTypes } from '../../types'
+import type { MemoryEntryRecord, MemoryEntryType } from '../../../types'
+import { memoryEntryTypes } from '../../../types'
 
 export const MAX_CLUSTER_SIZE = 8
 export const MAX_BUCKET_SIZE = 64

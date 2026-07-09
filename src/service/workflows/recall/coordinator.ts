@@ -1,22 +1,22 @@
 import { Logger } from 'koishi'
-import { LivingMemoryRepository } from '../repository'
-import { LivingMemoryRetriever } from '../retriever'
-import { LivingMemoryRecallQueryBuilder } from '../recall_query'
-import { summarizeError } from '../shared/utils'
+import { LivingMemoryRepository } from '../../repository'
+import { LivingMemoryRetriever } from './retriever'
+import { LivingMemoryRecallQueryBuilder } from './query_builder'
+import { summarizeError } from '../../shared/utils'
 import {
     type DebugLogger,
     formatMemoryItemsForLog,
     normalizeText,
     scopeKey
-} from './helpers'
-import { LivingMemoryJobTracker } from './job_tracker'
-import { LivingMemorySnapshotCache } from './snapshot_cache'
+} from '../../memory/helpers'
+import { LivingMemoryJobTracker } from '../job_tracker'
+import { LivingMemorySnapshotCache } from '../../memory/snapshot/snapshot_cache'
 import { LivingMemoryAgenticRecallExecutor } from './agentic_recall'
 import type {
     LivingMemoryConfig,
     LivingMemoryTranscriptMessage,
     MemoryScope
-} from '../../types'
+} from '../../../types'
 
 export class LivingMemoryRecallCoordinator {
     private readonly recallLockByConversation = new Set<string>()

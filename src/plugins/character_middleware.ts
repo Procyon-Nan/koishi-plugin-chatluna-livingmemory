@@ -8,7 +8,7 @@ import {
     resolveCharacterScopeSpeakerName,
     toCharacterTranscriptMessageResult,
     toCharacterTranscriptMessages
-} from '../service/character_transcript_adapter'
+} from '../service/transcript/character_transcript_adapter'
 import { takeRecentRounds } from '../service/shared/rounds'
 import { collectUserProfileSpeakerLabels } from '../service/user_profile'
 import {

@@ -1,15 +1,15 @@
 import { Logger } from 'koishi'
-import { LivingMemoryRepository } from '../repository'
-import { LivingMemoryDreamService } from '../dream'
-import { isModelConfigured } from '../shared/utils'
-import { type DebugLogger } from './helpers'
-import { LivingMemoryJobTracker } from './job_tracker'
-import { LivingMemorySnapshotCache } from './snapshot_cache'
+import { LivingMemoryRepository } from '../../repository'
+import { LivingMemoryDreamService } from './index'
+import { isModelConfigured } from '../../shared/utils'
+import { type DebugLogger } from '../../memory/helpers'
+import { LivingMemoryJobTracker } from '../job_tracker'
+import { LivingMemorySnapshotCache } from '../../memory/snapshot/snapshot_cache'
 import type {
     DreamTriggerResult,
     LivingMemoryConfig,
     MemoryScope
-} from '../../types'
+} from '../../../types'
 
 export class LivingMemoryDreamCoordinator {
     private readonly dreamLockByPreset = new Map<string, string>()

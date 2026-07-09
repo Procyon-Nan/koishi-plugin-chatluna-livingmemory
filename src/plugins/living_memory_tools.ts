@@ -4,15 +4,15 @@ import type { Config } from '../index'
 import {
     LivingMemoryGetMessagesTool,
     livingMemoryGetMessagesToolDescription
-} from '../service/memory/get_messages_tool'
+} from '../service/memory/tools/get_messages_tool'
 import {
     LivingMemorySearchTool,
     livingMemorySearchToolDescription
-} from '../service/memory/search_tool'
+} from '../service/memory/tools/search_tool'
 import {
     livingMemoryGetMessagesToolName,
     livingMemorySearchToolName
-} from '../service/memory/search_contract'
+} from '../service/memory/tools/search_contract'
 
 const toChatLunaStructuredTool = (
     tool: LivingMemorySearchTool | LivingMemoryGetMessagesTool

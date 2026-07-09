@@ -3,14 +3,14 @@ import type {
     LivingMemoryConfig,
     MemoryEntryRecord,
     MemoryEntryType
-} from '../../types'
-import type { LivingMemoryRepository } from '../repository'
-import { ensureEntryEmbeddings } from '../shared/embeddings'
+} from '../../../types'
+import type { LivingMemoryRepository } from '../../repository'
+import { ensureEntryEmbeddings } from '../../shared/embeddings'
 import {
     cosineSimilarity,
     isModelConfigured,
     summarizeError
-} from '../shared/utils'
+} from '../../shared/utils'
 import type { CandidateGroup, DreamCluster } from './types'
 import {
     EMBEDDING_SIMILARITY_THRESHOLD,

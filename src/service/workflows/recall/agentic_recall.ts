@@ -13,19 +13,19 @@ import type {
     LivingMemorySearchMemoryType,
     LivingMemoryTranscriptMessage,
     MemoryScope
-} from '../../types'
-import { LivingMemoryMessageFormatter } from '../message_formatter'
+} from '../../../types'
+import { LivingMemoryMessageFormatter } from '../../transcript/message_formatter'
 import {
     agenticRecallNoMemoryOutput,
     buildAgenticRecallPrompt
-} from '../prompts'
-import { isModelConfigured, stringifyModelContent } from '../shared/utils'
-import type { DebugLogger } from './helpers'
+} from '../../prompts'
+import { isModelConfigured, stringifyModelContent } from '../../shared/utils'
+import type { DebugLogger } from '../../memory/helpers'
 import {
     livingMemorySearchInputSchema,
     livingMemorySearchToolName
-} from './search_contract'
-import { LivingMemorySearchTool } from './search_tool'
+} from '../../memory/tools/search_contract'
+import { LivingMemorySearchTool } from '../../memory/tools/search_tool'
 
 const agenticRecallMaxModelCalls = 6
 

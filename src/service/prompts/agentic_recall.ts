@@ -1,4 +1,4 @@
-import { livingMemorySearchToolName } from '../memory/search_contract'
+import { livingMemorySearchToolName } from '../memory/tools/search_contract'
 
 export interface AgenticRecallPromptInput {
     presetLabel: string

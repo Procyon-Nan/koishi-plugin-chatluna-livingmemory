@@ -1,16 +1,16 @@
 import { Context } from 'koishi'
-import { LivingMemoryMessageFormatter } from './message_formatter'
+import { LivingMemoryMessageFormatter } from '../../transcript/message_formatter'
 import type {
     LivingMemoryConfig,
     LivingMemoryTranscriptMessage,
     MemoryScope
-} from '../types'
+} from '../../../types'
 import {
     isModelConfigured,
     stringifyModelContent,
     summarizeError
-} from './shared/utils'
-import { buildRecallRewritePrompt } from './prompts'
+} from '../../shared/utils'
+import { buildRecallRewritePrompt } from '../../prompts'
 
 const semanticTextPattern = /[\p{L}\p{N}]/u
 const queryLineTerminatorPattern = /[。！？!?；;，,、：:]$/u

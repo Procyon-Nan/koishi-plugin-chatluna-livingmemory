@@ -3,12 +3,12 @@ import type {
     LivingMemoryConfig,
     RecallRepository,
     RetrievedMemoryItem
-} from '../types'
-import { cosineSimilarity, isModelConfigured } from './shared/utils'
+} from '../../../types'
+import { cosineSimilarity, isModelConfigured } from '../../shared/utils'
 import {
     ensureEntryEmbeddings,
     toMemoryRetrievalText
-} from './shared/embeddings'
+} from '../../shared/embeddings'
 
 export class LivingMemoryRetriever {
     constructor(

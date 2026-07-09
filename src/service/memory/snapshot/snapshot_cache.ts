@@ -1,11 +1,11 @@
-import { LivingMemoryRepository } from '../repository'
-import { formatDateOnly } from '../shared/utils'
-import { scopeKey } from './helpers'
+import { LivingMemoryRepository } from '../../repository'
+import { formatDateOnly } from '../../shared/utils'
+import { scopeKey } from '../helpers'
 import {
     isAgenticMemorySnapshotItem,
     isMemoryReferenceItem
 } from './snapshot_items'
-import type { MemoryScope, MemorySnapshotRecord } from '../../types'
+import type { MemoryScope, MemorySnapshotRecord } from '../../../types'
 
 export class LivingMemorySnapshotCache {
     private readonly snapshotVariableByScope = new Map<string, string>()

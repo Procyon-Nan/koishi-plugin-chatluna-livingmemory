@@ -1,11 +1,11 @@
 import { Context } from 'koishi'
-import type { ExtractedMemoryItem } from '../types'
+import type { ExtractedMemoryItem } from '../../../types'
 import {
     isModelConfigured,
     stringifyModelContent,
     summarizeError
-} from './shared/utils'
-import { buildExtractionPrompt } from './prompts'
+} from '../../shared/utils'
+import { buildExtractionPrompt } from '../../prompts'
 
 const normalizeText = (value: string) => value.trim()
 

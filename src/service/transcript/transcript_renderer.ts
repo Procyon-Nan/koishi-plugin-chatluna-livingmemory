@@ -1,4 +1,4 @@
-import type { LivingMemoryTranscriptMessage } from '../types'
+import type { LivingMemoryTranscriptMessage } from '../../types'
 import { formatLivingMemoryMessageTime } from './transcript_message'
 
 export const renderLivingMemoryTranscriptLines = (

@@ -1,11 +1,11 @@
-import type { DreamCluster, DreamStage } from '../dream/types'
-import { toPromptEntry } from '../dream/util'
+import type { DreamCluster, DreamStage } from '../workflows/dream/types'
+import { toPromptEntry } from '../workflows/dream/util'
 import { MEMORY_KEYWORDS_DESCRIPTION } from './extraction'
 import { DREAM_ACTIVE_FORMAT, DREAM_ARCHIVED_FORMAT } from './schema'
 
 /**
  * 构建 Dream 整理提示词。纯函数，按阶段（active / archived）切换操作指南与输出格式。
- * 输出格式串引用自 ./schema，与 dream/parser.ts 保持单一真相源。
+ * 输出格式串引用自 ./schema，与 workflows/dream/parser.ts 保持单一真相源。
  */
 export const buildDreamPrompt = (
     presetId: string,

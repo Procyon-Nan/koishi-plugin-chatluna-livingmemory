@@ -1,4 +1,4 @@
-import type { LivingMemoryTranscriptMessage } from '../types'
+import type { LivingMemoryTranscriptMessage } from '../../types'
 
 export type LivingMemoryMessageTimeValue = Date | number | string
 

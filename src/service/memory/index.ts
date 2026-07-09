@@ -1,16 +1,16 @@
 import type { HumanMessage } from '@langchain/core/messages'
 import { Context, Logger, Service, Time } from 'koishi'
 import type { PresetTemplate } from 'koishi-plugin-chatluna/llm-core/prompt'
-import { LivingMemoryDreamService } from '../dream'
-import { LivingMemoryExtractor } from '../extractor'
-import { LivingMemoryMessageFormatter } from '../message_formatter'
-import { LivingMemoryRecallQueryBuilder } from '../recall_query'
+import { LivingMemoryDreamService } from '../workflows/dream'
+import { LivingMemoryExtractor } from '../workflows/extraction/extractor'
+import { LivingMemoryMessageFormatter } from '../transcript/message_formatter'
+import { LivingMemoryRecallQueryBuilder } from '../workflows/recall/query_builder'
 import {
     type LivingMemorySearchOptions,
     searchLivingMemoryEntries
-} from './search'
+} from './tools/search'
 import { LivingMemoryRepository } from '../repository'
-import { LivingMemoryRetriever } from '../retriever'
+import { LivingMemoryRetriever } from '../workflows/recall/retriever'
 import {
     LivingMemoryUserProfileService,
     normalizeUserProfileSpeakerKey,
@@ -40,16 +40,16 @@ import type {
     MemoryServiceStatus,
     MemorySnapshotWithResolvedItems
 } from '../../types'
-import { LivingMemoryDreamCoordinator } from './dream_coordinator'
-import { LivingMemoryExtractionCoordinator } from './extraction_coordinator'
-import { LivingMemoryJobTracker } from './job_tracker'
+import { LivingMemoryDreamCoordinator } from '../workflows/dream/coordinator'
+import { LivingMemoryExtractionCoordinator } from '../workflows/extraction/coordinator'
+import { LivingMemoryJobTracker } from '../workflows/job_tracker'
 import { LivingMemoryPresetCatalog } from './preset_catalog'
-import { LivingMemoryRecallCoordinator } from './recall_coordinator'
-import { LivingMemorySnapshotCache } from './snapshot_cache'
-import { LivingMemoryAgenticRecallExecutor } from './agentic_recall'
-import { isMemoryReferenceItem } from './snapshot_items'
+import { LivingMemoryRecallCoordinator } from '../workflows/recall/coordinator'
+import { LivingMemorySnapshotCache } from './snapshot/snapshot_cache'
+import { LivingMemoryAgenticRecallExecutor } from '../workflows/recall/agentic_recall'
+import { isMemoryReferenceItem } from './snapshot/snapshot_items'
 import type { QueueExtractionOptions } from './helpers'
-import { cloneSourceMessage } from './source_origins'
+import { cloneSourceMessage } from './origins/source_origins'
 
 export type { QueueExtractionOptions } from './helpers'
 

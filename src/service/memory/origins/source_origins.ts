@@ -2,7 +2,7 @@ import type {
     MemoryEntryRecord,
     MemorySourceMessage,
     MemorySourceOrigin
-} from '../../types'
+} from '../../../types'
 
 const cloneStringArray = (value: string[] | undefined) =>
     Array.isArray(value) ? [...value] : undefined

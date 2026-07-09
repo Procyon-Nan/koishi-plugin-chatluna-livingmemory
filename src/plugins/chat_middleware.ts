@@ -9,7 +9,7 @@ import {
     setLivingMemoryRawContent,
     toChatLunaTranscriptMessageResult,
     toChatLunaTranscriptMessages
-} from '../service/chatluna_transcript_adapter'
+} from '../service/transcript/chatluna_transcript_adapter'
 import { collectUserProfileSpeakerLabels } from '../service/user_profile'
 import type { LivingMemoryTranscriptMessage } from '../types'
 

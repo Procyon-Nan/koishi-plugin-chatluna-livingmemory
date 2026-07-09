@@ -1,5 +1,5 @@
 import type { MemoryEntryRecord, UserProfileRecord } from '../../types'
-import { toPromptEntry } from '../dream/util'
+import { toPromptEntry } from '../workflows/dream/util'
 
 export interface UserProfilePromptGroup {
     speakerLabel: string

@@ -2,7 +2,7 @@ import type {
     AgenticMemorySnapshotItem,
     MemoryReference,
     MemorySnapshotItem
-} from '../../types'
+} from '../../../types'
 
 export const isMemoryReferenceItem = (
     item: MemorySnapshotItem
