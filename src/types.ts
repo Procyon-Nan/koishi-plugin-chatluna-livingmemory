@@ -177,6 +177,11 @@ export interface MemoryEntryRecord {
     updatedAt: Date
 }
 
+export interface LivingMemoryMigrationRecord {
+    id: string
+    appliedAt: Date
+}
+
 export interface MemorySnapshotRecord {
     id: string
     presetId: string
@@ -421,6 +426,7 @@ declare module 'koishi' {
 
     interface Tables {
         living_memory_entry: MemoryEntryRecord
+        living_memory_migration: LivingMemoryMigrationRecord
         living_memory_snapshot: MemorySnapshotRecord
         living_memory_job: MemoryJobRecord
         living_memory_user_profile: UserProfileRecord

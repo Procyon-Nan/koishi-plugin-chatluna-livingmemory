@@ -41,6 +41,8 @@ import {
 } from './normalizers'
 import { defineLivingMemoryTables } from './tables'
 
+const sourceOriginsArrayMigrationId = 'source-origins-array-v1'
+
 export class LivingMemoryRepository
     implements
         RecallRepository,
@@ -53,6 +55,37 @@ export class LivingMemoryRepository
 
     defineTables() {
         defineLivingMemoryTables(this.ctx)
+    }
+
+    async migrateMemorySourceOriginsArray(): Promise<number> {
+        const applied = await this.ctx.database.get('living_memory_migration', {
+            id: sourceOriginsArrayMigrationId
+        })
+        if (applied.length > 0) {
+            return 0
+        }
+
+        const entries = await this.ctx.database.get('living_memory_entry', {}, [
+            'id',
+            'sourceOrigins'
+        ])
+        const invalidIds = entries
+            .filter((entry) => !Array.isArray(entry.sourceOrigins))
+            .map((entry) => entry.id)
+
+        if (invalidIds.length > 0) {
+            await this.ctx.database.set(
+                'living_memory_entry',
+                { id: { $in: invalidIds } },
+                { sourceOrigins: [] }
+            )
+        }
+
+        await this.ctx.database.create('living_memory_migration', {
+            id: sourceOriginsArrayMigrationId,
+            appliedAt: new Date()
+        })
+        return invalidIds.length
     }
 
     async listEntriesByPreset(presetId: string): Promise<MemoryEntryRecord[]> {

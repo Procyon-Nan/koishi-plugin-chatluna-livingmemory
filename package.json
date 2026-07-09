@@ -86,6 +86,7 @@
     "build:server": "yarn yakumo build",
     "build:client": "koishi-console build",
     "build": "yarn build:server && yarn build:client",
+    "test": "yarn node ../../node_modules/mocha/bin/mocha -r esbuild-register --exit tests/**/*.spec.ts",
     "bump": "yarn yakumo version",
     "dep": "yarn yakumo upgrade",
     "pub": "yarn yakumo publish",

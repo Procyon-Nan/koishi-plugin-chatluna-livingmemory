@@ -26,7 +26,7 @@ export const defineLivingMemoryTables = (ctx: Context) => {
                 initial: null
             },
             sourceConversationId: 'string(255)',
-            sourceOrigins: 'json',
+            sourceOrigins: 'array',
             embedding: {
                 type: 'json',
                 nullable: true,
@@ -57,6 +57,18 @@ export const defineLivingMemoryTables = (ctx: Context) => {
             query: 'text',
             items: 'json',
             createdAt: 'timestamp'
+        },
+        {
+            autoInc: false,
+            primary: 'id'
+        }
+    )
+
+    ctx.model.extend(
+        'living_memory_migration',
+        {
+            id: 'string(64)',
+            appliedAt: 'timestamp'
         },
         {
             autoInc: false,

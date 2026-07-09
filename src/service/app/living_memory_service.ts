@@ -158,6 +158,13 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     }
 
     protected async start() {
+        const repaired = await this.repository.migrateMemorySourceOriginsArray()
+        if (repaired > 0) {
+            this.serviceLogger.info(
+                `memory startup migration: repaired ${repaired} invalid sourceOrigins record(s)`
+            )
+        }
+
         try {
             const recovered =
                 await this.repository.markStaleRunningJobsAsFailed(

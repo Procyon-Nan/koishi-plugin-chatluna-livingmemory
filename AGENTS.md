@@ -92,9 +92,13 @@ tree whenever architecture, data contracts, or workflow boundaries change.
 
 ## Runtime Flows
 
-- Startup defines five tables through `LivingMemoryRepository.defineTables()`:
+- Startup defines six tables through `LivingMemoryRepository.defineTables()`:
   `living_memory_entry`, `living_memory_snapshot`, `living_memory_job`,
-  `living_memory_user_profile`, and `living_memory_preset_speaker`.
+  `living_memory_user_profile`, `living_memory_preset_speaker`, and
+  `living_memory_migration`.
+- Service startup runs versioned persistence migrations before recovering stale
+  jobs. The `source-origins-array-v1` migration repairs legacy non-array
+  `sourceOrigins` values to `[]`.
 - Service startup recovers stale pending/running jobs and emits config warnings.
   Job rows are audit records, not durable schedulers.
 - Main ChatLuna `before-chat` builds a scope, records the current speaker, loads
