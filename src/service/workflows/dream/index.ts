@@ -1,6 +1,6 @@
 import { Context } from 'koishi'
 import type { LivingMemoryConfig, MemoryEntryRecord } from '../../../types'
-import type { LivingMemoryRepository } from '../../repository'
+import type { LivingMemoryRepository } from '../../persistence/repository'
 import {
     isModelConfigured,
     stringifyModelContent,

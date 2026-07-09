@@ -36,42 +36,48 @@ tree whenever architecture, data contracts, or workflow boundaries change.
   repository, retriever, extractor, recall query builder, agentic recall
   executor, user profile service, Dream service, job tracker, snapshot cache,
   preset catalog, and coordinators.
-- `src/service/memory/*_coordinator.ts` contains async orchestration, job state
-  handling, in-memory locks, snapshot cache refreshes, and extraction baselines.
-- `src/service/memory/search_contract.ts` centralizes lexical memory-search
-  tool name, query text length limits, and schema rules used by the tool,
-  agentic recall, prompts, and search implementation.
-- `src/service/memory/search_tool.ts` owns the reusable `living_memory_search`
-  tool implementation.
-- `src/service/memory/get_messages_tool.ts` owns the
+- `src/service/workflows/` contains async workflow orchestration for recall,
+  extraction, and Dream. Coordinators own job state handling, in-memory locks,
+  snapshot cache refreshes, and extraction baselines.
+- `src/service/workflows/recall/` owns embedding-rerank retrieval, recall query
+  rewrite, and the agentic-recall executor.
+- `src/service/workflows/extraction/` owns memory extraction orchestration and
+  extraction model parsing.
+- `src/service/workflows/dream/` owns Dream clustering, prompt parsing,
+  operation execution, stats, and Dream coordination. Dream processes active
+  memories and archived memories, then regenerates user profiles when profile
+  injection is enabled.
+- `src/service/workflows/job_tracker.ts` owns shared workflow job status
+  updates.
+- `src/service/memory/tools/search_contract.ts` centralizes lexical
+  memory-search tool names, query text length limits, and schema rules used by
+  the tools, agentic recall, prompts, and search implementation.
+- `src/service/memory/tools/search_tool.ts` owns the reusable
+  `living_memory_search` tool implementation.
+- `src/service/memory/tools/get_messages_tool.ts` owns the
   `living_memory_get_messages` tool implementation for retrieving source
   conversation messages by memory id.
-- `src/service/memory/tool_runtime.ts` owns shared model-facing tool runtime
-  behavior, including runtime scope resolution, debug logging,
+- `src/service/memory/tools/tool_runtime.ts` owns shared model-facing tool
+  runtime behavior, including runtime scope resolution, debug logging,
   invalid-argument retry limits, and result serialization.
-- `src/service/memory/source_origins.ts` owns creation, cloning,
+- `src/service/memory/tools/search.ts` owns lexical memory search scoring and
+  result assembly.
+- `src/service/memory/snapshot/` owns snapshot hydration/cache helpers and
+  snapshot item type guards.
+- `src/service/memory/origins/source_origins.ts` owns creation, cloning,
   normalization, and deterministic merge helpers for memory source-origin
   groups.
-- `src/service/repository.ts` owns Koishi database table definitions and all
-  persistence methods.
-- `src/service/recall_query.ts` and `src/service/retriever.ts` own query
-  normalization/rewrite handling and embedding-rerank retrieval.
-- `src/service/memory/agentic_recall.ts` owns the agentic-recall recall
-  executor. It drives the recall model through a bounded tool-call loop, exposes
-  `living_memory_search` as the available tool, aggregates tool-call summaries
-  and matched memories, and returns final plain memory text for snapshot
-  injection.
-- `src/service/extractor.ts`, `src/service/message_formatter.ts`, and the
-  transcript adapters convert chat history into extraction-ready records and
-  parse model output.
-- `src/service/dream/` owns Dream clustering, prompt parsing, operation
-  execution, and stats. Dream processes active memories and archived memories,
-  then regenerates user profiles when profile injection is enabled.
+- `src/service/transcript/` owns ChatLuna/Character transcript adapters,
+  message formatting, transcript rendering, and source-message serialization.
+- `src/service/persistence/repository.ts` owns the `LivingMemoryRepository`
+  facade and all persistence methods.
+- `src/service/persistence/tables.ts` owns Koishi database table definitions.
+- `src/service/persistence/normalizers.ts` owns persistence record
+  normalization helpers.
 - `src/service/user_profile.ts` owns preset speaker normalization, user profile
   generation, profile rendering, and profile source-memory selection.
-- `src/service/prompts/` and `src/service/prompts.ts` are the prompt/schema
-  source of truth for extraction, recall rewrite, agentic recall, Dream, and
-  user profiles.
+- `src/service/prompts/` is the prompt/schema source of truth for extraction,
+  recall rewrite, agentic recall, Dream, and user profiles.
 - `lib/` and `dist/` are build outputs. Do not edit them unless the task
   explicitly asks for generated artifacts.
 - `tmp/` is the local planning workspace for each new feature design or bug-fix
@@ -139,8 +145,9 @@ tree whenever architecture, data contracts, or workflow boundaries change.
 ## Data And RPC Boundaries
 
 - Any schema-affecting change must update `src/types.ts`,
-  `src/service/repository.ts`, query helpers if list behavior changes, and the
-  WebUI/client types when visible in the console.
+  `src/service/persistence/tables.ts`,
+  `src/service/persistence/repository.ts`, query helpers if list behavior
+  changes, and the WebUI/client types when visible in the console.
 - Any console RPC change must update all four surfaces together:
   `src/types.ts`, `src/plugins/webui.ts`, `client/api.ts`, and
   `client/dashboard.vue`.
@@ -178,13 +185,17 @@ tree whenever architecture, data contracts, or workflow boundaries change.
 - For recall changes, distinguish rewrite-disabled, rewrite-failure,
   empty cleaned query, empty final query, and agentic `<NO_MEMORY>` behavior
   before editing.
-- For `living_memory_search` changes, keep `search_contract.ts`,
-  `search_tool.ts`, `search.ts`, `src/plugins/living_memory_tools.ts`, and
-  agentic recall prompt rules aligned.
-- For `living_memory_get_messages` changes, keep `search_contract.ts`,
-  `get_messages_tool.ts`, `tool_runtime.ts`,
-  `src/plugins/living_memory_tools.ts`, and service/repository source-origin
-  contracts aligned.
+- For `living_memory_search` changes, keep
+  `src/service/memory/tools/search_contract.ts`,
+  `src/service/memory/tools/search_tool.ts`,
+  `src/service/memory/tools/search.ts`, `src/plugins/living_memory_tools.ts`,
+  and agentic recall prompt rules aligned.
+- For `living_memory_get_messages` changes, keep
+  `src/service/memory/tools/search_contract.ts`,
+  `src/service/memory/tools/get_messages_tool.ts`,
+  `src/service/memory/tools/tool_runtime.ts`,
+  `src/plugins/living_memory_tools.ts`, and persistence repository
+  source-origin contracts aligned.
 - For extraction changes, preserve interval baseline handling, lock behavior,
   job state transitions, prompt rendering fallback, and parse-error semantics.
 - For Dream changes, preserve stage-specific action allowlists, touched-memory
@@ -203,7 +214,7 @@ tree whenever architecture, data contracts, or workflow boundaries change.
 - For documentation-only changes, run `git diff --check`.
 - For source changes, run `yarn lint` and `git diff --check`.
 - For type contract, repository, or RPC changes, also run
-  `yarn exec tsc -p tsconfig.json --noEmit`.
+  `yarn atsc -p tsconfig.json --noEmit`.
 - For WebUI changes, run `yarn build:client` when the change affects
   `client/`, console entries, or RPC payload shape.
 - For server build or package-boundary changes, run `yarn build:server` or

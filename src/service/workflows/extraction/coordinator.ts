@@ -1,6 +1,6 @@
 import { Context, Logger } from 'koishi'
 import type { PresetTemplate } from 'koishi-plugin-chatluna/llm-core/prompt'
-import { LivingMemoryRepository } from '../../repository'
+import { LivingMemoryRepository } from '../../persistence/repository'
 import { LivingMemoryExtractor } from './extractor'
 import { LivingMemoryMessageFormatter } from '../../transcript/message_formatter'
 import { summarizeError } from '../../shared/utils'

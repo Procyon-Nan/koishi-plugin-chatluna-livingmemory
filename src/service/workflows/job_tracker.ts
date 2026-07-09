@@ -1,4 +1,4 @@
-import { LivingMemoryRepository } from '../repository'
+import { LivingMemoryRepository } from '../persistence/repository'
 import { summarizeError } from '../shared/utils'
 
 export class LivingMemoryJobTracker {

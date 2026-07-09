@@ -1,5 +1,5 @@
 import { Logger } from 'koishi'
-import { LivingMemoryRepository } from '../../repository'
+import { LivingMemoryRepository } from '../../persistence/repository'
 import { LivingMemoryRetriever } from './retriever'
 import { LivingMemoryRecallQueryBuilder } from './query_builder'
 import { summarizeError } from '../../shared/utils'

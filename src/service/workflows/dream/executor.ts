@@ -1,6 +1,6 @@
 import type { MemoryEntryRecord, MemoryMutationInput } from '../../../types'
 import { mergeMemorySourceOrigins } from '../../memory/origins/source_origins'
-import type { LivingMemoryRepository } from '../../repository'
+import type { LivingMemoryRepository } from '../../persistence/repository'
 import { createEmptyStats } from './stats'
 import type {
     DreamAction,

@@ -1,5 +1,5 @@
 import { Logger } from 'koishi'
-import { LivingMemoryRepository } from '../../repository'
+import { LivingMemoryRepository } from '../../persistence/repository'
 import { LivingMemoryDreamService } from './index'
 import { isModelConfigured } from '../../shared/utils'
 import { type DebugLogger } from '../../memory/helpers'

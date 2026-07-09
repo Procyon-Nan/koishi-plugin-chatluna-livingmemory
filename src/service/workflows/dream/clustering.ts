@@ -4,7 +4,7 @@ import type {
     MemoryEntryRecord,
     MemoryEntryType
 } from '../../../types'
-import type { LivingMemoryRepository } from '../../repository'
+import type { LivingMemoryRepository } from '../../persistence/repository'
 import { ensureEntryEmbeddings } from '../../shared/embeddings'
 import {
     cosineSimilarity,

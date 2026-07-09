@@ -9,7 +9,7 @@ import {
     type LivingMemorySearchOptions,
     searchLivingMemoryEntries
 } from './tools/search'
-import { LivingMemoryRepository } from '../repository'
+import { LivingMemoryRepository } from '../persistence/repository'
 import { LivingMemoryRetriever } from '../workflows/recall/retriever'
 import {
     LivingMemoryUserProfileService,

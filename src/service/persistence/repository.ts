@@ -1,11 +1,10 @@
-import { createHash, randomUUID } from 'crypto'
+import { randomUUID } from 'crypto'
 import { Context } from 'koishi'
 import type {
     ExtractedMemoryItem,
     ExtractionRepository,
     JobRepository,
     MemoryEntryRecord,
-    MemoryEntryStatus,
     MemoryJobKind,
     MemoryJobRecord,
     MemoryMutationInput,
@@ -22,112 +21,25 @@ import type {
     UserProfileInput,
     UserProfileRecord,
     UserProfileRepository
-} from '../types'
+} from '../../types'
 import {
     createSourceOriginsFromMessages,
     normalizeMemorySourceOrigins
-} from './memory/origins/source_origins'
-
-const keywordFingerprintSeparator = '\u0000'
-
-const normalizeKeywords = (keywords: string[] | null | undefined) => {
-    return keywords?.length ? keywords.slice(0, 12) : []
-}
-
-const normalizeSentiment = (sentiment: string | null | undefined) => {
-    const normalized = sentiment?.trim()
-    return normalized?.length ? normalized : null
-}
-
-const normalizeImportance = (
-    importance: number | string | null | undefined
-) => {
-    let normalized = Number.NaN
-
-    if (typeof importance === 'number') {
-        normalized = importance
-    } else if (typeof importance === 'string') {
-        const trimmed = importance.trim()
-        if (trimmed.length > 0) {
-            normalized = Number(trimmed)
-        }
-    }
-
-    if (!Number.isFinite(normalized)) {
-        return null
-    }
-
-    return Math.min(1, Math.max(0, normalized))
-}
-
-const normalizeStatus = (
-    status: MemoryEntryStatus | string | null | undefined
-): MemoryEntryStatus => {
-    return status === 'archived' ? 'archived' : 'active'
-}
-
-const resolveKeywords = (
-    current: Pick<MemoryEntryRecord, 'keywords'>,
-    patch: Partial<MemoryMutationInput>
-) => {
-    if (patch.keywords !== undefined) {
-        return normalizeKeywords(patch.keywords)
-    }
-
-    return current.keywords
-}
-
-const normalizeEntryRecord = (
-    record: MemoryEntryRecord
-): MemoryEntryRecord => ({
-    ...record,
-    status: normalizeStatus(record.status),
-    sentiment: normalizeSentiment(record.sentiment),
-    importance: normalizeImportance(record.importance),
-    sourceOrigins: normalizeMemorySourceOrigins(
-        (record as { sourceOrigins?: unknown }).sourceOrigins
-    ),
-    embedding: Array.isArray(record.embedding) ? record.embedding : null,
-    embeddingModelId:
-        typeof record.embeddingModelId === 'string' &&
-        record.embeddingModelId.length > 0
-            ? record.embeddingModelId
-            : null
-})
-
-const normalizeUserProfileRecord = (
-    record: UserProfileRecord
-): UserProfileRecord => ({
-    ...record,
-    speakerKey: record.speakerKey.trim(),
-    speakerLabel: record.speakerLabel.trim(),
-    content: record.content.trim(),
-    sourceMemoryIds: Array.isArray(record.sourceMemoryIds)
-        ? record.sourceMemoryIds.filter(
-              (id): id is string => typeof id === 'string' && id.length > 0
-          )
-        : []
-})
-
-const normalizeOptionalString = (value: string | null | undefined) => {
-    const normalized = value?.trim()
-    return normalized?.length ? normalized : null
-}
-
-const createPresetSpeakerId = (presetId: string, speakerKey: string) => {
-    return createHash('sha256')
-        .update(`${presetId}\u0000${speakerKey}`)
-        .digest('hex')
-}
-
-const normalizePresetSpeakerRecord = (
-    record: PresetSpeakerRecord
-): PresetSpeakerRecord => ({
-    ...record,
-    speakerKey: record.speakerKey.trim(),
-    speakerLabel: record.speakerLabel.trim(),
-    speakerId: normalizeOptionalString(record.speakerId)
-})
+} from '../memory/origins/source_origins'
+import {
+    createPresetSpeakerId,
+    keywordFingerprintSeparator,
+    normalizeEntryRecord,
+    normalizeImportance,
+    normalizeKeywords,
+    normalizeOptionalString,
+    normalizePresetSpeakerRecord,
+    normalizeSentiment,
+    normalizeStatus,
+    normalizeUserProfileRecord,
+    resolveKeywords
+} from './normalizers'
+import { defineLivingMemoryTables } from './tables'
 
 export class LivingMemoryRepository
     implements
@@ -140,136 +52,7 @@ export class LivingMemoryRepository
     constructor(private readonly ctx: Context) {}
 
     defineTables() {
-        this.ctx.model.extend(
-            'living_memory_entry',
-            {
-                id: 'string(64)',
-                presetId: 'string(255)',
-                type: 'string(32)',
-                status: {
-                    type: 'string',
-                    length: 16,
-                    initial: 'active'
-                },
-                content: 'text',
-                keywords: 'json',
-                summary: 'text',
-                sentiment: {
-                    type: 'text',
-                    nullable: true,
-                    initial: null
-                },
-                importance: {
-                    type: 'double',
-                    nullable: true,
-                    initial: null
-                },
-                sourceConversationId: 'string(255)',
-                sourceOrigins: 'json',
-                embedding: {
-                    type: 'json',
-                    nullable: true,
-                    initial: null
-                },
-                embeddingModelId: {
-                    type: 'string',
-                    length: 255,
-                    nullable: true,
-                    initial: null
-                },
-                createdAt: 'timestamp',
-                updatedAt: 'timestamp'
-            },
-            {
-                autoInc: false,
-                primary: 'id'
-            }
-        )
-
-        this.ctx.model.extend(
-            'living_memory_snapshot',
-            {
-                id: 'string(64)',
-                presetId: 'string(255)',
-                conversationId: 'string(255)',
-                strategy: 'string(32)',
-                query: 'text',
-                items: 'json',
-                createdAt: 'timestamp'
-            },
-            {
-                autoInc: false,
-                primary: 'id'
-            }
-        )
-
-        this.ctx.model.extend(
-            'living_memory_job',
-            {
-                id: 'string(64)',
-                presetId: 'string(255)',
-                conversationId: 'string(255)',
-                kind: 'string(16)',
-                recallStrategy: {
-                    type: 'string',
-                    length: 32,
-                    nullable: true,
-                    initial: null
-                },
-                status: 'string(16)',
-                input: 'text',
-                detail: 'text',
-                error: 'text',
-                createdAt: 'timestamp',
-                startedAt: 'timestamp',
-                finishedAt: 'timestamp',
-                updatedAt: 'timestamp'
-            },
-            {
-                autoInc: false,
-                primary: 'id'
-            }
-        )
-
-        this.ctx.model.extend(
-            'living_memory_user_profile',
-            {
-                id: 'string(64)',
-                presetId: 'string(255)',
-                speakerKey: 'string(255)',
-                speakerLabel: 'string(255)',
-                content: 'text',
-                sourceMemoryIds: 'json',
-                createdAt: 'timestamp',
-                updatedAt: 'timestamp'
-            },
-            {
-                autoInc: false,
-                primary: 'id'
-            }
-        )
-
-        this.ctx.model.extend(
-            'living_memory_preset_speaker',
-            {
-                id: 'string(64)',
-                presetId: 'string(255)',
-                speakerKey: 'string(255)',
-                speakerLabel: 'string(255)',
-                speakerId: {
-                    type: 'string',
-                    length: 255,
-                    nullable: true,
-                    initial: null
-                },
-                createdAt: 'timestamp',
-                updatedAt: 'timestamp'
-            },
-            {
-                autoInc: false,
-                primary: 'id'
-            }
-        )
+        defineLivingMemoryTables(this.ctx)
     }
 
     async listEntriesByPreset(presetId: string): Promise<MemoryEntryRecord[]> {

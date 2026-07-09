@@ -1,4 +1,4 @@
-import { LivingMemoryRepository } from '../../repository'
+import { LivingMemoryRepository } from '../../persistence/repository'
 import { formatDateOnly } from '../../shared/utils'
 import { scopeKey } from '../helpers'
 import {
