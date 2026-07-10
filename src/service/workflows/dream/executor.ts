@@ -1,6 +1,10 @@
-import type { MemoryEntryRecord, MemoryMutationInput } from '../../../types'
+import type {
+    ExtractionRepository,
+    MemoryEntryRecord,
+    MemoryMutationInput,
+    MemorySourceOrigin
+} from '../../../types'
 import { mergeMemorySourceOrigins } from '../../memory/origins/source_origins'
-import type { LivingMemoryRepository } from '../../persistence/repository'
 import { createEmptyStats } from './stats'
 import type {
     DreamAction,
@@ -16,8 +20,18 @@ import {
     unique
 } from './util'
 
+export type DreamExecutorRepository = Pick<
+    ExtractionRepository,
+    'deleteMemory' | 'updateMemory'
+> & {
+    updateMemorySourceOrigins(
+        id: string,
+        sourceOrigins: MemorySourceOrigin[]
+    ): Promise<void>
+}
+
 export class DreamExecutor {
-    constructor(private readonly repository: LivingMemoryRepository) {}
+    constructor(private readonly repository: DreamExecutorRepository) {}
 
     async executeOperations(
         stage: DreamStage,

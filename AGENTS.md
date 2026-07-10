@@ -157,6 +157,9 @@ tree whenever architecture, data contracts, or workflow boundaries change.
   `src/service/persistence/tables.ts`,
   `src/service/persistence/repository.ts`, query helpers if list behavior
   changes, and the WebUI/client types when visible in the console.
+- Workflow classes should depend on caller-specific repository capability
+  types instead of the concrete `LivingMemoryRepository`. Compose the existing
+  repository contracts from `src/types.ts` where possible.
 - Any console RPC change must update all four surfaces together:
   `src/types.ts`, `src/plugins/webui.ts`, `client/api.ts`, and
   `client/dashboard.vue`.

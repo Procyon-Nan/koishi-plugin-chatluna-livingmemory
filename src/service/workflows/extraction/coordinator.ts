@@ -1,6 +1,5 @@
 import { Context, Logger } from 'koishi'
 import type { PresetTemplate } from 'koishi-plugin-chatluna/llm-core/prompt'
-import { LivingMemoryRepository } from '../../persistence/repository'
 import { LivingMemoryExtractor } from './extractor'
 import { LivingMemoryMessageFormatter } from '../../transcript/message_formatter'
 import { summarizeError } from '../../shared/utils'
@@ -13,6 +12,8 @@ import {
 } from '../../memory/helpers'
 import { LivingMemoryJobTracker } from '../job_tracker'
 import type {
+    ExtractionRepository,
+    JobRepository,
     LivingMemoryConfig,
     LivingMemoryTranscriptMessage,
     MemoryScope
@@ -23,6 +24,9 @@ type LivingMemoryExtractionConfig = Pick<
     'extractionInterval' | 'extractionRounds'
 >
 
+export type ExtractionWorkflowRepository = Pick<JobRepository, 'createJob'> &
+    Pick<ExtractionRepository, 'appendMemories'>
+
 export class LivingMemoryExtractionCoordinator {
     private readonly extractionLockByConversation = new Set<string>()
     private readonly lastExtractionChatCountByScope = new Map<string, number>()
@@ -30,7 +34,7 @@ export class LivingMemoryExtractionCoordinator {
     constructor(
         private readonly ctx: Context,
         private readonly config: LivingMemoryExtractionConfig,
-        private readonly repository: LivingMemoryRepository,
+        private readonly repository: ExtractionWorkflowRepository,
         private readonly formatter: LivingMemoryMessageFormatter,
         private readonly extractor: LivingMemoryExtractor,
         private readonly jobTracker: LivingMemoryJobTracker,

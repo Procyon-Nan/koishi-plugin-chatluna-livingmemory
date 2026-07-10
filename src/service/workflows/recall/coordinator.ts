@@ -1,5 +1,4 @@
 import { Logger } from 'koishi'
-import { LivingMemoryRepository } from '../../persistence/repository'
 import { LivingMemoryRetriever } from './retriever'
 import { LivingMemoryRecallQueryBuilder } from './query_builder'
 import { summarizeError } from '../../shared/utils'
@@ -13,9 +12,11 @@ import { LivingMemoryJobTracker } from '../job_tracker'
 import { LivingMemorySnapshotCache } from '../../memory/snapshot/snapshot_cache'
 import { LivingMemoryAgenticRecallExecutor } from './agentic_recall'
 import type {
+    JobRepository,
     LivingMemoryConfig,
     LivingMemoryTranscriptMessage,
-    MemoryScope
+    MemoryScope,
+    SnapshotRepository
 } from '../../../types'
 
 type LivingMemoryRecallCoordinatorConfig = Pick<
@@ -23,12 +24,15 @@ type LivingMemoryRecallCoordinatorConfig = Pick<
     'recallStrategy' | 'recallTopK'
 >
 
+export type RecallWorkflowRepository = Pick<JobRepository, 'createJob'> &
+    Pick<SnapshotRepository, 'upsertSnapshot'>
+
 export class LivingMemoryRecallCoordinator {
     private readonly recallLockByConversation = new Set<string>()
 
     constructor(
         private readonly config: LivingMemoryRecallCoordinatorConfig,
-        private readonly repository: LivingMemoryRepository,
+        private readonly repository: RecallWorkflowRepository,
         private readonly recallQuery: LivingMemoryRecallQueryBuilder,
         private readonly retriever: LivingMemoryRetriever,
         private readonly agenticRecall: LivingMemoryAgenticRecallExecutor,

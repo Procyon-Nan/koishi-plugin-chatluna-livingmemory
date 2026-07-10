@@ -4,8 +4,10 @@ import type {
     MemoryEntryRecord,
     MemoryEntryType
 } from '../../../types'
-import type { LivingMemoryRepository } from '../../persistence/repository'
-import { ensureEntryEmbeddings } from '../../shared/embeddings'
+import {
+    type EmbeddingRepositoryLike,
+    ensureEntryEmbeddings
+} from '../../shared/embeddings'
 import {
     cosineSimilarity,
     isModelConfigured,
@@ -33,7 +35,7 @@ export class DreamClusterer {
     constructor(
         private readonly ctx: Context,
         private readonly config: DreamClustererConfig,
-        private readonly repository: LivingMemoryRepository,
+        private readonly repository: EmbeddingRepositoryLike,
         private readonly debug: (message: string) => void
     ) {}
 

@@ -1,13 +1,18 @@
 import { Context } from 'koishi'
-import type { LivingMemoryConfig, MemoryEntryRecord } from '../../../types'
-import type { LivingMemoryRepository } from '../../persistence/repository'
+import type {
+    LivingMemoryConfig,
+    MemoryEntryRecord,
+    RecallRepository,
+    UserProfileRepository
+} from '../../../types'
+import type { EmbeddingRepositoryLike } from '../../shared/embeddings'
 import {
     isModelConfigured,
     stringifyModelContent,
     summarizeError
 } from '../../shared/utils'
 import { DreamClusterer } from './clustering'
-import { DreamExecutor } from './executor'
+import { DreamExecutor, type DreamExecutorRepository } from './executor'
 import { LivingMemoryUserProfileService } from '../../user_profile'
 import { parseDreamOperations } from './parser'
 import { buildDreamPrompt } from '../../prompts'
@@ -30,6 +35,11 @@ type LivingMemoryDreamConfig = Pick<
     | 'userProfileMemoryLimit'
 >
 
+export type DreamRepository = Pick<RecallRepository, 'listEntriesByPreset'> &
+    EmbeddingRepositoryLike &
+    DreamExecutorRepository &
+    UserProfileRepository
+
 export class LivingMemoryDreamService {
     private readonly clusterer: DreamClusterer
     private readonly executor: DreamExecutor
@@ -38,7 +48,7 @@ export class LivingMemoryDreamService {
     constructor(
         private readonly ctx: Context,
         private readonly config: LivingMemoryDreamConfig,
-        private readonly repository: LivingMemoryRepository,
+        private readonly repository: DreamRepository,
         private readonly debug: (message: string) => void
     ) {
         this.clusterer = new DreamClusterer(ctx, config, repository, debug)

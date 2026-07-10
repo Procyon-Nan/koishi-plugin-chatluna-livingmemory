@@ -1,5 +1,4 @@
 import { Logger } from 'koishi'
-import { LivingMemoryRepository } from '../../persistence/repository'
 import { LivingMemoryDreamService } from './index'
 import { isModelConfigured } from '../../shared/utils'
 import { type DebugLogger } from '../../memory/helpers'
@@ -7,6 +6,7 @@ import { LivingMemoryJobTracker } from '../job_tracker'
 import { LivingMemorySnapshotCache } from '../../memory/snapshot/snapshot_cache'
 import type {
     DreamTriggerResult,
+    JobRepository,
     LivingMemoryConfig,
     MemoryScope
 } from '../../../types'
@@ -16,13 +16,23 @@ type LivingMemoryDreamCoordinatorConfig = Pick<
     'autoDreamMemoryGrowthThreshold' | 'dreamModel' | 'enableAutoDream'
 >
 
+export type DreamCoordinatorRepository = Pick<
+    JobRepository,
+    'createJob' | 'getLatestJobByPresetAndKind' | 'markStaleRunningJobsAsFailed'
+> & {
+    countEntriesCreatedAfter(
+        presetId: string,
+        createdAfter?: Date
+    ): Promise<number>
+}
+
 export class LivingMemoryDreamCoordinator {
     private readonly dreamLockByPreset = new Map<string, string>()
 
     constructor(
         private readonly config: LivingMemoryDreamCoordinatorConfig,
         private readonly dream: LivingMemoryDreamService,
-        private readonly repository: LivingMemoryRepository,
+        private readonly repository: DreamCoordinatorRepository,
         private readonly snapshotCache: LivingMemorySnapshotCache,
         private readonly jobTracker: LivingMemoryJobTracker,
         private readonly logger: Logger,

@@ -1,8 +1,10 @@
-import { LivingMemoryRepository } from '../persistence/repository'
+import type { JobRepository } from '../../types'
 import { summarizeError } from '../shared/utils'
 
+export type JobTrackerRepository = Pick<JobRepository, 'updateJob'>
+
 export class LivingMemoryJobTracker {
-    constructor(private readonly repository: LivingMemoryRepository) {}
+    constructor(private readonly repository: JobTrackerRepository) {}
 
     async markRunning(id: string) {
         await this.repository.updateJob(id, {
