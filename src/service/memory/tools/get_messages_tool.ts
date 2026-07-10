@@ -14,6 +14,8 @@ import {
     LivingMemoryToolRuntime
 } from './tool_runtime'
 
+type LivingMemoryGetMessagesToolConfig = Pick<LivingMemoryConfig, 'debug'>
+
 export const livingMemoryGetMessagesToolDescription = [
     'Get source conversation messages for memories in the current preset by memory id.',
     '',
@@ -45,7 +47,7 @@ export class LivingMemoryGetMessagesTool extends StructuredTool {
 
     constructor(
         private readonly ctx: Context,
-        private readonly config: LivingMemoryConfig
+        private readonly config: LivingMemoryGetMessagesToolConfig
     ) {
         super()
         this.runtime = new LivingMemoryToolRuntime(

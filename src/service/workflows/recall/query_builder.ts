@@ -15,6 +15,13 @@ import { buildRecallRewritePrompt } from '../../prompts'
 const semanticTextPattern = /[\p{L}\p{N}]/u
 const queryLineTerminatorPattern = /[。！？!?；;，,、：:]$/u
 
+type LivingMemoryRecallQueryConfig = Pick<
+    LivingMemoryConfig,
+    | 'enableRecallQueryRewrite'
+    | 'recallHistoryWindowRounds'
+    | 'recallRewriteModel'
+>
+
 const normalizeQueryLines = (lines: string[]) => {
     return lines
         .map((line) => line.trim().replace(/\s+/gu, ' '))
@@ -100,7 +107,7 @@ export class LivingMemoryRecallQueryBuilder {
 
     constructor(
         private readonly ctx: Context,
-        private readonly config: LivingMemoryConfig
+        private readonly config: LivingMemoryRecallQueryConfig
     ) {}
 
     async resolve(

@@ -27,10 +27,12 @@ import {
     unique
 } from './util'
 
+type DreamClustererConfig = Pick<LivingMemoryConfig, 'embeddingModel'>
+
 export class DreamClusterer {
     constructor(
         private readonly ctx: Context,
-        private readonly config: LivingMemoryConfig,
+        private readonly config: DreamClustererConfig,
         private readonly repository: LivingMemoryRepository,
         private readonly debug: (message: string) => void
     ) {}

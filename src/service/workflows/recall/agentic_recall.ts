@@ -27,6 +27,14 @@ import {
 } from '../../memory/tools/search_contract'
 import { LivingMemorySearchTool } from '../../memory/tools/search_tool'
 
+type LivingMemoryAgenticRecallConfig = Pick<
+    LivingMemoryConfig,
+    | 'agenticRecallModel'
+    | 'debug'
+    | 'memorySearchToolMaxResults'
+    | 'recallHistoryWindowRounds'
+>
+
 const agenticRecallMaxModelCalls = 6
 
 interface AgenticRecallToolCall {
@@ -256,7 +264,7 @@ export class LivingMemoryAgenticRecallExecutor {
 
     constructor(
         private readonly ctx: Context,
-        private readonly config: LivingMemoryConfig,
+        private readonly config: LivingMemoryAgenticRecallConfig,
         private readonly debug: DebugLogger
     ) {}
 

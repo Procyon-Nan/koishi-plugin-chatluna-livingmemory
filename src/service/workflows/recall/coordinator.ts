@@ -18,11 +18,16 @@ import type {
     MemoryScope
 } from '../../../types'
 
+type LivingMemoryRecallCoordinatorConfig = Pick<
+    LivingMemoryConfig,
+    'recallStrategy' | 'recallTopK'
+>
+
 export class LivingMemoryRecallCoordinator {
     private readonly recallLockByConversation = new Set<string>()
 
     constructor(
-        private readonly config: LivingMemoryConfig,
+        private readonly config: LivingMemoryRecallCoordinatorConfig,
         private readonly repository: LivingMemoryRepository,
         private readonly recallQuery: LivingMemoryRecallQueryBuilder,
         private readonly retriever: LivingMemoryRetriever,

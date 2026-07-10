@@ -22,6 +22,14 @@ import type { DreamRunResult, DreamStage, DreamStageResult } from './types'
 
 export type { DreamRunResult } from './types'
 
+type LivingMemoryDreamConfig = Pick<
+    LivingMemoryConfig,
+    | 'dreamModel'
+    | 'embeddingModel'
+    | 'enableUserProfileInjection'
+    | 'userProfileMemoryLimit'
+>
+
 export class LivingMemoryDreamService {
     private readonly clusterer: DreamClusterer
     private readonly executor: DreamExecutor
@@ -29,7 +37,7 @@ export class LivingMemoryDreamService {
 
     constructor(
         private readonly ctx: Context,
-        private readonly config: LivingMemoryConfig,
+        private readonly config: LivingMemoryDreamConfig,
         private readonly repository: LivingMemoryRepository,
         private readonly debug: (message: string) => void
     ) {

@@ -10,10 +10,15 @@ import {
     toMemoryRetrievalText
 } from '../../shared/embeddings'
 
+type LivingMemoryRetrieverConfig = Pick<
+    LivingMemoryConfig,
+    'debug' | 'embeddingModel' | 'rerankModel'
+>
+
 export class LivingMemoryRetriever {
     constructor(
         private readonly ctx: Context,
-        private readonly config: LivingMemoryConfig,
+        private readonly config: LivingMemoryRetrieverConfig,
         private readonly recallRepository: RecallRepository
     ) {}
 

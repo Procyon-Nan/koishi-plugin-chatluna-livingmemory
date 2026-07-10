@@ -17,6 +17,11 @@ import {
     LivingMemoryToolRuntime
 } from './tool_runtime'
 
+type LivingMemorySearchToolConfig = Pick<
+    LivingMemoryConfig,
+    'debug' | 'memorySearchToolMaxResults'
+>
+
 export const livingMemorySearchToolDescription = [
     'Search active memories in the current preset by lexical phrase matching.',
     '',
@@ -55,7 +60,7 @@ export class LivingMemorySearchTool extends StructuredTool {
 
     constructor(
         private readonly ctx: Context,
-        private readonly config: LivingMemoryConfig
+        private readonly config: LivingMemorySearchToolConfig
     ) {
         super()
         this.runtime = new LivingMemoryToolRuntime(

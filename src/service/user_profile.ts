@@ -18,6 +18,11 @@ import { summarizeError } from './shared/utils'
 
 const maxProfileLength = 220
 
+type LivingMemoryUserProfileConfig = Pick<
+    LivingMemoryConfig,
+    'enableUserProfileInjection' | 'userProfileMemoryLimit'
+>
+
 export interface UserProfileGenerationResult {
     generated: number
     detail: string
@@ -90,7 +95,7 @@ export const collectUserProfileSpeakerLabels = (
 export class LivingMemoryUserProfileService {
     constructor(
         private readonly ctx: Context,
-        private readonly config: LivingMemoryConfig,
+        private readonly config: LivingMemoryUserProfileConfig,
         private readonly repository: UserProfileRepository,
         private readonly debug: (message: string) => void
     ) {}

@@ -18,13 +18,18 @@ import type {
     MemoryScope
 } from '../../../types'
 
+type LivingMemoryExtractionConfig = Pick<
+    LivingMemoryConfig,
+    'extractionInterval' | 'extractionRounds'
+>
+
 export class LivingMemoryExtractionCoordinator {
     private readonly extractionLockByConversation = new Set<string>()
     private readonly lastExtractionChatCountByScope = new Map<string, number>()
 
     constructor(
         private readonly ctx: Context,
-        private readonly config: LivingMemoryConfig,
+        private readonly config: LivingMemoryExtractionConfig,
         private readonly repository: LivingMemoryRepository,
         private readonly formatter: LivingMemoryMessageFormatter,
         private readonly extractor: LivingMemoryExtractor,

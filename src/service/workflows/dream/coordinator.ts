@@ -11,11 +11,16 @@ import type {
     MemoryScope
 } from '../../../types'
 
+type LivingMemoryDreamCoordinatorConfig = Pick<
+    LivingMemoryConfig,
+    'autoDreamMemoryGrowthThreshold' | 'dreamModel' | 'enableAutoDream'
+>
+
 export class LivingMemoryDreamCoordinator {
     private readonly dreamLockByPreset = new Map<string, string>()
 
     constructor(
-        private readonly config: LivingMemoryConfig,
+        private readonly config: LivingMemoryDreamCoordinatorConfig,
         private readonly dream: LivingMemoryDreamService,
         private readonly repository: LivingMemoryRepository,
         private readonly snapshotCache: LivingMemorySnapshotCache,
