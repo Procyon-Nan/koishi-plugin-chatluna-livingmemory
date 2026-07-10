@@ -1,5 +1,6 @@
 import type { DreamCluster, DreamStage } from '../workflows/dream/types'
 import { toPromptEntry } from '../workflows/dream/util'
+import { MAX_MEMORY_KEYWORDS } from '../memory/entry_fields'
 import { MEMORY_KEYWORDS_DESCRIPTION } from './extraction'
 import { DREAM_ACTIVE_FORMAT, DREAM_ARCHIVED_FORMAT } from './schema'
 
@@ -72,7 +73,7 @@ export const buildDreamPrompt = (
         '字段要求：',
         '- content 是最终会注入给 preset 的记忆正文，应保持第一人称关系视角。字数保持在100字以内。',
         '- summary 是检索友好的简短摘要，不要写成角色台词。',
-        `- keywords：${MEMORY_KEYWORDS_DESCRIPTION}；最多 12 个。`,
+        `- keywords：${MEMORY_KEYWORDS_DESCRIPTION}；最多 ${MAX_MEMORY_KEYWORDS} 个。`,
         '- update / merge 必须同步重新生成 memory.type、content、summary、keywords、sentiment、importance。',
         '- update / merge 的 keywords 必须基于最终 memory.content 重新提取，不能复用、拼接或合并旧记忆的 keywords，也不要把正文按标点切成整句片段。',
         '- 不要在 content、summary 或 keywords 中写入“历史记录”、“已合并”等状态或整理标记；归档状态由 status 字段表达。',

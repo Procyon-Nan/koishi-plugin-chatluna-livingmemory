@@ -18,26 +18,9 @@ export const neutralSentiments = new Set([
     'neutral'
 ])
 
-export const normalizeText = (value: string) => value.trim()
-
 export const normalizeTerm = (value: string) => value.trim().toLowerCase()
 
 export const unique = <T>(items: T[]) => Array.from(new Set(items))
-
-export const parseImportance = (value: unknown): number | undefined => {
-    const importance =
-        typeof value === 'number'
-            ? value
-            : typeof value === 'string' && value.trim().length > 0
-              ? Number(value.trim())
-              : Number.NaN
-
-    if (!Number.isFinite(importance)) {
-        return undefined
-    }
-
-    return Math.min(1, Math.max(0, importance))
-}
 
 export const isMemoryEntryType = (value: string): value is MemoryEntryType => {
     return (memoryEntryTypes as readonly string[]).includes(value)

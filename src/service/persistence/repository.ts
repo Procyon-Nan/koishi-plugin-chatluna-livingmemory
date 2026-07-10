@@ -25,25 +25,27 @@ import type {
     UserProfileRepository
 } from '../../contracts/workflows'
 import {
+    normalizeMemoryImportance,
+    normalizeMemoryKeywords,
+    normalizeMemoryStatus,
+    normalizeMemoryText,
+    normalizeOptionalMemoryText
+} from '../memory/entry_fields'
+import {
     createSourceOriginsFromMessages,
     normalizeMemorySourceOrigins
 } from '../memory/origins/source_origins'
 import {
     createPresetSpeakerId,
-    keywordFingerprintSeparator,
     normalizeEntryRecord,
-    normalizeImportance,
-    normalizeKeywords,
     normalizeOptionalString,
     normalizePresetSpeakerRecord,
-    normalizeSentiment,
-    normalizeStatus,
-    normalizeUserProfileRecord,
-    resolveKeywords
+    normalizeUserProfileRecord
 } from './normalizers'
 import { defineLivingMemoryTables } from './tables'
 
 const sourceOriginsArrayMigrationId = 'source-origins-array-v1'
+const keywordFingerprintSeparator = '\u0000'
 
 export class LivingMemoryRepository
     implements
@@ -394,12 +396,12 @@ export class LivingMemoryRepository
                 id: randomUUID(),
                 presetId: scope.presetId,
                 type: item.type,
-                status: normalizeStatus(item.status),
-                content: item.content,
-                keywords: normalizeKeywords(item.keywords),
-                summary: item.summary ?? null,
-                sentiment: normalizeSentiment(item.sentiment),
-                importance: normalizeImportance(item.importance),
+                status: normalizeMemoryStatus(item.status),
+                content: normalizeMemoryText(item.content),
+                keywords: normalizeMemoryKeywords(item.keywords),
+                summary: normalizeOptionalMemoryText(item.summary),
+                sentiment: normalizeOptionalMemoryText(item.sentiment),
+                importance: normalizeMemoryImportance(item.importance),
                 sourceConversationId: scope.conversationId,
                 sourceOrigins,
                 embedding: null,
@@ -416,12 +418,12 @@ export class LivingMemoryRepository
             id: randomUUID(),
             presetId: scope.presetId,
             type: input.type,
-            status: normalizeStatus(input.status),
-            content: input.content,
-            keywords: normalizeKeywords(input.keywords),
-            summary: input.summary ?? null,
-            sentiment: normalizeSentiment(input.sentiment),
-            importance: normalizeImportance(input.importance),
+            status: normalizeMemoryStatus(input.status),
+            content: normalizeMemoryText(input.content),
+            keywords: normalizeMemoryKeywords(input.keywords),
+            summary: normalizeOptionalMemoryText(input.summary),
+            sentiment: normalizeOptionalMemoryText(input.sentiment),
+            importance: normalizeMemoryImportance(input.importance),
             sourceConversationId: scope.conversationId,
             sourceOrigins: [],
             embedding: null,
@@ -440,24 +442,30 @@ export class LivingMemoryRepository
             return
         }
 
-        const content = patch.content ?? current.content
-        const keywords = resolveKeywords(current, patch)
+        const content =
+            patch.content === undefined
+                ? current.content
+                : normalizeMemoryText(patch.content)
+        const keywords =
+            patch.keywords === undefined
+                ? current.keywords
+                : normalizeMemoryKeywords(patch.keywords)
         const summary =
             patch.summary === undefined
                 ? (current.summary ?? null)
-                : patch.summary
+                : normalizeOptionalMemoryText(patch.summary)
         const status =
             patch.status === undefined
-                ? normalizeStatus(current.status)
-                : normalizeStatus(patch.status)
+                ? normalizeMemoryStatus(current.status)
+                : normalizeMemoryStatus(patch.status)
         const sentiment =
             patch.sentiment === undefined
-                ? normalizeSentiment(current.sentiment)
-                : normalizeSentiment(patch.sentiment)
+                ? normalizeOptionalMemoryText(current.sentiment)
+                : normalizeOptionalMemoryText(patch.sentiment)
         const importance =
             patch.importance === undefined
-                ? normalizeImportance(current.importance)
-                : normalizeImportance(patch.importance)
+                ? normalizeMemoryImportance(current.importance)
+                : normalizeMemoryImportance(patch.importance)
         // 内容/摘要/关键词变化时需要让已缓存的向量失效，由召回时按需重算
         const semanticChanged =
             content !== current.content ||

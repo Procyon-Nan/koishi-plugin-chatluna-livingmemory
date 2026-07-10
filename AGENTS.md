@@ -61,6 +61,8 @@ tree whenever architecture, data contracts, or workflow boundaries change.
   injection is enabled.
 - `src/service/workflows/job_tracker.ts` owns shared workflow job status
   updates.
+- `src/service/memory/entry_fields.ts` owns shared memory field normalization
+  rules and limits used by extraction, Dream, and persistence writes.
 - `src/service/memory/tools/search_contract.ts` centralizes lexical
   memory-search tool names, query text length limits, and schema rules used by
   the tools, agentic recall, prompts, and search implementation.

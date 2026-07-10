@@ -6,25 +6,13 @@ import {
     summarizeError
 } from '../../shared/utils'
 import { buildExtractionPrompt } from '../../prompts'
-
-const normalizeText = (value: string) => value.trim()
-
-const DEFAULT_IMPORTANCE = 0.5
-
-const parseImportance = (value: unknown) => {
-    const importance =
-        typeof value === 'number'
-            ? value
-            : typeof value === 'string' && value.trim().length > 0
-              ? Number(value.trim())
-              : Number.NaN
-
-    if (!Number.isFinite(importance)) {
-        return DEFAULT_IMPORTANCE
-    }
-
-    return Math.min(1, Math.max(0, importance))
-}
+import {
+    DEFAULT_MEMORY_IMPORTANCE,
+    normalizeMemoryImportance,
+    normalizeMemoryKeywords,
+    normalizeMemoryText,
+    normalizeOptionalMemoryText
+} from '../../memory/entry_fields'
 
 export type LivingMemoryExtractionSkipReason =
     | 'model-not-configured'
@@ -135,23 +123,20 @@ export class LivingMemoryExtractor {
                 const record = item as Record<string, unknown>
                 const content =
                     typeof record.content === 'string'
-                        ? normalizeText(record.content)
+                        ? normalizeMemoryText(record.content)
                         : ''
                 const type =
                     typeof record.type === 'string' ? record.type : 'other'
                 const summary =
                     typeof record.summary === 'string'
-                        ? normalizeText(record.summary)
+                        ? normalizeOptionalMemoryText(record.summary)
                         : null
                 const sentiment =
                     typeof record.sentiment === 'string'
-                        ? normalizeText(record.sentiment)
+                        ? normalizeOptionalMemoryText(record.sentiment)
                         : null
                 const keywords = Array.isArray(record.keywords)
-                    ? record.keywords.filter(
-                          (keyword): keyword is string =>
-                              typeof keyword === 'string'
-                      )
+                    ? normalizeMemoryKeywords(record.keywords)
                     : undefined
 
                 if (content.length === 0) {
@@ -162,9 +147,11 @@ export class LivingMemoryExtractor {
                     type: this.normalizeMemoryType(type),
                     content,
                     keywords,
-                    summary: summary?.length ? summary : null,
-                    sentiment: sentiment?.length ? sentiment : null,
-                    importance: parseImportance(record.importance)
+                    summary,
+                    sentiment,
+                    importance:
+                        normalizeMemoryImportance(record.importance) ??
+                        DEFAULT_MEMORY_IMPORTANCE
                 }
             })
             .filter((item): item is NonNullable<typeof item> => item != null)

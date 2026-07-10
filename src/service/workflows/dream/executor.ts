@@ -4,6 +4,12 @@ import type {
     MemorySourceOrigin
 } from '../../../contracts/memory'
 import type { ExtractionRepository } from '../../../contracts/workflows'
+import {
+    normalizeMemoryImportance,
+    normalizeMemoryKeywords,
+    normalizeMemoryText,
+    normalizeOptionalMemoryText
+} from '../../memory/entry_fields'
 import { mergeMemorySourceOrigins } from '../../memory/origins/source_origins'
 import { createEmptyStats } from './stats'
 import type {
@@ -13,12 +19,7 @@ import type {
     DreamOperationStats,
     DreamStage
 } from './types'
-import {
-    isMemoryEntryType,
-    normalizeText,
-    parseImportance,
-    unique
-} from './util'
+import { isMemoryEntryType, unique } from './util'
 
 export type DreamExecutorRepository = Pick<
     ExtractionRepository,
@@ -305,39 +306,29 @@ export class DreamExecutor {
         }
 
         if (typeof memory.content === 'string') {
-            const content = normalizeText(memory.content)
+            const content = normalizeMemoryText(memory.content)
             if (content.length > 0) {
                 patch.content = content
             }
         }
 
         if (typeof memory.summary === 'string') {
-            const summary = normalizeText(memory.summary)
-            patch.summary = summary.length > 0 ? summary : null
+            patch.summary = normalizeOptionalMemoryText(memory.summary)
         }
 
         if (Array.isArray(memory.keywords)) {
-            const keywords = unique(
-                memory.keywords
-                    .filter(
-                        (keyword): keyword is string =>
-                            typeof keyword === 'string'
-                    )
-                    .map(normalizeText)
-                    .filter(Boolean)
-            ).slice(0, 12)
+            const keywords = normalizeMemoryKeywords(memory.keywords)
             if (keywords.length > 0) {
                 patch.keywords = keywords
             }
         }
 
         if (typeof memory.sentiment === 'string') {
-            const sentiment = normalizeText(memory.sentiment)
-            patch.sentiment = sentiment.length > 0 ? sentiment : null
+            patch.sentiment = normalizeOptionalMemoryText(memory.sentiment)
         }
 
         if (Object.prototype.hasOwnProperty.call(memory, 'importance')) {
-            patch.importance = parseImportance(memory.importance)
+            patch.importance = normalizeMemoryImportance(memory.importance)
         }
 
         return patch

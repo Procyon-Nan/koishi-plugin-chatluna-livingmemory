@@ -1,4 +1,5 @@
 import { EXTRACTION_OUTPUT_FORMAT, MEMORY_TYPE_OPTIONS } from './schema'
+import { MAX_MEMORY_KEYWORDS } from '../memory/entry_fields'
 
 export interface ExtractionPromptInput {
     /** 已格式化的历史对话转写文本。 */
@@ -12,7 +13,7 @@ export interface ExtractionPromptInput {
 export const MEMORY_KEYWORDS_DESCRIPTION =
     '短词数组，作为检索锚点，保留具体昵称、状态、动作、关系和事件关键词；不要包含普通日期、时间戳'
 
-export const MEMORY_KEYWORDS_REQUIREMENT = `- keywords：${MEMORY_KEYWORDS_DESCRIPTION}。`
+export const MEMORY_KEYWORDS_REQUIREMENT = `- keywords：${MEMORY_KEYWORDS_DESCRIPTION}；最多 ${MAX_MEMORY_KEYWORDS} 个。`
 
 /**
  * 构建记忆抽取提示词。纯函数：所有动态值经入参传入，无副作用。
