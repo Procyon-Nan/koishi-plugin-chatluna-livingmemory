@@ -4,14 +4,14 @@ import {
     type HumanMessage,
     SystemMessage
 } from '@langchain/core/messages'
-import type { Config } from '../index'
+import type { LivingMemoryConfig } from '../contracts/workflows'
 import {
     setLivingMemoryRawContent,
     toChatLunaTranscriptMessageResult,
     toChatLunaTranscriptMessages
 } from '../service/transcript/chatluna_transcript_adapter'
 import { collectUserProfileSpeakerLabels } from '../service/user_profile'
-import type { LivingMemoryTranscriptMessage } from '../types'
+import type { LivingMemoryTranscriptMessage } from '../contracts/memory'
 
 const toNonEmptyString = (value: unknown) => {
     return typeof value === 'string' && value.trim().length > 0
@@ -77,7 +77,7 @@ const isSubagentPrompt = (agentContext: unknown) => {
     )
 }
 
-export async function apply(ctx: Context, config: Config) {
+export async function apply(ctx: Context, config: LivingMemoryConfig) {
     const logger = ctx.logger('chatluna-livingmemory')
     const activeUserProfileInjections = new Map<string, string>()
     const activeSnapshotInjections = new Map<string, string>()

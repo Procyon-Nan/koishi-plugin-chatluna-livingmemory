@@ -9,7 +9,7 @@ import {
     apply as webuiPlugin
 } from './plugins/webui'
 import { ChatLunaLivingMemoryService } from './service/app/living_memory_service'
-import type { LivingMemoryConfig } from './types'
+import type { LivingMemoryConfig } from './contracts/workflows'
 
 export type Config = LivingMemoryConfig
 

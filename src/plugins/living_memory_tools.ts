@@ -1,6 +1,6 @@
 import type { Context } from 'koishi'
 import type { ChatLunaTool } from 'koishi-plugin-chatluna/llm-core/platform/types'
-import type { Config } from '../index'
+import type { LivingMemoryConfig } from '../contracts/workflows'
 import {
     LivingMemoryGetMessagesTool,
     livingMemoryGetMessagesToolDescription
@@ -33,7 +33,7 @@ const livingMemoryToolMeta = {
     }
 }
 
-export function apply(ctx: Context, config: Config) {
+export function apply(ctx: Context, config: LivingMemoryConfig) {
     ctx.on('ready', () => {
         const disposeSearch = ctx.chatluna.platform.registerTool(
             livingMemorySearchToolName,

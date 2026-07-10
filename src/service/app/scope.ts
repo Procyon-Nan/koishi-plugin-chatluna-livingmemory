@@ -1,4 +1,4 @@
-import type { MemoryScope } from '../../types'
+import type { MemoryScope } from '../../contracts/memory'
 
 export type CreateLivingMemoryScopeOptions = Partial<
     Pick<

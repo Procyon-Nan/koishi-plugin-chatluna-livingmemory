@@ -20,25 +20,29 @@ import {
     filterJobList,
     filterMemoryList,
     filterSnapshotList,
-    filterUserProfileList,
-    type JobListQuery,
-    type MemoryListQuery,
-    type PageResult,
-    type SnapshotListQuery,
-    type UserProfileListQuery
+    filterUserProfileList
 } from '../../query'
 import type {
-    DreamTriggerResult,
-    LivingMemoryConfig,
     LivingMemoryGetMessagesOutput,
     LivingMemorySearchResult,
     LivingMemoryTranscriptMessage,
-    MemoryConfigWarning,
     MemoryMutationInput,
     MemoryScope,
-    MemoryServiceStatus,
     MemorySnapshotWithResolvedItems
-} from '../../types'
+} from '../../contracts/memory'
+import type {
+    JobListQuery,
+    MemoryListQuery,
+    PageResult,
+    SnapshotListQuery,
+    UserProfileListQuery
+} from '../../contracts/rpc'
+import type {
+    DreamTriggerResult,
+    LivingMemoryConfig,
+    MemoryConfigWarning,
+    MemoryServiceStatus
+} from '../../contracts/workflows'
 import { LivingMemoryDreamCoordinator } from '../workflows/dream/coordinator'
 import { LivingMemoryExtractionCoordinator } from '../workflows/extraction/coordinator'
 import { LivingMemoryJobTracker } from '../workflows/job_tracker'

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { livingMemorySearchMemoryTypes } from '../../../types'
+import { livingMemorySearchMemoryTypes } from '../../../contracts/memory'
 
 export const livingMemorySearchToolName = 'living_memory_search'
 export const livingMemoryGetMessagesToolName = 'living_memory_get_messages'

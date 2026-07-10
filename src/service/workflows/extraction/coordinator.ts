@@ -14,10 +14,12 @@ import { LivingMemoryJobTracker } from '../job_tracker'
 import type {
     ExtractionRepository,
     JobRepository,
-    LivingMemoryConfig,
+    LivingMemoryConfig
+} from '../../../contracts/workflows'
+import type {
     LivingMemoryTranscriptMessage,
     MemoryScope
-} from '../../../types'
+} from '../../../contracts/memory'
 
 type LivingMemoryExtractionConfig = Pick<
     LivingMemoryConfig,

@@ -1,9 +1,9 @@
 import { Context } from 'koishi'
 import type {
-    LivingMemoryConfig,
     MemoryEntryRecord,
     MemoryEntryType
-} from '../../../types'
+} from '../../../contracts/memory'
+import type { LivingMemoryConfig } from '../../../contracts/workflows'
 import {
     type EmbeddingRepositoryLike,
     ensureEntryEmbeddings

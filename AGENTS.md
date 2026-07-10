@@ -9,9 +9,15 @@ tree whenever architecture, data contracts, or workflow boundaries change.
 - `src/index.ts` is the Koishi plugin entrypoint. It registers
   `ChatLunaLivingMemoryService`, the optional console WebUI, the main ChatLuna
   middleware, and the optional `chatluna_character` middleware.
-- `src/types.ts` is the shared contract surface for memory entries, snapshots,
-  jobs, user profiles, preset speakers, config, repository interfaces, Koishi
-  table declarations, and console RPC events.
+- `src/contracts/memory.ts` owns memory-domain records, source messages,
+  snapshots, jobs, profiles, search payloads, and mutation inputs.
+- `src/contracts/workflows.ts` owns workflow configuration, status results, and
+  repository capability interfaces.
+- `src/contracts/rpc.ts` owns pagination, WebUI query payloads, and console RPC
+  event contracts.
+- `src/integrations/koishi-augmentations.ts` owns Koishi service/table and
+  console event declaration merging.
+- `src/types.ts` is the compatibility re-export entry for the contract modules.
 - `src/query.ts` contains list filtering and pagination helpers used by WebUI
   calls for memories, snapshots, jobs, and user profiles.
 - `src/plugins/chat_middleware.ts` handles main ChatLuna events. It resolves
@@ -25,7 +31,8 @@ tree whenever architecture, data contracts, or workflow boundaries change.
   scope, queues recall, and queues extraction with a character preset prompt
   override.
 - `src/plugins/webui.ts` is the console RPC boundary. Keep it synchronized with
-  `src/types.ts`, `client/api.ts`, and `client/dashboard.vue`.
+  `src/contracts/rpc.ts`, `src/integrations/koishi-augmentations.ts`,
+  `client/api.ts`, and `client/dashboard.vue`.
 - `src/plugins/living_memory_tools.ts` registers the model-facing
   living-memory tools with ChatLuna, including `living_memory_search` and
   `living_memory_get_messages`.
@@ -153,16 +160,17 @@ tree whenever architecture, data contracts, or workflow boundaries change.
 
 ## Data And RPC Boundaries
 
-- Any schema-affecting change must update `src/types.ts`,
+- Any schema-affecting change must update `src/contracts/memory.ts`,
   `src/service/persistence/tables.ts`,
   `src/service/persistence/repository.ts`, query helpers if list behavior
   changes, and the WebUI/client types when visible in the console.
 - Workflow classes should depend on caller-specific repository capability
-  types instead of the concrete `LivingMemoryRepository`. Compose the existing
-  repository contracts from `src/types.ts` where possible.
-- Any console RPC change must update all four surfaces together:
-  `src/types.ts`, `src/plugins/webui.ts`, `client/api.ts`, and
-  `client/dashboard.vue`.
+  types instead of the concrete `LivingMemoryRepository`. Compose the contracts
+  from `src/contracts/workflows.ts` where possible.
+- Any console RPC change must update all affected surfaces together:
+  `src/contracts/rpc.ts`, `src/integrations/koishi-augmentations.ts`,
+  `src/plugins/webui.ts`, and the corresponding `client/api.ts`,
+  `client/types.ts`, or `client/dashboard.vue` surface.
 - Any memory mutation that changes content, summary, or keywords must preserve
   embedding invalidation behavior so stale cached vectors are recomputed on
   demand.

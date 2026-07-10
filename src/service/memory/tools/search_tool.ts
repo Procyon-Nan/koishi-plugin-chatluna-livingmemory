@@ -2,7 +2,7 @@ import { StructuredTool } from '@langchain/core/tools'
 import type { ToolRunnableConfig } from '@langchain/core/tools'
 import type { Context } from 'koishi'
 import type { z } from 'zod'
-import type { LivingMemoryConfig } from '../../../types'
+import type { LivingMemoryConfig } from '../../../contracts/workflows'
 import {
     broadSearchTextRule,
     formatSearchTextLengthRange,

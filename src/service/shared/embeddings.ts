@@ -1,4 +1,4 @@
-import type { MemoryEntryRecord } from '../../types'
+import type { MemoryEntryRecord } from '../../contracts/memory'
 
 export interface EmbeddingsLike {
     embedDocuments(texts: string[]): Promise<number[][]>

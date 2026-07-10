@@ -1,10 +1,10 @@
 import { Context } from 'koishi'
 import { LivingMemoryMessageFormatter } from '../../transcript/message_formatter'
 import type {
-    LivingMemoryConfig,
     LivingMemoryTranscriptMessage,
     MemoryScope
-} from '../../../types'
+} from '../../../contracts/memory'
+import type { LivingMemoryConfig } from '../../../contracts/workflows'
 import {
     isModelConfigured,
     stringifyModelContent,

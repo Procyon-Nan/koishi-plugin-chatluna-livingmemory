@@ -1,12 +1,14 @@
 import { Context } from 'koishi'
 import type {
-    LivingMemoryConfig,
     LivingMemoryTranscriptMessage,
     MemoryEntryRecord,
     UserProfileInput,
-    UserProfileRecord,
+    UserProfileRecord
+} from '../contracts/memory'
+import type {
+    LivingMemoryConfig,
     UserProfileRepository
-} from '../types'
+} from '../contracts/workflows'
 import {
     type CharacterPresetProvider,
     characterPresetSuffix,

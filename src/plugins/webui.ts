@@ -2,15 +2,16 @@ import { existsSync, realpathSync } from 'fs'
 import { resolve } from 'path'
 import { Context } from 'koishi'
 import type {} from '@koishijs/plugin-console'
-import type { Config } from '../index'
+import type { MemoryMutationInput } from '../contracts/memory'
 import type {
+    CreateMemoryRequest,
     JobListQuery,
     MemoryListQuery,
     SnapshotListQuery,
     UserProfileListQuery
-} from '../query'
+} from '../contracts/rpc'
+import type { LivingMemoryConfig } from '../contracts/workflows'
 import type { ChatLunaLivingMemoryService } from '../service/app/living_memory_service'
-import type { MemoryMutationInput } from '../types'
 
 const packageName = 'koishi-plugin-chatluna-livingmemory'
 
@@ -44,7 +45,7 @@ export function registerEntry(ctx: Context) {
     ctx.console.addEntry(paths)
 }
 
-export function apply(ctx: Context, _config?: Config) {
+export function apply(ctx: Context, _config?: LivingMemoryConfig) {
     ctx.console.addListener(
         'living-memory/listPresetIds',
         async () => await service(ctx).listPresetIds()
@@ -65,13 +66,7 @@ export function apply(ctx: Context, _config?: Config) {
     )
 
     ctx.console.addListener('living-memory/createMemory', async (input) => {
-        const payload = input as {
-            conversationId: string
-            presetId: string
-            userId?: string
-            channelId?: string
-            memory: MemoryMutationInput
-        }
+        const payload = input as CreateMemoryRequest
 
         return await service(ctx).createMemory(
             service(ctx).createScope(

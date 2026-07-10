@@ -7,9 +7,9 @@ import { LivingMemorySnapshotCache } from '../../memory/snapshot/snapshot_cache'
 import type {
     DreamTriggerResult,
     JobRepository,
-    LivingMemoryConfig,
-    MemoryScope
-} from '../../../types'
+    LivingMemoryConfig
+} from '../../../contracts/workflows'
+import type { MemoryScope } from '../../../contracts/memory'
 
 type LivingMemoryDreamCoordinatorConfig = Pick<
     LivingMemoryConfig,

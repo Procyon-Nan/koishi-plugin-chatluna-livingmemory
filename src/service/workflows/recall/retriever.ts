@@ -3,7 +3,7 @@ import type {
     LivingMemoryConfig,
     RecallRepository,
     RetrievedMemoryItem
-} from '../../../types'
+} from '../../../contracts/workflows'
 import { cosineSimilarity, isModelConfigured } from '../../shared/utils'
 import {
     ensureEntryEmbeddings,

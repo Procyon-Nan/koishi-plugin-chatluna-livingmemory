@@ -1,9 +1,6 @@
 import { randomUUID } from 'crypto'
 import { Context } from 'koishi'
 import type {
-    ExtractedMemoryItem,
-    ExtractionRepository,
-    JobRepository,
     MemoryEntryRecord,
     MemoryJobKind,
     MemoryJobRecord,
@@ -16,12 +13,17 @@ import type {
     MemorySourceOrigin,
     PresetSpeakerInput,
     PresetSpeakerRecord,
+    UserProfileInput,
+    UserProfileRecord
+} from '../../contracts/memory'
+import type {
+    ExtractedMemoryItem,
+    ExtractionRepository,
+    JobRepository,
     RecallRepository,
     SnapshotRepository,
-    UserProfileInput,
-    UserProfileRecord,
     UserProfileRepository
-} from '../../types'
+} from '../../contracts/workflows'
 import {
     createSourceOriginsFromMessages,
     normalizeMemorySourceOrigins

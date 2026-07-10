@@ -1,5 +1,8 @@
 import type { Session } from 'koishi'
-import type { LivingMemoryTranscriptMessage, MemoryScope } from '../../types'
+import type {
+    LivingMemoryTranscriptMessage,
+    MemoryScope
+} from '../../contracts/memory'
 import { createLivingMemoryTranscriptMessageResult } from './transcript_message'
 
 export interface CharacterTranscriptSourceMessage {

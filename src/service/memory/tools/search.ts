@@ -3,8 +3,8 @@ import type {
     LivingMemorySearchMemoryType,
     LivingMemorySearchResult,
     MemoryEntryRecord
-} from '../../../types'
-import { memoryEntryTypes } from '../../../types'
+} from '../../../contracts/memory'
+import { memoryEntryTypes } from '../../../contracts/memory'
 import type { MemorySearchTextRule } from './search_contract'
 import {
     broadSearchTextRule,

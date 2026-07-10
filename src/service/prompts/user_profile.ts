@@ -1,4 +1,7 @@
-import type { MemoryEntryRecord, UserProfileRecord } from '../../types'
+import type {
+    MemoryEntryRecord,
+    UserProfileRecord
+} from '../../contracts/memory'
 import { toPromptEntry } from '../workflows/dream/util'
 
 export interface UserProfilePromptGroup {

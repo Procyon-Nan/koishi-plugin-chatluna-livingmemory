@@ -1,5 +1,5 @@
 import { Context, type Logger, type Session } from 'koishi'
-import type { Config } from '../index'
+import type { LivingMemoryConfig } from '../contracts/workflows'
 import {
     type CharacterTranscriptSourceMessage,
     countCharacterCompletedRounds,
@@ -16,7 +16,7 @@ import {
     characterPresetSuffix,
     renderCharacterPresetPrompt
 } from '../service/memory/helpers'
-import type { MemoryScope } from '../types'
+import type { MemoryScope } from '../contracts/memory'
 
 type CharacterMessage = CharacterTranscriptSourceMessage
 
@@ -202,7 +202,7 @@ const renderCharacterPresetPromptOverride = async (
     }
 }
 
-export async function apply(ctx: Context, config: Config) {
+export async function apply(ctx: Context, config: LivingMemoryConfig) {
     const logger = ctx.logger('chatluna-livingmemory')
     const events = ctx as unknown as CharacterEventRegistrar
     const completedRoundCountByScope = new Map<string, number>()

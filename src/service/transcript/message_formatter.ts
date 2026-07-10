@@ -1,8 +1,8 @@
+import type { LivingMemoryTranscriptMessage } from '../../contracts/memory'
 import type {
     ExtractionPayload,
-    LivingMemoryTranscriptMessage,
     MessageFormatter
-} from '../../types'
+} from '../../contracts/workflows'
 import { serializeLivingMemorySourceMessages } from './source_serializer'
 import { takeRecentRounds } from '../shared/rounds'
 import { renderLivingMemoryTranscript } from './transcript_renderer'

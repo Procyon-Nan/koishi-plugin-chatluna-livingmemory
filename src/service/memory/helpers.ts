@@ -1,7 +1,10 @@
 import { BaseMessage } from '@langchain/core/messages'
 import type { Context, Session } from 'koishi'
 import type { PresetTemplate } from 'koishi-plugin-chatluna/llm-core/prompt'
-import type { LivingMemoryTranscriptMessage, MemoryScope } from '../../types'
+import type {
+    LivingMemoryTranscriptMessage,
+    MemoryScope
+} from '../../contracts/memory'
 
 export interface QueueExtractionOptions {
     presetPromptOverride?: string | null

@@ -1,4 +1,4 @@
-import type { MemoryScope } from '../../types'
+import type { MemoryScope } from '../../contracts/memory'
 import type { LivingMemorySnapshotCache } from '../memory/snapshot/snapshot_cache'
 import type { LivingMemoryUserProfileService } from '../user_profile'
 

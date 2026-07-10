@@ -1,5 +1,5 @@
 import type { BaseMessage } from '@langchain/core/messages'
-import type { MemoryScope } from '../../types'
+import type { MemoryScope } from '../../contracts/memory'
 import {
     createLivingMemoryTranscriptMessageResult,
     parseLivingMemorySpeakerLine,

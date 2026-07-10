@@ -1,9 +1,9 @@
 import type {
-    ExtractionRepository,
     MemoryEntryRecord,
     MemoryMutationInput,
     MemorySourceOrigin
-} from '../../../types'
+} from '../../../contracts/memory'
+import type { ExtractionRepository } from '../../../contracts/workflows'
 import { mergeMemorySourceOrigins } from '../../memory/origins/source_origins'
 import { createEmptyStats } from './stats'
 import type {

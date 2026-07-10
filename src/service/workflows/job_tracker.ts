@@ -1,4 +1,4 @@
-import type { JobRepository } from '../../types'
+import type { JobRepository } from '../../contracts/workflows'
 import { summarizeError } from '../shared/utils'
 
 export type JobTrackerRepository = Pick<JobRepository, 'updateJob'>

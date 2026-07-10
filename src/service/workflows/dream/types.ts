@@ -1,4 +1,4 @@
-import type { MemoryEntryRecord } from '../../../types'
+import type { MemoryEntryRecord } from '../../../contracts/memory'
 
 export interface CandidateGroup {
     reason: string

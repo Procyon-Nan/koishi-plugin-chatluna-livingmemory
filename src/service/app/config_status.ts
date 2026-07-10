@@ -2,7 +2,7 @@ import type {
     LivingMemoryConfig,
     MemoryConfigWarning,
     MemoryServiceStatus
-} from '../../types'
+} from '../../contracts/workflows'
 import { isModelConfigured } from '../shared/utils'
 
 export const validateLivingMemoryConfig = (

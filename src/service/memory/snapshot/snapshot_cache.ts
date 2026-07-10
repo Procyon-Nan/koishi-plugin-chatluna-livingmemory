@@ -5,7 +5,10 @@ import {
     isAgenticMemorySnapshotItem,
     isMemoryReferenceItem
 } from './snapshot_items'
-import type { MemoryScope, MemorySnapshotRecord } from '../../../types'
+import type {
+    MemoryScope,
+    MemorySnapshotRecord
+} from '../../../contracts/memory'
 
 export class LivingMemorySnapshotCache {
     private readonly snapshotVariableByScope = new Map<string, string>()

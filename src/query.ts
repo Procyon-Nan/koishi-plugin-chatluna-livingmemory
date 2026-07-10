@@ -1,45 +1,25 @@
 import type {
     MemoryEntryRecord,
-    MemoryEntryStatus,
     MemoryJobRecord,
-    MemoryJobStatus,
     MemorySnapshotRecord,
     UserProfileRecord
-} from './types'
+} from './contracts/memory'
+import type {
+    JobListQuery,
+    MemoryListQuery,
+    PageResult,
+    SnapshotListQuery,
+    UserProfileListQuery
+} from './contracts/rpc'
 
-export interface PageRequest {
-    page?: number
-    pageSize?: number
-}
-
-export interface MemoryListQuery extends PageRequest {
-    presetId: string
-    type?: MemoryEntryRecord['type']
-    status?: MemoryEntryStatus | 'all'
-    keyword?: string
-}
-
-export interface SnapshotListQuery extends PageRequest {
-    presetId: string
-    conversationId?: string
-}
-
-export interface JobListQuery extends PageRequest {
-    presetId: string
-    kind?: MemoryJobRecord['kind']
-    status?: MemoryJobStatus
-}
-
-export interface UserProfileListQuery extends PageRequest {
-    presetId: string
-}
-
-export interface PageResult<T> {
-    items: T[]
-    page: number
-    pageSize: number
-    total: number
-}
+export type {
+    JobListQuery,
+    MemoryListQuery,
+    PageRequest,
+    PageResult,
+    SnapshotListQuery,
+    UserProfileListQuery
+} from './contracts/rpc'
 
 const clampPage = (value?: number) => {
     return value != null && value > 0 ? Math.floor(value) : 1

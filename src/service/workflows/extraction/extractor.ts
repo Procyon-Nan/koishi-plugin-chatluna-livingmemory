@@ -1,5 +1,5 @@
 import { Context } from 'koishi'
-import type { ExtractedMemoryItem } from '../../../types'
+import type { ExtractedMemoryItem } from '../../../contracts/workflows'
 import {
     isModelConfigured,
     stringifyModelContent,

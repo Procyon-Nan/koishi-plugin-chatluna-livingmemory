@@ -1,10 +1,10 @@
 import { Context } from 'koishi'
+import type { MemoryEntryRecord } from '../../../contracts/memory'
 import type {
     LivingMemoryConfig,
-    MemoryEntryRecord,
     RecallRepository,
     UserProfileRepository
-} from '../../../types'
+} from '../../../contracts/workflows'
 import type { EmbeddingRepositoryLike } from '../../shared/embeddings'
 import {
     isModelConfigured,

@@ -8,12 +8,12 @@ import type {
     AgenticMemorySearchToolCallSummary,
     AgenticMemorySnapshotItem,
     AgenticMemorySnapshotMemoryItem,
-    LivingMemoryConfig,
     LivingMemorySearchInput,
     LivingMemorySearchMemoryType,
     LivingMemoryTranscriptMessage,
     MemoryScope
-} from '../../../types'
+} from '../../../contracts/memory'
+import type { LivingMemoryConfig } from '../../../contracts/workflows'
 import { LivingMemoryMessageFormatter } from '../../transcript/message_formatter'
 import {
     agenticRecallNoMemoryOutput,

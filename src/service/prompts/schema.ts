@@ -1,5 +1,6 @@
-import { memoryEntryTypes } from '../../types'
-import type { ExtractedMemoryItem, MemoryMutationInput } from '../../types'
+import { memoryEntryTypes } from '../../contracts/memory'
+import type { MemoryMutationInput } from '../../contracts/memory'
+import type { ExtractedMemoryItem } from '../../contracts/workflows'
 import type { DreamOperation } from '../workflows/dream/types'
 
 /**

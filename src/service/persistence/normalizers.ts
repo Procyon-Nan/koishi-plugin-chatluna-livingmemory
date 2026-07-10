@@ -5,7 +5,7 @@ import type {
     MemoryMutationInput,
     PresetSpeakerRecord,
     UserProfileRecord
-} from '../../types'
+} from '../../contracts/memory'
 import { normalizeMemorySourceOrigins } from '../memory/origins/source_origins'
 
 export const keywordFingerprintSeparator = '\u0000'

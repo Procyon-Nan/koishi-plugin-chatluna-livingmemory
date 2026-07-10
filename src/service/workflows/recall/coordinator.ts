@@ -14,10 +14,12 @@ import { LivingMemoryAgenticRecallExecutor } from './agentic_recall'
 import type {
     JobRepository,
     LivingMemoryConfig,
-    LivingMemoryTranscriptMessage,
-    MemoryScope,
     SnapshotRepository
-} from '../../../types'
+} from '../../../contracts/workflows'
+import type {
+    LivingMemoryTranscriptMessage,
+    MemoryScope
+} from '../../../contracts/memory'
 
 type LivingMemoryRecallCoordinatorConfig = Pick<
     LivingMemoryConfig,
