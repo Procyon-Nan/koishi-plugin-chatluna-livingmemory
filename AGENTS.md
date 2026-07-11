@@ -48,6 +48,8 @@ tree whenever architecture, data contracts, or workflow boundaries change.
 - `src/service/app/scope.ts` owns `MemoryScope` construction.
 - `src/service/app/prompt_hydration.ts` owns prompt hydration composition for
   memory snapshots and user profiles.
+- `src/service/app/query_projections.ts` owns complex application query
+  projections, including source-message output and resolved snapshot pages.
 - `src/service/workflows/` contains async workflow orchestration for recall,
   extraction, and Dream. Coordinators own job state handling, in-memory locks,
   snapshot cache refreshes, and extraction baselines.
