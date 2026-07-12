@@ -1,7 +1,7 @@
-import { Context, Logger } from 'koishi'
+import type { Context, Logger } from 'koishi'
 import type { PresetTemplate } from 'koishi-plugin-chatluna/llm-core/prompt'
-import { LivingMemoryExtractor } from './extractor'
-import { LivingMemoryMessageFormatter } from '../../transcript/message_formatter'
+import type { LivingMemoryExtractor } from './extractor'
+import type { LivingMemoryMessageFormatter } from '../../transcript/message_formatter'
 import { summarizeError } from '../../shared/utils'
 import {
     type DebugLogger,
@@ -10,7 +10,7 @@ import {
     renderChatLunaPresetPrompt,
     scopeKey
 } from '../../memory/helpers'
-import { LivingMemoryJobTracker } from '../job_tracker'
+import type { LivingMemoryJobTracker } from '../job_tracker'
 import type {
     ExtractionRepository,
     JobRepository,
@@ -26,6 +26,17 @@ type LivingMemoryExtractionConfig = Pick<
     'extractionInterval' | 'extractionRounds'
 >
 
+type ExtractionFormatter = Pick<
+    LivingMemoryMessageFormatter,
+    'takeRecentRounds' | 'toExtractionPayload'
+>
+type ExtractionModel = Pick<LivingMemoryExtractor, 'extractWithTrace'>
+type ExtractionJobTracker = Pick<
+    LivingMemoryJobTracker,
+    'markRunning' | 'markCompleted' | 'markFailed'
+>
+type ExtractionLogger = Pick<Logger, 'warn'>
+
 export type ExtractionWorkflowRepository = Pick<JobRepository, 'createJob'> &
     Pick<ExtractionRepository, 'appendMemories'>
 
@@ -37,11 +48,11 @@ export class LivingMemoryExtractionCoordinator {
         private readonly ctx: Context,
         private readonly config: LivingMemoryExtractionConfig,
         private readonly repository: ExtractionWorkflowRepository,
-        private readonly formatter: LivingMemoryMessageFormatter,
-        private readonly extractor: LivingMemoryExtractor,
-        private readonly jobTracker: LivingMemoryJobTracker,
+        private readonly formatter: ExtractionFormatter,
+        private readonly extractor: ExtractionModel,
+        private readonly jobTracker: ExtractionJobTracker,
         private readonly queueAutoDream: (presetId: string) => void,
-        private readonly logger: Logger,
+        private readonly logger: ExtractionLogger,
         private readonly debug: DebugLogger
     ) {}
 

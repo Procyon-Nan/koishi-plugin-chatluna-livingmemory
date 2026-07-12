@@ -1,6 +1,6 @@
-import { Logger } from 'koishi'
-import { LivingMemoryRetriever } from './retriever'
-import { LivingMemoryRecallQueryBuilder } from './query_builder'
+import type { Logger } from 'koishi'
+import type { LivingMemoryRetriever } from './retriever'
+import type { LivingMemoryRecallQueryBuilder } from './query_builder'
 import { summarizeError } from '../../shared/utils'
 import {
     type DebugLogger,
@@ -8,9 +8,9 @@ import {
     normalizeText,
     scopeKey
 } from '../../memory/helpers'
-import { LivingMemoryJobTracker } from '../job_tracker'
-import { LivingMemorySnapshotCache } from '../../memory/snapshot/snapshot_cache'
-import { LivingMemoryAgenticRecallExecutor } from './agentic_recall'
+import type { LivingMemoryJobTracker } from '../job_tracker'
+import type { LivingMemorySnapshotCache } from '../../memory/snapshot/snapshot_cache'
+import type { LivingMemoryAgenticRecallExecutor } from './agentic_recall'
 import type {
     JobRepository,
     LivingMemoryConfig,
@@ -26,6 +26,16 @@ type LivingMemoryRecallCoordinatorConfig = Pick<
     'recallStrategy' | 'recallTopK'
 >
 
+type RecallQueryBuilder = Pick<LivingMemoryRecallQueryBuilder, 'resolve'>
+type RecallRetriever = Pick<LivingMemoryRetriever, 'retrieve'>
+type RecallAgenticExecutor = Pick<LivingMemoryAgenticRecallExecutor, 'run'>
+type RecallSnapshotCache = Pick<LivingMemorySnapshotCache, 'hydrate'>
+type RecallJobTracker = Pick<
+    LivingMemoryJobTracker,
+    'markRunning' | 'markCompleted' | 'markFailed'
+>
+type RecallLogger = Pick<Logger, 'warn'>
+
 export type RecallWorkflowRepository = Pick<JobRepository, 'createJob'> &
     Pick<SnapshotRepository, 'upsertSnapshot'>
 
@@ -35,12 +45,12 @@ export class LivingMemoryRecallCoordinator {
     constructor(
         private readonly config: LivingMemoryRecallCoordinatorConfig,
         private readonly repository: RecallWorkflowRepository,
-        private readonly recallQuery: LivingMemoryRecallQueryBuilder,
-        private readonly retriever: LivingMemoryRetriever,
-        private readonly agenticRecall: LivingMemoryAgenticRecallExecutor,
-        private readonly snapshotCache: LivingMemorySnapshotCache,
-        private readonly jobTracker: LivingMemoryJobTracker,
-        private readonly logger: Logger,
+        private readonly recallQuery: RecallQueryBuilder,
+        private readonly retriever: RecallRetriever,
+        private readonly agenticRecall: RecallAgenticExecutor,
+        private readonly snapshotCache: RecallSnapshotCache,
+        private readonly jobTracker: RecallJobTracker,
+        private readonly logger: RecallLogger,
         private readonly debug: DebugLogger
     ) {}
 

@@ -1,9 +1,9 @@
-import { Logger } from 'koishi'
-import { LivingMemoryDreamService } from './index'
+import type { Logger } from 'koishi'
+import type { LivingMemoryDreamService } from './index'
 import { isModelConfigured } from '../../shared/utils'
 import { type DebugLogger } from '../../memory/helpers'
-import { LivingMemoryJobTracker } from '../job_tracker'
-import { LivingMemorySnapshotCache } from '../../memory/snapshot/snapshot_cache'
+import type { LivingMemoryJobTracker } from '../job_tracker'
+import type { LivingMemorySnapshotCache } from '../../memory/snapshot/snapshot_cache'
 import type {
     DreamTriggerResult,
     JobRepository,
@@ -15,6 +15,14 @@ type LivingMemoryDreamCoordinatorConfig = Pick<
     LivingMemoryConfig,
     'autoDreamMemoryGrowthThreshold' | 'dreamModel' | 'enableAutoDream'
 >
+
+type DreamService = Pick<LivingMemoryDreamService, 'run'>
+type DreamSnapshotCache = Pick<LivingMemorySnapshotCache, 'clearByPreset'>
+type DreamJobTracker = Pick<
+    LivingMemoryJobTracker,
+    'markRunning' | 'markCompleted' | 'markFailed'
+>
+type DreamLogger = Pick<Logger, 'warn'>
 
 export type DreamCoordinatorRepository = Pick<
     JobRepository,
@@ -31,11 +39,11 @@ export class LivingMemoryDreamCoordinator {
 
     constructor(
         private readonly config: LivingMemoryDreamCoordinatorConfig,
-        private readonly dream: LivingMemoryDreamService,
+        private readonly dream: DreamService,
         private readonly repository: DreamCoordinatorRepository,
-        private readonly snapshotCache: LivingMemorySnapshotCache,
-        private readonly jobTracker: LivingMemoryJobTracker,
-        private readonly logger: Logger,
+        private readonly snapshotCache: DreamSnapshotCache,
+        private readonly jobTracker: DreamJobTracker,
+        private readonly logger: DreamLogger,
         private readonly debug: DebugLogger
     ) {}
 
