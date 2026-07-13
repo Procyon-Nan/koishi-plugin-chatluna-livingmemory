@@ -137,10 +137,14 @@ tree whenever architecture, data contracts, or workflow boundaries change.
   use the normalized current query when possible.
 - `agentic-recall` recall is a separate selectable strategy. It uses
   `recallHistoryWindowRounds` for its history window, has its own
-  `agenticRecallModel`, asks the model to call `living_memory_search`, writes
-  agentic snapshot items containing final memory text plus search parameters and
-  matched memories, and persists one failed Recall audit row rather than
-  switching strategy when required model/search validation fails.
+  `agenticRecallModel`, and delegates tool-call parsing, protocol handling, and
+  recoverable loop errors to ChatLuna `AgentRunner`. Each run allows at most six
+  model calls: the first five may call `living_memory_search`, while the sixth
+  is a tool-free finalization call. Exhausting this budget degrades to
+  `<NO_MEMORY>`; model-service and search-service runtime errors remain hard
+  failures. Successful runs write agentic snapshot items containing final
+  memory text plus the raw search parameters and matched memories captured
+  before AgentRunner decorates observations.
 - When agentic recall finishes with `<NO_MEMORY>`, no Job or snapshot is written
   or hydrated. The previous snapshot remains the next injectable memory context.
 - `living_memory_job.recallStrategy` records the selected Recall strategy for

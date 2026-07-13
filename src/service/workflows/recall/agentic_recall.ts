@@ -1,9 +1,25 @@
+import { type BaseMessage, HumanMessage } from '@langchain/core/messages'
 import {
-    type BaseMessage,
-    HumanMessage,
-    ToolMessage
-} from '@langchain/core/messages'
+    ChatPromptTemplate,
+    MessagesPlaceholder
+} from '@langchain/core/prompts'
+import { type RunnableConfig, RunnableLambda } from '@langchain/core/runnables'
+import { StructuredTool, type ToolRunnableConfig } from '@langchain/core/tools'
+import type { ChainValues } from '@langchain/core/utils/types'
+import type { z } from 'zod'
 import type { Context } from 'koishi'
+import {
+    _formatIntermediateSteps,
+    AgentRunner,
+    createOpenAIAgent
+} from 'koishi-plugin-chatluna/llm-core/agent'
+import type {
+    AgentAction,
+    AgentFinish,
+    AgentStep,
+    ScratchpadEntry
+} from 'koishi-plugin-chatluna/llm-core/agent'
+import type { ChatLunaChatModel } from 'koishi-plugin-chatluna/llm-core/platform/model'
 import type {
     AgenticMemorySearchToolCallSummary,
     AgenticMemorySnapshotItem,
@@ -17,15 +33,20 @@ import type { LivingMemoryConfig } from '../../../contracts/workflows'
 import { LivingMemoryMessageFormatter } from '../../transcript/message_formatter'
 import {
     agenticRecallNoMemoryOutput,
+    buildAgenticRecallFinalizationPrompt,
     buildAgenticRecallPrompt
 } from '../../prompts'
 import { isModelConfigured, stringifyModelContent } from '../../shared/utils'
 import type { DebugLogger } from '../../memory/helpers'
 import {
     livingMemorySearchInputSchema,
+    livingMemorySearchToolInputSchema,
     livingMemorySearchToolName
 } from '../../memory/tools/search_contract'
-import { LivingMemorySearchTool } from '../../memory/tools/search_tool'
+import {
+    LivingMemorySearchTool,
+    livingMemorySearchToolDescription
+} from '../../memory/tools/search_tool'
 
 type LivingMemoryAgenticRecallConfig = Pick<
     LivingMemoryConfig,
@@ -35,13 +56,27 @@ type LivingMemoryAgenticRecallConfig = Pick<
     | 'recallHistoryWindowRounds'
 >
 
+type AgenticSearchToolInput = z.infer<typeof livingMemorySearchToolInputSchema>
+
+interface RecordedAgenticSearchCall {
+    inputKey: string
+    input: Record<string, unknown>
+    output: string
+}
+
+type AgenticRecallDecision = AgentAction | AgentAction[] | AgentFinish
+
+type AgenticRecallToolAgentInput = ChainValues & {
+    steps: AgentStep[]
+    scratchpadEntries?: ScratchpadEntry[]
+}
+
 const agenticRecallMaxModelCalls = 6
 
-interface AgenticRecallToolCall {
-    name: string
-    args: Record<string, unknown>
-    id: string
-}
+const agenticRecallPromptTemplate = ChatPromptTemplate.fromMessages([
+    ['human', '{input}'],
+    new MessagesPlaceholder('agent_scratchpad')
+])
 
 export interface LivingMemoryAgenticRecallTrace {
     prompt: string
@@ -146,85 +181,6 @@ const uniqueMatchedMemories = (
     return result
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> => {
-    return typeof value === 'object' && value != null && !Array.isArray(value)
-}
-
-const parseToolArguments = (value: unknown): Record<string, unknown> => {
-    if (value == null) {
-        return {}
-    }
-
-    if (isRecord(value)) {
-        return value
-    }
-
-    if (typeof value === 'string') {
-        if (value.trim().length === 0) {
-            return {}
-        }
-
-        try {
-            const parsed = JSON.parse(value)
-            if (isRecord(parsed)) {
-                return parsed
-            }
-        } catch {
-            return {}
-        }
-    }
-
-    return {}
-}
-
-const extractToolCalls = (
-    message: BaseMessage,
-    modelCallIndex: number
-): AgenticRecallToolCall[] => {
-    const directToolCalls = (message as { tool_calls?: unknown }).tool_calls
-    if (Array.isArray(directToolCalls) && directToolCalls.length > 0) {
-        return directToolCalls.map((toolCall, index) => {
-            if (!isRecord(toolCall) || typeof toolCall.name !== 'string') {
-                throw new Error('Model returned an invalid tool call.')
-            }
-
-            return {
-                name: toolCall.name,
-                args: parseToolArguments(toolCall.args),
-                id:
-                    typeof toolCall.id === 'string'
-                        ? toolCall.id
-                        : `agentic_recall_${modelCallIndex}_${index}`
-            }
-        })
-    }
-
-    const rawToolCalls = message.additional_kwargs?.tool_calls
-    if (Array.isArray(rawToolCalls) && rawToolCalls.length > 0) {
-        return rawToolCalls.map((toolCall, index) => {
-            if (!isRecord(toolCall) || !isRecord(toolCall.function)) {
-                throw new Error('Model returned an invalid raw tool call.')
-            }
-
-            const name = toolCall.function.name
-            if (typeof name !== 'string') {
-                throw new Error('Model returned a raw tool call without name.')
-            }
-
-            return {
-                name,
-                args: parseToolArguments(toolCall.function.arguments),
-                id:
-                    typeof toolCall.id === 'string'
-                        ? toolCall.id
-                        : `agentic_recall_${modelCallIndex}_${index}`
-            }
-        })
-    }
-
-    return []
-}
-
 const parseMatchedMemories = (
     output: string
 ): AgenticMemorySnapshotMemoryItem[] => {
@@ -246,17 +202,109 @@ const toToolOutputText = (output: unknown) => {
     return JSON.stringify(output)
 }
 
-const createUnavailableToolMessage = (
-    toolCall: AgenticRecallToolCall
-): ToolMessage => {
-    return new ToolMessage({
-        content:
-            `Tool '${toolCall.name}' is not available. ` +
-            `Use ${livingMemorySearchToolName} or finish with ${agenticRecallNoMemoryOutput}.`,
-        tool_call_id: toolCall.id,
-        name: toolCall.name,
-        status: 'error'
-    })
+const createSearchInputKey = (input: unknown) => {
+    const parsedInput = livingMemorySearchToolInputSchema.safeParse(input)
+    return JSON.stringify(parsedInput.success ? parsedInput.data : input)
+}
+
+const hasToolCalls = (message: BaseMessage) => {
+    const directToolCalls = (message as { tool_calls?: unknown }).tool_calls
+    if (Array.isArray(directToolCalls) && directToolCalls.length > 0) {
+        return true
+    }
+
+    const rawToolCalls = message.additional_kwargs?.tool_calls
+    return Array.isArray(rawToolCalls) && rawToolCalls.length > 0
+}
+
+const countSearchCalls = (steps: AgentStep[] | undefined) => {
+    return (
+        steps?.filter((step) => step.action.tool === livingMemorySearchToolName)
+            .length ?? 0
+    )
+}
+
+const orderRecordedSearchCalls = (
+    calls: RecordedAgenticSearchCall[],
+    steps: AgentStep[] | undefined
+) => {
+    const callsByInput = new Map<string, RecordedAgenticSearchCall[]>()
+    for (const call of calls) {
+        const group = callsByInput.get(call.inputKey) ?? []
+        group.push(call)
+        callsByInput.set(call.inputKey, group)
+    }
+
+    const ordered: RecordedAgenticSearchCall[] = []
+    for (const step of steps ?? []) {
+        if (step.action.tool !== livingMemorySearchToolName) {
+            continue
+        }
+
+        const group = callsByInput.get(
+            createSearchInputKey(step.action.toolInput)
+        )
+        const call = group?.shift()
+        if (call != null) {
+            ordered.push(call)
+        }
+    }
+
+    return ordered
+}
+
+const formatDecisionOutput = (decision: AgenticRecallDecision) => {
+    if (Array.isArray(decision)) {
+        return decision
+            .map((action) => action.log.trim())
+            .filter((value) => value.length > 0)
+            .join('\n')
+    }
+
+    if ('returnValues' in decision) {
+        return toToolOutputText(decision.returnValues['output']).trim()
+    }
+
+    return decision.log.trim()
+}
+
+class RecordingLivingMemorySearchTool extends StructuredTool {
+    name = livingMemorySearchToolName
+    description = livingMemorySearchToolDescription
+    schema = livingMemorySearchToolInputSchema
+
+    constructor(
+        private readonly delegate: LivingMemorySearchTool,
+        private readonly calls: RecordedAgenticSearchCall[],
+        private readonly agentContext: { requestId: string }
+    ) {
+        super()
+    }
+
+    async _call(
+        input: AgenticSearchToolInput,
+        runManager: unknown,
+        runConfig?: ToolRunnableConfig
+    ) {
+        // AgentRunner 会复制 RunnableConfig，显式复用本次 run 的 agentContext，
+        // 以保持工具参数重试计数的请求级作用域。
+        const delegateConfig = {
+            ...(runConfig ?? {}),
+            configurable: {
+                ...(runConfig?.configurable ?? {}),
+                agentContext: this.agentContext
+            }
+        } as ToolRunnableConfig
+        const output = toToolOutputText(
+            await this.delegate._call(input, runManager, delegateConfig)
+        )
+        this.calls.push({
+            inputKey: createSearchInputKey(input),
+            input: { ...input },
+            output
+        })
+        return output
+    }
 }
 
 export class LivingMemoryAgenticRecallExecutor {
@@ -280,7 +328,8 @@ export class LivingMemoryAgenticRecallExecutor {
         const model = await this.ctx.chatluna.createChatModel(
             this.config.agenticRecallModel
         )
-        if (model.value == null) {
+        const chatModel = model.value
+        if (chatModel == null) {
             throw new Error('agenticRecallModel is unavailable.')
         }
 
@@ -300,7 +349,6 @@ export class LivingMemoryAgenticRecallExecutor {
             currentTranscript,
             history
         })
-        const searchTool = new LivingMemorySearchTool(this.ctx, this.config)
         const agentContext = {
             requestId: [
                 'agentic-recall',
@@ -309,22 +357,78 @@ export class LivingMemoryAgenticRecallExecutor {
                 Date.now()
             ].join(':')
         }
-        const toolConfig = {
-            configurable: {
-                preset: scope.presetId,
-                conversationId: scope.conversationId,
-                userId: scope.userId,
-                source: 'agentic-recall',
-                agentContext
+        const recordedSearchCalls: RecordedAgenticSearchCall[] = []
+        const searchTool = new RecordingLivingMemorySearchTool(
+            new LivingMemorySearchTool(this.ctx, this.config),
+            recordedSearchCalls,
+            agentContext
+        )
+        const toolAgent = createOpenAIAgent({
+            llm: chatModel,
+            tools: [searchTool],
+            prompt: agenticRecallPromptTemplate
+        })
+        let modelCallCount = 0
+        let usedFinalizationCall = false
+
+        const boundedAgent = RunnableLambda.from(
+            async (
+                input: ChainValues,
+                runConfig?: RunnableConfig
+            ): Promise<AgenticRecallDecision> => {
+                modelCallCount += 1
+
+                let decision: AgenticRecallDecision
+                if (modelCallCount === agenticRecallMaxModelCalls) {
+                    usedFinalizationCall = true
+                    decision = await this.finalize(
+                        chatModel,
+                        prompt,
+                        input,
+                        runConfig
+                    )
+                } else {
+                    decision = await toolAgent.invoke(
+                        input as AgenticRecallToolAgentInput,
+                        runConfig
+                    )
+                }
+
+                this.debug(
+                    [
+                        `memory agentic recall turn: conversationId=${scope.conversationId}`,
+                        `presetId=${scope.presetId}`,
+                        `modelCall=${modelCallCount}`,
+                        `toolCalls=${
+                            Array.isArray(decision)
+                                ? decision.length
+                                : 'returnValues' in decision
+                                  ? 0
+                                  : 1
+                        }`,
+                        'output:',
+                        formatDecisionOutput(decision)
+                    ].join('\n')
+                )
+
+                return decision
             }
-        }
-        const modelOptions = {
-            tools: [searchTool]
-        } as unknown as Parameters<typeof model.value.invoke>[1]
-        const messages: BaseMessage[] = [new HumanMessage(prompt)]
-        const toolCallSummaries: AgenticMemorySearchToolCallSummary[] = []
-        const matchedMemories: AgenticMemorySnapshotMemoryItem[] = []
-        let toolCallCount = 0
+        )
+        const runner = AgentRunner.fromAgentAndTools({
+            agent: boundedAgent,
+            tools: [searchTool],
+            maxIterations: agenticRecallMaxModelCalls,
+            returnIntermediateSteps: true,
+            handleParsingErrors: (error) => {
+                return [
+                    `Invalid tool call: ${error.message}`,
+                    `Correct the tool name or arguments, then retry the tool call or finish with ${agenticRecallNoMemoryOutput}.`
+                ].join(' ')
+            },
+            handleToolRuntimeErrors: (error) => {
+                throw error
+            }
+        })
 
         this.debug(
             [
@@ -334,79 +438,108 @@ export class LivingMemoryAgenticRecallExecutor {
             ].join('\n')
         )
 
-        for (
-            let modelCallIndex = 0;
-            modelCallIndex < agenticRecallMaxModelCalls;
-            modelCallIndex += 1
-        ) {
-            const response = await model.value.invoke(messages, modelOptions)
-            messages.push(response)
+        const result = await runner.invoke(
+            { input: prompt },
+            {
+                configurable: {
+                    model: chatModel,
+                    preset: scope.presetId,
+                    conversationId: scope.conversationId,
+                    userId: scope.userId,
+                    source: 'agentic-recall',
+                    agentContext
+                }
+            }
+        )
+        const toolCallSummaries: AgenticMemorySearchToolCallSummary[] = []
+        const matchedMemories: AgenticMemorySnapshotMemoryItem[] = []
+        const orderedSearchCalls = orderRecordedSearchCalls(
+            recordedSearchCalls,
+            result.intermediateSteps
+        )
 
-            const output = stringifyModelContent(response.content).trim()
-            const toolCalls = extractToolCalls(response, modelCallIndex)
-
-            this.debug(
-                [
-                    `memory agentic recall turn: conversationId=${scope.conversationId}`,
-                    `presetId=${scope.presetId}`,
-                    `modelCall=${modelCallIndex + 1}`,
-                    `toolCalls=${toolCalls.length}`,
-                    'output:',
-                    output
-                ].join('\n')
+        for (const call of orderedSearchCalls) {
+            const parsedInput = livingMemorySearchInputSchema.safeParse(
+                call.input
             )
-
-            if (toolCalls.length === 0) {
-                return this.createTrace(
-                    prompt,
-                    output,
-                    toolCallCount,
-                    matchedMemories,
-                    toolCallSummaries
-                )
-            }
-
-            for (const toolCall of toolCalls) {
-                if (toolCall.name !== livingMemorySearchToolName) {
-                    messages.push(createUnavailableToolMessage(toolCall))
-                    continue
-                }
-
-                toolCallCount += 1
-                const parsedInput = livingMemorySearchInputSchema.safeParse(
-                    toolCall.args
-                )
-                if (parsedInput.success) {
-                    const toolInput: LivingMemorySearchInput = {
-                        broadSearchTexts: parsedInput.data.broadSearchTexts,
-                        specificSearchTexts:
-                            parsedInput.data.specificSearchTexts,
-                        memoryTypes: parsedInput.data.memoryTypes
-                    }
-
-                    toolCallSummaries.push(
-                        normalizeToolCallSummary(
-                            toolInput,
-                            this.config.memorySearchToolMaxResults
-                        )
+            if (parsedInput.success) {
+                toolCallSummaries.push(
+                    normalizeToolCallSummary(
+                        {
+                            broadSearchTexts: parsedInput.data.broadSearchTexts,
+                            specificSearchTexts:
+                                parsedInput.data.specificSearchTexts,
+                            memoryTypes: parsedInput.data.memoryTypes
+                        },
+                        this.config.memorySearchToolMaxResults
                     )
-                }
-
-                const toolOutput = toToolOutputText(
-                    await searchTool.invoke(toolCall.args, toolConfig)
-                )
-                matchedMemories.push(...parseMatchedMemories(toolOutput))
-                messages.push(
-                    new ToolMessage({
-                        content: toolOutput,
-                        tool_call_id: toolCall.id,
-                        name: livingMemorySearchToolName
-                    })
                 )
             }
+
+            matchedMemories.push(...parseMatchedMemories(call.output))
         }
 
-        throw new Error('agentic recall reached max model calls.')
+        const trace = this.createTrace(
+            prompt,
+            result.output.trim(),
+            countSearchCalls(result.intermediateSteps),
+            matchedMemories,
+            toolCallSummaries,
+            usedFinalizationCall
+        )
+
+        if (
+            usedFinalizationCall &&
+            trace.finalOutput === agenticRecallNoMemoryOutput
+        ) {
+            this.debug(
+                [
+                    `memory agentic recall exhausted: conversationId=${scope.conversationId}`,
+                    `presetId=${scope.presetId}`,
+                    `modelCalls=${modelCallCount}`,
+                    'reason=max-model-calls'
+                ].join(' ')
+            )
+        }
+
+        return trace
+    }
+
+    private async finalize(
+        model: ChatLunaChatModel,
+        prompt: string,
+        input: ChainValues,
+        runConfig?: RunnableConfig
+    ): Promise<AgentFinish> {
+        const scratchpad = _formatIntermediateSteps(
+            (input['scratchpadEntries'] ??
+                input['steps'] ??
+                []) as ScratchpadEntry[]
+        )
+        const response = await model.invoke(
+            [
+                new HumanMessage(prompt),
+                ...scratchpad,
+                new HumanMessage(buildAgenticRecallFinalizationPrompt())
+            ],
+            {
+                ...(runConfig ?? {}),
+                tools: []
+            } as Parameters<ChatLunaChatModel['invoke']>[1]
+        )
+        const output = stringifyModelContent(response.content).trim()
+        const finalOutput =
+            output.length === 0 || hasToolCalls(response)
+                ? agenticRecallNoMemoryOutput
+                : output
+
+        return {
+            returnValues: {
+                output: finalOutput,
+                message: response
+            },
+            log: finalOutput
+        }
     }
 
     private createTrace(
@@ -414,21 +547,33 @@ export class LivingMemoryAgenticRecallExecutor {
         finalOutput: string,
         toolCallCount: number,
         matchedMemories: AgenticMemorySnapshotMemoryItem[],
-        toolCallSummaries: AgenticMemorySearchToolCallSummary[]
+        toolCallSummaries: AgenticMemorySearchToolCallSummary[],
+        allowNoMemoryFallback: boolean
     ): LivingMemoryAgenticRecallTrace {
-        if (toolCallCount === 0) {
+        if (toolCallCount === 0 && !allowNoMemoryFallback) {
             throw new Error(
                 'agentic recall finished without calling living_memory_search.'
             )
         }
 
-        if (finalOutput.length === 0) {
+        const uniqueMemories = uniqueMatchedMemories(matchedMemories)
+        let resolvedOutput = finalOutput
+
+        if (
+            allowNoMemoryFallback &&
+            (resolvedOutput.length === 0 ||
+                (resolvedOutput !== agenticRecallNoMemoryOutput &&
+                    uniqueMemories.length === 0))
+        ) {
+            resolvedOutput = agenticRecallNoMemoryOutput
+        }
+
+        if (resolvedOutput.length === 0) {
             throw new Error('agentic recall final output is empty.')
         }
 
-        const uniqueMemories = uniqueMatchedMemories(matchedMemories)
         const finalText =
-            finalOutput === agenticRecallNoMemoryOutput ? '' : finalOutput
+            resolvedOutput === agenticRecallNoMemoryOutput ? '' : resolvedOutput
 
         if (finalText.length > 0 && uniqueMemories.length === 0) {
             throw new Error(
@@ -438,7 +583,7 @@ export class LivingMemoryAgenticRecallExecutor {
 
         return {
             prompt,
-            finalOutput,
+            finalOutput: resolvedOutput,
             item: {
                 finalText,
                 toolCallSummary: aggregateToolCallSummary(

@@ -8,6 +8,15 @@ export interface AgenticRecallPromptInput {
 
 export const agenticRecallNoMemoryOutput = '<NO_MEMORY>'
 
+export const buildAgenticRecallFinalizationPrompt = () => {
+    return [
+        '工具调用阶段已经结束，不得再调用或请求任何工具。',
+        '请仅根据前面已经返回的记忆搜索结果，立即输出最终纯文本记忆内容。',
+        `如果没有可靠且相关的记忆，只输出 ${agenticRecallNoMemoryOutput}。`,
+        '不要解释工具调用过程，不要输出标题、编号、JSON 或 Markdown。'
+    ].join('\n')
+}
+
 export const buildAgenticRecallPrompt = (params: AgenticRecallPromptInput) => {
     const { presetLabel, currentTranscript, history } = params
 

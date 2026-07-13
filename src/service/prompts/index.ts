@@ -4,6 +4,7 @@ export { buildRecallRewritePrompt } from './recall_query'
 export type { RecallRewritePromptInput } from './recall_query'
 export {
     agenticRecallNoMemoryOutput,
+    buildAgenticRecallFinalizationPrompt,
     buildAgenticRecallPrompt
 } from './agentic_recall'
 export type { AgenticRecallPromptInput } from './agentic_recall'
