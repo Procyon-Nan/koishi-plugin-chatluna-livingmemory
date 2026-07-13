@@ -9,7 +9,7 @@
     "url": "git+https://github.com/Procyon-Nan/koishi-plugin-chatluna-livingmemory.git"
   },
   "type": "module",
-  "description": "ChatLuna plugin example",
+  "description": "Let the AI record the time spent with you as a first-person narrative memory.",
   "main": "lib/index.cjs",
   "module": "lib/index.mjs",
   "typings": "lib/index.d.ts",
@@ -96,7 +96,8 @@
   },
   "koishi": {
     "description": {
-      "zh": "适用于chatluna的长期记忆插件，提供记忆的异步召回、提取与 WebUI 管理能力"
+      "zh": "让 AI 以第一人称的叙事记忆，记录下与你共度的时光。",
+      "en": "Let the AI record the time spent with you as a first-person narrative memory."
     },
     "service": {
       "required": [
