@@ -4,7 +4,6 @@ import type {
     MemoryRecallStrategy,
     MemorySnapshotItem
 } from '../src/contracts/memory'
-import { LivingMemoryJobTracker } from '../src/service/workflows/job_tracker'
 import {
     LivingMemoryRecallCoordinator,
     type RecallWorkflowRepository
@@ -21,7 +20,7 @@ import {
     waitFor
 } from './workflow-test-utils'
 
-it('completes embedding-rerank recall and hydrates its snapshot', async () => {
+it('completes embedding-rerank recall without persisting a successful job', async () => {
     const jobStore = createJobStore()
     const snapshots: {
         strategy: MemoryRecallStrategy
@@ -30,7 +29,7 @@ it('completes embedding-rerank recall and hydrates its snapshot', async () => {
     }[] = []
     let hydrated = 0
     const repository: RecallWorkflowRepository = {
-        createJob: jobStore.createJob,
+        createFailedJob: jobStore.createFailedJob,
         upsertSnapshot: async (_scope, strategy, query, items) => {
             snapshots.push({ strategy, query, items })
         }
@@ -51,18 +50,14 @@ it('completes embedding-rerank recall and hydrates its snapshot', async () => {
                 return ''
             }
         },
-        new LivingMemoryJobTracker(jobStore),
         logger,
         debug
     )
 
     await coordinator.queue(scope, currentMessage, async () => [])
-    await waitFor(
-        () => jobStore.jobs[0]?.status === 'completed',
-        'embedding recall'
-    )
+    await waitFor(() => hydrated === 1, 'embedding recall hydration')
 
-    assert.equal(jobStore.jobs[0]?.recallStrategy, 'embedding-rerank')
+    assert.equal(jobStore.jobs.length, 0)
     assert.deepEqual(snapshots, [
         {
             strategy: 'embedding-rerank',
@@ -70,14 +65,39 @@ it('completes embedding-rerank recall and hydrates its snapshot', async () => {
             items: [{ memoryId: 'memory-1', score: 0.9 }]
         }
     ])
-    assert.equal(hydrated, 1)
 })
 
-it('completes agentic recall and writes the selected snapshot', async () => {
+it('writes an empty embedding snapshot without persisting a job', async () => {
+    const jobStore = createJobStore()
+    let snapshotItems: MemorySnapshotItem[] | undefined
+    const coordinator = new LivingMemoryRecallCoordinator(
+        { recallStrategy: 'embedding-rerank', recallTopK: 3 },
+        {
+            createFailedJob: jobStore.createFailedJob,
+            upsertSnapshot: async (_scope, _strategy, _query, items) => {
+                snapshotItems = items
+            }
+        },
+        { resolve: async () => createRecallQueryResult() },
+        { retrieve: async () => [] },
+        { run: async () => createAgenticTrace('unused') },
+        { hydrate: async () => '' },
+        logger,
+        debug
+    )
+
+    await coordinator.queue(scope, currentMessage, async () => [])
+    await waitFor(() => snapshotItems != null, 'empty embedding snapshot')
+
+    assert.deepEqual(snapshotItems, [])
+    assert.equal(jobStore.jobs.length, 0)
+})
+
+it('completes agentic recall without persisting a successful job', async () => {
     const jobStore = createJobStore()
     const snapshots: MemorySnapshotItem[][] = []
     const repository: RecallWorkflowRepository = {
-        createJob: jobStore.createJob,
+        createFailedJob: jobStore.createFailedJob,
         upsertSnapshot: async (_scope, _strategy, _query, items) => {
             snapshots.push(items)
         }
@@ -89,30 +109,26 @@ it('completes agentic recall and writes the selected snapshot', async () => {
         { retrieve: async () => [] },
         { run: async () => createAgenticTrace('remembered context') },
         { hydrate: async () => '' },
-        new LivingMemoryJobTracker(jobStore),
         logger,
         debug
     )
 
     await coordinator.queue(scope, currentMessage, async () => [])
-    await waitFor(
-        () => jobStore.jobs[0]?.status === 'completed',
-        'agentic recall'
-    )
+    await waitFor(() => snapshots.length === 1, 'agentic recall snapshot')
 
-    assert.equal(jobStore.jobs[0]?.recallStrategy, 'agentic-recall')
-    assert.equal(snapshots.length, 1)
+    assert.equal(jobStore.jobs.length, 0)
     assert.equal(
         (snapshots[0]?.[0] as { finalText: string }).finalText,
         'remembered context'
     )
 })
 
-it('keeps the previous snapshot when agentic recall returns <NO_MEMORY>', async () => {
+it('keeps the previous snapshot without persisting a job for <NO_MEMORY>', async () => {
     const jobStore = createJobStore()
     let snapshotWrites = 0
+    let noMemoryLogged = false
     const repository: RecallWorkflowRepository = {
-        createJob: jobStore.createJob,
+        createFailedJob: jobStore.createFailedJob,
         upsertSnapshot: async () => {
             snapshotWrites += 1
         }
@@ -124,36 +140,34 @@ it('keeps the previous snapshot when agentic recall returns <NO_MEMORY>', async 
         { retrieve: async () => [] },
         { run: async () => createAgenticTrace('') },
         { hydrate: async () => '' },
-        new LivingMemoryJobTracker(jobStore),
         logger,
-        debug
+        (message) => {
+            noMemoryLogged ||= message.includes('no memory selected')
+        }
     )
 
     await coordinator.queue(scope, currentMessage, async () => [])
-    await waitFor(
-        () => jobStore.jobs[0]?.status === 'completed',
-        'agentic no-memory recall'
-    )
+    await waitFor(() => noMemoryLogged, 'agentic no-memory result')
 
     assert.equal(snapshotWrites, 0)
-    assert.equal(
-        jobStore.jobs[0]?.detail,
-        'no memory selected; snapshot unchanged'
-    )
+    assert.equal(jobStore.jobs.length, 0)
 })
 
-it('serializes recall jobs for the same scope', async () => {
+it('serializes recall runs for the same scope without persisted running state', async () => {
     const jobStore = createJobStore()
     let resolveQuery!: (result: RecallQueryResult) => void
     let queryCalls = 0
+    let snapshotWrites = 0
     const queryResult = new Promise<RecallQueryResult>((resolve) => {
         resolveQuery = resolve
     })
     const coordinator = new LivingMemoryRecallCoordinator(
         { recallStrategy: 'embedding-rerank', recallTopK: 3 },
         {
-            createJob: jobStore.createJob,
-            upsertSnapshot: async () => {}
+            createFailedJob: jobStore.createFailedJob,
+            upsertSnapshot: async () => {
+                snapshotWrites += 1
+            }
         },
         {
             resolve: async () => {
@@ -164,7 +178,6 @@ it('serializes recall jobs for the same scope', async () => {
         { retrieve: async () => [] },
         { run: async () => createAgenticTrace('unused') },
         { hydrate: async () => '' },
-        new LivingMemoryJobTracker(jobStore),
         logger,
         debug
     )
@@ -174,18 +187,46 @@ it('serializes recall jobs for the same scope', async () => {
     assert.equal(queryCalls, 1)
 
     resolveQuery(createRecallQueryResult())
-    await waitFor(
-        () => jobStore.jobs[0]?.status === 'completed',
-        'serialized recall'
-    )
+    await waitFor(() => snapshotWrites === 1, 'serialized recall completion')
+
+    assert.equal(jobStore.jobs.length, 0)
 })
 
-it('marks a recall job failed when retrieval throws', async () => {
+it('persists one failed recall job when query construction throws', async () => {
     const jobStore = createJobStore()
     const coordinator = new LivingMemoryRecallCoordinator(
         { recallStrategy: 'embedding-rerank', recallTopK: 3 },
         {
-            createJob: jobStore.createJob,
+            createFailedJob: jobStore.createFailedJob,
+            upsertSnapshot: async () => {}
+        },
+        {
+            resolve: async () => {
+                throw new Error('query failure')
+            }
+        },
+        { retrieve: async () => [] },
+        { run: async () => createAgenticTrace('unused') },
+        { hydrate: async () => '' },
+        logger,
+        debug
+    )
+
+    await coordinator.queue(scope, currentMessage, async () => [])
+    await waitFor(() => jobStore.jobs.length === 1, 'failed recall query')
+
+    assert.equal(jobStore.jobs[0]?.status, 'failed')
+    assert.equal(jobStore.jobs[0]?.input, '记忆查询')
+    assert.equal(jobStore.jobs[0]?.recallStrategy, 'embedding-rerank')
+    assert.match(jobStore.jobs[0]?.error ?? '', /query failure/u)
+})
+
+it('persists one failed recall job when retrieval throws', async () => {
+    const jobStore = createJobStore()
+    const coordinator = new LivingMemoryRecallCoordinator(
+        { recallStrategy: 'embedding-rerank', recallTopK: 3 },
+        {
+            createFailedJob: jobStore.createFailedJob,
             upsertSnapshot: async () => {}
         },
         { resolve: async () => createRecallQueryResult() },
@@ -196,25 +237,55 @@ it('marks a recall job failed when retrieval throws', async () => {
         },
         { run: async () => createAgenticTrace('unused') },
         { hydrate: async () => '' },
-        new LivingMemoryJobTracker(jobStore),
         logger,
         debug
     )
 
     await coordinator.queue(scope, currentMessage, async () => [])
-    await waitFor(() => jobStore.jobs[0]?.status === 'failed', 'failed recall')
+    await waitFor(() => jobStore.jobs.length === 1, 'failed recall retrieval')
 
-    assert.match(jobStore.jobs[0]?.error ?? '', /retrieval failure/u)
+    const job = jobStore.jobs[0]
+    assert.equal(job?.status, 'failed')
+    assert.equal(job?.recallStrategy, 'embedding-rerank')
+    assert.equal(+job!.createdAt, +job!.startedAt!)
+    assert.ok(+job!.finishedAt! >= +job!.startedAt!)
+    assert.match(job?.error ?? '', /retrieval failure/u)
 })
 
-it('does not create a recall job when the query is skipped', async () => {
+it('persists one failed recall job when snapshot hydration throws', async () => {
+    const jobStore = createJobStore()
+    const coordinator = new LivingMemoryRecallCoordinator(
+        { recallStrategy: 'embedding-rerank', recallTopK: 3 },
+        {
+            createFailedJob: jobStore.createFailedJob,
+            upsertSnapshot: async () => {}
+        },
+        { resolve: async () => createRecallQueryResult() },
+        { retrieve: async () => [] },
+        { run: async () => createAgenticTrace('unused') },
+        {
+            hydrate: async () => {
+                throw new Error('hydrate failure')
+            }
+        },
+        logger,
+        debug
+    )
+
+    await coordinator.queue(scope, currentMessage, async () => [])
+    await waitFor(() => jobStore.jobs.length === 1, 'failed snapshot hydration')
+
+    assert.match(jobStore.jobs[0]?.error ?? '', /hydrate failure/u)
+})
+
+it('does not persist a recall job when the query is skipped', async () => {
     const jobStore = createJobStore()
     let queryCalls = 0
     let retrieverCalls = 0
     const coordinator = new LivingMemoryRecallCoordinator(
         { recallStrategy: 'embedding-rerank', recallTopK: 3 },
         {
-            createJob: jobStore.createJob,
+            createFailedJob: jobStore.createFailedJob,
             upsertSnapshot: async () => {}
         },
         {
@@ -235,7 +306,6 @@ it('does not create a recall job when the query is skipped', async () => {
         },
         { run: async () => createAgenticTrace('unused') },
         { hydrate: async () => '' },
-        new LivingMemoryJobTracker(jobStore),
         logger,
         debug
     )
@@ -247,13 +317,49 @@ it('does not create a recall job when the query is skipped', async () => {
     assert.equal(retrieverCalls, 0)
 })
 
-it('continues recall with empty history when history loading fails', async () => {
+it('does not persist a recall job when the final query is empty', async () => {
     const jobStore = createJobStore()
-    let receivedHistory: LivingMemoryTranscriptMessage[] | undefined
+    let retrieverCalls = 0
     const coordinator = new LivingMemoryRecallCoordinator(
         { recallStrategy: 'embedding-rerank', recallTopK: 3 },
         {
-            createJob: jobStore.createJob,
+            createFailedJob: jobStore.createFailedJob,
+            upsertSnapshot: async () => {}
+        },
+        {
+            resolve: async () =>
+                createRecallQueryResult('', {
+                    cleanedQuery: 'cleaned query',
+                    skippedReason: null
+                })
+        },
+        {
+            retrieve: async () => {
+                retrieverCalls += 1
+                return []
+            }
+        },
+        { run: async () => createAgenticTrace('unused') },
+        { hydrate: async () => '' },
+        logger,
+        debug
+    )
+
+    await coordinator.queue(scope, currentMessage, async () => [])
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    assert.equal(retrieverCalls, 0)
+    assert.equal(jobStore.jobs.length, 0)
+})
+
+it('continues recall with empty history without persisting a job', async () => {
+    const jobStore = createJobStore()
+    let receivedHistory: LivingMemoryTranscriptMessage[] | undefined
+    let hydrated = 0
+    const coordinator = new LivingMemoryRecallCoordinator(
+        { recallStrategy: 'embedding-rerank', recallTopK: 3 },
+        {
+            createFailedJob: jobStore.createFailedJob,
             upsertSnapshot: async () => {}
         },
         {
@@ -264,8 +370,12 @@ it('continues recall with empty history when history loading fails', async () =>
         },
         { retrieve: async () => [] },
         { run: async () => createAgenticTrace('unused') },
-        { hydrate: async () => '' },
-        new LivingMemoryJobTracker(jobStore),
+        {
+            hydrate: async () => {
+                hydrated += 1
+                return ''
+            }
+        },
         logger,
         debug
     )
@@ -273,20 +383,18 @@ it('continues recall with empty history when history loading fails', async () =>
     await coordinator.queue(scope, currentMessage, async () => {
         throw new Error('history unavailable')
     })
-    await waitFor(
-        () => jobStore.jobs[0]?.status === 'completed',
-        'recall after history failure'
-    )
+    await waitFor(() => hydrated === 1, 'recall after history failure')
 
     assert.deepEqual(receivedHistory, [])
+    assert.equal(jobStore.jobs.length, 0)
 })
 
-it('marks an agentic recall job failed when its executor throws', async () => {
+it('persists one failed agentic recall job when its executor throws', async () => {
     const jobStore = createJobStore()
     const coordinator = new LivingMemoryRecallCoordinator(
         { recallStrategy: 'agentic-recall', recallTopK: 3 },
         {
-            createJob: jobStore.createJob,
+            createFailedJob: jobStore.createFailedJob,
             upsertSnapshot: async () => {}
         },
         { resolve: async () => createRecallQueryResult() },
@@ -297,16 +405,12 @@ it('marks an agentic recall job failed when its executor throws', async () => {
             }
         },
         { hydrate: async () => '' },
-        new LivingMemoryJobTracker(jobStore),
         logger,
         debug
     )
 
     await coordinator.queue(scope, currentMessage, async () => [])
-    await waitFor(
-        () => jobStore.jobs[0]?.status === 'failed',
-        'failed agentic recall'
-    )
+    await waitFor(() => jobStore.jobs.length === 1, 'failed agentic recall')
 
     assert.equal(jobStore.jobs[0]?.recallStrategy, 'agentic-recall')
     assert.match(jobStore.jobs[0]?.error ?? '', /agentic failure/u)

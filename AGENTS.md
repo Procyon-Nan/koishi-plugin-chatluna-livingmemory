@@ -61,8 +61,9 @@ tree whenever architecture, data contracts, or workflow boundaries change.
   operation execution, stats, and Dream coordination. Dream processes active
   memories and archived memories, then regenerates user profiles when profile
   injection is enabled.
-- `src/service/workflows/job_tracker.ts` owns shared workflow job status
-  updates.
+- `src/service/workflows/job_tracker.ts` owns Dream workflow job lifecycle
+  status updates. Recall and extraction only create a single persisted failed
+  audit row when their execution pipeline throws or extraction parsing fails.
 - `src/service/memory/entry_fields.ts` owns shared memory field normalization
   rules and limits used by extraction, Dream, and persistence writes.
 - `src/service/memory/tools/search_contract.ts` centralizes lexical
@@ -110,8 +111,10 @@ tree whenever architecture, data contracts, or workflow boundaries change.
 - Service startup runs versioned persistence migrations before recovering stale
   jobs. The `source-origins-array-v1` migration repairs legacy non-array
   `sourceOrigins` values to `[]`.
-- Service startup recovers stale pending/running jobs and emits config warnings.
-  Job rows are audit records, not durable schedulers.
+- Service startup recovers stale pending/running lifecycle rows and emits config
+  warnings. New pending/running rows normally belong to Dream; legacy Recall or
+  Extraction rows may also be recovered. Job rows are audit records, not durable
+  schedulers.
 - Main ChatLuna `before-chat` builds a scope, records the current speaker, loads
   history only when needed, hydrates prompt sections, activates request-scoped
   user profiles as a system-role block after system prompts, activates
@@ -126,8 +129,9 @@ tree whenever architecture, data contracts, or workflow boundaries change.
   `{living_memory}` function provider rather than ChatLuna core context
   injection.
 - Recall is serialized per scope and remains asynchronous: the current chat turn
-  injects the previous hydrated snapshot, while the recall job produced by the
-  current turn is used by later turns.
+  injects the previous hydrated snapshot, while the recall snapshot produced by the
+  current turn is used by later turns. Successful, skipped, empty, and
+  `<NO_MEMORY>` Recall runs do not create Job rows.
 - `embedding-rerank` recall uses query rewrite when enabled. Empty cleaned
   queries are skipped; disabled or failed rewrite paths record their reason and
   use the normalized current query when possible.
@@ -135,18 +139,19 @@ tree whenever architecture, data contracts, or workflow boundaries change.
   `recallHistoryWindowRounds` for its history window, has its own
   `agenticRecallModel`, asks the model to call `living_memory_search`, writes
   agentic snapshot items containing final memory text plus search parameters and
-  matched memories, and fails the recall job rather than switching strategy when
-  required model/search validation fails.
-- When agentic recall finishes with `<NO_MEMORY>`, the recall job is completed
-  but no snapshot is written or hydrated. The previous snapshot remains the next
-  injectable memory context.
-- `living_memory_job.recallStrategy` records the selected recall strategy for
-  recall jobs. Non-recall jobs and pre-existing rows may have `null`.
+  matched memories, and persists one failed Recall audit row rather than
+  switching strategy when required model/search validation fails.
+- When agentic recall finishes with `<NO_MEMORY>`, no Job or snapshot is written
+  or hydrated. The previous snapshot remains the next injectable memory context.
+- `living_memory_job.recallStrategy` records the selected Recall strategy for
+  failed Recall audit rows. Non-Recall jobs and pre-existing rows may have
+  `null`.
 - `living_memory_snapshot.strategy` distinguishes snapshot item semantics:
   `embedding-rerank` stores memory references, while `agentic-recall`
   stores agentic snapshot items rendered directly as final memory text.
-- Extraction uses an interval baseline per scope. Parse failures mark the job as
-  failed; valid empty arrays mark a completed extraction with zero memories.
+- Extraction uses an interval baseline per scope. Payload construction, model,
+  parse, and persistence failures create one failed audit row; successful and
+  skipped runs, including valid empty arrays, do not create Job rows.
 - Dream active-stage operations allow keep, update, merge, and archive. Archived
   stage operations allow keep, update, merge, and deleteSource.
 - Dream merge preserves source-origin groups by combining the target memory

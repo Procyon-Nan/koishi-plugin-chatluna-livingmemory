@@ -43,6 +43,7 @@ import {
     normalizeUserProfileRecord
 } from './normalizers'
 import { defineLivingMemoryTables } from './tables'
+import { summarizeError } from '../shared/utils'
 
 const sourceOriginsArrayMigrationId = 'source-origins-array-v1'
 const keywordFingerprintSeparator = '\u0000'
@@ -307,6 +308,35 @@ export class LivingMemoryRepository
             startedAt: null,
             finishedAt: null,
             updatedAt: now
+        }
+
+        await this.ctx.database.create('living_memory_job', job)
+        return job
+    }
+
+    async createFailedJob(
+        scope: MemoryScope,
+        kind: MemoryJobKind,
+        input: string,
+        error: unknown,
+        startedAt: Date,
+        recallStrategy: MemoryRecallStrategy | null = null
+    ): Promise<MemoryJobRecord> {
+        const finishedAt = new Date()
+        const job: MemoryJobRecord = {
+            id: randomUUID(),
+            presetId: scope.presetId,
+            conversationId: scope.conversationId,
+            kind,
+            recallStrategy,
+            status: 'failed',
+            input,
+            detail: null,
+            error: summarizeError(error),
+            createdAt: startedAt,
+            startedAt,
+            finishedAt,
+            updatedAt: finishedAt
         }
 
         await this.ctx.database.create('living_memory_job', job)

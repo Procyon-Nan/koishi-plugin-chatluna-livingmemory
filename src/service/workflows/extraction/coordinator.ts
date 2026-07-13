@@ -1,6 +1,9 @@
 import type { Context, Logger } from 'koishi'
 import type { PresetTemplate } from 'koishi-plugin-chatluna/llm-core/prompt'
-import type { LivingMemoryExtractor } from './extractor'
+import type {
+    LivingMemoryExtractionTrace,
+    LivingMemoryExtractor
+} from './extractor'
 import type { LivingMemoryMessageFormatter } from '../../transcript/message_formatter'
 import { summarizeError } from '../../shared/utils'
 import {
@@ -10,8 +13,8 @@ import {
     renderChatLunaPresetPrompt,
     scopeKey
 } from '../../memory/helpers'
-import type { LivingMemoryJobTracker } from '../job_tracker'
 import type {
+    ExtractionPayload,
     ExtractionRepository,
     JobRepository,
     LivingMemoryConfig
@@ -31,13 +34,12 @@ type ExtractionFormatter = Pick<
     'takeRecentRounds' | 'toExtractionPayload'
 >
 type ExtractionModel = Pick<LivingMemoryExtractor, 'extractWithTrace'>
-type ExtractionJobTracker = Pick<
-    LivingMemoryJobTracker,
-    'markRunning' | 'markCompleted' | 'markFailed'
->
 type ExtractionLogger = Pick<Logger, 'warn'>
 
-export type ExtractionWorkflowRepository = Pick<JobRepository, 'createJob'> &
+export type ExtractionWorkflowRepository = Pick<
+    JobRepository,
+    'createFailedJob'
+> &
     Pick<ExtractionRepository, 'appendMemories'>
 
 export class LivingMemoryExtractionCoordinator {
@@ -50,7 +52,6 @@ export class LivingMemoryExtractionCoordinator {
         private readonly repository: ExtractionWorkflowRepository,
         private readonly formatter: ExtractionFormatter,
         private readonly extractor: ExtractionModel,
-        private readonly jobTracker: ExtractionJobTracker,
         private readonly queueAutoDream: (presetId: string) => void,
         private readonly logger: ExtractionLogger,
         private readonly debug: DebugLogger
@@ -194,25 +195,24 @@ export class LivingMemoryExtractionCoordinator {
         promptVariables: Record<string, unknown> = {},
         presetPromptOverride?: string | null
     ) {
-        const payload = this.formatter.toExtractionPayload(messages)
-        const job = await this.repository.createJob(
-            scope,
-            'extract',
-            payload.input
-        )
-
-        this.debug(
-            [
-                `runExtraction started: jobId=${job.id}`,
-                `conversationId=${scope.conversationId}`,
-                `presetId=${scope.presetId}`,
-                `sourceOriginMessages=${payload.sourceOriginMessages.length}`,
-                `inputLength=${payload.input.length}`
-            ].join(' ')
-        )
+        const startedAt = new Date()
+        let input = ''
+        let payload: ExtractionPayload
+        let trace: LivingMemoryExtractionTrace
 
         try {
-            await this.jobTracker.markRunning(job.id)
+            payload = this.formatter.toExtractionPayload(messages)
+            input = payload.input
+
+            this.debug(
+                [
+                    'runExtraction started:',
+                    `conversationId=${scope.conversationId}`,
+                    `presetId=${scope.presetId}`,
+                    `sourceOriginMessages=${payload.sourceOriginMessages.length}`,
+                    `inputLength=${payload.input.length}`
+                ].join(' ')
+            )
 
             const presetPrompt =
                 presetPromptOverride ??
@@ -221,7 +221,7 @@ export class LivingMemoryExtractionCoordinator {
                     presetTemplate,
                     promptVariables
                 ))
-            const trace = await this.extractor.extractWithTrace(payload.input, {
+            trace = await this.extractor.extractWithTrace(payload.input, {
                 conversationId: scope.conversationId,
                 presetId: scope.presetId,
                 presetLabel: scope.presetLabel,
@@ -230,7 +230,7 @@ export class LivingMemoryExtractionCoordinator {
             if (trace.skippedReason != null) {
                 this.debug(
                     [
-                        `memory extraction skipped: jobId=${job.id}`,
+                        'memory extraction skipped:',
                         `conversationId=${scope.conversationId}`,
                         `presetId=${scope.presetId}`,
                         `reason=${trace.skippedReason}`
@@ -241,7 +241,7 @@ export class LivingMemoryExtractionCoordinator {
             if (trace.prompt != null && trace.output != null) {
                 this.debug(
                     [
-                        `memory extraction llm input: jobId=${job.id}`,
+                        'memory extraction llm input:',
                         `conversationId=${scope.conversationId}`,
                         `presetId=${scope.presetId}`,
                         trace.prompt
@@ -249,42 +249,56 @@ export class LivingMemoryExtractionCoordinator {
                 )
                 this.debug(
                     [
-                        `memory extraction llm output: jobId=${job.id}`,
+                        'memory extraction llm output:',
                         `conversationId=${scope.conversationId}`,
                         `presetId=${scope.presetId}`,
                         trace.output
                     ].join('\n')
                 )
             }
+        } catch (error) {
+            await this.repository.createFailedJob(
+                scope,
+                'extract',
+                input,
+                error,
+                startedAt
+            )
+            throw error
+        }
 
-            // 模型输出无法解析为合法 JSON 数组：不做修复或重试，仅记录日志，
-            // 并将作业标记为失败，使任务列表如实反映“解析失败”而非“抽取 0 条”。
-            if (trace.parseError != null) {
-                this.debug(
-                    [
-                        `memory extraction parse failed: jobId=${job.id}`,
-                        `conversationId=${scope.conversationId}`,
-                        `presetId=${scope.presetId}`,
-                        `parseError=${trace.parseError}`
-                    ].join(' ')
-                )
-                await this.jobTracker.markFailed(
-                    job.id,
-                    `extraction parse failed: ${trace.parseError}`
-                )
-                return
-            }
-
-            const extracted = trace.extracted
+        // 模型输出无法解析为合法 JSON 数组：不做修复或重试，仅持久化失败记录，
+        // 使任务列表如实反映“解析失败”而非“抽取 0 条”。
+        if (trace.parseError != null) {
             this.debug(
                 [
-                    `memory extraction: jobId=${job.id}`,
+                    'memory extraction parse failed:',
                     `conversationId=${scope.conversationId}`,
                     `presetId=${scope.presetId}`,
-                    `count=${extracted.length}\n${formatMemoryItemsForLog(extracted)}`
+                    `parseError=${trace.parseError}`
                 ].join(' ')
             )
+            await this.repository.createFailedJob(
+                scope,
+                'extract',
+                input,
+                `extraction parse failed: ${trace.parseError}`,
+                startedAt
+            )
+            return
+        }
 
+        const extracted = trace.extracted
+        this.debug(
+            [
+                'memory extraction:',
+                `conversationId=${scope.conversationId}`,
+                `presetId=${scope.presetId}`,
+                `count=${extracted.length}\n${formatMemoryItemsForLog(extracted)}`
+            ].join(' ')
+        )
+
+        try {
             if (extracted.length > 0) {
                 await this.repository.appendMemories(
                     scope,
@@ -292,20 +306,20 @@ export class LivingMemoryExtractionCoordinator {
                     extracted
                 )
             }
-
-            await this.jobTracker.markCompleted(
-                job.id,
-                `extracted ${extracted.length} memories`
-            )
-            this.debug(
-                `runExtraction completed: jobId=${job.id}, extracted=${extracted.length}`
-            )
-            if (extracted.length > 0) {
-                this.queueAutoDream(scope.presetId)
-            }
         } catch (error) {
-            await this.jobTracker.markFailed(job.id, error)
+            await this.repository.createFailedJob(
+                scope,
+                'extract',
+                input,
+                error,
+                startedAt
+            )
             throw error
+        }
+
+        this.debug(`runExtraction completed: extracted=${extracted.length}`)
+        if (extracted.length > 0) {
+            this.queueAutoDream(scope.presetId)
         }
     }
 

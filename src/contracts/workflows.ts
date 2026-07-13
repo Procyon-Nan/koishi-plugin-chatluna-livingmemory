@@ -123,6 +123,14 @@ export interface JobRepository {
         input: string,
         recallStrategy?: MemoryRecallStrategy | null
     ): Promise<MemoryJobRecord>
+    createFailedJob(
+        scope: MemoryScope,
+        kind: MemoryJobKind,
+        input: string,
+        error: unknown,
+        startedAt: Date,
+        recallStrategy?: MemoryRecallStrategy | null
+    ): Promise<MemoryJobRecord>
     updateJob(id: string, patch: Partial<MemoryJobRecord>): Promise<void>
     listJobsByPreset(presetId: string): Promise<MemoryJobRecord[]>
     getLatestJobByPresetAndKind(

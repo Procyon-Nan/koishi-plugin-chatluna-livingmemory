@@ -121,7 +121,6 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             retriever,
             agenticRecall,
             this.snapshotCache,
-            jobTracker,
             this.serviceLogger,
             debug
         )
@@ -140,7 +139,6 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             this.repository,
             formatter,
             extractor,
-            jobTracker,
             (presetId) => this.queueAutoDreamIfThresholdReached(presetId),
             this.serviceLogger,
             debug

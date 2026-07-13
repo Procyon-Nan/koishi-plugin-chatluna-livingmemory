@@ -8,7 +8,6 @@ import {
     normalizeText,
     scopeKey
 } from '../../memory/helpers'
-import type { LivingMemoryJobTracker } from '../job_tracker'
 import type { LivingMemorySnapshotCache } from '../../memory/snapshot/snapshot_cache'
 import type { LivingMemoryAgenticRecallExecutor } from './agentic_recall'
 import type {
@@ -30,13 +29,9 @@ type RecallQueryBuilder = Pick<LivingMemoryRecallQueryBuilder, 'resolve'>
 type RecallRetriever = Pick<LivingMemoryRetriever, 'retrieve'>
 type RecallAgenticExecutor = Pick<LivingMemoryAgenticRecallExecutor, 'run'>
 type RecallSnapshotCache = Pick<LivingMemorySnapshotCache, 'hydrate'>
-type RecallJobTracker = Pick<
-    LivingMemoryJobTracker,
-    'markRunning' | 'markCompleted' | 'markFailed'
->
 type RecallLogger = Pick<Logger, 'warn'>
 
-export type RecallWorkflowRepository = Pick<JobRepository, 'createJob'> &
+export type RecallWorkflowRepository = Pick<JobRepository, 'createFailedJob'> &
     Pick<SnapshotRepository, 'upsertSnapshot'>
 
 export class LivingMemoryRecallCoordinator {
@@ -49,7 +44,6 @@ export class LivingMemoryRecallCoordinator {
         private readonly retriever: RecallRetriever,
         private readonly agenticRecall: RecallAgenticExecutor,
         private readonly snapshotCache: RecallSnapshotCache,
-        private readonly jobTracker: RecallJobTracker,
         private readonly logger: RecallLogger,
         private readonly debug: DebugLogger
     ) {}
@@ -115,83 +109,77 @@ export class LivingMemoryRecallCoordinator {
         currentMessage: LivingMemoryTranscriptMessage,
         historyMessages: LivingMemoryTranscriptMessage[]
     ) {
-        const query = await this.recallQuery.resolve(
-            scope,
-            currentMessage,
-            historyMessages
-        )
-
-        this.debug(
-            [
-                `memory recall query prepared: conversationId=${scope.conversationId}`,
-                `presetId=${scope.presetId}`,
-                `rawInputLength=${query.rawInputLength}`,
-                'cleanedQuery:',
-                query.cleanedQuery,
-                'finalQuery:',
-                query.finalQuery
-            ].join('\n')
-        )
-
-        if (query.skippedReason != null) {
-            this.debug(
-                [
-                    `memory recall skipped: conversationId=${scope.conversationId}`,
-                    `presetId=${scope.presetId}`,
-                    `reason=${query.skippedReason}`
-                ].join(' ')
-            )
-            return
-        }
-
-        if (query.rewritePrompt != null) {
-            this.debug(
-                [
-                    `memory recall rewrite input: conversationId=${scope.conversationId}`,
-                    `presetId=${scope.presetId}`,
-                    query.rewritePrompt
-                ].join('\n')
-            )
-        }
-
-        if (query.rewriteOutput != null) {
-            this.debug(
-                [
-                    `memory recall rewrite output: conversationId=${scope.conversationId}`,
-                    `presetId=${scope.presetId}`,
-                    query.rewriteOutput
-                ].join('\n')
-            )
-        }
-
-        if (query.fallbackReason != null) {
-            this.debug(
-                [
-                    `memory recall rewrite fallback: conversationId=${scope.conversationId}`,
-                    `presetId=${scope.presetId}`,
-                    `reason=${query.fallbackReason}`,
-                    query.error == null ? '' : `error=${query.error}`,
-                    `finalQuery=${query.finalQuery}`
-                ]
-                    .filter((part) => part.length > 0)
-                    .join(' ')
-            )
-        }
-
-        const input = normalizeText(query.finalQuery)
-        if (input.length === 0) {
-            return
-        }
-
-        const job = await this.repository.createJob(
-            scope,
-            'recall',
-            input,
-            'embedding-rerank'
-        )
+        const startedAt = new Date()
+        let input = normalizeText(currentMessage.contentLines.join('\n'))
 
         try {
-            await this.jobTracker.markRunning(job.id)
+            const query = await this.recallQuery.resolve(
+                scope,
+                currentMessage,
+                historyMessages
+            )
+
+            this.debug(
+                [
+                    `memory recall query prepared: conversationId=${scope.conversationId}`,
+                    `presetId=${scope.presetId}`,
+                    `rawInputLength=${query.rawInputLength}`,
+                    'cleanedQuery:',
+                    query.cleanedQuery,
+                    'finalQuery:',
+                    query.finalQuery
+                ].join('\n')
+            )
+
+            if (query.skippedReason != null) {
+                this.debug(
+                    [
+                        `memory recall skipped: conversationId=${scope.conversationId}`,
+                        `presetId=${scope.presetId}`,
+                        `reason=${query.skippedReason}`
+                    ].join(' ')
+                )
+                return
+            }
+
+            if (query.rewritePrompt != null) {
+                this.debug(
+                    [
+                        `memory recall rewrite input: conversationId=${scope.conversationId}`,
+                        `presetId=${scope.presetId}`,
+                        query.rewritePrompt
+                    ].join('\n')
+                )
+            }
+
+            if (query.rewriteOutput != null) {
+                this.debug(
+                    [
+                        `memory recall rewrite output: conversationId=${scope.conversationId}`,
+                        `presetId=${scope.presetId}`,
+                        query.rewriteOutput
+                    ].join('\n')
+                )
+            }
+
+            if (query.fallbackReason != null) {
+                this.debug(
+                    [
+                        `memory recall rewrite fallback: conversationId=${scope.conversationId}`,
+                        `presetId=${scope.presetId}`,
+                        `reason=${query.fallbackReason}`,
+                        query.error == null ? '' : `error=${query.error}`,
+                        `finalQuery=${query.finalQuery}`
+                    ]
+                        .filter((part) => part.length > 0)
+                        .join(' ')
+                )
+            }
+
+            input = normalizeText(query.finalQuery)
+            if (input.length === 0) {
+                return
+            }
 
             const items = await this.retriever.retrieve(
                 scope.presetId,
@@ -216,13 +204,15 @@ export class LivingMemoryRecallCoordinator {
                 }))
             )
             await this.snapshotCache.hydrate(scope)
-
-            await this.jobTracker.markCompleted(
-                job.id,
-                `matched ${items.length} memories`
-            )
         } catch (error) {
-            await this.jobTracker.markFailed(job.id, error)
+            await this.repository.createFailedJob(
+                scope,
+                'recall',
+                input,
+                error,
+                startedAt,
+                'embedding-rerank'
+            )
             throw error
         }
     }
@@ -232,21 +222,13 @@ export class LivingMemoryRecallCoordinator {
         currentMessage: LivingMemoryTranscriptMessage,
         historyMessages: LivingMemoryTranscriptMessage[]
     ) {
+        const startedAt = new Date()
         const input = normalizeText(currentMessage.contentLines.join('\n'))
         if (input.length === 0) {
             return
         }
 
-        const job = await this.repository.createJob(
-            scope,
-            'recall',
-            input,
-            'agentic-recall'
-        )
-
         try {
-            await this.jobTracker.markRunning(job.id)
-
             const trace = await this.agenticRecall.run(
                 scope,
                 currentMessage,
@@ -263,10 +245,6 @@ export class LivingMemoryRecallCoordinator {
                         'snapshot=unchanged'
                     ].join(' ')
                 )
-                await this.jobTracker.markCompleted(
-                    job.id,
-                    'no memory selected; snapshot unchanged'
-                )
                 return
             }
 
@@ -278,13 +256,15 @@ export class LivingMemoryRecallCoordinator {
                 [trace.item]
             )
             await this.snapshotCache.hydrate(scope)
-
-            await this.jobTracker.markCompleted(
-                job.id,
-                `matched ${matchedCount} memories`
-            )
         } catch (error) {
-            await this.jobTracker.markFailed(job.id, error)
+            await this.repository.createFailedJob(
+                scope,
+                'recall',
+                input,
+                error,
+                startedAt,
+                'agentic-recall'
+            )
             throw error
         }
     }

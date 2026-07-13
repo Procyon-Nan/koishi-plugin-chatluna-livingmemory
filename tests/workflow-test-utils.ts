@@ -8,6 +8,7 @@ import type {
 import type { LivingMemoryAgenticRecallTrace } from '../src/service/workflows/recall/agentic_recall'
 import type { RecallQueryResult } from '../src/service/workflows/recall/query_builder'
 import type { DreamRunResult } from '../src/service/workflows/dream/types'
+import { summarizeError } from '../src/service/shared/utils'
 
 export const logger = { warn: () => {} }
 export const debug = () => {}
@@ -53,6 +54,34 @@ export const createJobStore = () => {
         return job
     }
 
+    const createFailedJob: JobRepository['createFailedJob'] = async (
+        jobScope,
+        kind,
+        input,
+        error,
+        startedAt,
+        recallStrategy = null
+    ) => {
+        const finishedAt = new Date()
+        const job: MemoryJobRecord = {
+            id: `job-${jobs.length + 1}`,
+            presetId: jobScope.presetId,
+            conversationId: jobScope.conversationId,
+            kind,
+            recallStrategy,
+            status: 'failed',
+            input,
+            detail: null,
+            error: summarizeError(error),
+            createdAt: startedAt,
+            startedAt,
+            finishedAt,
+            updatedAt: finishedAt
+        }
+        jobs.push(job)
+        return job
+    }
+
     const updateJob: JobRepository['updateJob'] = async (id, patch) => {
         const job = jobs.find((item) => item.id === id)
         if (job == null) {
@@ -78,6 +107,7 @@ export const createJobStore = () => {
     return {
         jobs,
         createJob,
+        createFailedJob,
         updateJob,
         getLatestJobByPresetAndKind,
         markStaleRunningJobsAsFailed

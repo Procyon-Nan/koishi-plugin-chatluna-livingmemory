@@ -4,7 +4,7 @@ import { createJobStore, scope } from './workflow-test-utils'
 
 it('tracks job lifecycle from pending through running and terminal states', async () => {
     const jobStore = createJobStore()
-    const job = await jobStore.createJob(scope, 'recall', 'input')
+    const job = await jobStore.createJob(scope, 'dream', 'input')
     const tracker = new LivingMemoryJobTracker(jobStore)
 
     assert.equal(job.status, 'pending')
@@ -17,7 +17,7 @@ it('tracks job lifecycle from pending through running and terminal states', asyn
     assert.equal(job.detail, 'completed detail')
     assert.notEqual(job.finishedAt, null)
 
-    const failedJob = await jobStore.createJob(scope, 'extract', 'input')
+    const failedJob = await jobStore.createJob(scope, 'dream', 'input')
     await tracker.markRunning(failedJob.id)
     await tracker.markFailed(failedJob.id, new Error('failure detail'))
     assert.equal(failedJob.status, 'failed')
