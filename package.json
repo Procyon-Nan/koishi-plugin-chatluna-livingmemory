@@ -88,8 +88,8 @@
     "bump": "yarn yakumo version",
     "dep": "yarn yakumo upgrade",
     "pub": "yarn yakumo publish",
-    "lint": "yarn eslint src --ext=ts",
-    "lint-fix": "yarn eslint src --ext=ts --fix"
+    "lint": "yarn eslint src client --ext=ts",
+    "lint-fix": "yarn eslint src client --ext=ts --fix"
   },
   "koishi": {
     "description": {

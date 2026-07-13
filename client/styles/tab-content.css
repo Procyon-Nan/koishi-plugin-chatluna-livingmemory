@@ -1,0 +1,155 @@
+/* Tables styling */
+:deep(.el-table) {
+    background-color: var(--lm-bg-primary) !important;
+    border: 1px solid var(--lm-border) !important;
+    border-radius: 4px !important;
+}
+
+:deep(.el-table th.el-table__cell) {
+    background-color: var(--lm-bg-secondary) !important;
+    color: var(--lm-text-secondary) !important;
+    font-weight: 600 !important;
+    font-size: 11px !important;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-family: var(--lm-font-mono);
+    border-bottom: 1px solid var(--lm-border) !important;
+    padding: 10px 0 !important;
+}
+
+:deep(.el-table td.el-table__cell) {
+    border-bottom: 1px solid var(--lm-border) !important;
+    color: var(--lm-text-primary) !important;
+    font-size: 13px !important;
+    padding: 8px 0 !important;
+}
+
+:deep(.el-table--border .el-table__inner-wrapper::after),
+:deep(.el-table--border::after),
+:deep(.el-table--border::before) {
+    background-color: var(--lm-border) !important;
+}
+
+:deep(.el-table__border-left-patch) {
+    background-color: var(--lm-border) !important;
+}
+
+:deep(.el-table--border .el-table__cell) {
+    border-right: 1px solid var(--lm-border) !important;
+}
+
+:deep(.el-table__row:hover > td.el-table__cell) {
+    background-color: var(--lm-bg-hover) !important;
+}
+
+/* Custom plain text labels for type and status columns */
+.type-text-span,
+.status-text-span {
+    font-size: 13px;
+    font-weight: 600;
+    font-family: var(--lm-font-sans);
+}
+
+/* Type colors mapping from getMemoryTagType classes */
+.type-text-span.success {
+    color: var(--lm-success);
+}
+.type-text-span.info {
+    color: var(--lm-text-secondary);
+}
+.type-text-span.warning {
+    color: var(--lm-warning);
+}
+.type-text-span.danger {
+    color: var(--lm-danger);
+}
+.type-text-span.identity {
+    color: var(--lm-primary); /* Empty mapping, fallback to primary */
+}
+.type-text-span:not(.success):not(.info):not(.warning):not(.danger) {
+    color: var(--lm-primary);
+}
+
+/* Status colors mapping */
+.status-text-span.active {
+    color: var(--lm-success);
+}
+.status-text-span.archived {
+    color: var(--lm-text-tertiary);
+}
+
+/* Tag colors */
+:deep(.el-tag) {
+    border-radius: 3px !important;
+    font-weight: 500 !important;
+    font-size: 11px !important;
+    font-family: var(--lm-font-mono);
+    padding: 2px 6px !important;
+    height: auto !important;
+    line-height: 1.2 !important;
+    border: 1px solid currentColor !important;
+}
+
+:deep(.el-tag--plain.el-tag--info) {
+    background-color: var(--lm-bg-secondary) !important;
+    border-color: var(--lm-border) !important;
+    color: var(--lm-text-secondary) !important;
+}
+
+.tab-pane-content {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    flex: 1;
+    min-height: 0;
+}
+
+/* Pagination */
+.pagination-container {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 20px;
+    margin-top: auto;
+    border-top: 1px solid var(--lm-border);
+    background-color: transparent;
+}
+
+.pagination-container :deep(.el-pagination) {
+    gap: 12px;
+}
+
+.pagination-container :deep(.el-pagination__sizes) {
+    margin-right: 16px;
+}
+
+.pagination-container :deep(.el-pagination__jump) {
+    margin-left: 16px;
+}
+
+:deep(.el-pagination button),
+:deep(.el-pagination .el-pager li) {
+    background-color: var(--lm-bg-primary) !important;
+    border: 1px solid var(--lm-border) !important;
+    color: var(--lm-text-secondary) !important;
+    border-radius: 4px !important;
+    font-family: var(--lm-font-mono) !important;
+    font-size: 12px !important;
+    min-width: 28px !important;
+    height: 28px !important;
+    line-height: 26px !important;
+    margin: 0 2px !important;
+    transition: all 150ms ease !important;
+}
+
+:deep(.el-pagination button:hover),
+:deep(.el-pagination .el-pager li:hover) {
+    border-color: var(--lm-border-hover) !important;
+    color: var(--lm-text-primary) !important;
+    background-color: var(--lm-bg-hover) !important;
+}
+
+:deep(.el-pagination .el-pager li.is-active) {
+    background-color: var(--lm-primary) !important;
+    border-color: var(--lm-primary) !important;
+    color: #ffffff !important;
+}

@@ -161,20 +161,29 @@ export interface PageResult<T> {
     total: number
 }
 
+export type MemoryFacetStatus = MemoryEntryStatus | 'all'
+
+export interface MemoryListFacets {
+    statuses: Record<MemoryFacetStatus, number>
+    types: Record<MemoryFacetStatus, Record<MemoryEntryType, number>>
+}
+
+export interface MemoryListResult extends PageResult<MemoryEntryRecord> {
+    facets: MemoryListFacets
+}
+
 declare module '@koishijs/client' {
     interface Events {
         'living-memory/listPresetIds': () => string[]
         'living-memory/getStatus': () => MemoryServiceStatus
-        'living-memory/listMemories': (
-            query: {
-                presetId: string
-                type?: MemoryEntryType
-                status?: MemoryEntryStatus | 'all'
-                keyword?: string
-                page?: number
-                pageSize?: number
-            }
-        ) => PageResult<MemoryEntryRecord>
+        'living-memory/listMemories': (query: {
+            presetId: string
+            type?: MemoryEntryType
+            status?: MemoryEntryStatus | 'all'
+            keyword?: string
+            page?: number
+            pageSize?: number
+        }) => MemoryListResult
         'living-memory/getMemory': (
             memoryId: string
         ) => MemoryEntryRecord | undefined
@@ -189,44 +198,32 @@ declare module '@koishijs/client' {
             memoryId: string,
             patch: Partial<MemoryMutationInput>
         ) => { success: true }
-        'living-memory/deleteMemory': (
-            memoryId: string
-        ) => { success: true }
-        'living-memory/listSnapshots': (
-            query: {
-                presetId: string
-                conversationId?: string
-                page?: number
-                pageSize?: number
-            }
-        ) => PageResult<MemorySnapshotRecord>
-        'living-memory/deleteSnapshot': (
-            snapshotId: string
-        ) => { success: true }
-        'living-memory/listJobs': (
-            query: {
-                presetId: string
-                kind?: string
-                status?: string
-                page?: number
-                pageSize?: number
-            }
-        ) => PageResult<MemoryJobRecord>
-        'living-memory/listUserProfiles': (
-            query: {
-                presetId: string
-                page?: number
-                pageSize?: number
-            }
-        ) => PageResult<UserProfileRecord>
-        'living-memory/deleteUserProfile': (
-            profileId: string
-        ) => { success: true }
-        'living-memory/runDream': (
+        'living-memory/deleteMemory': (memoryId: string) => { success: true }
+        'living-memory/listSnapshots': (query: {
             presetId: string
-        ) => DreamTriggerResult
-        'living-memory/clearPresetData': (
+            conversationId?: string
+            page?: number
+            pageSize?: number
+        }) => PageResult<MemorySnapshotRecord>
+        'living-memory/deleteSnapshot': (snapshotId: string) => {
+            success: true
+        }
+        'living-memory/listJobs': (query: {
             presetId: string
-        ) => { success: true }
+            kind?: string
+            status?: string
+            page?: number
+            pageSize?: number
+        }) => PageResult<MemoryJobRecord>
+        'living-memory/listUserProfiles': (query: {
+            presetId: string
+            page?: number
+            pageSize?: number
+        }) => PageResult<UserProfileRecord>
+        'living-memory/deleteUserProfile': (profileId: string) => {
+            success: true
+        }
+        'living-memory/runDream': (presetId: string) => DreamTriggerResult
+        'living-memory/clearPresetData': (presetId: string) => { success: true }
     }
 }

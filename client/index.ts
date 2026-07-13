@@ -1,16 +1,16 @@
 import { Context, icons } from '@koishijs/client'
 import type {} from './types'
-import Dashboard from './dashboard.vue'
-import TreeOfLife from './icons/tree-of-life.vue'
+import dashboard from './dashboard.vue'
+import treeOfLife from './icons/tree-of-life.vue'
 
-icons.register('living-memory-tree', TreeOfLife)
+icons.register('living-memory-tree', treeOfLife)
 
 export default (ctx: Context) => {
     ctx.page({
         name: 'Living Memory',
         path: '/chatluna-livingmemory',
         icon: 'living-memory-tree',
-        component: Dashboard,
+        component: dashboard,
         order: 500,
         authority: 3
     })

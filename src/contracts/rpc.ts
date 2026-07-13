@@ -1,6 +1,7 @@
 import type {
     MemoryEntryRecord,
     MemoryEntryStatus,
+    MemoryEntryType,
     MemoryJobRecord,
     MemoryJobStatus,
     MemoryMutationInput,
@@ -43,6 +44,17 @@ export interface PageResult<T> {
     total: number
 }
 
+export type MemoryFacetStatus = MemoryEntryStatus | 'all'
+
+export interface MemoryListFacets {
+    statuses: Record<MemoryFacetStatus, number>
+    types: Record<MemoryFacetStatus, Record<MemoryEntryType, number>>
+}
+
+export interface MemoryListResult extends PageResult<MemoryEntryRecord> {
+    facets: MemoryListFacets
+}
+
 export interface CreateMemoryRequest {
     conversationId: string
     presetId: string
@@ -56,7 +68,7 @@ export interface LivingMemoryConsoleEvents {
     'living-memory/getStatus': () => Promise<MemoryServiceStatus>
     'living-memory/listMemories': (
         query: MemoryListQuery
-    ) => Promise<PageResult<MemoryEntryRecord>>
+    ) => Promise<MemoryListResult>
     'living-memory/getMemory': (
         memoryId: string
     ) => Promise<MemoryEntryRecord | undefined>

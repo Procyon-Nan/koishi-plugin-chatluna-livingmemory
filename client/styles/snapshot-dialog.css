@@ -1,0 +1,149 @@
+/* Snapshot dialog detail contents */
+.snapshot-dialog-meta {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+    padding: 14px;
+    border: 1px solid var(--lm-border);
+    border-radius: 4px;
+    background-color: var(--lm-bg-secondary);
+}
+
+@media (max-width: 768px) {
+    .snapshot-dialog-meta {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+.snapshot-dialog-meta > div {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.snapshot-dialog-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--lm-text-tertiary) !important;
+    font-family: var(--lm-font-mono);
+}
+
+.snapshot-dialog-meta span:last-child {
+    font-family: var(--lm-font-mono);
+    font-size: 12px;
+    color: var(--lm-text-primary) !important;
+}
+
+.snapshot-dialog-query {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--lm-border);
+    padding-top: 8px;
+    margin-top: 4px;
+}
+
+.snapshot-dialog-query span:last-child {
+    font-family: var(--lm-font-mono) !important;
+    font-size: 12px !important;
+    line-height: 1.4 !important;
+}
+
+.snapshot-memory-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.snapshot-agentic-item {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.snapshot-final-text {
+    padding: 12px;
+    border-radius: 4px;
+    background-color: var(--lm-bg-secondary);
+    color: var(--lm-text-primary) !important;
+    white-space: pre-wrap;
+    line-height: 1.7;
+}
+
+.snapshot-tool-summary,
+.snapshot-match-texts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    color: var(--lm-text-tertiary) !important;
+    font-size: 12px !important;
+    font-family: var(--lm-font-mono);
+}
+
+.snapshot-memory-item {
+    border: 1px solid var(--lm-border) !important;
+    border-radius: 4px !important;
+    background-color: var(--lm-bg-primary) !important;
+    padding: 14px !important;
+    display: flex;
+    flex-direction: column;
+    gap: 10px !important;
+}
+
+.snapshot-memory-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-bottom: 1px dashed var(--lm-border);
+    padding-bottom: 8px;
+}
+
+.snapshot-memory-id {
+    font-family: var(--lm-font-mono);
+    font-weight: 600;
+    color: var(--lm-text-secondary) !important;
+    font-size: 12px;
+}
+
+.snapshot-memory-score {
+    margin-left: auto;
+    font-family: var(--lm-font-mono);
+    color: var(--lm-primary) !important;
+    font-size: 12px !important;
+    font-weight: 600;
+}
+
+.snapshot-memory-content {
+    font-size: 13px !important;
+    line-height: 1.5 !important;
+    color: var(--lm-text-primary) !important;
+}
+
+.snapshot-memory-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px !important;
+    font-size: 11px !important;
+    color: var(--lm-text-tertiary) !important;
+    font-family: var(--lm-font-mono);
+}
+
+.snapshot-memory-summary {
+    font-size: 12px !important;
+    background-color: var(--lm-bg-secondary) !important;
+    border-left: 2px solid var(--lm-primary);
+    padding: 6px 10px !important;
+    color: var(--lm-text-secondary) !important;
+    border-radius: 0 4px 4px 0;
+}
+
+.snapshot-memory-keywords {
+    margin-top: 2px;
+}
+
+.snapshot-memory-missing {
+    color: var(--lm-danger);
+    font-size: 12px;
+    font-family: var(--lm-font-mono);
+}

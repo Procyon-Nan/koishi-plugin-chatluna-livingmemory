@@ -32,13 +32,19 @@ tree whenever architecture, data contracts, or workflow boundaries change.
   override.
 - `src/plugins/webui.ts` is the console RPC boundary. Keep it synchronized with
   `src/contracts/rpc.ts`, `src/integrations/koishi-augmentations.ts`,
-  `client/api.ts`, and `client/dashboard.vue`.
+  `client/api.ts`, `client/types.ts`, and the affected dashboard component.
 - `src/plugins/living_memory_tools.ts` registers the model-facing
   living-memory tools with ChatLuna, including `living_memory_search` and
   `living_memory_get_messages`.
-- `client/api.ts`, `client/types.ts`, and `client/dashboard.vue` implement the
-  WebUI surface for memories, user profiles, snapshots, jobs, Dream execution,
-  and preset data cleanup.
+- `client/dashboard.vue` is the WebUI shell for preset selection, warnings,
+  global actions, tabs, and cross-tab refresh coordination.
+- `client/components/` owns the memories, user profiles, snapshots, and jobs
+  tabs plus memory-editor and snapshot-detail dialogs.
+- `client/composables/` owns client-side paged-resource and memory-list state;
+  `client/utils/display.ts` owns shared display-only formatters and labels.
+- `client/styles/` owns scoped dashboard, tab, card, table, and dialog styles.
+- `client/api.ts` and `client/types.ts` own the client RPC wrappers and local
+  browser-safe contract mirror.
 - `src/service/app/living_memory_service.ts` is the service facade. It
   constructs the repository, retriever, extractor, recall query builder,
   agentic recall executor, user profile service, Dream service, job tracker,
@@ -187,7 +193,10 @@ tree whenever architecture, data contracts, or workflow boundaries change.
 - Any console RPC change must update all affected surfaces together:
   `src/contracts/rpc.ts`, `src/integrations/koishi-augmentations.ts`,
   `src/plugins/webui.ts`, and the corresponding `client/api.ts`,
-  `client/types.ts`, or `client/dashboard.vue` surface.
+  `client/types.ts`, component, or composable surface.
+- Memory list RPC responses include preset-wide status/type facets computed
+  before query pagination. Do not restore client-side pseudo-full-list requests
+  for filter counts.
 - Any memory mutation that changes content, summary, or keywords must preserve
   embedding invalidation behavior so stale cached vectors are recomputed on
   demand.
@@ -246,7 +255,7 @@ tree whenever architecture, data contracts, or workflow boundaries change.
   injection paths separate; do not assume one event payload shape applies to the
   other.
 - For WebUI work, keep server RPCs, client API wrappers, Vue state, pagination,
-  and type declarations in sync.
+  type declarations, tab component refresh behavior, and scoped styles in sync.
 
 ## Verification
 

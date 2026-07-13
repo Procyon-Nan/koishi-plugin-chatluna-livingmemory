@@ -1,0 +1,628 @@
+/* Define global/local variables on body for seamless teleported component styles */
+.living-memory-dashboard.lm-theme-light {
+    --lm-bg-primary: #ffffff;
+    --lm-bg-secondary: #f8f9fa;
+    --lm-bg-hover: #f1f3f5;
+    --lm-border: #e9ecef;
+    --lm-border-hover: #dee2e6;
+    --lm-text-primary: #212529;
+    --lm-text-secondary: #495057;
+    --lm-text-tertiary: #868e96;
+    --lm-primary: #2563eb;
+    --lm-primary-hover: #1d4ed8;
+    --lm-primary-light: #eff6ff;
+    --lm-success: #10b981;
+    --lm-success-light: #ecfdf5;
+    --lm-warning: #f59e0b;
+    --lm-warning-light: #fefbeb;
+    --lm-danger: #ef4444;
+    --lm-danger-light: #fef2f2;
+    --lm-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.02);
+    --lm-font-sans:
+        -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+        Arial, sans-serif;
+    --lm-font-mono:
+        ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+    /* Element Plus Overrides mapping */
+    --el-color-primary: var(--lm-primary) !important;
+    --el-color-success: var(--lm-success) !important;
+    --el-color-warning: var(--lm-warning) !important;
+    --el-color-danger: var(--lm-danger) !important;
+    --el-text-color-primary: var(--lm-text-primary) !important;
+    --el-text-color-regular: var(--lm-text-secondary) !important;
+    --el-text-color-secondary: var(--lm-text-tertiary) !important;
+    --el-border-color: var(--lm-border) !important;
+    --el-border-color-light: var(--lm-border) !important;
+    --el-border-color-lighter: var(--lm-border) !important;
+    --el-fill-color-blank: var(--lm-bg-primary) !important;
+    --el-bg-color: var(--lm-bg-primary) !important;
+    --el-bg-color-overlay: var(--lm-bg-primary) !important;
+}
+
+.living-memory-dashboard.lm-theme-dark {
+    --lm-bg-primary: #18181b;
+    --lm-bg-secondary: #09090b;
+    --lm-bg-hover: #27272a;
+    --lm-border: #27272a;
+    --lm-border-hover: #3f3f46;
+    --lm-text-primary: #f4f4f5;
+    --lm-text-secondary: #a1a1aa;
+    --lm-text-tertiary: #71717a;
+    --lm-primary: #3b82f6;
+    --lm-primary-hover: #60a5fa;
+    --lm-primary-light: rgba(59, 130, 246, 0.1);
+    --lm-success: #10b981;
+    --lm-success-light: rgba(16, 185, 129, 0.1);
+    --lm-warning: #f59e0b;
+    --lm-warning-light: rgba(245, 158, 11, 0.1);
+    --lm-danger: #ef4444;
+    --lm-danger-light: rgba(239, 68, 68, 0.1);
+    --lm-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+    --lm-font-sans:
+        -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+        Arial, sans-serif;
+    --lm-font-mono:
+        ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+    /* Element Plus Overrides mapping */
+    --el-color-primary: var(--lm-primary) !important;
+    --el-color-success: var(--lm-success) !important;
+    --el-color-warning: var(--lm-warning) !important;
+    --el-color-danger: var(--lm-danger) !important;
+    --el-text-color-primary: var(--lm-text-primary) !important;
+    --el-text-color-regular: var(--lm-text-secondary) !important;
+    --el-text-color-secondary: var(--lm-text-tertiary) !important;
+    --el-border-color: var(--lm-border) !important;
+    --el-border-color-light: var(--lm-border) !important;
+    --el-border-color-lighter: var(--lm-border) !important;
+    --el-fill-color-blank: var(--lm-bg-primary) !important;
+    --el-bg-color: var(--lm-bg-primary) !important;
+    --el-bg-color-overlay: var(--lm-bg-primary) !important;
+}
+
+/* Also define custom variables for Dialogs, mapped locally per dialog element state */
+:global(.lm-dialog.lm-theme-light) {
+    --lm-bg-primary: #ffffff;
+    --lm-bg-secondary: #f8f9fa;
+    --lm-bg-hover: #f1f3f5;
+    --lm-border: #e9ecef;
+    --lm-border-hover: #dee2e6;
+    --lm-text-primary: #212529;
+    --lm-text-secondary: #495057;
+    --lm-text-tertiary: #868e96;
+    --lm-primary: #2563eb;
+    --lm-primary-hover: #1d4ed8;
+    --lm-primary-light: #eff6ff;
+    --lm-success: #10b981;
+    --lm-success-light: #ecfdf5;
+    --lm-warning: #f59e0b;
+    --lm-warning-light: #fefbeb;
+    --lm-danger: #ef4444;
+    --lm-danger-light: #fef2f2;
+    --lm-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.02);
+    --lm-font-sans:
+        -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+        Arial, sans-serif;
+    --lm-font-mono:
+        ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+    --el-color-primary: var(--lm-primary) !important;
+    --el-text-color-primary: var(--lm-text-primary) !important;
+    --el-text-color-regular: var(--lm-text-secondary) !important;
+    --el-border-color: var(--lm-border) !important;
+    --el-border-color-light: var(--lm-border) !important;
+    --el-border-color-lighter: var(--lm-border) !important;
+    --el-fill-color-blank: var(--lm-bg-primary) !important;
+    --el-bg-color: var(--lm-bg-primary) !important;
+    --el-bg-color-overlay: var(--lm-bg-primary) !important;
+}
+
+:global(.lm-dialog.lm-theme-dark) {
+    --lm-bg-primary: #18181b;
+    --lm-bg-secondary: #09090b;
+    --lm-bg-hover: #27272a;
+    --lm-border: #27272a;
+    --lm-border-hover: #3f3f46;
+    --lm-text-primary: #f4f4f5;
+    --lm-text-secondary: #a1a1aa;
+    --lm-text-tertiary: #71717a;
+    --lm-primary: #3b82f6;
+    --lm-primary-hover: #60a5fa;
+    --lm-primary-light: rgba(59, 130, 246, 0.1);
+    --lm-success: #10b981;
+    --lm-success-light: rgba(16, 185, 129, 0.1);
+    --lm-warning: #f59e0b;
+    --lm-warning-light: rgba(245, 158, 11, 0.1);
+    --lm-danger: #ef4444;
+    --lm-danger-light: rgba(239, 68, 68, 0.1);
+    --lm-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+    --lm-font-sans:
+        -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+        Arial, sans-serif;
+    --lm-font-mono:
+        ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+    --el-color-primary: var(--lm-primary) !important;
+    --el-text-color-primary: var(--lm-text-primary) !important;
+    --el-text-color-regular: var(--lm-text-secondary) !important;
+    --el-border-color: var(--lm-border) !important;
+    --el-border-color-light: var(--lm-border) !important;
+    --el-border-color-lighter: var(--lm-border) !important;
+    --el-fill-color-blank: var(--lm-bg-primary) !important;
+    --el-bg-color: var(--lm-bg-primary) !important;
+    --el-bg-color-overlay: var(--lm-bg-primary) !important;
+}
+
+/* Base styles styling */
+.living-memory-dashboard {
+    height: 100%;
+    background-color: var(--lm-bg-secondary) !important;
+    color: var(--lm-text-primary);
+    font-family: var(--lm-font-sans);
+    transition:
+        background-color 150ms ease,
+        color 150ms ease;
+}
+
+.living-memory-dashboard :deep(.layout-main) {
+    overflow-y: auto;
+    background-color: transparent !important;
+}
+
+.living-memory-dashboard :deep(.layout-content) {
+    overflow-y: auto;
+}
+
+.dashboard-shell {
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    overflow-y: auto;
+}
+
+/* Card layout wrapper */
+:deep(.el-card) {
+    background-color: var(--lm-bg-primary) !important;
+    border: 1px solid var(--lm-border) !important;
+    border-radius: 6px !important;
+    box-shadow: var(--lm-shadow) !important;
+    transition:
+        border-color 150ms ease,
+        box-shadow 150ms ease;
+}
+
+:deep(.el-card__header) {
+    border-bottom: 1px solid var(--lm-border) !important;
+    padding: 12px 20px !important;
+    background-color: var(--lm-bg-primary) !important;
+}
+
+/* Toolbar Header style */
+.toolbar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+}
+
+.toolbar-title {
+    font-family: var(--lm-font-mono);
+    font-weight: 700;
+    font-size: 16px;
+    letter-spacing: 0.05em;
+    color: var(--lm-text-primary);
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.toolbar-title::before {
+    content: '';
+    display: inline-block;
+    width: 4px;
+    height: 16px;
+    background-color: var(--lm-primary);
+    border-radius: 2px;
+}
+
+/* Grid parameters */
+.toolbar-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+}
+
+@media (min-width: 768px) {
+    .toolbar-grid {
+        grid-template-columns: 1fr auto;
+        align-items: center;
+    }
+}
+
+.filter-group-horizontal {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+}
+
+.field-label-inline {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--lm-text-tertiary);
+    font-family: var(--lm-font-mono);
+    white-space: nowrap;
+}
+
+.preset-select {
+    max-width: 240px;
+}
+
+/* Dashboard content */
+.dashboard-body-layout {
+    display: flex;
+    flex: 1;
+    min-height: 500px;
+    height: calc(100vh - 220px);
+}
+
+@media (max-width: 1024px) {
+    .dashboard-body-layout {
+        height: auto;
+    }
+}
+
+/* Custom Overrides for Input & Selects */
+:deep(.el-input__wrapper),
+:deep(.el-select .el-input__wrapper),
+:global(.lm-dialog .el-input__wrapper),
+:global(.lm-dialog .el-textarea__inner) {
+    background-color: var(--lm-bg-secondary) !important;
+    border: 1px solid var(--lm-border) !important;
+    box-shadow: none !important;
+    border-radius: 4px !important;
+    padding: 4px 12px !important;
+    color: var(--lm-text-primary) !important;
+    transition:
+        border-color 150ms ease,
+        background-color 150ms ease;
+}
+
+:deep(.el-input__wrapper:hover),
+:deep(.el-select .el-input__wrapper:hover),
+:deep(.el-input__wrapper.is-focus),
+:deep(.el-select .el-input__wrapper.is-focus),
+:global(.lm-dialog .el-input__wrapper:hover),
+:global(.lm-dialog .el-textarea__inner:hover),
+:global(.lm-dialog .el-input__wrapper.is-focus),
+:global(.lm-dialog .el-textarea__inner:focus) {
+    border-color: var(--lm-border-hover) !important;
+    background-color: var(--lm-bg-primary) !important;
+}
+
+:deep(.el-input__inner),
+:global(.lm-dialog .el-input__inner),
+:global(.lm-dialog .el-textarea__inner) {
+    color: var(--lm-text-primary) !important;
+    font-family: var(--lm-font-sans);
+    font-size: 13px !important;
+}
+
+:deep(.el-input__inner::placeholder),
+:global(.lm-dialog .el-input__inner::placeholder) {
+    color: var(--lm-text-tertiary) !important;
+}
+
+:deep(.el-select),
+:deep(.el-input) {
+    width: 100% !important;
+}
+
+/* Dialog & Dropdown Theme Sync (Fixes transparent dropdown backgrounds) */
+:global(.lm-select-popper.lm-theme-light),
+:global(.lm-select-popper.lm-theme-light .el-select-dropdown),
+:global(.lm-select-popper.lm-theme-light .el-select-dropdown__wrap),
+:global(.lm-select-popper.lm-theme-light .el-select-dropdown__list) {
+    background-color: #ffffff !important;
+    border: 1px solid #e9ecef !important;
+    color: #212529 !important;
+}
+
+:global(.lm-select-popper.lm-theme-dark),
+:global(.lm-select-popper.lm-theme-dark .el-select-dropdown),
+:global(.lm-select-popper.lm-theme-dark .el-select-dropdown__wrap),
+:global(.lm-select-popper.lm-theme-dark .el-select-dropdown__list) {
+    background-color: #18181b !important;
+    border: 1px solid #27272a !important;
+    color: #f4f4f5 !important;
+}
+
+:global(.lm-select-popper .el-select-dropdown__item) {
+    color: var(--lm-text-secondary) !important;
+}
+
+:global(.lm-select-popper .el-select-dropdown__item.is-hovering),
+:global(.lm-select-popper .el-select-dropdown__item:hover) {
+    background-color: var(--lm-bg-hover) !important;
+    color: var(--lm-text-primary) !important;
+}
+
+:global(.lm-select-popper .el-select-dropdown__item.is-selected) {
+    color: var(--lm-primary) !important;
+    background-color: var(--lm-primary-light) !important;
+    font-weight: bold;
+}
+
+/* Button overrides */
+:deep(.el-button),
+:global(.lm-dialog .el-button) {
+    border-radius: 4px !important;
+    font-weight: 500 !important;
+    font-family: var(--lm-font-sans);
+    padding: 8px 16px !important;
+    font-size: 13px !important;
+    transition: all 150ms ease !important;
+    box-shadow: none !important;
+}
+
+:deep(.el-button--default),
+:global(.lm-dialog .el-button--default) {
+    background-color: var(--lm-bg-primary) !important;
+    border: 1px solid var(--lm-border) !important;
+    color: var(--lm-text-secondary) !important;
+}
+
+:deep(.el-button--default:hover),
+:global(.lm-dialog .el-button--default:hover) {
+    background-color: var(--lm-bg-hover) !important;
+    color: var(--lm-text-primary) !important;
+    border-color: var(--lm-border-hover) !important;
+}
+
+:deep(.el-button--primary),
+:global(.lm-dialog .el-button--primary) {
+    background-color: var(--lm-primary) !important;
+    border: 1px solid var(--lm-primary) !important;
+    color: #ffffff !important;
+}
+
+:deep(.el-button--primary:hover),
+:global(.lm-dialog .el-button--primary:hover) {
+    background-color: var(--lm-primary-hover) !important;
+    border-color: var(--lm-primary-hover) !important;
+    color: #ffffff !important;
+}
+
+:deep(.el-button--danger),
+:global(.lm-dialog .el-button--danger) {
+    background-color: var(--lm-danger) !important;
+    border: 1px solid var(--lm-danger) !important;
+    color: #ffffff !important;
+}
+
+:deep(.el-button--danger.is-plain) {
+    background-color: var(--lm-danger-light) !important;
+    border: 1px solid var(--lm-danger) !important;
+    color: var(--lm-danger) !important;
+}
+
+:deep(.el-button--danger.is-plain:hover) {
+    background-color: var(--lm-danger) !important;
+    color: #ffffff !important;
+}
+
+:deep(.el-button.is-disabled),
+:global(.lm-dialog .el-button.is-disabled) {
+    background-color: var(--lm-bg-secondary) !important;
+    border-color: var(--lm-border) !important;
+    color: var(--lm-text-tertiary) !important;
+    opacity: 0.6;
+}
+
+/* Prevent layout shifts when loading is active on the refresh button */
+.refresh-btn-wrapper {
+    display: inline-flex;
+    width: 68px; /* Fixed width matching the exact size of the refresh button */
+    height: 32px;
+}
+
+.refresh-btn-wrapper :deep(.refresh-button) {
+    width: 100% !important;
+    padding: 0 !important;
+    justify-content: center;
+    align-items: center;
+}
+
+.toolbar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+}
+
+/* Warnings */
+.config-warning-banner {
+    border-radius: 6px !important;
+    border: 1px solid var(--lm-warning) !important;
+    background-color: var(--lm-warning-light) !important;
+    color: var(--lm-text-primary) !important;
+}
+
+.config-warning-list {
+    margin: 4px 0 0;
+    padding-left: 20px;
+}
+
+.config-warning-list li + li {
+    margin-top: 4px;
+}
+
+/* Tab Header & Custom Styling inside consolidated main card */
+.main-content-card {
+    border-radius: 6px !important;
+    display: flex;
+    flex-direction: column;
+}
+
+.main-content-card :deep(.el-card__header) {
+    display: none;
+}
+
+.main-content-card :deep(.el-card__body) {
+    padding: 0 20px 20px 20px !important;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+.card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--lm-text-primary);
+    font-family: var(--lm-font-sans);
+}
+
+.custom-tabs {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+.custom-tabs :deep(.el-tabs__header) {
+    margin: 0 0 20px 0 !important;
+    border-bottom: 1px solid var(--lm-border) !important;
+}
+
+.custom-tabs :deep(.el-tabs__nav-wrap) {
+    width: 100%;
+}
+
+.custom-tabs :deep(.el-tabs__nav-wrap::after) {
+    display: none !important;
+}
+
+.custom-tabs :deep(.el-tabs__item) {
+    font-family: var(--lm-font-sans) !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    color: var(--lm-text-secondary) !important;
+    height: 52px !important;
+    line-height: 52px !important;
+}
+
+.custom-tabs :deep(.el-tabs__item.is-active) {
+    color: var(--lm-primary) !important;
+}
+
+.custom-tabs :deep(.el-tabs__nav) {
+    height: 52px !important;
+}
+
+.custom-tabs :deep(.el-tabs__active-bar) {
+    bottom: 0 !important;
+}
+
+.custom-tabs :deep(.el-tabs__content) {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    margin-top: 0px;
+}
+
+.custom-tabs :deep(.el-tab-pane) {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+.tab-label-container {
+    font-family: var(--lm-font-sans) !important;
+    font-weight: 600 !important;
+    display: inline-flex;
+    align-items: center;
+}
+
+.tab-badge {
+    font-family: var(--lm-font-mono);
+    font-size: 10px;
+    padding: 1px 5px;
+    border-radius: 8px;
+    background-color: var(--lm-bg-hover);
+    color: var(--lm-text-tertiary);
+    margin-left: 6px;
+    border: 1px solid var(--lm-border);
+    font-weight: normal;
+    line-height: 1.2;
+    transition: all 120ms ease;
+}
+
+.custom-tabs :deep(.el-tabs__item.is-active) .tab-badge {
+    background-color: var(--lm-primary-light);
+    color: var(--lm-primary);
+    border-color: var(--lm-primary);
+}
+
+/* Dialog layout styling */
+:global(.lm-dialog) {
+    border-radius: 6px !important;
+    overflow: hidden;
+    box-shadow: var(--lm-shadow) !important;
+    background-color: var(--lm-bg-primary) !important;
+}
+
+:global(.lm-dialog .el-dialog__header) {
+    border-bottom: 1px solid var(--lm-border) !important;
+    padding: 16px 20px !important;
+    margin-right: 0 !important;
+    background-color: var(--lm-bg-primary) !important;
+}
+
+:global(.lm-dialog .el-dialog__title) {
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    color: var(--lm-text-primary) !important;
+    font-family: var(--lm-font-sans);
+}
+
+:global(.lm-dialog .el-dialog__body) {
+    padding: 20px !important;
+    background-color: var(--lm-bg-primary) !important;
+    color: var(--lm-text-primary) !important;
+}
+
+:global(.lm-dialog .el-dialog__footer) {
+    border-top: 1px solid var(--lm-border) !important;
+    padding: 12px 20px !important;
+    background-color: var(--lm-bg-secondary) !important;
+}
+
+:global(.lm-dialog-overlay) {
+    background-color: rgba(0, 0, 0, 0.4) !important;
+    backdrop-filter: blur(1px);
+}
+
+/* Form items in Dialogs */
+:global(.lm-dialog .el-form-item) {
+    margin-bottom: 16px !important;
+}
+
+:global(.lm-dialog .el-form-item__label) {
+    color: var(--lm-text-secondary) !important;
+    font-size: 13px !important;
+}
+
+.main-content-card {
+    width: 100%;
+    height: 100%;
+}
