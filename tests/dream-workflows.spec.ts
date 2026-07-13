@@ -84,14 +84,30 @@ const completeDreamOperation = (
     }
 })
 
+const completeDreamMergeOperation = (
+    targetMemoryId: string,
+    sourceMemoryIds: string[]
+): DreamOperation => ({
+    action: 'merge',
+    targetMemoryId,
+    sourceMemoryIds,
+    memory: {
+        type: 'fact',
+        content: 'merged content',
+        summary: 'merged summary',
+        keywords: ['merged'],
+        sentiment: 'neutral',
+        importance: 0.9
+    }
+})
+
 it('enforces Dream stage actions and touched-memory guards', async () => {
     const updates: Partial<MemoryEntryRecord>[] = []
     const repository: DreamExecutorRepository = {
-        deleteMemory: async () => {},
         updateMemory: async (_id, patch) => {
             updates.push(patch)
         },
-        updateMemorySourceOrigins: async () => {}
+        applyDreamMerge: async () => {}
     }
     const executor = new DreamExecutor(repository)
     const entry = createMemoryEntry('memory-1')
@@ -122,6 +138,125 @@ it('enforces Dream stage actions and touched-memory guards', async () => {
     assert.equal(repeatedUpdate.updated, 1)
     assert.equal(repeatedUpdate.skipped, 1)
     assert.equal(updates.length, 1)
+})
+
+it('delegates each Dream merge to one atomic repository operation', async () => {
+    const mergeInputs: Parameters<
+        DreamExecutorRepository['applyDreamMerge']
+    >[0][] = []
+    const repository: DreamExecutorRepository = {
+        updateMemory: async () => {},
+        applyDreamMerge: async (input) => {
+            mergeInputs.push(input)
+        }
+    }
+    const executor = new DreamExecutor(repository)
+    const activeEntries = [
+        createMemoryEntry('target-active'),
+        createMemoryEntry('source-active-1'),
+        createMemoryEntry('source-active-2')
+    ]
+    const activeTouched = new Set<string>()
+    const activeResult = await executor.executeOperations(
+        'active',
+        { id: 'active-cluster', reason: 'test', entries: activeEntries },
+        [
+            completeDreamMergeOperation('target-active', [
+                'source-active-1',
+                'source-active-2'
+            ])
+        ],
+        activeTouched
+    )
+    const archivedEntries = [
+        createMemoryEntry('target-archived', 'archived'),
+        createMemoryEntry('source-archived-1', 'archived'),
+        createMemoryEntry('source-archived-2', 'archived')
+    ]
+    const archivedTouched = new Set<string>()
+    const archivedResult = await executor.executeOperations(
+        'archived',
+        {
+            id: 'archived-cluster',
+            reason: 'test',
+            entries: archivedEntries
+        },
+        [
+            completeDreamMergeOperation('target-archived', [
+                'source-archived-1',
+                'source-archived-2'
+            ])
+        ],
+        archivedTouched
+    )
+
+    assert.equal(mergeInputs.length, 2)
+    assert.equal(mergeInputs[0]?.sourceDisposition, 'archive')
+    assert.deepEqual(
+        mergeInputs[0]?.sources.map((source) => source.id),
+        [
+        'source-active-1',
+        'source-active-2'
+        ]
+    )
+    assert.equal(mergeInputs[0]?.patch.status, 'active')
+    assert.equal(mergeInputs[1]?.sourceDisposition, 'delete')
+    assert.equal(mergeInputs[1]?.patch.status, 'archived')
+    assert.deepEqual(activeResult, {
+        kept: 0,
+        merged: 1,
+        updated: 0,
+        archived: 2,
+        deleted: 0,
+        skipped: 0
+    })
+    assert.deepEqual(archivedResult, {
+        kept: 0,
+        merged: 1,
+        updated: 0,
+        archived: 0,
+        deleted: 2,
+        skipped: 0
+    })
+    assert.deepEqual([...activeTouched].sort(), [
+        'source-active-1',
+        'source-active-2',
+        'target-active'
+    ])
+    assert.deepEqual([...archivedTouched].sort(), [
+        'source-archived-1',
+        'source-archived-2',
+        'target-archived'
+    ])
+})
+
+it('does not touch merge state when the atomic repository write fails', async () => {
+    const repository: DreamExecutorRepository = {
+        updateMemory: async () => {},
+        applyDreamMerge: async () => {
+            throw new Error('merge write failed')
+        }
+    }
+    const executor = new DreamExecutor(repository)
+    const touchedMemoryIds = new Set(['already-touched'])
+
+    await assert.rejects(
+        executor.executeOperations(
+            'active',
+            {
+                id: 'cluster-1',
+                reason: 'test',
+                entries: [
+                    createMemoryEntry('target'),
+                    createMemoryEntry('source')
+                ]
+            },
+            [completeDreamMergeOperation('target', ['source'])],
+            touchedMemoryIds
+        ),
+        /merge write failed/u
+    )
+    assert.deepEqual([...touchedMemoryIds], ['already-touched'])
 })
 
 it('skips auto Dream when memory growth is below the threshold', async () => {
@@ -188,7 +323,7 @@ it('starts auto Dream when memory growth reaches the threshold', async () => {
     assert.equal(jobStore.jobs.length, 1)
 })
 
-it('clears snapshot cache only when Dream changes memories', async () => {
+it('clears snapshot cache only when successful Dream changes memories', async () => {
     const runDream = async (result: DreamRunResult) => {
         const jobStore = createJobStore()
         const clearedPresets: string[] = []
@@ -226,4 +361,35 @@ it('clears snapshot cache only when Dream changes memories', async () => {
 
     assert.deepEqual(unchanged, [])
     assert.deepEqual(changed, [scope.presetId])
+})
+
+it('clears snapshot cache when Dream fails after possible writes', async () => {
+    const jobStore = createJobStore()
+    const clearedPresets: string[] = []
+    const coordinator = new LivingMemoryDreamCoordinator(
+        {
+            enableAutoDream: false,
+            autoDreamMemoryGrowthThreshold: 3,
+            dreamModel: 'dream-model'
+        },
+        {
+            run: async () => {
+                throw new Error('dream failed')
+            }
+        },
+        createDreamCoordinatorRepository(jobStore),
+        {
+            clearByPreset: (presetId) => {
+                clearedPresets.push(presetId)
+            }
+        },
+        new LivingMemoryJobTracker(jobStore),
+        logger,
+        debug
+    )
+
+    await coordinator.run(scope.presetId)
+    await waitFor(() => jobStore.jobs[0]?.status === 'failed', 'Dream failure')
+
+    assert.deepEqual(clearedPresets, [scope.presetId])
 })

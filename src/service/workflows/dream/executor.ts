@@ -1,9 +1,9 @@
+import type { MemoryEntryRecord } from '../../../contracts/memory'
 import type {
-    MemoryEntryRecord,
-    MemoryMutationInput,
-    MemorySourceOrigin
-} from '../../../contracts/memory'
-import type { ExtractionRepository } from '../../../contracts/workflows'
+    DreamMergeMutation,
+    DreamMergeRepository,
+    ExtractionRepository
+} from '../../../contracts/workflows'
 import {
     normalizeMemoryImportance,
     normalizeMemoryKeywords,
@@ -23,13 +23,11 @@ import { isMemoryEntryType, unique } from './util'
 
 export type DreamExecutorRepository = Pick<
     ExtractionRepository,
-    'deleteMemory' | 'updateMemory'
-> & {
-    updateMemorySourceOrigins(
-        id: string,
-        sourceOrigins: MemorySourceOrigin[]
-    ): Promise<void>
-}
+    'updateMemory'
+> &
+    DreamMergeRepository
+
+type DreamGeneratedMemoryMutation = Omit<DreamMergeMutation, 'status'>
 
 export class DreamExecutor {
     constructor(private readonly repository: DreamExecutorRepository) {}
@@ -241,28 +239,31 @@ export class DreamExecutor {
         const patch = this.sanitizeMemoryPatch(operation.memory)
         this.assertCompleteMetadataForNewContent(operation, patch)
         const sourceOrigins = mergeMemorySourceOrigins([target, ...sources])
+        const sourceMemoryIds = sources.map((source) => source.id)
 
-        await this.repository.updateMemory(
-            target.id,
-            this.prepareStagePatch(stage, patch)
-        )
-        await this.repository.updateMemorySourceOrigins(
-            target.id,
-            sourceOrigins
-        )
+        await this.repository.applyDreamMerge({
+            target: {
+                id: target.id,
+                updatedAt: target.updatedAt
+            },
+            sources: sources.map((source) => ({
+                id: source.id,
+                updatedAt: source.updatedAt
+            })),
+            patch: this.prepareStagePatch(stage, patch),
+            sourceOrigins,
+            sourceDisposition: stage === 'archived' ? 'delete' : 'archive'
+        })
+
         touchedMemoryIds.add(target.id)
+        sourceMemoryIds.forEach((id) => touchedMemoryIds.add(id))
         stats.merged++
 
-        for (const source of sources) {
-            if (stage === 'archived') {
-                await this.repository.deleteMemory(source.id)
-                touchedMemoryIds.add(source.id)
-                mergeDeletedSourceIds.add(source.id)
-                stats.deleted++
-            } else {
-                await this.archiveMemory(source, touchedMemoryIds)
-                stats.archived++
-            }
+        if (stage === 'archived') {
+            sourceMemoryIds.forEach((id) => mergeDeletedSourceIds.add(id))
+            stats.deleted += sourceMemoryIds.length
+        } else {
+            stats.archived += sourceMemoryIds.length
         }
     }
 
@@ -278,8 +279,8 @@ export class DreamExecutor {
 
     private prepareStagePatch(
         stage: DreamStage,
-        patch: Partial<MemoryMutationInput>
-    ): Partial<MemoryMutationInput> {
+        patch: DreamGeneratedMemoryMutation
+    ): DreamMergeMutation {
         if (stage === 'active') {
             return {
                 ...patch,
@@ -295,12 +296,12 @@ export class DreamExecutor {
 
     private sanitizeMemoryPatch(
         memory: Record<string, unknown> | undefined
-    ): Partial<MemoryMutationInput> {
+    ): Partial<DreamGeneratedMemoryMutation> {
         if (memory == null || typeof memory !== 'object') {
             return {}
         }
 
-        const patch: Partial<MemoryMutationInput> = {}
+        const patch: Partial<DreamGeneratedMemoryMutation> = {}
         if (typeof memory.type === 'string' && isMemoryEntryType(memory.type)) {
             patch.type = memory.type
         }
@@ -336,8 +337,8 @@ export class DreamExecutor {
 
     private assertCompleteMetadataForNewContent(
         operation: DreamOperation,
-        patch: Partial<MemoryMutationInput>
-    ) {
+        patch: Partial<DreamGeneratedMemoryMutation>
+    ): asserts patch is DreamGeneratedMemoryMutation {
         if (
             patch.type == null ||
             patch.content == null ||

@@ -11,6 +11,7 @@ import type {
     MemorySnapshotItem,
     MemorySnapshotRecord,
     MemorySourceMessage,
+    MemorySourceOrigin,
     PresetSpeakerInput,
     PresetSpeakerRecord,
     UserProfileInput,
@@ -22,6 +23,33 @@ export interface DreamTriggerResult {
     started: boolean
     reason?: 'preset-locked'
     runningJobId?: string
+}
+
+export interface DreamMergeMutation {
+    type: MemoryEntryType
+    status: MemoryEntryStatus
+    content: string
+    keywords: string[]
+    summary: string
+    sentiment: string
+    importance: number
+}
+
+export interface DreamMergeMemoryVersion {
+    id: string
+    updatedAt: Date
+}
+
+export interface DreamMergeInput {
+    target: DreamMergeMemoryVersion
+    sources: DreamMergeMemoryVersion[]
+    patch: DreamMergeMutation
+    sourceOrigins: MemorySourceOrigin[]
+    sourceDisposition: 'archive' | 'delete'
+}
+
+export interface DreamMergeRepository {
+    applyDreamMerge(input: DreamMergeInput): Promise<void>
 }
 
 export type MemoryConfigWarningCode =

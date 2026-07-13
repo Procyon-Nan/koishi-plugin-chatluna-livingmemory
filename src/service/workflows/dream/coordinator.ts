@@ -166,6 +166,7 @@ export class LivingMemoryDreamCoordinator {
                 this.refreshSnapshotCache(scope.presetId, jobId)
             }
         } catch (error) {
+            this.refreshSnapshotCache(scope.presetId, jobId)
             await this.jobTracker.markFailed(jobId, error)
             throw error
         }

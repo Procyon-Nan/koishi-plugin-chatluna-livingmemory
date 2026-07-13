@@ -157,6 +157,10 @@ tree whenever architecture, data contracts, or workflow boundaries change.
 - Dream merge preserves source-origin groups by combining the target memory
   first, then source memories in operation order. Dream update and archive do
   not change source-origin groups.
+- Each Dream merge is committed through one repository transaction: the target
+  metadata and source origins are updated together with all source archives or
+  deletions. Dream jobs remain non-atomic across separate operations and
+  clusters, so failed jobs clear the preset snapshot cache.
 - Automatic Dream is optional and preset-scoped. When enabled, successful
   memory creation checks how many entries were created for that preset after
   the latest `dream` job; if the configured threshold is reached, it reuses the
@@ -183,6 +187,8 @@ tree whenever architecture, data contracts, or workflow boundaries change.
 - Any memory mutation that changes content, summary, or keywords must preserve
   embedding invalidation behavior so stale cached vectors are recomputed on
   demand.
+- Dream merge writes must use the `applyDreamMerge()` repository capability;
+  do not split target updates and source disposition into independent writes.
 - `clearPresetData()` intentionally clears entries, snapshots, jobs, user
   profiles, preset speakers, and snapshot cache for the preset.
 - Snapshot operations should clear the snapshot cache when deleting or replacing

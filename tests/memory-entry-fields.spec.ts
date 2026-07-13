@@ -101,11 +101,10 @@ it('applies shared field rules to extracted memories', async () => {
 it('applies shared field rules to Dream mutations', async () => {
     let capturedPatch: Partial<MemoryMutationInput> | undefined
     const repository: DreamExecutorRepository = {
-        deleteMemory: async () => {},
         updateMemory: async (_id, patch) => {
             capturedPatch = patch
         },
-        updateMemorySourceOrigins: async () => {}
+        applyDreamMerge: async () => {}
     }
     const executor = new DreamExecutor(repository)
     const now = new Date()

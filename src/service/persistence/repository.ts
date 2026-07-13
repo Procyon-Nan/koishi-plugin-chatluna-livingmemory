@@ -10,13 +10,14 @@ import type {
     MemorySnapshotItem,
     MemorySnapshotRecord,
     MemorySourceMessage,
-    MemorySourceOrigin,
     PresetSpeakerInput,
     PresetSpeakerRecord,
     UserProfileInput,
     UserProfileRecord
 } from '../../contracts/memory'
 import type {
+    DreamMergeInput,
+    DreamMergeRepository,
     ExtractedMemoryItem,
     ExtractionRepository,
     JobRepository,
@@ -54,6 +55,7 @@ export class LivingMemoryRepository
         SnapshotRepository,
         JobRepository,
         ExtractionRepository,
+        DreamMergeRepository,
         UserProfileRepository
 {
     constructor(private readonly ctx: Context) {}
@@ -472,6 +474,126 @@ export class LivingMemoryRepository
             return
         }
 
+        await this.ctx.database.set(
+            'living_memory_entry',
+            { id },
+            {
+                ...this.buildMemoryUpdatePatch(current, patch),
+                updatedAt: new Date()
+            }
+        )
+    }
+
+    async applyDreamMerge(input: DreamMergeInput) {
+        const sourceIds = input.sources.map((source) => source.id)
+        const uniqueSourceIds = [...new Set(sourceIds)]
+        if (
+            uniqueSourceIds.length === 0 ||
+            uniqueSourceIds.length !== sourceIds.length ||
+            uniqueSourceIds.includes(input.target.id)
+        ) {
+            throw new Error('dream merge failed: invalid source ids')
+        }
+
+        const expectedStatus: MemoryEntryRecord['status'] =
+            input.sourceDisposition === 'archive' ? 'active' : 'archived'
+        if (input.patch.status !== expectedStatus) {
+            throw new Error('dream merge failed: stage disposition mismatch')
+        }
+
+        await this.ctx.database.withTransaction(async (database) => {
+            const entries = (
+                await database.get('living_memory_entry', {
+                    id: {
+                        $in: [input.target.id, ...sourceIds]
+                    }
+                })
+            ).map(normalizeEntryRecord)
+            const entryById = new Map(entries.map((entry) => [entry.id, entry]))
+            const target = entryById.get(input.target.id)
+            const expectedSourceUpdatedAtById = new Map(
+                input.sources.map((source) => [source.id, +source.updatedAt])
+            )
+            const sources = sourceIds
+                .map((id) => entryById.get(id))
+                .filter((entry): entry is MemoryEntryRecord => entry != null)
+
+            if (
+                target == null ||
+                target.status !== expectedStatus ||
+                +target.updatedAt !== +input.target.updatedAt ||
+                sources.length !== sourceIds.length ||
+                sources.some(
+                    (source) =>
+                        source.presetId !== target.presetId ||
+                        source.status !== expectedStatus ||
+                        +source.updatedAt !==
+                            expectedSourceUpdatedAtById.get(source.id)
+                )
+            ) {
+                throw new Error(
+                    'dream merge failed: target or source memories changed'
+                )
+            }
+
+            const updatedAt = new Date()
+            const targetResult = await database.set(
+                'living_memory_entry',
+                {
+                    id: target.id,
+                    status: expectedStatus,
+                    updatedAt: input.target.updatedAt
+                },
+                {
+                    ...this.buildMemoryUpdatePatch(target, input.patch),
+                    sourceOrigins: normalizeMemorySourceOrigins(
+                        input.sourceOrigins
+                    ),
+                    updatedAt
+                }
+            )
+            this.assertAffectedCount(targetResult.matched, 1, 'target update')
+
+            const sourceQuery = {
+                $or: input.sources.map((source) => ({
+                    id: source.id,
+                    status: expectedStatus,
+                    updatedAt: source.updatedAt
+                }))
+            }
+            if (input.sourceDisposition === 'archive') {
+                const sourceResult = await database.set(
+                    'living_memory_entry',
+                    sourceQuery,
+                    {
+                        status: 'archived',
+                        updatedAt
+                    }
+                )
+                this.assertAffectedCount(
+                    sourceResult.matched,
+                    sourceIds.length,
+                    'source archive'
+                )
+                return
+            }
+
+            const sourceResult = await database.remove(
+                'living_memory_entry',
+                sourceQuery
+            )
+            this.assertAffectedCount(
+                sourceResult.removed ?? sourceResult.matched,
+                sourceIds.length,
+                'source delete'
+            )
+        })
+    }
+
+    private buildMemoryUpdatePatch(
+        current: MemoryEntryRecord,
+        patch: Partial<MemoryMutationInput>
+    ) {
         const content =
             patch.content === undefined
                 ? current.content
@@ -503,37 +625,30 @@ export class LivingMemoryRepository
             keywords.join(keywordFingerprintSeparator) !==
                 current.keywords.join(keywordFingerprintSeparator)
 
-        await this.ctx.database.set(
-            'living_memory_entry',
-            { id },
-            {
-                type: patch.type ?? current.type,
-                status,
-                content,
-                keywords,
-                summary,
-                sentiment,
-                importance,
-                ...(semanticChanged
-                    ? { embedding: null, embeddingModelId: null }
-                    : {}),
-                updatedAt: new Date()
-            }
-        )
+        return {
+            type: patch.type ?? current.type,
+            status,
+            content,
+            keywords,
+            summary,
+            sentiment,
+            importance,
+            ...(semanticChanged
+                ? { embedding: null, embeddingModelId: null }
+                : {})
+        }
     }
 
-    async updateMemorySourceOrigins(
-        id: string,
-        sourceOrigins: MemorySourceOrigin[]
+    private assertAffectedCount(
+        actual: number | undefined,
+        expected: number,
+        operation: string
     ) {
-        await this.ctx.database.set(
-            'living_memory_entry',
-            { id },
-            {
-                sourceOrigins: normalizeMemorySourceOrigins(sourceOrigins),
-                updatedAt: new Date()
-            }
-        )
+        if (actual != null && actual !== expected) {
+            throw new Error(
+                `dream merge failed: ${operation} affected ${actual} of ${expected} memories`
+            )
+        }
     }
 
     async updateEntryEmbeddings(
