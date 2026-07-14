@@ -1,5 +1,4 @@
 import { Context } from 'koishi'
-import { LivingMemoryRepository } from '../persistence/repository'
 import { summarizeError } from '../shared/utils'
 import {
     type CharacterPresetProvider,
@@ -9,10 +8,14 @@ import {
     toPresetIdList
 } from './helpers'
 
+interface StoredPresetCatalogRepository {
+    listDistinctPresetIds(): Promise<string[]>
+}
+
 export class LivingMemoryPresetCatalog {
     constructor(
         private readonly ctx: Context,
-        private readonly repository: LivingMemoryRepository,
+        private readonly repository: StoredPresetCatalogRepository,
         private readonly debug: DebugLogger
     ) {}
 

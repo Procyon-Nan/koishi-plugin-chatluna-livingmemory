@@ -93,7 +93,16 @@ tree whenever architecture, data contracts, or workflow boundaries change.
 - `src/service/transcript/` owns ChatLuna/Character transcript adapters,
   message formatting, transcript rendering, and source-message serialization.
 - `src/service/persistence/repository.ts` owns the `LivingMemoryRepository`
-  facade and all persistence methods.
+  facade, table registration, cross-table maintenance, and delegation to the
+  table-focused persistence modules.
+- `src/service/persistence/entries.ts` owns memory entry queries and mutations,
+  source-origin migration, embedding updates, and transactional Dream merges.
+- `src/service/persistence/jobs.ts` owns job lifecycle, stale-job recovery, and
+  retention cleanup.
+- `src/service/persistence/snapshots.ts` owns snapshot queries, replacement,
+  duplicate cleanup, and deletion.
+- `src/service/persistence/user_profiles.ts` owns preset speaker and user
+  profile persistence.
 - `src/service/persistence/tables.ts` owns Koishi database table definitions.
 - `src/service/persistence/normalizers.ts` owns persistence record
   normalization helpers.
@@ -185,8 +194,10 @@ tree whenever architecture, data contracts, or workflow boundaries change.
 
 - Any schema-affecting change must update `src/contracts/memory.ts`,
   `src/service/persistence/tables.ts`,
-  `src/service/persistence/repository.ts`, query helpers if list behavior
-  changes, and the WebUI/client types when visible in the console.
+  the affected table-focused persistence module,
+  `src/service/persistence/repository.ts` when its public facade changes, query
+  helpers if list behavior changes, and the WebUI/client types when visible in
+  the console.
 - Workflow classes should depend on caller-specific repository capability
   types instead of the concrete `LivingMemoryRepository`. Compose the contracts
   from `src/contracts/workflows.ts` where possible.

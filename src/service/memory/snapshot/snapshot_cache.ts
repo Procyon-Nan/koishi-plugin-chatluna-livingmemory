@@ -1,4 +1,3 @@
-import { LivingMemoryRepository } from '../../persistence/repository'
 import { formatDateOnly } from '../../shared/utils'
 import { scopeKey } from '../helpers'
 import {
@@ -6,14 +5,22 @@ import {
     isMemoryReferenceItem
 } from './snapshot_items'
 import type {
+    MemoryEntryRecord,
     MemoryScope,
     MemorySnapshotRecord
 } from '../../../contracts/memory'
 
+interface SnapshotCacheRepository {
+    getLatestSnapshotByScope(
+        scope: Pick<MemoryScope, 'presetId' | 'conversationId'>
+    ): Promise<MemorySnapshotRecord | undefined>
+    getEntriesByIds(ids: string[]): Promise<MemoryEntryRecord[]>
+}
+
 export class LivingMemorySnapshotCache {
     private readonly snapshotVariableByScope = new Map<string, string>()
 
-    constructor(private readonly repository: LivingMemoryRepository) {}
+    constructor(private readonly repository: SnapshotCacheRepository) {}
 
     clearByScope(scope: Pick<MemoryScope, 'presetId' | 'conversationId'>) {
         this.snapshotVariableByScope.delete(scopeKey(scope))
