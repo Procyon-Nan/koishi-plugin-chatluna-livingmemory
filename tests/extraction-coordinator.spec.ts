@@ -46,6 +46,15 @@ const createExtractionTrace = (
     ...overrides
 })
 
+const createExtractedMemory = (): ExtractedMemoryItem => ({
+    type: 'fact',
+    content: 'memory',
+    summary: 'memory summary',
+    keywords: ['memory'],
+    sentiment: 'neutral',
+    importance: 0.5
+})
+
 interface ExtractionCoordinatorOptions {
     trace?: LivingMemoryExtractionTrace
     extractionInterval?: number
@@ -153,7 +162,7 @@ it('skips extraction when the configured interval is not reached', async () => {
 
 it('drops a same-scope extraction while the previous run is in flight', async () => {
     const extractionTrace = createExtractionTrace({
-        extracted: [{ type: 'fact', content: 'memory' }]
+        extracted: [createExtractedMemory()]
     })
     let resolveTrace!: (trace: LivingMemoryExtractionTrace) => void
     const tracePromise = new Promise<LivingMemoryExtractionTrace>((resolve) => {
@@ -183,9 +192,7 @@ it('drops a same-scope extraction while the previous run is in flight', async ()
 })
 
 it('writes extracted memories and queues auto Dream without persisting a job', async () => {
-    const extracted: ExtractedMemoryItem[] = [
-        { type: 'fact', content: 'memory' }
-    ]
+    const extracted: ExtractedMemoryItem[] = [createExtractedMemory()]
     const autoDreamPresets: string[] = []
     const { coordinator, jobStore, appended } = createExtractionCoordinator({
         trace: createExtractionTrace({ extracted }),
@@ -243,7 +250,7 @@ it('persists one failed extraction job for parse errors', async () => {
 it('persists one failed extraction job when memory persistence throws', async () => {
     const { coordinator, jobStore } = createExtractionCoordinator({
         trace: createExtractionTrace({
-            extracted: [{ type: 'fact', content: 'memory' }]
+            extracted: [createExtractedMemory()]
         }),
         appendMemories: async () => {
             throw new Error('memory persistence failure')

@@ -35,7 +35,6 @@ export const livingMemorySearchToolDescription = [
     '- memoryTypes: memory categories to search, or ["all"] to search every category.',
     '- The tool only searches active memories owned by the current preset.',
     '- Specific phrase matches receive higher score than broad phrase matches. Memories matching multiple phrases receive additional score.',
-    '- Each result includes id. Use living_memory_get_messages with these ids when you need source conversation messages.',
     '- Each result includes matchedBroadSearchTexts and matchedSpecificSearchTexts so you can see which query phrases matched that memory.',
     '- The result is a JSON array of memory records sorted by lexical relevance, importance, then recent update time.'
 ].join('\n')

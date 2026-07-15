@@ -62,10 +62,6 @@ const normalizeRewriteOutput = (output: string) => {
         .trim()
 }
 
-const isSkipQuery = (query: string) => {
-    return query.trim().toLowerCase() === '[skip]'
-}
-
 const buildFallbackQuery = (
     currentMessage: LivingMemoryTranscriptMessage,
     cleanedQuery: string
@@ -85,7 +81,6 @@ export type RecallQueryFallbackReason =
     | 'rewrite-disabled'
     | 'model-not-configured'
     | 'model-unavailable'
-    | 'model-skip'
     | 'empty-output'
     | 'invalid-output'
     | 'invoke-failed'
@@ -197,17 +192,6 @@ export class LivingMemoryRecallQueryBuilder {
             const result = await model.value.invoke(rewritePrompt)
             const rewriteOutput = stringifyModelContent(result.content).trim()
             const rewrittenQuery = normalizeRewriteOutput(rewriteOutput)
-
-            if (isSkipQuery(rewrittenQuery)) {
-                return this.fallbackResult(
-                    rawInput,
-                    cleanedQuery,
-                    fallbackQuery,
-                    rewritePrompt,
-                    rewriteOutput,
-                    'model-skip'
-                )
-            }
 
             if (rewrittenQuery.length === 0) {
                 return this.fallbackResult(

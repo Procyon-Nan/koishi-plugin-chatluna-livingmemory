@@ -1,5 +1,6 @@
 import { Context } from 'koishi'
 import { HumanMessage, SystemMessage } from '@langchain/core/messages'
+import { memoryEntryTypes } from '../../../contracts/memory'
 import type { ExtractedMemoryItem } from '../../../contracts/workflows'
 import {
     isModelConfigured,
@@ -9,11 +10,9 @@ import {
 import { buildExtractionPrompt } from '../../prompts'
 import type { ExtractionPromptMessages } from '../../prompts'
 import {
-    DEFAULT_MEMORY_IMPORTANCE,
-    normalizeMemoryImportance,
+    MAX_MEMORY_KEYWORDS,
     normalizeMemoryKeywords,
-    normalizeMemoryText,
-    normalizeOptionalMemoryText
+    normalizeMemoryText
 } from '../../memory/entry_fields'
 
 export type LivingMemoryExtractionSkipReason =
@@ -37,6 +36,10 @@ export interface LivingMemoryExtractionContext {
     presetLabel?: string
     presetPrompt?: string | null
 }
+
+type ParsedExtractionItem =
+    | { value: ExtractedMemoryItem; parseError: null }
+    | { value: null; parseError: string }
 
 const formatPromptTrace = (prompt: ExtractionPromptMessages) => {
     return [
@@ -129,49 +132,96 @@ export class LivingMemoryExtractor {
             return { extracted: [], parseError: 'parsed value is not an array' }
         }
 
-        const extracted = parsed
-            .map((item) => {
-                if (item == null || typeof item !== 'object') {
-                    return null
-                }
-
-                const record = item as Record<string, unknown>
-                const content =
-                    typeof record.content === 'string'
-                        ? normalizeMemoryText(record.content)
-                        : ''
-                const type =
-                    typeof record.type === 'string' ? record.type : 'other'
-                const summary =
-                    typeof record.summary === 'string'
-                        ? normalizeOptionalMemoryText(record.summary)
-                        : null
-                const sentiment =
-                    typeof record.sentiment === 'string'
-                        ? normalizeOptionalMemoryText(record.sentiment)
-                        : null
-                const keywords = Array.isArray(record.keywords)
-                    ? normalizeMemoryKeywords(record.keywords)
-                    : undefined
-
-                if (content.length === 0) {
-                    return null
-                }
-
+        const extracted: ExtractedMemoryItem[] = []
+        for (const [index, item] of parsed.entries()) {
+            const result = this.parseItem(item, index)
+            if (result.parseError != null) {
                 return {
-                    type: this.normalizeMemoryType(type),
-                    content,
-                    keywords,
-                    summary,
-                    sentiment,
-                    importance:
-                        normalizeMemoryImportance(record.importance) ??
-                        DEFAULT_MEMORY_IMPORTANCE
+                    extracted: [],
+                    parseError: result.parseError
                 }
-            })
-            .filter((item): item is NonNullable<typeof item> => item != null)
+            }
+
+            extracted.push(result.value)
+        }
 
         return { extracted, parseError: null }
+    }
+
+    private parseItem(item: unknown, index: number): ParsedExtractionItem {
+        if (item == null || typeof item !== 'object' || Array.isArray(item)) {
+            return this.invalidItem(index, 'object')
+        }
+
+        const record = item as Record<string, unknown>
+        if (!this.isMemoryEntryType(record.type)) {
+            return this.invalidItem(index, 'type')
+        }
+
+        const content = normalizeMemoryText(record.content)
+        if (typeof record.content !== 'string' || content.length === 0) {
+            return this.invalidItem(index, 'content')
+        }
+
+        const summary = normalizeMemoryText(record.summary)
+        if (typeof record.summary !== 'string' || summary.length === 0) {
+            return this.invalidItem(index, 'summary')
+        }
+
+        if (
+            !Array.isArray(record.keywords) ||
+            record.keywords.length > MAX_MEMORY_KEYWORDS ||
+            record.keywords.some(
+                (keyword) =>
+                    typeof keyword !== 'string' ||
+                    normalizeMemoryText(keyword).length === 0
+            )
+        ) {
+            return this.invalidItem(index, 'keywords')
+        }
+        const keywords = normalizeMemoryKeywords(record.keywords)
+
+        const sentiment = normalizeMemoryText(record.sentiment)
+        if (typeof record.sentiment !== 'string' || sentiment.length === 0) {
+            return this.invalidItem(index, 'sentiment')
+        }
+
+        if (
+            typeof record.importance !== 'number' ||
+            !Number.isFinite(record.importance) ||
+            record.importance < 0 ||
+            record.importance > 1
+        ) {
+            return this.invalidItem(index, 'importance')
+        }
+
+        return {
+            value: {
+                type: record.type,
+                content,
+                summary,
+                keywords,
+                sentiment,
+                importance: record.importance
+            },
+            parseError: null
+        }
+    }
+
+    private isMemoryEntryType(
+        value: unknown
+    ): value is ExtractedMemoryItem['type'] {
+        return (
+            typeof value === 'string' &&
+            (memoryEntryTypes as readonly string[]).includes(value)
+        )
+    }
+
+    private invalidItem(index: number, field: string): ParsedExtractionItem {
+        return {
+            value: null,
+            parseError: `item ${index} has missing or invalid ${field}`
+        }
     }
 
     private buildPrompt(
@@ -188,19 +238,5 @@ export class LivingMemoryExtractor {
             assistantLabel,
             presetPrompt: context?.presetPrompt
         })
-    }
-
-    private normalizeMemoryType(type: string): ExtractedMemoryItem['type'] {
-        switch (type) {
-            case 'identity':
-            case 'preference':
-            case 'fact':
-            case 'plan':
-            case 'context':
-            case 'other':
-                return type
-            default:
-                return 'other'
-        }
     }
 }

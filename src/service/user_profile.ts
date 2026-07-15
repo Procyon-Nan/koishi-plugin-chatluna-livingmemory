@@ -39,6 +39,11 @@ interface UserProfileGroup {
     existingProfile?: UserProfileRecord
 }
 
+interface ParsedUserProfileItem {
+    profile: UserProfileInput | null
+    parseError: string | null
+}
+
 const normalizeText = (value: string) => value.replace(/\s+/gu, ' ').trim()
 const normalizeSearchText = (value: string) =>
     normalizeText(value).toLowerCase()
@@ -61,7 +66,9 @@ const truncateText = (value: string, maxLength: number) => {
         return value
     }
 
-    return `${chars.slice(0, maxLength).join('')}...`
+    const suffix = '...'
+    const contentLength = Math.max(0, maxLength - suffix.length)
+    return `${chars.slice(0, contentLength).join('')}${suffix.slice(0, maxLength)}`
 }
 
 export const normalizeUserProfileSpeakerKey = (speakerLabel: string) => {
@@ -373,31 +380,90 @@ export class LivingMemoryUserProfileService {
         const groupByKey = new Map(
             groups.map((group) => [group.speakerKey, group])
         )
-        const profiles = parsed
-            .map((item) => this.toUserProfileInput(item, groupByKey))
-            .filter((profile): profile is UserProfileInput => profile != null)
+        const allowedSourceMemoryIds = new Set(
+            groups.flatMap((group) =>
+                this.getProfileFallbackSourceMemoryIds(group)
+            )
+        )
+        const profiles: UserProfileInput[] = []
+        for (const [index, item] of parsed.entries()) {
+            const result = this.toUserProfileInput(
+                item,
+                groupByKey,
+                allowedSourceMemoryIds
+            )
+            if (result.parseError != null) {
+                return {
+                    profiles: [],
+                    parseError: `profile item ${index}: ${result.parseError}`
+                }
+            }
+            if (result.profile != null) {
+                profiles.push(result.profile)
+            }
+        }
 
         return { profiles, parseError: null }
     }
 
     private toUserProfileInput(
         item: unknown,
-        groupByKey: Map<string, UserProfileGroup>
-    ): UserProfileInput | null {
+        groupByKey: Map<string, UserProfileGroup>,
+        allowedSourceMemoryIds: Set<string>
+    ): ParsedUserProfileItem {
         if (!isRecord(item)) {
-            return null
+            return {
+                profile: null,
+                parseError: 'sourceMemoryIds must be a non-empty array'
+            }
+        }
+        if (
+            !Array.isArray(item.sourceMemoryIds) ||
+            item.sourceMemoryIds.length === 0
+        ) {
+            return {
+                profile: null,
+                parseError: 'sourceMemoryIds must be a non-empty array'
+            }
+        }
+        if (item.sourceMemoryIds.some((id) => typeof id !== 'string')) {
+            return {
+                profile: null,
+                parseError: 'sourceMemoryIds must contain only strings'
+            }
+        }
+        if (
+            item.sourceMemoryIds.some((id) => !allowedSourceMemoryIds.has(id))
+        ) {
+            return {
+                profile: null,
+                parseError:
+                    'sourceMemoryIds contains an id outside the allowed set'
+            }
         }
         if (
             typeof item.speakerLabel !== 'string' ||
             typeof item.content !== 'string'
         ) {
-            return null
+            return { profile: null, parseError: null }
         }
 
         const speakerKey = normalizeUserProfileSpeakerKey(item.speakerLabel)
         const group = groupByKey.get(speakerKey)
         if (group == null) {
-            return null
+            return { profile: null, parseError: null }
+        }
+
+        const sourceMemoryIds = this.resolveProfileSourceMemoryIds(
+            item.sourceMemoryIds,
+            group
+        )
+        if (sourceMemoryIds == null) {
+            return {
+                profile: null,
+                parseError:
+                    'sourceMemoryIds contains an id outside the allowed set'
+            }
         }
 
         const content = this.normalizeProfileContent(
@@ -405,17 +471,17 @@ export class LivingMemoryUserProfileService {
             item.content
         )
         if (content.length === 0) {
-            return null
+            return { profile: null, parseError: null }
         }
 
         return {
-            speakerKey: group.speakerKey,
-            speakerLabel: group.speakerLabel,
-            content,
-            sourceMemoryIds: this.resolveProfileSourceMemoryIds(
-                item.sourceMemoryIds,
-                group
-            )
+            profile: {
+                speakerKey: group.speakerKey,
+                speakerLabel: group.speakerLabel,
+                content,
+                sourceMemoryIds
+            },
+            parseError: null
         }
     }
 
@@ -427,20 +493,17 @@ export class LivingMemoryUserProfileService {
     }
 
     private resolveProfileSourceMemoryIds(
-        sourceMemoryIds: unknown,
+        sourceMemoryIds: string[],
         group: UserProfileGroup
-    ) {
-        const fallbackIds = this.getProfileFallbackSourceMemoryIds(group)
-        const candidateIds = Array.isArray(sourceMemoryIds)
-            ? sourceMemoryIds
-            : fallbackIds
-        const allowedIds = new Set(fallbackIds)
-
-        return unique(
-            candidateIds.filter((id): id is string => {
-                return typeof id === 'string' && allowedIds.has(id)
-            })
+    ): string[] | null {
+        const allowedIds = new Set(
+            this.getProfileFallbackSourceMemoryIds(group)
         )
+        if (sourceMemoryIds.some((id) => !allowedIds.has(id))) {
+            return null
+        }
+
+        return unique(sourceMemoryIds)
     }
 
     private getProfileFallbackSourceMemoryIds(group: UserProfileGroup) {

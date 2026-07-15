@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { memoryEntryTypes } from '../src/contracts/memory'
 import type { MemoryEntryRecord } from '../src/contracts/memory'
+import { livingMemoryGetMessagesToolName } from '../src/service/memory/tools/search_contract'
+import { livingMemorySearchToolDescription } from '../src/service/memory/tools/search_tool'
 import { buildAgenticRecallPrompt } from '../src/service/prompts/agentic_recall'
 import { buildDreamPrompt } from '../src/service/prompts/dream'
 import { buildExtractionPrompt } from '../src/service/prompts/extraction'
@@ -100,6 +102,14 @@ it('uses the shared memory entry and user profile output formats', () => {
     assert.match(prompt, /id=memory-1/u)
     assert.match(prompt, /createdAt=2026-07-15T12:00:00.000Z/u)
     assert.ok(prompt.includes(USER_PROFILE_OUTPUT_FORMAT))
+    assert.match(prompt, /sourceMemoryIds 必须存在且为非空字符串数组/u)
+})
+
+it('keeps the search tool description within its own capability boundary', () => {
+    assert.doesNotMatch(
+        livingMemorySearchToolDescription,
+        new RegExp(livingMemoryGetMessagesToolName, 'u')
+    )
 })
 
 it('shares transcript interpretation rules across prompt workflows', () => {

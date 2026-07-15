@@ -74,10 +74,10 @@ export interface ExtractedMemoryItem {
     type: MemoryEntryType
     status?: MemoryEntryStatus
     content: string
-    keywords?: string[]
-    summary?: string | null
-    sentiment?: string | null
-    importance?: number | null
+    keywords: string[]
+    summary: string
+    sentiment: string
+    importance: number
 }
 
 export interface RetrievedMemoryItem {

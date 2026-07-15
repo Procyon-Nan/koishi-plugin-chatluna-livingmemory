@@ -74,8 +74,9 @@ export const buildUserProfilePrompt = (input: UserProfilePromptInput) => {
         '5. content 不可以用“某某的个人画像”作为开头；标题由代码层渲染。',
         '6. 如果存在已有的个人画像，必须把它作为更新基线：保留未被记忆推翻的稳定信息，并用记忆补充或修正。',
         '7. 如果已有的个人画像与记忆冲突，以记忆中的内容为准。',
-        `8. sourceMemoryIds 只能从“${input.group.speakerLabel}已有的个人画像的来源记忆 id”和下方“关于${input.group.speakerLabel}的记忆”条目 id 中选择，不得编造。`,
-        '9. 如果现有画像无需变更，输出空数组 []；如果需要补充、修正或重写画像，输出一个完整的新画像对象，content 必须包含更新后的完整画像内容。',
+        `8. sourceMemoryIds 必须存在且为非空字符串数组，只能从“${input.group.speakerLabel}已有的个人画像的来源记忆 id”和下方“关于${input.group.speakerLabel}的记忆”条目 id 中选择，不得编造。`,
+        '9. sourceMemoryIds 缺失、不是数组、为空、包含非字符串或包含允许范围外的 id 时，整个画像输出都会失败。',
+        '10. 如果现有画像无需变更，输出空数组 []；如果需要补充、修正或重写画像，输出一个完整的新画像对象，content 必须包含更新后的完整画像内容。',
         '',
         formatGroup(input.group)
     ].join('\n')

@@ -109,6 +109,7 @@ export const buildExtractionPrompt = (
         '<output_contract>',
         '你的输出必须是 JSON 数组，确保 JSON 格式正确可解析。',
         `每个元素格式为 ${outputFormat}。`,
+        `每个元素必须完整包含 ${MEMORY_COMPLETE_FIELD_LIST} 六个字段；任何字段缺失、类型错误或不符合字段要求都会导致整个输出失败。`,
         '只保留高价值、稳定、可复用的信息。',
         '如果没有可提取内容，输出 []。',
         '只输出 JSON 数组，不要解释，不要 Markdown，不要使用代码块。',

@@ -1,10 +1,36 @@
 import assert from 'node:assert/strict'
 import type { Context } from 'koishi'
+import { MAX_MEMORY_KEYWORDS } from '../src/service/memory/entry_fields'
 import { LivingMemoryExtractor } from '../src/service/workflows/extraction/extractor'
 
 interface CapturedMessage {
     content: unknown
     getType(): string
+}
+
+const completeMemory = {
+    type: 'fact',
+    content: '张三正在准备考试，我会继续关心他的进度。',
+    summary: '张三正在准备考试',
+    keywords: ['张三', '准备考试'],
+    sentiment: '关心',
+    importance: 0.7
+}
+
+const extractModelOutput = async (content: string) => {
+    const ctx = {
+        chatluna: {
+            createChatModel: async () => ({
+                value: {
+                    invoke: async () => ({ content })
+                }
+            })
+        }
+    } as unknown as Context
+
+    return await new LivingMemoryExtractor(ctx, 'test-model').extractWithTrace(
+        'input'
+    )
 }
 
 it('sends extraction rules as system and escaped dynamic context as human input', async () => {
@@ -61,4 +87,54 @@ it('sends extraction rules as system and escaped dynamic context as human input'
     assert.match(trace.prompt ?? '', /^\[system\]/u)
     assert.match(trace.prompt ?? '', /\n\[human\]\n/u)
     assert.equal(trace.parseError, null)
+})
+
+it('rejects the whole extraction output when a required field is missing', async () => {
+    const fields = [
+        'type',
+        'content',
+        'summary',
+        'keywords',
+        'sentiment',
+        'importance'
+    ] as const
+
+    for (const field of fields) {
+        const incomplete = { ...completeMemory } as Record<string, unknown>
+        delete incomplete[field]
+
+        const trace = await extractModelOutput(JSON.stringify([incomplete]))
+
+        assert.deepEqual(trace.extracted, [])
+        assert.match(trace.parseError ?? '', new RegExp(field, 'u'))
+    }
+})
+
+it('rejects the whole extraction output when a field violates the contract', async () => {
+    const invalidItems: Record<string, unknown>[] = [
+        { ...completeMemory, type: 'unsupported' },
+        { ...completeMemory, content: '   ' },
+        { ...completeMemory, summary: null },
+        { ...completeMemory, keywords: '张三' },
+        { ...completeMemory, keywords: ['张三', 1] },
+        {
+            ...completeMemory,
+            keywords: Array.from(
+                { length: MAX_MEMORY_KEYWORDS + 1 },
+                (_, index) => `关键词${index}`
+            )
+        },
+        { ...completeMemory, sentiment: '' },
+        { ...completeMemory, importance: '0.7' },
+        { ...completeMemory, importance: 1.1 }
+    ]
+
+    for (const invalid of invalidItems) {
+        const trace = await extractModelOutput(
+            JSON.stringify([completeMemory, invalid])
+        )
+
+        assert.deepEqual(trace.extracted, [])
+        assert.notEqual(trace.parseError, null)
+    }
 })

@@ -61,6 +61,7 @@ it('normalizes importance and status consistently', () => {
 })
 
 it('applies shared field rules to extracted memories', async () => {
+    const extractionKeywords = ['  alpha  ', 'alpha', 'keyword-0']
     const ctx = {
         chatluna: {
             createChatModel: async () => ({
@@ -72,8 +73,8 @@ it('applies shared field rules to extracted memories', async () => {
                                 content: '  extracted content  ',
                                 summary: '  extracted summary  ',
                                 sentiment: '  neutral  ',
-                                keywords: keywordInput(),
-                                importance: '1.5'
+                                keywords: extractionKeywords,
+                                importance: 1
                             }
                         ])
                     })
@@ -92,7 +93,7 @@ it('applies shared field rules to extracted memories', async () => {
             content: 'extracted content',
             summary: 'extracted summary',
             sentiment: 'neutral',
-            keywords: normalizeMemoryKeywords(keywordInput()),
+            keywords: normalizeMemoryKeywords(extractionKeywords),
             importance: 1
         }
     ])
