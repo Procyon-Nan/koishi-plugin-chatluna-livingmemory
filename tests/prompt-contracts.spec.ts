@@ -55,6 +55,7 @@ it('uses a valid memory type in the extraction output example', () => {
 it('shares persistent memory field rules between Extraction and Dream', () => {
     const extraction = buildExtractionPrompt({
         input: '[2026-07-15 20:00] 张三说：我最近在准备考试。',
+        presetId: 'preset-1',
         assistantLabel: '助手'
     }).systemPrompt
     const dream = buildDreamPrompt(
@@ -79,6 +80,8 @@ it('shares persistent memory field rules between Extraction and Dream', () => {
         assert.ok(extraction.includes(requirement))
         assert.ok(dream.includes(requirement))
     }
+    assert.match(MEMORY_CONTENT_REQUIREMENT, /当前角色的第一人称关系视角/u)
+    assert.doesNotMatch(MEMORY_CONTENT_REQUIREMENT, /你的第一人称关系视角/u)
 })
 
 it('uses the shared memory entry and user profile output formats', () => {
@@ -115,6 +118,7 @@ it('keeps the search tool description within its own capability boundary', () =>
 it('shares transcript interpretation rules across prompt workflows', () => {
     const extraction = buildExtractionPrompt({
         input: '历史消息',
+        presetId: 'preset-1',
         assistantLabel: '助手'
     }).systemPrompt
     const recall = buildRecallRewritePrompt({
@@ -133,4 +137,5 @@ it('shares transcript interpretation rules across prompt workflows', () => {
         assert.ok(prompt.includes(TRANSCRIPT_SPEAKER_RULE))
         assert.ok(prompt.includes(TRANSCRIPT_TIMESTAMP_RULE))
     }
+    assert.match(TRANSCRIPT_SPEAKER_RULE, /除当前角色自己的发言外/u)
 })

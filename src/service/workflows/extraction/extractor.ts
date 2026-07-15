@@ -59,7 +59,7 @@ export class LivingMemoryExtractor {
 
     async extractWithTrace(
         input: string,
-        context?: LivingMemoryExtractionContext
+        context: LivingMemoryExtractionContext
     ): Promise<LivingMemoryExtractionTrace> {
         if (!isModelConfigured(this.extractModel)) {
             return {
@@ -224,19 +224,14 @@ export class LivingMemoryExtractor {
         }
     }
 
-    private buildPrompt(
-        input: string,
-        context?: LivingMemoryExtractionContext
-    ) {
-        const assistantLabel =
-            context == null
-                ? '当前 presetId 对应角色名'
-                : context.presetLabel?.trim() || context.presetId
+    private buildPrompt(input: string, context: LivingMemoryExtractionContext) {
+        const assistantLabel = context.presetLabel?.trim() || context.presetId
 
         return buildExtractionPrompt({
             input,
+            presetId: context.presetId,
             assistantLabel,
-            presetPrompt: context?.presetPrompt
+            presetPrompt: context.presetPrompt
         })
     }
 }

@@ -84,7 +84,10 @@ it('applies shared field rules to extracted memories', async () => {
     } as unknown as Context
     const extractor = new LivingMemoryExtractor(ctx, 'test-model')
 
-    const trace = await extractor.extractWithTrace('input')
+    const trace = await extractor.extractWithTrace('input', {
+        conversationId: 'conversation-1',
+        presetId: 'preset-1'
+    })
 
     assert.equal(trace.parseError, null)
     assert.deepEqual(trace.extracted, [

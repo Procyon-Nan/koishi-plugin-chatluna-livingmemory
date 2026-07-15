@@ -149,7 +149,6 @@ const formatCharacterPresetPrompt = (systemPrompt: string) => {
     }
 
     return [
-        '# 当前 Character system prompt（仅用于理解“我”的人设，不要从此处抽取记忆）',
         normalized
     ].join('\n\n')
 }
