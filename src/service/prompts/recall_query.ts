@@ -1,3 +1,9 @@
+import {
+    formatPresetPerspectiveRule,
+    TRANSCRIPT_SPEAKER_RULE,
+    TRANSCRIPT_TIMESTAMP_RULE
+} from './transcript_contract'
+
 export interface RecallRewritePromptInput {
     /** 角色名标签。 */
     presetLabel: string
@@ -17,14 +23,14 @@ export const buildRecallRewritePrompt = (
 ): string => {
     const { presetLabel, currentTranscript, cleanedQuery, history } = params
     return [
-        `你是${presetLabel}，对话历史中以“${presetLabel}说：...”开头的是你自己的发言。`,
+        formatPresetPerspectiveRule(presetLabel),
         '【任务目标】',
         '你要结合对话历史和最后一条信息，总结你们当前的话题内容。',
         '',
         '【任务要求】',
         `使用第一人称口吻来叙述，保留你自己的说话语气和风格。`,
-        '使用对话中每一条发言的前缀指代具体发言者，不要泛称“用户”。',
-        '每条消息前的方括号中的时间是消息实际发送时间，不属于发言内容，你需要根据它来理解消息的先后关系和时间间隔。',
+        TRANSCRIPT_SPEAKER_RULE,
+        TRANSCRIPT_TIMESTAMP_RULE,
         '保留对关系、情绪、互动状态、重要事实的具体叙述。',
         '不要写成主题标签、分类词或关键词列表。',
         '不要输出“偏好、关系、互动状态”这类抽象概括。',

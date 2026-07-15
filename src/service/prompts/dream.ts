@@ -1,7 +1,15 @@
 import type { DreamCluster, DreamStage } from '../workflows/dream/types'
-import { toPromptEntry } from '../workflows/dream/util'
-import { MAX_MEMORY_KEYWORDS } from '../memory/entry_fields'
-import { MEMORY_KEYWORDS_DESCRIPTION } from './extraction'
+import { formatMemoryEntryForPrompt } from './memory_entries'
+import {
+    MEMORY_COMPLETE_FIELD_LIST,
+    MEMORY_CONTENT_REQUIREMENT,
+    MEMORY_IMPORTANCE_REQUIREMENT,
+    MEMORY_KEYWORDS_REQUIREMENT,
+    MEMORY_SENTIMENT_REQUIREMENT,
+    MEMORY_SPEAKER_REFERENCE_REQUIREMENT,
+    MEMORY_SUMMARY_REQUIREMENT,
+    MEMORY_TYPE_GUIDE
+} from './memory_fields'
 import { DREAM_ACTIVE_FORMAT, DREAM_ARCHIVED_FORMAT } from './schema'
 
 /**
@@ -32,13 +40,13 @@ export const buildDreamPrompt = (
     const operationFieldGuide = [
         '操作字段要求：',
         '- keep：输出 action、memoryIds、reason，不要输出 memory。',
-        '- update：必须指定 memoryId 和 memory；memory 必须完整输出重新生成后的 type、content、summary、keywords、sentiment、importance。',
-        '- merge：必须指定 targetMemoryId、sourceMemoryIds 和 memory；memory 必须完整输出合并后重新生成的 type、content、summary、keywords、sentiment、importance。',
+        `- update：必须指定 memoryId 和 memory；memory 必须完整输出重新生成后的 ${MEMORY_COMPLETE_FIELD_LIST}。`,
+        `- merge：必须指定 targetMemoryId、sourceMemoryIds 和 memory；memory 必须完整输出合并后重新生成的 ${MEMORY_COMPLETE_FIELD_LIST}。`,
         '- archive：必须指定 memoryId；不要输出 memory，代码层只会把该条记忆的 status 改为 archived。',
         stage === 'archived'
             ? '- deleteSource：只能声明已成功 merge 的 source 可以物理删除，不要单独用于删除。'
             : '- active 阶段不要输出 deleteSource。',
-        '- 无法为 update / merge 完整重新生成 type、content、summary、keywords、sentiment、importance 时，改用 keep，不要输出缺字段的 update / merge。'
+        `- 无法为 update / merge 完整重新生成 ${MEMORY_COMPLETE_FIELD_LIST} 时，改用 keep，不要输出缺字段的 update / merge。`
     ]
     const activeFormat = DREAM_ACTIVE_FORMAT
     const archivedFormat = DREAM_ARCHIVED_FORMAT
@@ -71,20 +79,22 @@ export const buildDreamPrompt = (
         stage === 'active' ? activeFormat : archivedFormat,
         '',
         '字段要求：',
-        '- content 是最终会注入给 preset 的记忆正文，应保持第一人称关系视角。字数保持在100字以内。',
-        '- summary 是检索友好的简短摘要，不要写成角色台词。',
-        `- keywords：${MEMORY_KEYWORDS_DESCRIPTION}；最多 ${MAX_MEMORY_KEYWORDS} 个。`,
-        '- update / merge 必须同步重新生成 memory.type、content、summary、keywords、sentiment、importance。',
+        MEMORY_TYPE_GUIDE,
+        MEMORY_CONTENT_REQUIREMENT,
+        MEMORY_SUMMARY_REQUIREMENT,
+        MEMORY_KEYWORDS_REQUIREMENT,
+        MEMORY_SENTIMENT_REQUIREMENT,
+        MEMORY_IMPORTANCE_REQUIREMENT,
+        MEMORY_SPEAKER_REFERENCE_REQUIREMENT,
+        `- update / merge 必须同步重新生成 memory 的 ${MEMORY_COMPLETE_FIELD_LIST}。`,
         '- update / merge 的 keywords 必须基于最终 memory.content 重新提取，不能复用、拼接或合并旧记忆的 keywords，也不要把正文按标点切成整句片段。',
         '- 不要在 content、summary 或 keywords 中写入“历史记录”、“已合并”等状态或整理标记；归档状态由 status 字段表达。',
-        '- sentiment 是简短自由文本。',
-        '- importance 必须是 0 到 1 的数字。',
         '- 所有 memoryId、targetMemoryId、sourceMemoryIds 必须来自下面的 id。',
         stage === 'archived'
             ? '- archived 阶段输出的 memory 不能包含 active 状态；即使包含也会被代码层强制保持 archived。'
             : '- active 阶段的 update / merge target 会被代码层强制保持 active。',
         '',
         '记忆条目：',
-        cluster.entries.map(toPromptEntry).join('\n\n---\n\n')
+        cluster.entries.map(formatMemoryEntryForPrompt).join('\n\n---\n\n')
     ].join('\n')
 }

@@ -1,4 +1,9 @@
 import { livingMemorySearchToolName } from '../memory/tools/search_contract'
+import {
+    formatPresetPerspectiveRule,
+    TRANSCRIPT_SPEAKER_RULE,
+    TRANSCRIPT_TIMESTAMP_RULE
+} from './transcript_contract'
 
 export interface AgenticRecallPromptInput {
     presetLabel: string
@@ -21,7 +26,9 @@ export const buildAgenticRecallPrompt = (params: AgenticRecallPromptInput) => {
     const { presetLabel, currentTranscript, history } = params
 
     return [
-        `你是${presetLabel}，对话历史中以“${presetLabel}说：...”开头的是你自己的发言。`,
+        formatPresetPerspectiveRule(presetLabel),
+        TRANSCRIPT_SPEAKER_RULE,
+        TRANSCRIPT_TIMESTAMP_RULE,
         '',
         '【任务目标】',
         `1. 你要结合对话历史和最后一条信息，预测接下来最可能继续讨论的话题。`,

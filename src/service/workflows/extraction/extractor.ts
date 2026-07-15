@@ -1,4 +1,5 @@
 import { Context } from 'koishi'
+import { HumanMessage, SystemMessage } from '@langchain/core/messages'
 import type { ExtractedMemoryItem } from '../../../contracts/workflows'
 import {
     isModelConfigured,
@@ -6,6 +7,7 @@ import {
     summarizeError
 } from '../../shared/utils'
 import { buildExtractionPrompt } from '../../prompts'
+import type { ExtractionPromptMessages } from '../../prompts'
 import {
     DEFAULT_MEMORY_IMPORTANCE,
     normalizeMemoryImportance,
@@ -34,6 +36,16 @@ export interface LivingMemoryExtractionContext {
     presetId: string
     presetLabel?: string
     presetPrompt?: string | null
+}
+
+const formatPromptTrace = (prompt: ExtractionPromptMessages) => {
+    return [
+        '[system]',
+        prompt.systemPrompt,
+        '',
+        '[human]',
+        prompt.inputPrompt
+    ].join('\n')
 }
 
 export class LivingMemoryExtractor {
@@ -69,14 +81,17 @@ export class LivingMemoryExtractor {
 
         const prompt = this.buildPrompt(input, context)
 
-        const result = await model.value.invoke(prompt)
+        const result = await model.value.invoke([
+            new SystemMessage(prompt.systemPrompt),
+            new HumanMessage(prompt.inputPrompt)
+        ])
         const content = stringifyModelContent(result.content)
 
         const { extracted, parseError } = this.parse(content)
 
         return {
             extracted,
-            prompt,
+            prompt: formatPromptTrace(prompt),
             output: content,
             skippedReason: null,
             parseError

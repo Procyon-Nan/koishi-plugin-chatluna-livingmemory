@@ -157,7 +157,6 @@ export class LivingMemoryUserProfileService {
 
         for (const group of profileGroups) {
             const prompt = buildUserProfilePrompt({
-                presetId,
                 presetPrompt,
                 group,
                 maxProfileLength

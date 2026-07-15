@@ -1,5 +1,8 @@
 export { buildExtractionPrompt } from './extraction'
-export type { ExtractionPromptInput } from './extraction'
+export type {
+    ExtractionPromptInput,
+    ExtractionPromptMessages
+} from './extraction'
 export { buildRecallRewritePrompt } from './recall_query'
 export type { RecallRewritePromptInput } from './recall_query'
 export {
@@ -17,5 +20,6 @@ export type {
 export {
     EXTRACTION_OUTPUT_FORMAT,
     DREAM_ACTIVE_FORMAT,
-    DREAM_ARCHIVED_FORMAT
+    DREAM_ARCHIVED_FORMAT,
+    USER_PROFILE_OUTPUT_FORMAT
 } from './schema'

@@ -2,7 +2,8 @@ import type {
     MemoryEntryRecord,
     UserProfileRecord
 } from '../../contracts/memory'
-import { toPromptEntry } from '../workflows/dream/util'
+import { formatMemoryEntryForPrompt } from './memory_entries'
+import { USER_PROFILE_OUTPUT_FORMAT } from './schema'
 
 export interface UserProfilePromptGroup {
     speakerLabel: string
@@ -11,19 +12,10 @@ export interface UserProfilePromptGroup {
 }
 
 export interface UserProfilePromptInput {
-    presetId: string
     presetPrompt?: string | null
     group: UserProfilePromptGroup
     maxProfileLength: number
 }
-
-const outputExample = [
-    {
-        speakerLabel: '张三',
-        content: '我对张三的理解是……',
-        sourceMemoryIds: ['...']
-    }
-]
 
 const formatSourceMemoryIds = (sourceMemoryIds: string[]) => {
     const lastIndex = sourceMemoryIds.length - 1
@@ -64,7 +56,7 @@ const formatGroup = (group: UserProfilePromptGroup) => {
         formatExistingProfileSection(group.speakerLabel, group.existingProfile),
         '',
         `【关于${group.speakerLabel}的记忆】`,
-        group.entries.map(toPromptEntry).join('\n\n---\n\n')
+        group.entries.map(formatMemoryEntryForPrompt).join('\n\n---\n\n')
     ].join('\n')
 }
 
@@ -76,7 +68,7 @@ export const buildUserProfilePrompt = (input: UserProfilePromptInput) => {
         '',
         '【输出要求】',
         '1. 输出必须是一个可解析 JSON 数组，不要解释，不要 Markdown。',
-        `2. 数组元素格式为 ${JSON.stringify(outputExample[0])}。`,
+        `2. 数组元素格式为 ${USER_PROFILE_OUTPUT_FORMAT}。`,
         `3. 数组中最多包含一个元素，speakerLabel 必须严格等于 ${JSON.stringify(input.group.speakerLabel)}。`,
         `4. content 使用第一人称关系视角，描述“我”对这个人的稳定理解；content 的长度不能超过 ${input.maxProfileLength} 个中文字符。`,
         '5. content 不可以用“某某的个人画像”作为开头；标题由代码层渲染。',
