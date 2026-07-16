@@ -148,9 +148,7 @@ const formatCharacterPresetPrompt = (systemPrompt: string) => {
         return null
     }
 
-    return [
-        normalized
-    ].join('\n\n')
+    return [normalized].join('\n\n')
 }
 
 export const renderCharacterPresetPrompt = async (

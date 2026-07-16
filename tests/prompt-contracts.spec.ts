@@ -21,8 +21,7 @@ import {
 } from '../src/service/prompts/schema'
 import { buildRecallRewritePrompt } from '../src/service/prompts/recall_query'
 import {
-    TRANSCRIPT_SPEAKER_RULE,
-    TRANSCRIPT_TIMESTAMP_RULE
+    TRANSCRIPT_MESSAGE_FORMAT_RULES
 } from '../src/service/prompts/transcript_contract'
 import { buildUserProfilePrompt } from '../src/service/prompts/user_profile'
 
@@ -136,10 +135,14 @@ it('shares transcript interpretation rules across prompt workflows', () => {
     }).systemPrompt
 
     for (const prompt of [extraction, recall, agenticRecall]) {
-        assert.ok(prompt.includes(TRANSCRIPT_SPEAKER_RULE))
-        assert.ok(prompt.includes(TRANSCRIPT_TIMESTAMP_RULE))
+        for (const rule of TRANSCRIPT_MESSAGE_FORMAT_RULES) {
+            assert.ok(prompt.includes(rule))
+        }
     }
-    assert.match(TRANSCRIPT_SPEAKER_RULE, /除了你自己的发言以外/u)
+    assert.match(
+        TRANSCRIPT_MESSAGE_FORMAT_RULES.join('\n'),
+        /除了你自己的发言以外/u
+    )
     assert.match(agenticRecall, /禁止把数组编码成字符串/u)
 })
 
@@ -175,8 +178,8 @@ it('separates recall rules from escaped dynamic inputs', () => {
     }
 
     assert.match(recall.systemPrompt, /不得输出 \[skip\]/u)
-    assert.match(recall.systemPrompt, /查询不是角色回复或台词/u)
-    assert.match(recall.systemPrompt, /保持中性、紧凑/u)
+    assert.match(recall.systemPrompt, /话题内容不是角色回复或台词/u)
+    assert.match(recall.systemPrompt, /保留你既有的语气和人格特征/u)
     assert.doesNotMatch(
         recall.systemPrompt,
         /保留你自己的说话语气和风格/u

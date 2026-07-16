@@ -1,8 +1,5 @@
 import { livingMemorySearchToolName } from '../memory/tools/search_contract'
-import {
-    TRANSCRIPT_SPEAKER_RULE,
-    TRANSCRIPT_TIMESTAMP_RULE
-} from './transcript_contract'
+import { TRANSCRIPT_MESSAGE_FORMAT_RULES } from './transcript_contract'
 import {
     escapeXmlText,
     formatXmlBlock,
@@ -52,10 +49,7 @@ export const buildAgenticRecallPrompt = (params: AgenticRecallPromptInput) => {
         '</input_policy>',
         '',
         '<message_format>',
-        '对话中的每条消息都包含发送时间和发言者标签：',
-        TRANSCRIPT_TIMESTAMP_RULE,
-        '- 以 <assistant_label> 中的名称加“说：”开头的是你自己的发言。',
-        TRANSCRIPT_SPEAKER_RULE,
+        ...TRANSCRIPT_MESSAGE_FORMAT_RULES,
         '</message_format>',
         '',
         '<tool_policy>',
