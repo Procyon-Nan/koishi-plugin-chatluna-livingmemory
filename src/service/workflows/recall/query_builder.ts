@@ -1,4 +1,5 @@
 import { Context } from 'koishi'
+import { HumanMessage, SystemMessage } from '@langchain/core/messages'
 import { LivingMemoryMessageFormatter } from '../../transcript/message_formatter'
 import type {
     LivingMemoryTranscriptMessage,
@@ -11,6 +12,7 @@ import {
     summarizeError
 } from '../../shared/utils'
 import { buildRecallRewritePrompt } from '../../prompts'
+import { formatPromptMessagesTrace } from '../../prompts/prompt_format'
 
 const semanticTextPattern = /[\p{L}\p{N}]/u
 const queryLineTerminatorPattern = /[。！？!?；;，,、：:]$/u
@@ -73,7 +75,7 @@ const buildFallbackQuery = (
     return `${currentMessage.speakerLabel}说：${cleanedQuery}`.trim()
 }
 
-const toPresetLabel = (scope: MemoryScope) => {
+const toAssistantLabel = (scope: MemoryScope) => {
     return scope.presetLabel?.trim() || scope.presetId
 }
 
@@ -181,15 +183,19 @@ export class LivingMemoryRecallQueryBuilder {
             )
         }
 
-        const rewritePrompt = this.buildRewritePrompt(
+        const rewritePromptMessages = this.buildRewritePrompt(
             scope,
             cleanedQuery,
             currentTranscript,
             historyMessages
         )
+        const rewritePrompt = formatPromptMessagesTrace(rewritePromptMessages)
 
         try {
-            const result = await model.value.invoke(rewritePrompt)
+            const result = await model.value.invoke([
+                new SystemMessage(rewritePromptMessages.systemPrompt),
+                new HumanMessage(rewritePromptMessages.inputPrompt)
+            ])
             const rewriteOutput = stringifyModelContent(result.content).trim()
             const rewrittenQuery = normalizeRewriteOutput(rewriteOutput)
 
@@ -267,7 +273,7 @@ export class LivingMemoryRecallQueryBuilder {
         currentTranscript: string,
         historyMessages: LivingMemoryTranscriptMessage[]
     ) {
-        const presetLabel = toPresetLabel(scope)
+        const assistantLabel = toAssistantLabel(scope)
         const recentMessages = this.formatter.takeRecentRounds(
             historyMessages,
             this.config.recallHistoryWindowRounds
@@ -277,7 +283,8 @@ export class LivingMemoryRecallQueryBuilder {
             : '无'
 
         return buildRecallRewritePrompt({
-            presetLabel,
+            presetId: scope.presetId,
+            assistantLabel,
             currentTranscript,
             cleanedQuery,
             history

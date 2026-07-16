@@ -13,6 +13,11 @@ import {
     TRANSCRIPT_SPEAKER_RULE,
     TRANSCRIPT_TIMESTAMP_RULE
 } from './transcript_contract'
+import {
+    escapeXmlText,
+    formatXmlBlock,
+    type PromptMessages
+} from './prompt_format'
 
 export interface ExtractionPromptInput {
     /** 已格式化的历史对话转写文本。 */
@@ -25,21 +30,7 @@ export interface ExtractionPromptInput {
     presetPrompt?: string | null
 }
 
-export interface ExtractionPromptMessages {
-    systemPrompt: string
-    inputPrompt: string
-}
-
-const escapeXmlText = (value: string) => {
-    return value
-        .replace(/&/gu, '&amp;')
-        .replace(/</gu, '&lt;')
-        .replace(/>/gu, '&gt;')
-}
-
-const formatXmlBlock = (name: string, value: string) => {
-    return [`<${name}>`, escapeXmlText(value), `</${name}>`]
-}
+export type ExtractionPromptMessages = PromptMessages
 
 /**
  * 构建记忆抽取提示词。纯函数：所有动态值经入参传入，无副作用。

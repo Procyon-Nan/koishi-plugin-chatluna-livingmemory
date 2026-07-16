@@ -1,4 +1,8 @@
-import { type BaseMessage, HumanMessage } from '@langchain/core/messages'
+import {
+    type BaseMessage,
+    HumanMessage,
+    SystemMessage
+} from '@langchain/core/messages'
 import {
     ChatPromptTemplate,
     MessagesPlaceholder
@@ -36,6 +40,8 @@ import {
     buildAgenticRecallFinalizationPrompt,
     buildAgenticRecallPrompt
 } from '../../prompts'
+import type { AgenticRecallPromptMessages } from '../../prompts'
+import { formatPromptMessagesTrace } from '../../prompts/prompt_format'
 import { isModelConfigured, stringifyModelContent } from '../../shared/utils'
 import type { DebugLogger } from '../../memory/helpers'
 import {
@@ -73,7 +79,8 @@ type AgenticRecallToolAgentInput = ChainValues & {
 const agenticRecallMaxModelCalls = 6
 
 const agenticRecallPromptTemplate = ChatPromptTemplate.fromMessages([
-    ['human', '{input}'],
+    ['system', '{systemPrompt}'],
+    ['human', '{inputPrompt}'],
     new MessagesPlaceholder('agent_scratchpad')
 ])
 
@@ -83,7 +90,7 @@ export interface LivingMemoryAgenticRecallTrace {
     item: AgenticMemorySnapshotItem
 }
 
-const toPresetLabel = (scope: MemoryScope) => {
+const toAssistantLabel = (scope: MemoryScope) => {
     return scope.presetLabel?.trim() || scope.presetId
 }
 
@@ -332,7 +339,7 @@ export class LivingMemoryAgenticRecallExecutor {
             throw new Error('agenticRecallModel is unavailable.')
         }
 
-        const presetLabel = toPresetLabel(scope)
+        const assistantLabel = toAssistantLabel(scope)
         const currentTranscript = this.formatter.toExtractionPayload([
             currentMessage
         ]).input
@@ -344,10 +351,12 @@ export class LivingMemoryAgenticRecallExecutor {
             ? this.formatter.toExtractionPayload(recentMessages).input
             : '无'
         const prompt = buildAgenticRecallPrompt({
-            presetLabel,
+            presetId: scope.presetId,
+            assistantLabel,
             currentTranscript,
             history
         })
+        const promptTrace = formatPromptMessagesTrace(prompt)
         const agentContext = {
             requestId: [
                 'agentic-recall',
@@ -433,12 +442,15 @@ export class LivingMemoryAgenticRecallExecutor {
             [
                 `memory agentic recall prompt: conversationId=${scope.conversationId}`,
                 `presetId=${scope.presetId}`,
-                prompt
+                promptTrace
             ].join('\n')
         )
 
         const result = await runner.invoke(
-            { input: prompt },
+            {
+                systemPrompt: prompt.systemPrompt,
+                inputPrompt: prompt.inputPrompt
+            },
             {
                 configurable: {
                     model: chatModel,
@@ -479,7 +491,7 @@ export class LivingMemoryAgenticRecallExecutor {
         }
 
         const trace = this.createTrace(
-            prompt,
+            promptTrace,
             result.output.trim(),
             countSearchCalls(result.intermediateSteps),
             matchedMemories,
@@ -506,7 +518,7 @@ export class LivingMemoryAgenticRecallExecutor {
 
     private async finalize(
         model: ChatLunaChatModel,
-        prompt: string,
+        prompt: AgenticRecallPromptMessages,
         input: ChainValues,
         runConfig?: RunnableConfig
     ): Promise<AgentFinish> {
@@ -517,7 +529,8 @@ export class LivingMemoryAgenticRecallExecutor {
         )
         const response = await model.invoke(
             [
-                new HumanMessage(prompt),
+                new SystemMessage(prompt.systemPrompt),
+                new HumanMessage(prompt.inputPrompt),
                 ...scratchpad,
                 new HumanMessage(buildAgenticRecallFinalizationPrompt())
             ],

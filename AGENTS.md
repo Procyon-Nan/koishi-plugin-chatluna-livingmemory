@@ -109,6 +109,9 @@ tree whenever architecture, data contracts, or workflow boundaries change.
   generation, profile rendering, and profile source-memory selection.
 - `src/service/prompts/` is the prompt/schema source of truth for extraction,
   recall rewrite, agentic recall, Dream, and user profiles.
+- `src/service/prompts/prompt_format.ts` owns the shared System/Human prompt
+  message contract, XML text escaping and block formatting, and prompt trace
+  serialization used by model workflows.
 - `lib/` and `dist/` are build outputs. Do not edit them unless the task
   explicitly asks for generated artifacts.
 - `tmp/` is the local planning workspace for each new feature design or bug-fix
@@ -148,17 +151,21 @@ tree whenever architecture, data contracts, or workflow boundaries change.
   `<NO_MEMORY>` Recall runs do not create Job rows.
 - `embedding-rerank` recall uses query rewrite when enabled. Empty cleaned
   queries are skipped; disabled or failed rewrite paths record their reason and
-  use the normalized current query when possible.
+  use the normalized current query when possible. Rewrite rules are sent as a
+  System message, while escaped transcript inputs are sent as XML-blocked Human
+  data.
 - `agentic-recall` recall is a separate selectable strategy. It uses
   `recallHistoryWindowRounds` for its history window, has its own
   `agenticRecallModel`, and delegates tool-call parsing, protocol handling, and
-  recoverable loop errors to ChatLuna `AgentRunner`. Each run allows at most six
-  model calls: the first five may call `living_memory_search`, while the sixth
-  is a tool-free finalization call. Exhausting this budget degrades to
-  `<NO_MEMORY>`; model-service and search-service runtime errors remain hard
-  failures. Successful runs write agentic snapshot items containing final
-  memory text plus the raw search parameters and matched memories captured
-  before AgentRunner decorates observations.
+  recoverable loop errors to ChatLuna `AgentRunner`. Static role, tool, and
+  output rules are sent as a System message; escaped transcript inputs are sent
+  as XML-blocked Human data. Each run allows at most six model calls: the first
+  five may call `living_memory_search`, while the sixth is a tool-free
+  finalization call. Exhausting this budget degrades to `<NO_MEMORY>`;
+  model-service and search-service runtime errors remain hard failures.
+  Successful runs write agentic snapshot items containing final memory text
+  plus the raw search parameters and matched memories captured before
+  AgentRunner decorates observations.
 - When agentic recall finishes with `<NO_MEMORY>`, no Job or snapshot is written
   or hydrated. The previous snapshot remains the next injectable memory context.
 - `living_memory_job.recallStrategy` records the selected Recall strategy for

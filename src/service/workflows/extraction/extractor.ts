@@ -8,7 +8,7 @@ import {
     summarizeError
 } from '../../shared/utils'
 import { buildExtractionPrompt } from '../../prompts'
-import type { ExtractionPromptMessages } from '../../prompts'
+import { formatPromptMessagesTrace } from '../../prompts/prompt_format'
 import {
     MAX_MEMORY_KEYWORDS,
     normalizeMemoryKeywords,
@@ -40,16 +40,6 @@ export interface LivingMemoryExtractionContext {
 type ParsedExtractionItem =
     | { value: ExtractedMemoryItem; parseError: null }
     | { value: null; parseError: string }
-
-const formatPromptTrace = (prompt: ExtractionPromptMessages) => {
-    return [
-        '[system]',
-        prompt.systemPrompt,
-        '',
-        '[human]',
-        prompt.inputPrompt
-    ].join('\n')
-}
 
 export class LivingMemoryExtractor {
     constructor(
@@ -94,7 +84,7 @@ export class LivingMemoryExtractor {
 
         return {
             extracted,
-            prompt: formatPromptTrace(prompt),
+            prompt: formatPromptMessagesTrace(prompt),
             output: content,
             skippedReason: null,
             parseError

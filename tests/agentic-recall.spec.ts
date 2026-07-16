@@ -198,6 +198,22 @@ it('runs one search through AgentRunner and preserves preset-scoped trace data',
     assert.equal(harness.searchInvocations[0]?.presetId, scope.presetId)
     assert.equal(harness.boundInvocations.length, 2)
     assert.equal(harness.directInvocations.length, 0)
+    assert.deepEqual(
+        harness.boundInvocations[0]?.messages.map((message) =>
+            message.getType()
+        ),
+        ['system', 'human']
+    )
+    assert.match(
+        String(harness.boundInvocations[0]?.messages[0]?.content),
+        /<tool_policy>/u
+    )
+    assert.match(
+        String(harness.boundInvocations[0]?.messages[1]?.content),
+        /<agentic_recall_input>/u
+    )
+    assert.match(trace.prompt, /^\[system\]/u)
+    assert.match(trace.prompt, /\n\[human\]\n/u)
     assert.match(String(toolMessages(harness.boundInvocations[1])[0]?.content), /memory-1/u)
 })
 
@@ -412,6 +428,15 @@ it('reserves the sixth model call for tool-free finalization and never calls a s
     assert.equal(harness.directInvocations.length, 1)
     assert.deepEqual(harness.directInvocations[0]?.config?.['tools'], [])
     assert.equal(harness.searchInvocations.length, 5)
+    const finalMessages = harness.directInvocations[0]?.messages ?? []
+    assert.deepEqual(
+        finalMessages.slice(0, 2).map((message) => message.getType()),
+        ['system', 'human']
+    )
+    assert.match(String(finalMessages[0]?.content), /<role>/u)
+    assert.match(String(finalMessages[1]?.content), /<agentic_recall_input>/u)
+    assert.equal(finalMessages.at(-1)?.getType(), 'human')
+    assert.match(String(finalMessages.at(-1)?.content), /<finalization>/u)
 })
 
 it('accepts a valid sixth-call finalization when prior searches matched memory', async () => {
