@@ -81,8 +81,7 @@ tree whenever architecture, data contracts, or workflow boundaries change.
   `living_memory_get_messages` tool implementation for retrieving source
   conversation messages by memory id.
 - `src/service/memory/tools/tool_runtime.ts` owns shared model-facing tool
-  runtime behavior, including runtime scope resolution, debug logging,
-  invalid-argument retry limits, and result serialization.
+  runtime behavior, including runtime scope resolution and debug logging.
 - `src/service/memory/tools/search.ts` owns lexical memory search scoring and
   result assembly.
 - `src/service/memory/snapshot/` owns snapshot hydration/cache helpers and

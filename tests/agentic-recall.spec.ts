@@ -201,12 +201,13 @@ it('runs one search through AgentRunner and preserves preset-scoped trace data',
     assert.match(String(toolMessages(harness.boundInvocations[1])[0]?.content), /memory-1/u)
 })
 
-it('returns complete invalid argument feedback and allows corrected search input', async () => {
+it('rejects stringified arrays and allows corrected search input', async () => {
     const harness = createHarness({
         responses: [
             createSearchCall('invalid-1', {
-                broadSearchTexts: ['a'],
-                memoryTypes: ['all']
+                broadSearchTexts: '["记忆"]',
+                specificSearchTexts: '["具体记忆内容"]',
+                memoryTypes: '["all"]'
             }),
             createSearchCall('search-2'),
             new AIMessage('我记得修正查询后找到的内容。')
@@ -220,26 +221,31 @@ it('returns complete invalid argument feedback and allows corrected search input
     )
 
     assert.equal(trace.item.matchedMemories.length, 1)
-    assert.match(invalidOutput, /"status": "invalid_arguments"/u)
-    assert.match(invalidOutput, /"remainingRetries": 2/u)
+    assert.match(
+        invalidOutput,
+        /Received tool input did not match expected schema/u
+    )
+    assert.match(invalidOutput, /Expected array, received string/u)
     assert.match(invalidOutput, /broadSearchTexts/u)
+    assert.match(invalidOutput, /specificSearchTexts/u)
+    assert.match(invalidOutput, /memoryTypes/u)
     assert.equal(harness.searchInvocations.length, 1)
 })
 
-it('keeps tool_call_failed feedback complete after three invalid searches', async () => {
+it('never normalizes repeated stringified array inputs', async () => {
     const harness = createHarness({
         responses: [
             createSearchCall('invalid-1', {
-                broadSearchTexts: ['a'],
-                memoryTypes: ['all']
+                broadSearchTexts: '["记忆"]',
+                memoryTypes: '["all"]'
             }),
             createSearchCall('invalid-2', {
-                broadSearchTexts: ['b'],
-                memoryTypes: ['all']
+                broadSearchTexts: '["计划"]',
+                memoryTypes: '["all"]'
             }),
             createSearchCall('invalid-3', {
-                broadSearchTexts: ['c'],
-                memoryTypes: ['all']
+                broadSearchTexts: '["关系"]',
+                memoryTypes: '["all"]'
             }),
             new AIMessage('<NO_MEMORY>')
         ]
@@ -251,8 +257,11 @@ it('keeps tool_call_failed feedback complete after three invalid searches', asyn
     )
 
     assert.equal(trace.finalOutput, '<NO_MEMORY>')
-    assert.match(failedOutput, /"status": "tool_call_failed"/u)
-    assert.match(failedOutput, /"remainingRetries": 0/u)
+    assert.match(
+        failedOutput,
+        /Received tool input did not match expected schema/u
+    )
+    assert.match(failedOutput, /Expected array, received string/u)
     assert.equal(harness.searchInvocations.length, 0)
 })
 

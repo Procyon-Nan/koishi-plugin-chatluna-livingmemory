@@ -7,7 +7,6 @@ import {
     broadSearchTextRule,
     formatSearchTextLengthRange,
     livingMemorySearchInputSchema,
-    livingMemorySearchToolInputSchema,
     livingMemorySearchToolName,
     memorySearchMaxTextCount,
     specificSearchTextRule
@@ -26,52 +25,39 @@ export const livingMemorySearchToolDescription = [
     'Search active memories in the current preset by lexical phrase matching.',
     '',
     'Use this tool when you need to look up existing memories by both broad and specific search phrases.',
-    `- broadSearchTexts: 1 to ${memorySearchMaxTextCount} short, broad phrases. ` +
+    `- broadSearchTexts: required JSON array containing 1 to ${memorySearchMaxTextCount} short, broad phrases. ` +
         `Each phrase must be ${formatSearchTextLengthRange(broadSearchTextRule)} characters after trimming. ` +
         'Use broad topics, categories, or general needs.',
-    `- specificSearchTexts: optional but recommended, 1 to ${memorySearchMaxTextCount} longer, specific phrases. ` +
+    `- specificSearchTexts: optional JSON array containing 1 to ${memorySearchMaxTextCount} longer, specific phrases. ` +
         `Each phrase must be ${formatSearchTextLengthRange(specificSearchTextRule)} characters after trimming when provided.`,
     '  Use concrete constraints, entities, preferences, or factual phrases.',
-    '- memoryTypes: memory categories to search, or ["all"] to search every category.',
+    '- memoryTypes: required JSON array of memory categories, or ["all"] to search every category.',
+    '- Pass arrays directly. Never encode an array as a JSON string.',
     '- The tool only searches active memories owned by the current preset.',
     '- Specific phrase matches receive higher score than broad phrase matches. Memories matching multiple phrases receive additional score.',
     '- Each result includes matchedBroadSearchTexts and matchedSpecificSearchTexts so you can see which query phrases matched that memory.',
     '- The result is a JSON array of memory records sorted by lexical relevance, importance, then recent update time.'
 ].join('\n')
 
-type LivingMemorySearchToolInput = z.infer<
-    typeof livingMemorySearchToolInputSchema
->
-
-const invalidArgumentRetryMessage =
-    'living_memory_search input is invalid. Correct the arguments and call this tool again.'
-const toolCallFailedMessage =
-    'living_memory_search failed because invalid arguments were provided 3 times. ' +
-    'Do not call this tool again for this request. Continue replying with the ' +
-    'context that the memory search tool call failed.'
+type LivingMemorySearchToolInput = z.infer<typeof livingMemorySearchInputSchema>
 
 export class LivingMemorySearchTool extends StructuredTool {
     name = livingMemorySearchToolName
     description = livingMemorySearchToolDescription
 
-    schema = livingMemorySearchToolInputSchema
+    schema = livingMemorySearchInputSchema
     private readonly runtime: LivingMemoryToolRuntime
 
     constructor(
         private readonly ctx: Context,
         private readonly config: LivingMemorySearchToolConfig
     ) {
-        super()
-        this.runtime = new LivingMemoryToolRuntime(
-            {
-                toolName: livingMemorySearchToolName,
-                logger: ctx.logger('chatluna-livingmemory'),
-                isDebugEnabled: () => this.config.debug,
-                invalidArgumentRetryMessage,
-                toolCallFailedMessage
-            },
-            this
-        )
+        super({ verboseParsingErrors: true })
+        this.runtime = new LivingMemoryToolRuntime({
+            toolName: livingMemorySearchToolName,
+            logger: ctx.logger('chatluna-livingmemory'),
+            isDebugEnabled: () => this.config.debug
+        })
     }
 
     async _call(
@@ -88,26 +74,13 @@ export class LivingMemorySearchTool extends StructuredTool {
             throw new Error('Missing preset in the current tool call.')
         }
 
-        if (this.runtime.hasReachedRetryLimit(configurable)) {
-            return this.runtime.createRetryLimitOutput(configurable)
-        }
-
-        const parsedInput = livingMemorySearchInputSchema.safeParse(input)
-        if (!parsedInput.success) {
-            return this.runtime.createInvalidArgumentOutput(
-                configurable,
-                this.runtime.formatValidationErrors(parsedInput.error)
-            )
-        }
-
         const livingMemory = this.ctx.get('chatluna_living_memory')
         const results = await livingMemory.searchMemories(presetId, {
-            broadSearchTexts: parsedInput.data.broadSearchTexts,
-            specificSearchTexts: parsedInput.data.specificSearchTexts,
-            memoryTypes: parsedInput.data.memoryTypes,
+            broadSearchTexts: input.broadSearchTexts,
+            specificSearchTexts: input.specificSearchTexts,
+            memoryTypes: input.memoryTypes,
             maxCandidates: this.config.memorySearchToolMaxResults
         })
-        this.runtime.clearInvalidArgumentRetry(configurable)
 
         const output = JSON.stringify(results, null, 2)
 

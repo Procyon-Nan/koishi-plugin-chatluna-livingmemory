@@ -5,7 +5,6 @@ import type { z } from 'zod'
 import type { LivingMemoryConfig } from '../../../contracts/workflows'
 import {
     livingMemoryGetMessagesInputSchema,
-    livingMemoryGetMessagesToolInputSchema,
     livingMemoryGetMessagesToolName,
     memoryGetMessagesMaxIdCount
 } from './search_contract'
@@ -20,7 +19,8 @@ export const livingMemoryGetMessagesToolDescription = [
     'Get source conversation messages for memories in the current preset by memory id.',
     '',
     'Use this tool when you need to inspect whether specific memories are supported by their source conversation messages.',
-    `- memoryIds: 1 to ${memoryGetMessagesMaxIdCount} memory ids from living_memory_search results.`,
+    `- memoryIds: required JSON array containing 1 to ${memoryGetMessagesMaxIdCount} memory ids from living_memory_search results.`,
+    '- Pass the array directly. Never encode it as a JSON string.',
     '- The tool only reads memories owned by the current preset.',
     '- Each result includes the target memory id, type, content, summary, keywords, importance, timestamps, and sourceOrigins.',
     '- sourceOrigins are indexed with originIndex for display. Missing source origins mean the memory has no recorded source messages.',
@@ -28,38 +28,26 @@ export const livingMemoryGetMessagesToolDescription = [
 ].join('\n')
 
 type LivingMemoryGetMessagesToolInput = z.infer<
-    typeof livingMemoryGetMessagesToolInputSchema
+    typeof livingMemoryGetMessagesInputSchema
 >
-
-const invalidArgumentRetryMessage =
-    'living_memory_get_messages input is invalid. Correct the arguments and call this tool again.'
-const toolCallFailedMessage =
-    'living_memory_get_messages failed because invalid arguments were provided 3 times. ' +
-    'Do not call this tool again for this request. Continue replying with the ' +
-    'context that the memory source message tool call failed.'
 
 export class LivingMemoryGetMessagesTool extends StructuredTool {
     name = livingMemoryGetMessagesToolName
     description = livingMemoryGetMessagesToolDescription
 
-    schema = livingMemoryGetMessagesToolInputSchema
+    schema = livingMemoryGetMessagesInputSchema
     private readonly runtime: LivingMemoryToolRuntime
 
     constructor(
         private readonly ctx: Context,
         private readonly config: LivingMemoryGetMessagesToolConfig
     ) {
-        super()
-        this.runtime = new LivingMemoryToolRuntime(
-            {
-                toolName: livingMemoryGetMessagesToolName,
-                logger: ctx.logger('chatluna-livingmemory'),
-                isDebugEnabled: () => this.config.debug,
-                invalidArgumentRetryMessage,
-                toolCallFailedMessage
-            },
-            this
-        )
+        super({ verboseParsingErrors: true })
+        this.runtime = new LivingMemoryToolRuntime({
+            toolName: livingMemoryGetMessagesToolName,
+            logger: ctx.logger('chatluna-livingmemory'),
+            isDebugEnabled: () => this.config.debug
+        })
     }
 
     async _call(
@@ -76,24 +64,11 @@ export class LivingMemoryGetMessagesTool extends StructuredTool {
             throw new Error('Missing preset in the current tool call.')
         }
 
-        if (this.runtime.hasReachedRetryLimit(configurable)) {
-            return this.runtime.createRetryLimitOutput(configurable)
-        }
-
-        const parsedInput = livingMemoryGetMessagesInputSchema.safeParse(input)
-        if (!parsedInput.success) {
-            return this.runtime.createInvalidArgumentOutput(
-                configurable,
-                this.runtime.formatValidationErrors(parsedInput.error)
-            )
-        }
-
         const livingMemory = this.ctx.get('chatluna_living_memory')
         const result = await livingMemory.getMemorySourceMessages(
             presetId,
-            parsedInput.data.memoryIds
+            input.memoryIds
         )
-        this.runtime.clearInvalidArgumentRetry(configurable)
 
         const output = JSON.stringify(result, null, 2)
 

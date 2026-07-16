@@ -34,6 +34,7 @@ export const buildAgenticRecallPrompt = (params: AgenticRecallPromptInput) => {
         `1. 你要结合对话历史和最后一条信息，预测接下来最可能继续讨论的话题。`,
         `2. 调用 ${livingMemorySearchToolName} 查询可能与接下来的话题有关的记忆。`,
         `  - 你可以调用且**只可以**调用 ${livingMemorySearchToolName} 工具来查询记忆，不可以调用其他工具。`,
+        '  - broadSearchTexts、specificSearchTexts 和 memoryTypes 必须直接传递 JSON 数组，禁止把数组编码成字符串。',
         '  - 如果调用工具的参数错误，你应该修正查询参数后再重新调用工具。',
         `3. 根据查询到的记忆，输出以你的视角叙述的纯文本记忆内容。`,
         '',

@@ -40,7 +40,6 @@ import { isModelConfigured, stringifyModelContent } from '../../shared/utils'
 import type { DebugLogger } from '../../memory/helpers'
 import {
     livingMemorySearchInputSchema,
-    livingMemorySearchToolInputSchema,
     livingMemorySearchToolName
 } from '../../memory/tools/search_contract'
 import {
@@ -56,7 +55,7 @@ type LivingMemoryAgenticRecallConfig = Pick<
     | 'recallHistoryWindowRounds'
 >
 
-type AgenticSearchToolInput = z.infer<typeof livingMemorySearchToolInputSchema>
+type AgenticSearchToolInput = z.infer<typeof livingMemorySearchInputSchema>
 
 interface RecordedAgenticSearchCall {
     inputKey: string
@@ -203,7 +202,7 @@ const toToolOutputText = (output: unknown) => {
 }
 
 const createSearchInputKey = (input: unknown) => {
-    const parsedInput = livingMemorySearchToolInputSchema.safeParse(input)
+    const parsedInput = livingMemorySearchInputSchema.safeParse(input)
     return JSON.stringify(parsedInput.success ? parsedInput.data : input)
 }
 
@@ -271,14 +270,14 @@ const formatDecisionOutput = (decision: AgenticRecallDecision) => {
 class RecordingLivingMemorySearchTool extends StructuredTool {
     name = livingMemorySearchToolName
     description = livingMemorySearchToolDescription
-    schema = livingMemorySearchToolInputSchema
+    schema = livingMemorySearchInputSchema
 
     constructor(
         private readonly delegate: LivingMemorySearchTool,
         private readonly calls: RecordedAgenticSearchCall[],
         private readonly agentContext: { requestId: string }
     ) {
-        super()
+        super({ verboseParsingErrors: true })
     }
 
     async _call(

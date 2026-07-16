@@ -137,5 +137,6 @@ it('shares transcript interpretation rules across prompt workflows', () => {
         assert.ok(prompt.includes(TRANSCRIPT_SPEAKER_RULE))
         assert.ok(prompt.includes(TRANSCRIPT_TIMESTAMP_RULE))
     }
-    assert.match(TRANSCRIPT_SPEAKER_RULE, /除当前角色自己的发言外/u)
+    assert.match(TRANSCRIPT_SPEAKER_RULE, /除了你自己的发言以外/u)
+    assert.match(agenticRecall, /禁止把数组编码成字符串/u)
 })

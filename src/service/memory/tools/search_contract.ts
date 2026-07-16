@@ -87,23 +87,6 @@ export const livingMemorySearchInputSchema = z.object({
         )
 })
 
-export const livingMemorySearchToolInputSchema = z.object({
-    broadSearchTexts: z
-        .unknown()
-        .optional()
-        .describe(broadSearchTextDescription),
-    specificSearchTexts: z
-        .unknown()
-        .optional()
-        .describe(specificSearchTextDescription),
-    memoryTypes: z
-        .unknown()
-        .optional()
-        .describe(
-            `Memory categories to search. Use concrete categories or all. Supported values: ${livingMemorySearchMemoryTypes.join(', ')}.`
-        )
-})
-
 const memoryIdsDescription =
     `Memory ids to inspect. Provide 1 to ${memoryGetMessagesMaxIdCount} ids ` +
     'from living_memory_search results.'
@@ -114,8 +97,4 @@ export const livingMemoryGetMessagesInputSchema = z.object({
         .min(1)
         .max(memoryGetMessagesMaxIdCount)
         .describe(memoryIdsDescription)
-})
-
-export const livingMemoryGetMessagesToolInputSchema = z.object({
-    memoryIds: z.unknown().optional().describe(memoryIdsDescription)
 })
