@@ -121,17 +121,15 @@ export class LivingMemoryDreamService {
             archivedEntries,
             invokeModel
         )
-        const finalEntries = await this.repository.listEntriesByPreset(presetId)
-        const profileResult = await this.userProfiles.regenerate(
+        const profileDetail = await this.regenerateUserProfilesAfterDream(
             presetId,
-            finalEntries.filter((entry) => entry.status === 'active'),
             invokeModel
         )
         const stats = sumStats([activeResult, archivedResult])
         const detail = [
             activeResult.detail,
             archivedResult.detail,
-            profileResult.detail
+            profileDetail
         ].join('\n')
 
         this.debug(
@@ -147,6 +145,38 @@ export class LivingMemoryDreamService {
                 activeResult.clusterCount + archivedResult.clusterCount,
             ...stats,
             detail
+        }
+    }
+
+    private async regenerateUserProfilesAfterDream(
+        presetId: string,
+        invokeModel: (prompt: PromptMessages) => Promise<string>
+    ) {
+        if (!this.config.enableUserProfileInjection) {
+            return 'user profiles skipped: disabled'
+        }
+
+        try {
+            const finalEntries =
+                await this.repository.listEntriesByPreset(presetId)
+            const result = await this.userProfiles.regenerate(
+                presetId,
+                finalEntries.filter((entry) => entry.status === 'active'),
+                invokeModel
+            )
+            return result.detail
+        } catch (error) {
+            const errorSummary = summarizeError(error)
+            const errorMessage =
+                error instanceof Error ? error.message : errorSummary
+            const detail = `user profiles failed: ${errorMessage}`
+            this.debug(
+                [
+                    `memory user profile generation failed after dream: presetId=${presetId}`,
+                    `error=${errorSummary}`
+                ].join(' ')
+            )
+            return detail
         }
     }
 

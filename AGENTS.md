@@ -65,8 +65,9 @@ tree whenever architecture, data contracts, or workflow boundaries change.
   extraction model parsing.
 - `src/service/workflows/dream/` owns Dream clustering, prompt parsing,
   operation execution, stats, and Dream coordination. Dream processes active
-  memories and archived memories, then regenerates user profiles when profile
-  injection is enabled.
+  memories and archived memories, then attempts user profile regeneration when
+  profile injection is enabled. Profile regeneration failures are recorded in
+  the completed Dream detail without failing the preceding Dream operations.
 - `src/service/workflows/job_tracker.ts` owns Dream workflow job lifecycle
   status updates. Recall and extraction only create a single persisted failed
   audit row when their execution pipeline throws or extraction parsing fails.
@@ -195,6 +196,9 @@ tree whenever architecture, data contracts, or workflow boundaries change.
 - User profile generation and rendering must honor `enableUserProfileInjection`.
   Speaker recording can still happen independently so future profile generation
   has an index to work from.
+- Dream attempts user profile regeneration only after its active and archived
+  stages finish. User profile failures must not change a completed Dream into a
+  failed job, while Dream-stage failures keep their existing failure semantics.
 - Dream sends static operation and output rules as a System message, while
   escaped preset, stage, cluster, and memory-entry data is sent as XML-blocked
   Human input.

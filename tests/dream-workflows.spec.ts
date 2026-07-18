@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict'
+import type { Context } from 'koishi'
 import type { MemoryEntryRecord } from '../src/contracts/memory'
+import {
+    type DreamRepository,
+    LivingMemoryDreamService
+} from '../src/service/workflows/dream'
 import {
     type DreamCoordinatorRepository,
     LivingMemoryDreamCoordinator
@@ -32,6 +37,117 @@ const createDreamCoordinatorRepository = (
     getLatestJobByPresetAndKind: jobStore.getLatestJobByPresetAndKind,
     markStaleRunningJobsAsFailed: jobStore.markStaleRunningJobsAsFailed,
     countEntriesCreatedAfter
+})
+
+const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
+    const events: string[] = []
+    const debugMessages: string[] = []
+    const activeEntry = {
+        ...createMemoryEntry('active-memory'),
+        keywords: ['张三']
+    }
+    const archivedEntry = createMemoryEntry('archived-memory', 'archived')
+    const entries = [activeEntry, archivedEntry]
+    const repository: DreamRepository = {
+        listEntriesByPreset: async () => {
+            events.push('list-entries')
+            return entries
+        },
+        updateEntryEmbeddings: async () => {},
+        updateMemory: async () => {},
+        applyDreamMerge: async () => {},
+        listPresetSpeakers: async () => {
+            events.push('list-speakers')
+            return [
+                {
+                    id: 'speaker-1',
+                    presetId: scope.presetId,
+                    speakerKey: '张三',
+                    speakerLabel: '张三',
+                    speakerId: 'user-1',
+                    createdAt: activeEntry.createdAt,
+                    updatedAt: activeEntry.updatedAt
+                }
+            ]
+        },
+        upsertPresetSpeaker: async () => {},
+        listUserProfilesByPreset: async () => {
+            events.push('list-profiles')
+            return []
+        },
+        listUserProfilesBySpeakerKeys: async () => [],
+        replaceUserProfile: async () => {},
+        deleteUserProfile: async () => {}
+    }
+    const ctx = {
+        chatluna: {
+            createChatModel: async () => {
+                events.push('create-model')
+                return {
+                    value: {
+                        invoke: async () => ({ content: '[]' })
+                    }
+                }
+            },
+            preset: {
+                getPreset: () => {
+                    events.push('resolve-preset')
+                    return { value: null }
+                }
+            }
+        }
+    } as unknown as Context
+    const service = new LivingMemoryDreamService(
+        ctx,
+        {
+            dreamModel: 'dream-model',
+            embeddingModel: 'embedding-model',
+            enableUserProfileInjection,
+            userProfileMemoryLimit: 20
+        },
+        repository,
+        (message) => debugMessages.push(message)
+    )
+
+    return { debugMessages, events, service }
+}
+
+it('keeps Dream successful when post-Dream user profile generation fails', async () => {
+    const harness = createDreamServiceHarness(true)
+
+    const result = await harness.service.run(scope.presetId)
+
+    assert.match(
+        result.detail,
+        /user profiles failed: memory user profile preset prompt unavailable/u
+    )
+    assert.deepEqual(harness.events, [
+        'list-entries',
+        'create-model',
+        'list-entries',
+        'list-entries',
+        'list-speakers',
+        'list-profiles',
+        'resolve-preset'
+    ])
+    assert.ok(
+        harness.debugMessages.some((message) =>
+            message.includes('user profile generation failed after dream')
+        )
+    )
+})
+
+it('does not start post-Dream user profile generation when disabled', async () => {
+    const harness = createDreamServiceHarness(false)
+
+    const result = await harness.service.run(scope.presetId)
+
+    assert.match(result.detail, /user profiles skipped: disabled/u)
+    assert.deepEqual(harness.events, [
+        'list-entries',
+        'create-model',
+        'list-entries'
+    ])
 })
 
 it('locks a Dream preset while its job is running', async () => {
