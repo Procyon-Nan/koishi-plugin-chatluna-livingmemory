@@ -153,7 +153,14 @@ export class LivingMemoryUserProfileService {
             ...group,
             existingProfile: existingProfileByKey.get(group.speakerKey)
         }))
+        const characterPresetName = toCharacterPresetName(presetId)
+        const assistantLabel = characterPresetName ?? presetId
         const presetPrompt = await this.resolvePresetPrompt(presetId)
+        if (presetPrompt == null) {
+            throw new Error(
+                `memory user profile preset prompt unavailable: presetId=${presetId}`
+            )
+        }
         const matchedEntryCount = profileGroups.reduce(
             (sum, group) => sum + group.matchedEntryCount,
             0
@@ -168,6 +175,7 @@ export class LivingMemoryUserProfileService {
 
         for (const group of profileGroups) {
             const prompt = buildUserProfilePrompt({
+                assistantLabel,
                 presetPrompt,
                 group,
                 maxProfileLength

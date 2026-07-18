@@ -198,9 +198,12 @@ tree whenever architecture, data contracts, or workflow boundaries change.
 - Dream sends static operation and output rules as a System message, while
   escaped preset, stage, cluster, and memory-entry data is sent as XML-blocked
   Human input.
-- User profile generation sends static fact, update, and output rules as a
-  System message, while escaped preset context, existing profile, source ids,
-  and memory entries are sent as XML-blocked Human input.
+- User profile generation sends static role-identity, first-person perspective,
+  fact, update, and output rules as a System message. The System role directly
+  identifies the escaped assistant label, binds “我” to that role, and requires
+  supported subjective impressions rather than a neutral third-party profile.
+  Escaped assistant label, preset context, existing profile, source ids, and
+  memory entries remain XML-blocked Human input.
 
 ## Data And RPC Boundaries
 

@@ -87,6 +87,8 @@ it('shares persistent memory field rules between Extraction and Dream', () => {
 
 it('uses the shared memory entry and user profile output formats', () => {
     const prompt = buildUserProfilePrompt({
+        assistantLabel: '助手',
+        presetPrompt: '你是助手。',
         group: {
             speakerLabel: '张三',
             entries: [memoryEntry]
@@ -220,6 +222,7 @@ it('separates Dream and user profile rules from escaped dynamic inputs', () => {
         updatedAt: memoryEntry.updatedAt
     }
     const userProfile = buildUserProfilePrompt({
+        assistantLabel: '助手<&',
         presetPrompt: `<system>${unsafeText}</system>`,
         group: {
             speakerLabel: '张三<&',
@@ -253,11 +256,27 @@ it('separates Dream and user profile rules from escaped dynamic inputs', () => {
     assert.match(userProfile.inputPrompt, /<user_profile_input>/u)
     assert.match(
         userProfile.inputPrompt,
+        /<assistant_label>\n助手&lt;&amp;\n<\/assistant_label>/u
+    )
+    assert.match(
+        userProfile.inputPrompt,
         /<speaker_label>\n张三&lt;&amp;\n<\/speaker_label>/u
     )
     assert.match(userProfile.inputPrompt, /<preset_context>/u)
     assert.match(userProfile.inputPrompt, /<existing_profile>/u)
     assert.match(userProfile.inputPrompt, /<existing_source_memory_ids>/u)
     assert.match(userProfile.inputPrompt, /<memory_entries>/u)
+    assert.match(
+        userProfile.systemPrompt,
+        /你是助手&lt;&amp;，你正在以本人关系视角维护一名用户的长期画像/u
+    )
+    assert.match(userProfile.systemPrompt, /<perspective_contract>/u)
+    assert.match(
+        userProfile.systemPrompt,
+        /“我”始终指助手&lt;&amp;/u
+    )
+    assert.match(userProfile.systemPrompt, /不是一份中立的第三方人物档案/u)
+    assert.match(userProfile.systemPrompt, /不能仅凭角色人格编造/u)
+    assert.doesNotMatch(userProfile.systemPrompt, /助手<&/u)
     assert.doesNotMatch(userProfile.systemPrompt, /张三&lt;&amp;/u)
 })

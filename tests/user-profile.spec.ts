@@ -5,6 +5,7 @@ import type {
     UserProfileInput
 } from '../src/contracts/memory'
 import type { UserProfileRepository } from '../src/contracts/workflows'
+import { characterPresetSuffix } from '../src/service/memory/helpers'
 import { LivingMemoryUserProfileService } from '../src/service/user_profile'
 
 const now = new Date('2026-07-16T00:00:00.000Z')
@@ -26,7 +27,12 @@ const memory: MemoryEntryRecord = {
     updatedAt: now
 }
 
-const createHarness = () => {
+const createHarness = (
+    options: {
+        ctx?: Context
+        presetId?: string
+    } = {}
+) => {
     const savedProfiles: UserProfileInput[] = []
     const debugMessages: string[] = []
     const capturedPrompts: unknown[] = []
@@ -50,13 +56,24 @@ const createHarness = () => {
         },
         deleteUserProfile: async () => {}
     }
-    const ctx = {
+    const defaultCtx = {
         chatluna: {
             preset: {
-                getPreset: () => ({ value: null })
+                getPreset: () => ({ value: {} })
+            },
+            promptRenderer: {
+                renderPresetTemplate: async () => ({
+                    messages: [
+                        {
+                            content: '你是测试角色。',
+                            getType: () => 'system'
+                        }
+                    ]
+                })
             }
         }
     } as unknown as Context
+    const ctx = options.ctx ?? defaultCtx
     const service = new LivingMemoryUserProfileService(
         ctx,
         {
@@ -72,10 +89,14 @@ const createHarness = () => {
         debugMessages,
         capturedPrompts,
         run: async (output: unknown) =>
-            await service.regenerate('preset-1', [memory], async (prompt) => {
-                capturedPrompts.push(prompt)
-                return JSON.stringify([output])
-            })
+            await service.regenerate(
+                options.presetId ?? 'preset-1',
+                [memory],
+                async (prompt) => {
+                    capturedPrompts.push(prompt)
+                    return JSON.stringify([output])
+                }
+            )
     }
 }
 
@@ -137,10 +158,58 @@ it('passes user profile rules and memory data through PromptMessages', async () 
         inputPrompt: string
     }
     assert.match(prompt.systemPrompt, /<output_contract>/u)
+    assert.match(prompt.systemPrompt, /<perspective_contract>/u)
+    assert.match(
+        prompt.systemPrompt,
+        /你是preset-1，你正在以本人关系视角维护一名用户的长期画像/u
+    )
+    assert.match(
+        prompt.systemPrompt,
+        /“我”始终指preset-1/u
+    )
+    assert.match(prompt.systemPrompt, /有依据的主观印象/u)
     assert.doesNotMatch(prompt.systemPrompt, /张三正在准备考试/u)
     assert.match(prompt.inputPrompt, /<user_profile_input>/u)
+    assert.match(prompt.inputPrompt, /<assistant_label>\npreset-1/u)
+    assert.doesNotMatch(prompt.inputPrompt, /<preset_context>\n无/u)
     assert.match(prompt.inputPrompt, /<memory_entries>/u)
     assert.match(prompt.inputPrompt, /张三正在准备考试/u)
+})
+
+it('uses the Character preset name as the user profile assistant label', async () => {
+    const ctx = {
+        chatluna: {
+            promptRenderer: {
+                renderTemplate: async () => ({ text: '你是角色甲。' })
+            }
+        },
+        chatluna_character: {
+            preset: {
+                getPreset: async () => ({
+                    system: {
+                        rawString: '你是角色甲。'
+                    }
+                })
+            }
+        }
+    } as unknown as Context
+    const harness = createHarness({
+        ctx,
+        presetId: `角色甲${characterPresetSuffix}`
+    })
+
+    await harness.run({
+        ...baseProfileOutput,
+        sourceMemoryIds: ['memory-1']
+    })
+
+    const prompt = harness.capturedPrompts[0] as {
+        systemPrompt: string
+        inputPrompt: string
+    }
+    assert.match(prompt.systemPrompt, /你是角色甲，/u)
+    assert.doesNotMatch(prompt.systemPrompt, /角色甲（Character）/u)
+    assert.match(prompt.inputPrompt, /<assistant_label>\n角色甲/u)
 })
 
 it('keeps truncated user profile content within the declared maximum', async () => {
