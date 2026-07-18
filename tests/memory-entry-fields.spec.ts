@@ -86,7 +86,8 @@ it('applies shared field rules to extracted memories', async () => {
 
     const trace = await extractor.extractWithTrace('input', {
         conversationId: 'conversation-1',
-        presetId: 'preset-1'
+        presetId: 'preset-1',
+        presetPrompt: '你是测试助手。'
     })
 
     assert.equal(trace.parseError, null)

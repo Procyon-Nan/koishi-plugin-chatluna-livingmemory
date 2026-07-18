@@ -1,4 +1,4 @@
-import { Context, type Logger, type Session } from 'koishi'
+import { Context, type Session } from 'koishi'
 import type { LivingMemoryConfig } from '../contracts/workflows'
 import {
     type CharacterTranscriptSourceMessage,
@@ -187,21 +187,6 @@ const formatPromptVariable = (sections: PromptSections) => {
     return parts.join('\n\n')
 }
 
-const renderCharacterPresetPromptOverride = async (
-    ctx: Context,
-    logger: Logger,
-    payload: CharacterAfterChatEventPayload
-) => {
-    try {
-        return await renderCharacterPresetPrompt(ctx, payload.preset, {
-            session: payload.session
-        })
-    } catch (error) {
-        logger.warn(error)
-        return null
-    }
-}
-
 export async function apply(ctx: Context, config: LivingMemoryConfig) {
     const logger = ctx.logger('chatluna-livingmemory')
     const events = ctx as unknown as CharacterEventRegistrar
@@ -382,17 +367,15 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 ].join(' ')
             )
 
-            const presetPromptOverride =
-                await renderCharacterPresetPromptOverride(ctx, logger, payload)
-
             await ctx.chatluna_living_memory.queueExtraction(
                 scope,
                 chatCount,
                 messages,
-                undefined,
-                {},
                 {
-                    presetPromptOverride,
+                    resolvePresetPrompt: async () =>
+                        await renderCharacterPresetPrompt(ctx, payload.preset, {
+                            session: payload.session
+                        }),
                     preselectedMessages: extractionMessages
                 }
             )

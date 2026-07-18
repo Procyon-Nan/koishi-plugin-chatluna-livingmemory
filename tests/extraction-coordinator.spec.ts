@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import type { Context } from 'koishi'
 import type {
     ExtractedMemoryItem,
     ExtractionPayload
@@ -111,7 +110,6 @@ const createExtractionCoordinator = (
             })
     }
     const coordinator = new LivingMemoryExtractionCoordinator(
-        {} as Context,
         {
             extractionInterval: options.extractionInterval ?? 1,
             extractionRounds: 1
@@ -135,17 +133,22 @@ const createExtractionCoordinator = (
 const queueExtraction = async (
     coordinator: LivingMemoryExtractionCoordinator,
     firstChatCount = 0,
-    secondChatCount = 1
+    secondChatCount = 1,
+    resolvePresetPrompt: () => Promise<string> = async () =>
+        '你是测试助手。'
 ) => {
     const messages = createExtractionMessages()
-    await coordinator.queue(scope, firstChatCount, messages)
-    await coordinator.queue(scope, secondChatCount, messages)
+    const options = { resolvePresetPrompt }
+    await coordinator.queue(scope, firstChatCount, messages, options)
+    await coordinator.queue(scope, secondChatCount, messages, options)
 }
 
 it('skips the first extraction call while initializing its baseline', async () => {
     const { coordinator, jobStore } = createExtractionCoordinator()
 
-    await coordinator.queue(scope, 0, createExtractionMessages())
+    await coordinator.queue(scope, 0, createExtractionMessages(), {
+        resolvePresetPrompt: async () => '你是测试助手。'
+    })
 
     assert.equal(jobStore.jobs.length, 0)
 })
@@ -177,11 +180,14 @@ it('drops a same-scope extraction while the previous run is in flight', async ()
         trace: extractionTrace,
         extractWithTrace: async () => await tracePromise
     })
+    const options = {
+        resolvePresetPrompt: async () => '你是测试助手。'
+    }
 
-    await coordinator.queue(scope, 0, createExtractionMessages())
-    await coordinator.queue(scope, 1, createExtractionMessages())
+    await coordinator.queue(scope, 0, createExtractionMessages(), options)
+    await coordinator.queue(scope, 1, createExtractionMessages(), options)
     await waitFor(() => getExtractorCalls() === 1, 'extraction model call')
-    await coordinator.queue(scope, 1, createExtractionMessages())
+    await coordinator.queue(scope, 1, createExtractionMessages(), options)
 
     assert.equal(getExtractorCalls(), 1)
     assert.equal(jobStore.jobs.length, 0)
@@ -233,6 +239,25 @@ it('persists one failed extraction job when the model throws', async () => {
 
     assert.equal(jobStore.jobs[0]?.input, 'payload')
     assert.match(jobStore.jobs[0]?.error ?? '', /extraction failure/u)
+})
+
+it('persists one failed extraction job when preset prompt resolution throws', async () => {
+    const { coordinator, jobStore, getExtractorCalls } =
+        createExtractionCoordinator()
+
+    await queueExtraction(coordinator, 0, 1, async () => {
+        throw new Error('preset prompt resolution failure')
+    })
+    await waitFor(
+        () => jobStore.jobs.length === 1,
+        'failed preset prompt resolution'
+    )
+
+    assert.equal(getExtractorCalls(), 0)
+    assert.match(
+        jobStore.jobs[0]?.error ?? '',
+        /preset prompt resolution failure/u
+    )
 })
 
 it('persists one failed extraction job for parse errors', async () => {

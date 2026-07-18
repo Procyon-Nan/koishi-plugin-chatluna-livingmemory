@@ -156,11 +156,6 @@ export class LivingMemoryUserProfileService {
         const characterPresetName = toCharacterPresetName(presetId)
         const assistantLabel = characterPresetName ?? presetId
         const presetPrompt = await this.resolvePresetPrompt(presetId)
-        if (presetPrompt == null) {
-            throw new Error(
-                `memory user profile preset prompt unavailable: presetId=${presetId}`
-            )
-        }
         const matchedEntryCount = profileGroups.reduce(
             (sum, group) => sum + group.matchedEntryCount,
             0
@@ -560,85 +555,24 @@ export class LivingMemoryUserProfileService {
     private async resolvePresetPrompt(presetId: string) {
         const characterPresetName = toCharacterPresetName(presetId)
         if (characterPresetName != null) {
-            return await this.resolveCharacterPresetPrompt(
-                presetId,
-                characterPresetName
-            )
+            return await this.resolveCharacterPresetPrompt(characterPresetName)
         }
 
         return await this.resolveChatLunaPresetPrompt(presetId)
     }
 
     private async resolveChatLunaPresetPrompt(presetId: string) {
-        try {
-            const preset = this.ctx.chatluna.preset.getPreset(
-                presetId,
-                false
-            ).value
-            if (preset == null) {
-                return null
-            }
-
-            return await renderChatLunaPresetPrompt(this.ctx, preset)
-        } catch (error) {
-            this.debug(
-                [
-                    `memory user profile preset prompt skipped: presetId=${presetId}`,
-                    'source=chatluna',
-                    `error=${summarizeError(error)}`
-                ].join(' ')
-            )
-            return null
-        }
+        const preset = this.ctx.chatluna.preset.getPreset(presetId).value
+        return await renderChatLunaPresetPrompt(this.ctx, preset)
     }
 
-    private async resolveCharacterPresetPrompt(
-        presetId: string,
-        presetName: string
-    ) {
+    private async resolveCharacterPresetPrompt(presetName: string) {
         const character = (
             this.ctx as Context & {
-                chatluna_character?: CharacterPresetProvider
+                chatluna_character: CharacterPresetProvider
             }
         ).chatluna_character
-        const presetProvider = character?.preset
-        if (presetProvider?.getPreset == null) {
-            this.debug(
-                [
-                    `memory user profile preset prompt skipped: presetId=${presetId}`,
-                    'source=character',
-                    'reason=character-preset-unavailable'
-                ].join(' ')
-            )
-            return null
-        }
-
-        try {
-            const preset = await presetProvider.getPreset(presetName, false)
-            const prompt = await renderCharacterPresetPrompt(this.ctx, preset)
-            if (prompt == null) {
-                this.debug(
-                    [
-                        `memory user profile preset prompt skipped: presetId=${presetId}`,
-                        'source=character',
-                        `presetName=${presetName}`,
-                        'reason=empty-system-prompt'
-                    ].join(' ')
-                )
-                return null
-            }
-
-            return prompt
-        } catch (error) {
-            this.debug(
-                [
-                    `memory user profile preset prompt skipped: presetId=${presetId}`,
-                    'source=character',
-                    `presetName=${presetName}`,
-                    `error=${summarizeError(error)}`
-                ].join(' ')
-            )
-            return null
-        }
+        const preset = await character.preset.getPreset(presetName, false)
+        return await renderCharacterPresetPrompt(this.ctx, preset)
     }
 }

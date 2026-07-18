@@ -1,16 +1,13 @@
-import type { Context, Logger } from 'koishi'
-import type { PresetTemplate } from 'koishi-plugin-chatluna/llm-core/prompt'
+import type { Logger } from 'koishi'
 import type {
     LivingMemoryExtractionTrace,
     LivingMemoryExtractor
 } from './extractor'
 import type { LivingMemoryMessageFormatter } from '../../transcript/message_formatter'
-import { summarizeError } from '../../shared/utils'
 import {
     type DebugLogger,
     formatMemoryItemsForLog,
     type QueueExtractionOptions,
-    renderChatLunaPresetPrompt,
     scopeKey
 } from '../../memory/helpers'
 import type {
@@ -47,7 +44,6 @@ export class LivingMemoryExtractionCoordinator {
     private readonly lastExtractionChatCountByScope = new Map<string, number>()
 
     constructor(
-        private readonly ctx: Context,
         private readonly config: LivingMemoryExtractionConfig,
         private readonly repository: ExtractionWorkflowRepository,
         private readonly formatter: ExtractionFormatter,
@@ -69,9 +65,7 @@ export class LivingMemoryExtractionCoordinator {
         scope: MemoryScope,
         chatCount: number,
         messages: LivingMemoryTranscriptMessage[],
-        presetTemplate?: PresetTemplate,
-        promptVariables: Record<string, unknown> = {},
-        options: QueueExtractionOptions = {}
+        options: QueueExtractionOptions
     ) {
         this.debug(
             [
@@ -170,13 +164,7 @@ export class LivingMemoryExtractionCoordinator {
 
         this.extractionLockByConversation.add(lockKey)
 
-        this.run(
-            scope,
-            rounds,
-            presetTemplate,
-            promptVariables,
-            options.presetPromptOverride
-        )
+        this.run(scope, rounds, options.resolvePresetPrompt)
             .then(() => {
                 this.lastExtractionChatCountByScope.set(lockKey, chatCount)
             })
@@ -191,9 +179,7 @@ export class LivingMemoryExtractionCoordinator {
     private async run(
         scope: MemoryScope,
         messages: LivingMemoryTranscriptMessage[],
-        presetTemplate?: PresetTemplate,
-        promptVariables: Record<string, unknown> = {},
-        presetPromptOverride?: string | null
+        resolvePresetPrompt: () => Promise<string>
     ) {
         const startedAt = new Date()
         let input = ''
@@ -214,13 +200,7 @@ export class LivingMemoryExtractionCoordinator {
                 ].join(' ')
             )
 
-            const presetPrompt =
-                presetPromptOverride ??
-                (await this.renderPresetPrompt(
-                    scope,
-                    presetTemplate,
-                    promptVariables
-                ))
+            const presetPrompt = await resolvePresetPrompt()
             trace = await this.extractor.extractWithTrace(payload.input, {
                 conversationId: scope.conversationId,
                 presetId: scope.presetId,
@@ -320,52 +300,6 @@ export class LivingMemoryExtractionCoordinator {
         this.debug(`runExtraction completed: extracted=${extracted.length}`)
         if (extracted.length > 0) {
             this.queueAutoDream(scope.presetId)
-        }
-    }
-
-    private async renderPresetPrompt(
-        scope: MemoryScope,
-        presetTemplate?: PresetTemplate,
-        promptVariables: Record<string, unknown> = {}
-    ) {
-        if (presetTemplate == null) {
-            this.debug(
-                [
-                    `memory extraction preset prompt skipped: conversationId=${scope.conversationId}`,
-                    `presetId=${scope.presetId}`,
-                    'reason=preset-unavailable'
-                ].join(' ')
-            )
-            return null
-        }
-
-        try {
-            const presetPrompt = await renderChatLunaPresetPrompt(
-                this.ctx,
-                presetTemplate,
-                promptVariables
-            )
-            if (presetPrompt == null) {
-                this.debug(
-                    [
-                        `memory extraction preset prompt skipped: conversationId=${scope.conversationId}`,
-                        `presetId=${scope.presetId}`,
-                        'reason=empty-rendered-prompt'
-                    ].join(' ')
-                )
-            }
-
-            return presetPrompt
-        } catch (error) {
-            this.debug(
-                [
-                    `memory extraction preset prompt skipped: conversationId=${scope.conversationId}`,
-                    `presetId=${scope.presetId}`,
-                    'reason=render-failed',
-                    `error=${summarizeError(error)}`
-                ].join(' ')
-            )
-            return null
         }
     }
 }

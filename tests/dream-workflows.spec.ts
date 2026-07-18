@@ -92,7 +92,12 @@ const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
             preset: {
                 getPreset: () => {
                     events.push('resolve-preset')
-                    return { value: null }
+                    return { value: {} }
+                }
+            },
+            promptRenderer: {
+                renderPresetTemplate: async () => {
+                    throw new Error('preset prompt rendering failure')
                 }
             }
         }
@@ -119,7 +124,7 @@ it('keeps Dream successful when post-Dream user profile generation fails', async
 
     assert.match(
         result.detail,
-        /user profiles failed: memory user profile preset prompt unavailable/u
+        /user profiles failed: preset prompt rendering failure/u
     )
     assert.deepEqual(harness.events, [
         'list-entries',

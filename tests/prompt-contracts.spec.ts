@@ -57,7 +57,8 @@ it('uses a valid memory type in the extraction output example', () => {
 it('shares persistent memory field rules between Extraction and Dream', () => {
     const extraction = buildExtractionPrompt({
         input: '[2026-07-15 20:00] 张三说：我最近在准备考试。',
-        assistantLabel: '助手'
+        assistantLabel: '助手',
+        presetPrompt: '你是测试助手。'
     }).systemPrompt
     const dream = buildDreamPrompt(
         'preset-1',
@@ -127,7 +128,8 @@ it('keeps the search tool description within its own capability boundary', () =>
 it('shares transcript interpretation rules across prompt workflows', () => {
     const extraction = buildExtractionPrompt({
         input: '历史消息',
-        assistantLabel: '助手'
+        assistantLabel: '助手',
+        presetPrompt: '你是测试助手。'
     }).systemPrompt
     const recall = buildRecallRewritePrompt({
         assistantLabel: '助手',

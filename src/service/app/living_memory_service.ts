@@ -1,6 +1,5 @@
 import type { HumanMessage } from '@langchain/core/messages'
 import { Context, Logger, Service, Time } from 'koishi'
-import type { PresetTemplate } from 'koishi-plugin-chatluna/llm-core/prompt'
 import { LivingMemoryDreamService } from '../workflows/dream'
 import { LivingMemoryExtractor } from '../workflows/extraction/extractor'
 import { LivingMemoryMessageFormatter } from '../transcript/message_formatter'
@@ -134,7 +133,6 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             debug
         )
         this.extractionCoordinator = new LivingMemoryExtractionCoordinator(
-            ctx,
             config,
             this.repository,
             formatter,
@@ -302,16 +300,12 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         scope: MemoryScope,
         chatCount: number,
         messages: LivingMemoryTranscriptMessage[],
-        presetTemplate?: PresetTemplate,
-        promptVariables: Record<string, unknown> = {},
-        options: QueueExtractionOptions = {}
+        options: QueueExtractionOptions
     ) {
         await this.extractionCoordinator.queue(
             scope,
             chatCount,
             messages,
-            presetTemplate,
-            promptVariables,
             options
         )
     }

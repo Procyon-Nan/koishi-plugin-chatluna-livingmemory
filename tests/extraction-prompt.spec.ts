@@ -32,7 +32,8 @@ const extractModelOutput = async (content: string) => {
         'input',
         {
             conversationId: 'conversation-1',
-            presetId: 'preset-1'
+            presetId: 'preset-1',
+            presetPrompt: '你是测试助手。'
         }
     )
 }
@@ -90,6 +91,7 @@ it('sends persona context as system and escaped transcript as human input', asyn
     assert.match(systemPrompt, /事实内容只能来自 <transcript>/u)
     assert.match(systemPrompt, /必须体现你的实际回复或作用/u)
     assert.match(systemPrompt, /当天 00:00 之后的凌晨属于当天/u)
+    assert.doesNotMatch(systemPrompt, /<preset_context> 为“无”/u)
     assert.doesNotMatch(systemPrompt, /不要你的人设描述/u)
     assert.doesNotMatch(systemPrompt, /真是个笨蛋/u)
     assert.doesNotMatch(systemPrompt, /无可救药的大笨蛋/u)

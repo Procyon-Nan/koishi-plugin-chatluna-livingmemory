@@ -141,11 +141,13 @@ tree whenever architecture, data contracts, or workflow boundaries change.
   injections remain available across the main agent's tool-call turns and are
   cleared on `after-chat`, `after-chat-error`, or history clear.
 - Main ChatLuna `after-chat` converts history to transcript messages and queues
-  extraction based on chat count.
+  extraction based on chat count with a required lazy resolver for the active
+  preset system prompt.
 - Character integration uses a separate preset id based on
   `characterPresetSuffix`. Character prompt injection happens through the
   `{living_memory}` function provider rather than ChatLuna core context
-  injection.
+  injection. Character extraction resolves its preset system prompt from the
+  required preset snapshot carried by the event payload.
 - Recall is serialized per scope and remains asynchronous: the current chat turn
   injects the previous hydrated snapshot, while the recall snapshot produced by the
   current turn is used by later turns. Successful, skipped, empty, and
@@ -175,9 +177,14 @@ tree whenever architecture, data contracts, or workflow boundaries change.
 - `living_memory_snapshot.strategy` distinguishes snapshot item semantics:
   `embedding-rerank` stores memory references, while `agentic-recall`
   stores agentic snapshot items rendered directly as final memory text.
-- Extraction uses an interval baseline per scope. Payload construction, model,
-  parse, and persistence failures create one failed audit row; successful and
-  skipped runs, including valid empty arrays, do not create Job rows.
+- Preset system prompts are runtime invariants for extraction and user-profile
+  generation. Do not add empty, missing, or unavailable-prompt fallbacks; preset
+  lookup and rendering failures indicate an integration error and must propagate
+  through the owning workflow's existing failure semantics.
+- Extraction uses an interval baseline per scope. Payload construction, preset
+  prompt resolution, model, parse, and persistence failures create one failed
+  audit row; successful and skipped runs, including valid empty arrays, do not
+  create Job rows.
 - Dream active-stage operations allow keep, update, merge, and archive. Archived
   stage operations allow keep, update, merge, and deleteSource.
 - Dream merge preserves source-origin groups by combining the target memory
@@ -275,12 +282,15 @@ tree whenever architecture, data contracts, or workflow boundaries change.
   `src/plugins/living_memory_tools.ts`, and persistence repository
   source-origin contracts aligned.
 - For extraction changes, preserve interval baseline handling, lock behavior,
-  job state transitions, prompt rendering fallback, and parse-error semantics.
+  job state transitions, the required preset-prompt resolver contract, and
+  parse-error semantics. Do not restore null, empty, unavailable, or
+  render-failure prompt fallbacks.
 - For Dream changes, preserve stage-specific action allowlists, touched-memory
   guards, complete metadata validation, source-origin merge behavior, and
   profile regeneration gating.
 - For user profile changes, keep speaker key normalization, selected memory
-  limits, source memory id validation, and prompt rendering fallbacks explicit.
+  limits, source memory id validation, and direct preset prompt retrieval
+  explicit. Preset lookup and rendering errors must propagate to the caller.
 - For Character integration changes, keep the main ChatLuna and Character
   injection paths separate; do not assume one event payload shape applies to the
   other.

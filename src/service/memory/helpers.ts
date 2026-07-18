@@ -7,7 +7,7 @@ import type {
 } from '../../contracts/memory'
 
 export interface QueueExtractionOptions {
-    presetPromptOverride?: string | null
+    resolvePresetPrompt: () => Promise<string>
     preselectedMessages?: LivingMemoryTranscriptMessage[]
 }
 
@@ -20,9 +20,9 @@ export interface CharacterPresetPromptSource {
 }
 
 export interface CharacterPresetProvider {
-    preset?: {
+    preset: {
         getAllPreset?: () => Promise<unknown>
-        getPreset?: (
+        getPreset: (
             presetName: string,
             loadForDisk?: boolean,
             throwError?: boolean
@@ -109,19 +109,7 @@ const stringifyMessageContent = (content: unknown) => {
 export const formatRenderedPresetPrompt = (messages: BaseMessage[]) => {
     const formattedMessages = messages
         .filter((message) => message.getType() === 'system')
-        .map((message) => {
-            const content = stringifyMessageContent(message.content)
-            if (content.length === 0) {
-                return null
-            }
-
-            return content
-        })
-        .filter((message): message is string => message != null)
-
-    if (formattedMessages.length === 0) {
-        return null
-    }
+        .map((message) => stringifyMessageContent(message.content))
 
     return [
         '# 当前 preset prompt（仅用于理解“我”的人设，不要从此处抽取记忆）',
@@ -142,15 +130,6 @@ export const renderChatLunaPresetPrompt = async (
     return formatRenderedPresetPrompt(rendered.messages)
 }
 
-const formatCharacterPresetPrompt = (systemPrompt: string) => {
-    const normalized = systemPrompt.trim()
-    if (normalized.length === 0) {
-        return null
-    }
-
-    return [normalized].join('\n\n')
-}
-
 export const renderCharacterPresetPrompt = async (
     ctx: Context,
     preset: CharacterPresetPromptSource,
@@ -158,13 +137,8 @@ export const renderCharacterPresetPrompt = async (
         session?: Session
     } = {}
 ) => {
-    const rawString = preset.system.rawString.trim()
-    if (rawString.length === 0) {
-        return null
-    }
-
     const rendered = await ctx.chatluna.promptRenderer.renderTemplate(
-        rawString,
+        preset.system.rawString,
         {
             time: '',
             stickers: '',
@@ -179,5 +153,5 @@ export const renderCharacterPresetPrompt = async (
               }
     )
 
-    return formatCharacterPresetPrompt(rendered.text)
+    return rendered.text.trim()
 }

@@ -12,6 +12,7 @@ import {
 } from '../service/transcript/chatluna_transcript_adapter'
 import { collectUserProfileSpeakerLabels } from '../service/user_profile'
 import type { LivingMemoryTranscriptMessage } from '../contracts/memory'
+import { renderChatLunaPresetPrompt } from '../service/memory/helpers'
 
 const toNonEmptyString = (value: unknown) => {
     return typeof value === 'string' && value.trim().length > 0
@@ -414,13 +415,20 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                     `transcriptMessagesLength=${transcriptMessages.length}`
                 ].join(' ')
             )
+            const presetTemplate = chatInterface.preset.value
 
             await ctx.chatluna_living_memory.queueExtraction(
                 scope,
                 chatCount,
                 transcriptMessages,
-                chatInterface.preset.value,
-                promptVariables
+                {
+                    resolvePresetPrompt: async () =>
+                        await renderChatLunaPresetPrompt(
+                            ctx,
+                            presetTemplate,
+                            promptVariables
+                        )
+                }
             )
         }
     )

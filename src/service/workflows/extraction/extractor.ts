@@ -34,7 +34,7 @@ export interface LivingMemoryExtractionContext {
     conversationId: string
     presetId: string
     presetLabel?: string
-    presetPrompt?: string | null
+    presetPrompt: string
 }
 
 type ParsedExtractionItem =
