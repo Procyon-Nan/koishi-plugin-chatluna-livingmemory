@@ -6,8 +6,6 @@ import {
 } from './prompt_format'
 
 export interface RecallRewritePromptInput {
-    /** 当前改写任务所使用的 presetId。 */
-    presetId: string
     /** 角色名标签（用于「XX说：」前缀）。 */
     assistantLabel: string
     /** 当前发言者最后一条信息（为空时回退到 cleanedQuery）。 */
@@ -21,22 +19,16 @@ export interface RecallRewritePromptInput {
 export type RecallRewritePromptMessages = PromptMessages
 
 /**
- * 构建召回查询改写提示词。纯函数：presetId / history 等均由调用方预先算好传入。
+ * 构建召回查询改写提示词。纯函数：assistantLabel / history 等均由调用方预先算好传入。
  */
 export const buildRecallRewritePrompt = (
     params: RecallRewritePromptInput
 ): RecallRewritePromptMessages => {
-    const {
-        presetId,
-        assistantLabel,
-        currentTranscript,
-        cleanedQuery,
-        history
-    } = params
-    const escapedPresetId = escapeXmlText(presetId)
+    const { assistantLabel, currentTranscript, cleanedQuery, history } = params
+    const escapedAssistantLabel = escapeXmlText(assistantLabel)
     const systemPrompt = [
         '<role>',
-        `你是${escapedPresetId}，你正在以本人视角，总结你和用户的聊天话题内容。`,
+        `你是${escapedAssistantLabel}，你正在以本人视角，总结你和用户的聊天话题内容。`,
         '话题内容不是角色回复或台词；必须优先保证信息具体、紧凑且语义清晰。',
         '</role>',
         '',

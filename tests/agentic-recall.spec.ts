@@ -40,7 +40,8 @@ const config = {
 
 const testScope: MemoryScope = {
     ...scope,
-    userId: 'user-1'
+    userId: 'user-1',
+    presetLabel: '助手<&'
 }
 
 const validSearchInput = (text: string): LivingMemorySearchInput => ({
@@ -207,6 +208,14 @@ it('runs one search through AgentRunner and preserves preset-scoped trace data',
     assert.match(
         String(harness.boundInvocations[0]?.messages[0]?.content),
         /<tool_policy>/u
+    )
+    assert.match(
+        String(harness.boundInvocations[0]?.messages[0]?.content),
+        /你是助手&lt;&amp;/u
+    )
+    assert.doesNotMatch(
+        String(harness.boundInvocations[0]?.messages[0]?.content),
+        /你是preset-1/u
     )
     assert.match(
         String(harness.boundInvocations[0]?.messages[1]?.content),

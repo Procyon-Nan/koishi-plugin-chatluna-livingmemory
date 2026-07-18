@@ -219,7 +219,6 @@ export class LivingMemoryExtractor {
 
         return buildExtractionPrompt({
             input,
-            presetId: context.presetId,
             assistantLabel,
             presetPrompt: context.presetPrompt
         })

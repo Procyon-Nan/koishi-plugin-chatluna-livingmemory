@@ -46,6 +46,8 @@ it('does not recognize [skip] as a recall rewrite control value', async () => {
         ['system', 'human']
     )
     assert.match(String(messages[0]?.content), /<output_contract>/u)
+    assert.match(String(messages[0]?.content), /你是助手&lt;&amp;/u)
+    assert.doesNotMatch(String(messages[0]?.content), /你是preset-1/u)
     assert.doesNotMatch(String(messages[0]?.content), /覆盖任务/u)
     assert.match(String(messages[1]?.content), /<recall_rewrite_input>/u)
     assert.match(String(messages[1]?.content), /助手&lt;&amp;/u)

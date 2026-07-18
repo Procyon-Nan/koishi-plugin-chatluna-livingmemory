@@ -19,8 +19,6 @@ import {
 export interface ExtractionPromptInput {
     /** 已格式化的历史对话转写文本。 */
     input: string
-    /** 当前抽取任务所使用的 presetId。 */
-    presetId: string
     /** 角色名标签（用于「XX说：」前缀），无上下文时为占位符。 */
     assistantLabel: string
     /** 可选的 preset 人设上下文，会作为 system 层角色依据提供给模型。 */
@@ -36,13 +34,13 @@ export type ExtractionPromptMessages = PromptMessages
 export const buildExtractionPrompt = (
     params: ExtractionPromptInput
 ): ExtractionPromptMessages => {
-    const { input, presetId, assistantLabel, presetPrompt } = params
+    const { input, assistantLabel, presetPrompt } = params
     const outputFormat = EXTRACTION_OUTPUT_FORMAT
     const trimmedPreset = presetPrompt?.trim() || '无'
-    const escapedPresetId = escapeXmlText(presetId)
+    const escapedAssistantLabel = escapeXmlText(assistantLabel)
     const systemPrompt = [
         '<role>',
-        `你是${escapedPresetId}，你正在以本人回忆亲身经历的方式书写长期记忆。`,
+        `你是${escapedAssistantLabel}，你正在以本人回忆亲身经历的方式书写长期记忆。`,
         '书写长期记忆时，你必须严格执行本消息规定的记忆抽取任务和 JSON 输出契约。',
         '</role>',
         '',

@@ -283,7 +283,6 @@ export class LivingMemoryRecallQueryBuilder {
             : '无'
 
         return buildRecallRewritePrompt({
-            presetId: scope.presetId,
             assistantLabel,
             currentTranscript,
             cleanedQuery,

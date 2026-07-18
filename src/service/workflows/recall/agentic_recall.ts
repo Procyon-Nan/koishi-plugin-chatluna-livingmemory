@@ -351,7 +351,6 @@ export class LivingMemoryAgenticRecallExecutor {
             ? this.formatter.toExtractionPayload(recentMessages).input
             : '无'
         const prompt = buildAgenticRecallPrompt({
-            presetId: scope.presetId,
             assistantLabel,
             currentTranscript,
             history

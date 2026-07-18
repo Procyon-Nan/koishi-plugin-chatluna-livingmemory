@@ -82,8 +82,9 @@ it('sends persona context as system and escaped transcript as human input', asyn
     )
     assert.match(
         systemPrompt,
-        /<role>\n你是preset-1，你正在以本人回忆亲身经历的方式书写长期记忆。/u
+        /<role>\n你是助手&lt;&amp;，你正在以本人回忆亲身经历的方式书写长期记忆。/u
     )
+    assert.doesNotMatch(systemPrompt, /你是preset-1/u)
     assert.match(systemPrompt, /优先沿用已经实际出现过的表达/u)
     assert.match(systemPrompt, /不能写成旁观者、客服记录或聊天日志/u)
     assert.match(systemPrompt, /事实内容只能来自 <transcript>/u)
