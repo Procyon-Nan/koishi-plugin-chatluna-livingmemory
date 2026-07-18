@@ -1,3 +1,4 @@
+import { HumanMessage, SystemMessage } from '@langchain/core/messages'
 import { Context } from 'koishi'
 import type { MemoryEntryRecord } from '../../../contracts/memory'
 import type {
@@ -16,6 +17,10 @@ import { DreamExecutor, type DreamExecutorRepository } from './executor'
 import { LivingMemoryUserProfileService } from '../../user_profile'
 import { parseDreamOperations } from './parser'
 import { buildDreamPrompt } from '../../prompts'
+import {
+    formatPromptMessagesTrace,
+    type PromptMessages
+} from '../../prompts/prompt_format'
 import {
     addStats,
     createEmptyStageResult,
@@ -91,8 +96,11 @@ export class LivingMemoryDreamService {
         }
 
         const chatModel = model.value
-        const invokeModel = async (prompt: string) => {
-            const result = await chatModel.invoke(prompt)
+        const invokeModel = async (prompt: PromptMessages) => {
+            const result = await chatModel.invoke([
+                new SystemMessage(prompt.systemPrompt),
+                new HumanMessage(prompt.inputPrompt)
+            ])
             return stringifyModelContent(result.content)
         }
 
@@ -146,7 +154,7 @@ export class LivingMemoryDreamService {
         presetId: string,
         stage: DreamStage,
         entries: MemoryEntryRecord[],
-        invokeModel: (prompt: string) => Promise<string>
+        invokeModel: (prompt: PromptMessages) => Promise<string>
     ): Promise<DreamStageResult> {
         if (entries.length < 2) {
             return createEmptyStageResult(stage, entries.length)
@@ -180,7 +188,7 @@ export class LivingMemoryDreamService {
                     `memory dream llm input: presetId=${presetId}`,
                     `stage=${stage}`,
                     `clusterId=${cluster.id}`,
-                    prompt
+                    formatPromptMessagesTrace(prompt)
                 ].join('\n')
             )
 

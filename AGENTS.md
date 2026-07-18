@@ -195,6 +195,12 @@ tree whenever architecture, data contracts, or workflow boundaries change.
 - User profile generation and rendering must honor `enableUserProfileInjection`.
   Speaker recording can still happen independently so future profile generation
   has an index to work from.
+- Dream sends static operation and output rules as a System message, while
+  escaped preset, stage, cluster, and memory-entry data is sent as XML-blocked
+  Human input.
+- User profile generation sends static fact, update, and output rules as a
+  System message, while escaped preset context, existing profile, source ids,
+  and memory entries are sent as XML-blocked Human input.
 
 ## Data And RPC Boundaries
 

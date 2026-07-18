@@ -29,6 +29,7 @@ const memory: MemoryEntryRecord = {
 const createHarness = () => {
     const savedProfiles: UserProfileInput[] = []
     const debugMessages: string[] = []
+    const capturedPrompts: unknown[] = []
     const repository: UserProfileRepository = {
         listPresetSpeakers: async () => [
             {
@@ -69,10 +70,12 @@ const createHarness = () => {
     return {
         savedProfiles,
         debugMessages,
+        capturedPrompts,
         run: async (output: unknown) =>
-            await service.regenerate('preset-1', [memory], async () =>
-                JSON.stringify([output])
-            )
+            await service.regenerate('preset-1', [memory], async (prompt) => {
+                capturedPrompts.push(prompt)
+                return JSON.stringify([output])
+            })
     }
 }
 
@@ -118,6 +121,26 @@ it('rejects a non-object user profile without sourceMemoryIds', async () => {
     assert.equal(result.generated, 0)
     assert.equal(harness.savedProfiles.length, 0)
     assert.match(result.detail, /failed=1/u)
+})
+
+it('passes user profile rules and memory data through PromptMessages', async () => {
+    const harness = createHarness()
+
+    await harness.run({
+        ...baseProfileOutput,
+        sourceMemoryIds: ['memory-1']
+    })
+
+    assert.equal(harness.capturedPrompts.length, 1)
+    const prompt = harness.capturedPrompts[0] as {
+        systemPrompt: string
+        inputPrompt: string
+    }
+    assert.match(prompt.systemPrompt, /<output_contract>/u)
+    assert.doesNotMatch(prompt.systemPrompt, /张三正在准备考试/u)
+    assert.match(prompt.inputPrompt, /<user_profile_input>/u)
+    assert.match(prompt.inputPrompt, /<memory_entries>/u)
+    assert.match(prompt.inputPrompt, /张三正在准备考试/u)
 })
 
 it('keeps truncated user profile content within the declared maximum', async () => {

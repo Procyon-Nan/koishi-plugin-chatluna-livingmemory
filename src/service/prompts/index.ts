@@ -18,10 +18,12 @@ export type {
     AgenticRecallPromptMessages
 } from './agentic_recall'
 export { buildDreamPrompt } from './dream'
+export type { DreamPromptMessages } from './dream'
 export { buildUserProfilePrompt } from './user_profile'
 export type {
     UserProfilePromptGroup,
-    UserProfilePromptInput
+    UserProfilePromptInput,
+    UserProfilePromptMessages
 } from './user_profile'
 export {
     EXTRACTION_OUTPUT_FORMAT,

@@ -16,6 +16,10 @@ import {
     renderChatLunaPresetPrompt
 } from './memory/helpers'
 import { buildUserProfilePrompt } from './prompts'
+import {
+    formatPromptMessagesTrace,
+    type PromptMessages
+} from './prompts/prompt_format'
 import { summarizeError } from './shared/utils'
 
 const maxProfileLength = 220
@@ -112,7 +116,7 @@ export class LivingMemoryUserProfileService {
     async regenerate(
         presetId: string,
         activeEntries: MemoryEntryRecord[],
-        invokeModel: (prompt: string) => Promise<string>
+        invokeModel: (prompt: PromptMessages) => Promise<string>
     ): Promise<UserProfileGenerationResult> {
         if (!this.config.enableUserProfileInjection) {
             return {
@@ -172,7 +176,7 @@ export class LivingMemoryUserProfileService {
                 [
                     `memory user profile llm prompt: presetId=${presetId}`,
                     `speaker=${group.speakerLabel}`,
-                    prompt
+                    formatPromptMessagesTrace(prompt)
                 ].join('\n')
             )
 
