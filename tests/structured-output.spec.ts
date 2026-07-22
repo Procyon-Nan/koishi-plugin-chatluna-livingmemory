@@ -9,7 +9,8 @@ import {
 
 const toolName = 'submit_result'
 const schema = z.object({
-    items: z.array(z.string().trim().min(1))
+    items: z.array(z.string().trim().min(1)),
+    note: z.string().optional()
 })
 const prompt = {
     systemPrompt: `只调用 ${toolName}。`,
@@ -30,6 +31,7 @@ const invoke = (responses: Parameters<typeof createToolCallingModel>[0]) => {
             toolName,
             toolDescription: '提交测试结果。',
             schema,
+            stringifiedArrayField: 'items',
             context
         })
     }
@@ -50,6 +52,67 @@ it('accepts one valid structured result tool call', async () => {
     assert.equal(harness.invocations.length, 1)
     const tools = harness.bindings[0]?.['tools'] as { name?: string }[]
     assert.equal(tools[0]?.name, toolName)
+})
+
+it('decodes one whitelisted stringified array field without retry', async () => {
+    const note = '["keep this as text"]'
+    const { harness, result } = invoke([
+        createToolCallMessage(toolName, {
+            items: '["alpha"]',
+            note
+        })
+    ])
+
+    const resolved = await result
+
+    assert.deepEqual(resolved.value, { items: ['alpha'], note })
+    assert.equal(resolved.parseError, null)
+    assert.equal(harness.invocations.length, 1)
+    assert.match(resolved.output, /\[attempt 1 normalization\]/u)
+    assert.match(
+        resolved.output,
+        /decoded stringified JSON array field: items/u
+    )
+})
+
+it('retries malformed stringified arrays with direct array guidance', async () => {
+    const { harness, result } = invoke([
+        createToolCallMessage(toolName, { items: '["broken"' }),
+        createToolCallMessage(
+            toolName,
+            { items: ['corrected'] },
+            'result-2'
+        )
+    ])
+
+    const resolved = await result
+
+    assert.deepEqual(resolved.value, { items: ['corrected'] })
+    assert.equal(resolved.parseError, null)
+    assert.equal(harness.invocations.length, 2)
+    const retryMessages = harness.invocations[1]?.messages ?? []
+    const toolMessage = retryMessages.find(
+        (message) => message.getType() === 'tool'
+    )
+    assert.ok(String(toolMessage?.content).includes('正确 {"items":[]}'))
+    assert.ok(String(toolMessage?.content).includes('错误 {"items":"[]"}'))
+})
+
+it('does not normalize stringified values that are not arrays', async () => {
+    const { harness, result } = invoke([
+        createToolCallMessage(toolName, { items: '"alpha"' }),
+        createToolCallMessage(
+            toolName,
+            { items: ['corrected'] },
+            'result-2'
+        )
+    ])
+
+    const resolved = await result
+
+    assert.deepEqual(resolved.value, { items: ['corrected'] })
+    assert.equal(harness.invocations.length, 2)
+    assert.doesNotMatch(resolved.output, /\[attempt 1 normalization\]/u)
 })
 
 it('retries once when the model finishes without the result tool', async () => {

@@ -51,8 +51,13 @@ interface StructuredOutputOptions<Schema extends z.AnyZodObject> {
     toolName: string
     toolDescription: string
     schema: Schema
+    stringifiedArrayField: Extract<keyof z.input<Schema>, string>
     context: StructuredOutputContext
 }
+
+type StructuredOutputValidation<T> =
+    | { value: T; error: null; normalizedField: string | null }
+    | { value: null; error: string; normalizedField: string | null }
 
 const toActions = (decision: StructuredOutputDecision): AgentAction[] => {
     if (Array.isArray(decision)) {
@@ -101,25 +106,54 @@ const parseToolInput = (input: AgentAction['toolInput']) => {
     }
 }
 
+const normalizeStringifiedArrayField = (input: unknown, field: string) => {
+    const unchanged = { value: input, normalizedField: null }
+    if (input == null || typeof input !== 'object' || Array.isArray(input)) {
+        return unchanged
+    }
+
+    const record = input as Record<string, unknown>
+    const raw = record[field]
+    if (typeof raw !== 'string') {
+        return unchanged
+    }
+
+    try {
+        const parsed = JSON.parse(raw) as unknown
+        if (!Array.isArray(parsed)) {
+            return unchanged
+        }
+
+        return {
+            value: { ...record, [field]: parsed },
+            normalizedField: field
+        }
+    } catch {
+        // 保留原值，让严格 Schema 生成明确错误并进入现有纠正重试。
+        return unchanged
+    }
+}
+
 const validateDecision = <Schema extends z.AnyZodObject>(
     decision: StructuredOutputDecision,
     toolName: string,
-    schema: Schema
-):
-    | { value: z.output<Schema>; error: null }
-    | { value: null; error: string } => {
+    schema: Schema,
+    stringifiedArrayField: string
+): StructuredOutputValidation<z.output<Schema>> => {
     const actions = toActions(decision)
     if (actions.length === 0) {
         return {
             value: null,
-            error: `model finished without calling ${toolName}`
+            error: `model finished without calling ${toolName}`,
+            normalizedField: null
         }
     }
 
     if (actions.length !== 1) {
         return {
             value: null,
-            error: `${toolName} must be called exactly once; received ${actions.length} tool calls`
+            error: `${toolName} must be called exactly once; received ${actions.length} tool calls`,
+            normalizedField: null
         }
     }
 
@@ -127,29 +161,41 @@ const validateDecision = <Schema extends z.AnyZodObject>(
     if (action.tool !== toolName) {
         return {
             value: null,
-            error: `unexpected tool call ${action.tool}; expected ${toolName}`
+            error: `unexpected tool call ${action.tool}; expected ${toolName}`,
+            normalizedField: null
         }
     }
 
-    const parsed = schema.safeParse(parseToolInput(action.toolInput))
+    const normalized = normalizeStringifiedArrayField(
+        parseToolInput(action.toolInput),
+        stringifiedArrayField
+    )
+    const parsed = schema.safeParse(normalized.value)
     if (!parsed.success) {
         return {
             value: null,
-            error: `invalid ${toolName} arguments: ${formatSchemaError(parsed.error)}`
+            error: `invalid ${toolName} arguments: ${formatSchemaError(parsed.error)}`,
+            normalizedField: normalized.normalizedField
         }
     }
 
-    return { value: parsed.data, error: null }
+    return {
+        value: parsed.data,
+        error: null,
+        normalizedField: normalized.normalizedField
+    }
 }
 
 const createRetryEntries = (
     decision: StructuredOutputDecision | null,
     toolName: string,
-    error: string
+    error: string,
+    stringifiedArrayField: string
 ): ScratchpadEntry[] => {
     const correction = [
         `结构化结果无效：${error}。`,
         `必须且只能调用 ${toolName} 一次，并完整修正工具参数。`,
+        `${stringifiedArrayField} 必须直接传 JSON 数组：正确 {"${stringifiedArrayField}":[]}；错误 {"${stringifiedArrayField}":"[]"}。`,
         '不要在普通文本中输出结果。'
     ].join(' ')
     const actions = decision == null ? [] : toActions(decision)
@@ -258,8 +304,14 @@ export async function invokeStructuredOutput<Schema extends z.AnyZodObject>(
             const validated = validateDecision(
                 decision,
                 options.toolName,
-                options.schema
+                options.schema,
+                options.stringifiedArrayField
             )
+            if (validated.normalizedField != null) {
+                outputs.push(
+                    `[attempt ${attempt} normalization]\ndecoded stringified JSON array field: ${validated.normalizedField}`
+                )
+            }
             if (validated.error == null) {
                 return {
                     value: validated.value,
@@ -287,7 +339,8 @@ export async function invokeStructuredOutput<Schema extends z.AnyZodObject>(
         scratchpadEntries = createRetryEntries(
             decision,
             options.toolName,
-            lastError
+            lastError,
+            options.stringifiedArrayField
         )
     }
 

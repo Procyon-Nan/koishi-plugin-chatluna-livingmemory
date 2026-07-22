@@ -239,6 +239,7 @@ export class LivingMemoryDreamService {
                     prompt,
                     toolName: dreamResultToolName,
                     toolDescription: dreamResultToolDescription,
+                    stringifiedArrayField: 'operations',
                     schema:
                         stage === 'active'
                             ? dreamActiveResultSchema

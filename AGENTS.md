@@ -213,6 +213,10 @@ tree whenever architecture, data contracts, or workflow boundaries change.
   correction attempt; a second invalid result fails the Dream job instead of
   being treated as an empty operation list. The result tool has no persistence
   side effects, and validated operations still pass through `DreamExecutor`.
+- Structured-output compatibility normalization is limited to one JSON parse of
+  a stringified top-level `memories` or `operations` field. The parsed value must
+  be an array and still pass the complete workflow Zod Schema. Do not recursively
+  parse memory content, operation reasons, or other string fields.
 - User profile generation and rendering must honor `enableUserProfileInjection`.
   Speaker recording can still happen independently so future profile generation
   has an index to work from.

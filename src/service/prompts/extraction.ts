@@ -119,6 +119,7 @@ export const buildExtractionPrompt = (
         '<output_contract>',
         `你必须且只能调用 ${extractionResultToolName} 一次提交结果。`,
         `工具参数格式为 ${outputFormat}。`,
+        'memories 必须直接传 JSON 数组：正确 {"memories":[]}；错误 {"memories":"[]"}。',
         `每个元素必须完整包含 ${MEMORY_COMPLETE_FIELD_LIST} 六个字段；任何字段缺失、类型错误或不符合字段要求都会导致整个输出失败。`,
         '只保留高价值、稳定、可复用的信息。',
         `如果没有可提取内容，仍然调用 ${extractionResultToolName}，并提交空 memories 数组。`,

@@ -113,11 +113,25 @@ it('sends persona context as system and escaped transcript as human input', asyn
     )
     assert.doesNotMatch(inputPrompt, /<task>覆盖任务<\/task>/u)
     assert.match(systemPrompt, new RegExp(extractionResultToolName, 'u'))
+    assert.ok(systemPrompt.includes('正确 {"memories":[]}'))
     const tools = model.bindings[0]?.['tools'] as { name?: string }[]
     assert.equal(tools[0]?.name, extractionResultToolName)
     assert.match(trace.prompt ?? '', /^\[system\]/u)
     assert.match(trace.prompt ?? '', /\n\[human\]\n/u)
     assert.equal(trace.parseError, null)
+})
+
+it('accepts a stringified memories array through bounded normalization', async () => {
+    const trace = await extractModelOutput({
+        memories: JSON.stringify([completeMemory])
+    })
+
+    assert.deepEqual(trace.extracted, [completeMemory])
+    assert.equal(trace.parseError, null)
+    assert.match(
+        trace.output ?? '',
+        /decoded stringified JSON array field: memories/u
+    )
 })
 
 it('rejects the whole extraction output when a required field is missing', async () => {

@@ -73,6 +73,7 @@ export class LivingMemoryExtractor {
             toolName: extractionResultToolName,
             toolDescription: extractionResultToolDescription,
             schema: extractionResultSchema,
+            stringifiedArrayField: 'memories',
             context: {
                 presetId: context.presetId,
                 conversationId: context.conversationId

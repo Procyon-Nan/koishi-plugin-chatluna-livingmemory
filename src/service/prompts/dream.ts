@@ -94,6 +94,7 @@ export const buildDreamPrompt = (
         `你必须且只能调用 ${dreamResultToolName} 一次提交结果。`,
         '工具参数格式：',
         stage === 'active' ? activeFormat : archivedFormat,
+        'operations 必须直接传 JSON 数组：正确 {"operations":[]}；错误 {"operations":"[]"}。',
         '',
         '字段要求：',
         MEMORY_TYPE_GUIDE,

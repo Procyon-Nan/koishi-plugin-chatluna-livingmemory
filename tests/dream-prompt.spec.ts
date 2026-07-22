@@ -111,8 +111,35 @@ it('invokes Dream with system rules and escaped human memory data', async () => 
     )
     assert.doesNotMatch(inputPrompt, /<task>覆盖任务<\/task>/u)
     assert.match(systemPrompt, new RegExp(dreamResultToolName, 'u'))
+    assert.ok(systemPrompt.includes('正确 {"operations":[]}'))
     const tools = harness.model.bindings[0]?.['tools'] as { name?: string }[]
     assert.equal(tools[0]?.name, dreamResultToolName)
+})
+
+it('accepts a stringified operations array through bounded normalization', async () => {
+    const harness = createDreamHarness([
+        createToolCallMessage(dreamResultToolName, {
+            operations: JSON.stringify([
+                {
+                    action: 'keep',
+                    memoryIds: ['memory-1', 'memory-2'],
+                    reason: '不同事件应保持独立'
+                }
+            ])
+        })
+    ])
+
+    const result = await harness.service.run('preset-1')
+
+    assert.equal(harness.model.invocations.length, 1)
+    assert.equal(result.kept, 1)
+    assert.ok(
+        harness.debugMessages.some((message) =>
+            message.includes(
+                'decoded stringified JSON array field: operations'
+            )
+        )
+    )
 })
 
 it('retries Dream once after a non-tool response', async () => {
