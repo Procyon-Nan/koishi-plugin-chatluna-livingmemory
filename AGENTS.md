@@ -64,9 +64,9 @@ tree whenever architecture, data contracts, or workflow boundaries change.
 - `src/service/workflows/extraction/` owns memory extraction orchestration and
   extraction result normalization.
 - `src/service/workflows/structured_output.ts` owns the internal Tool Calling
-  result protocol shared by Extraction and Dream. Its result tools are scoped
-  to each structured-output invocation and are not registered as ChatLuna
-  tools.
+  result protocol shared by Extraction, Dream, and user profile generation. Its
+  result tools are scoped to each structured-output invocation and are not
+  registered as ChatLuna tools.
 - `src/service/workflows/dream/` owns Dream clustering, structured result
   validation, operation execution, stats, and Dream coordination. Dream
   processes active
@@ -214,12 +214,19 @@ tree whenever architecture, data contracts, or workflow boundaries change.
   being treated as an empty operation list. The result tool has no persistence
   side effects, and validated operations still pass through `DreamExecutor`.
 - Structured-output compatibility normalization is limited to one JSON parse of
-  a stringified top-level `memories` or `operations` field. The parsed value must
-  be an array and still pass the complete workflow Zod Schema. Do not recursively
-  parse memory content, operation reasons, or other string fields.
+  a stringified top-level `memories`, `operations`, or `profiles` field. The
+  parsed value must be an array and still pass the complete workflow Zod Schema.
+  Do not recursively parse memory content, operation reasons, profile content,
+  or other string fields.
 - User profile generation and rendering must honor `enableUserProfileInjection`.
   Speaker recording can still happen independently so future profile generation
   has an index to work from.
+- Each user profile group must submit exactly one
+  `living_memory_user_profile_result` tool call. The group-specific Zod Schema
+  allows at most one profile, binds `speakerLabel` to the current speaker, and
+  restricts `sourceMemoryIds` to the existing profile and selected memory ids. A
+  missing or invalid result gets one correction attempt; a second invalid result
+  skips that speaker without overwriting its existing profile.
 - Dream attempts user profile regeneration only after its active and archived
   stages finish. User profile failures must not change a completed Dream into a
   failed job, while Dream-stage failures keep their existing failure semantics.

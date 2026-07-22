@@ -30,11 +30,14 @@ export {
     DREAM_ACTIVE_FORMAT,
     DREAM_ARCHIVED_FORMAT,
     USER_PROFILE_OUTPUT_FORMAT,
+    createUserProfileResultSchema,
     dreamActiveResultSchema,
     dreamArchivedResultSchema,
     dreamResultToolDescription,
     dreamResultToolName,
     extractionResultSchema,
     extractionResultToolDescription,
-    extractionResultToolName
+    extractionResultToolName,
+    userProfileResultToolDescription,
+    userProfileResultToolName
 } from './schema'

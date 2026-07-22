@@ -22,12 +22,14 @@ import {
     DREAM_ACTIVE_FORMAT,
     DREAM_ARCHIVED_FORMAT,
     EXTRACTION_OUTPUT_FORMAT,
+    createUserProfileResultSchema,
     dreamActiveResultSchema,
     dreamArchivedResultSchema,
     dreamResultToolName,
     extractionResultSchema,
     extractionResultToolName,
-    USER_PROFILE_OUTPUT_FORMAT
+    USER_PROFILE_OUTPUT_FORMAT,
+    userProfileResultToolName
 } from '../src/service/prompts/schema'
 import { buildRecallRewritePrompt } from '../src/service/prompts/recall_query'
 import {
@@ -200,22 +202,38 @@ it('uses the shared memory entry and user profile output formats', () => {
         },
         maxProfileLength: 220
     })
-    const outputExample = JSON.parse(USER_PROFILE_OUTPUT_FORMAT) as Record<
-        string,
-        unknown
-    >
+    const outputExample = JSON.parse(USER_PROFILE_OUTPUT_FORMAT) as {
+        profiles: Record<string, unknown>[]
+    }
 
-    assert.deepEqual(Object.keys(outputExample), [
+    assert.deepEqual(Object.keys(outputExample), ['profiles'])
+    assert.deepEqual(Object.keys(outputExample.profiles[0] ?? {}), [
         'speakerLabel',
         'content',
         'sourceMemoryIds'
     ])
+    assert.equal(
+        createUserProfileResultSchema({
+            speakerLabel: '张三',
+            allowedSourceMemoryIds: ['...']
+        }).safeParse({
+            profiles: [
+                {
+                    ...outputExample.profiles[0],
+                    speakerLabel: '张三'
+                }
+            ]
+        }).success,
+        true
+    )
+    assert.equal(outputExample.profiles[0]?.['speakerLabel'], '<speaker_label>')
     assert.match(prompt.inputPrompt, /id=memory-1/u)
     assert.match(
         prompt.inputPrompt,
         /createdAt=2026-07-15T12:00:00.000Z/u
     )
     assert.ok(prompt.systemPrompt.includes(USER_PROFILE_OUTPUT_FORMAT))
+    assert.match(prompt.systemPrompt, new RegExp(userProfileResultToolName, 'u'))
     assert.match(
         prompt.systemPrompt,
         /sourceMemoryIds 必须存在且为非空字符串数组/u

@@ -1,8 +1,8 @@
 import { Context } from 'koishi'
+import type { ChatLunaChatModel } from 'koishi-plugin-chatluna/llm-core/platform/model'
 import type {
     LivingMemoryTranscriptMessage,
     MemoryEntryRecord,
-    UserProfileInput,
     UserProfileRecord
 } from '../contracts/memory'
 import type {
@@ -15,12 +15,15 @@ import {
     renderCharacterPresetPrompt,
     renderChatLunaPresetPrompt
 } from './memory/helpers'
-import { buildUserProfilePrompt } from './prompts'
 import {
-    formatPromptMessagesTrace,
-    type PromptMessages
-} from './prompts/prompt_format'
+    buildUserProfilePrompt,
+    createUserProfileResultSchema,
+    userProfileResultToolDescription,
+    userProfileResultToolName
+} from './prompts'
+import { formatPromptMessagesTrace } from './prompts/prompt_format'
 import { summarizeError } from './shared/utils'
+import { invokeStructuredOutput } from './workflows/structured_output'
 
 const maxProfileLength = 220
 
@@ -43,20 +46,11 @@ interface UserProfileGroup {
     existingProfile?: UserProfileRecord
 }
 
-interface ParsedUserProfileItem {
-    profile: UserProfileInput | null
-    parseError: string | null
-}
-
 const normalizeText = (value: string) => value.replace(/\s+/gu, ' ').trim()
 const normalizeSearchText = (value: string) =>
     normalizeText(value).toLowerCase()
 
 const unique = <T>(items: T[]) => Array.from(new Set(items))
-
-const isRecord = (value: unknown): value is Record<string, unknown> => {
-    return value != null && typeof value === 'object' && !Array.isArray(value)
-}
 
 const toCharacterPresetName = (presetId: string) => {
     return presetId.endsWith(characterPresetSuffix)
@@ -116,7 +110,7 @@ export class LivingMemoryUserProfileService {
     async regenerate(
         presetId: string,
         activeEntries: MemoryEntryRecord[],
-        invokeModel: (prompt: PromptMessages) => Promise<string>
+        model: ChatLunaChatModel
     ): Promise<UserProfileGenerationResult> {
         if (!this.config.enableUserProfileInjection) {
             return {
@@ -183,9 +177,28 @@ export class LivingMemoryUserProfileService {
                 ].join('\n')
             )
 
-            let output: string
+            let structuredResult
             try {
-                output = await invokeModel(prompt)
+                structuredResult = await invokeStructuredOutput({
+                    model,
+                    prompt,
+                    toolName: userProfileResultToolName,
+                    toolDescription: userProfileResultToolDescription,
+                    schema: createUserProfileResultSchema({
+                        speakerLabel: group.speakerLabel,
+                        allowedSourceMemoryIds:
+                            this.getProfileFallbackSourceMemoryIds(group)
+                    }),
+                    stringifiedArrayField: 'profiles',
+                    context: {
+                        presetId,
+                        conversationId: [
+                            'user-profile',
+                            presetId,
+                            group.speakerKey
+                        ].join(':')
+                    }
+                })
             } catch (error) {
                 failed++
                 this.debug(
@@ -203,30 +216,44 @@ export class LivingMemoryUserProfileService {
                 [
                     `memory user profile llm output: presetId=${presetId}`,
                     `speaker=${group.speakerLabel}`,
-                    output
+                    structuredResult.output
                 ].join('\n')
             )
 
-            const parsed = this.parseProfiles(output, [group])
-            if (parsed.parseError != null) {
+            if (structuredResult.parseError != null) {
                 failed++
                 this.debug(
                     [
                         `memory user profile skipped: presetId=${presetId}`,
                         `speaker=${group.speakerLabel}`,
-                        `reason=parse-failed error=${parsed.parseError}`
+                        `reason=structured-output-failed error=${structuredResult.parseError}`
                     ].join(' ')
                 )
                 continue
             }
 
-            const profile = parsed.profiles[0]
-            if (profile == null) {
+            const parsedProfiles = structuredResult.value?.profiles ?? []
+            const parsed = parsedProfiles[0]
+            if (parsed == null) {
                 empty++
                 continue
             }
 
-            await this.repository.replaceUserProfile(presetId, profile)
+            const content = this.normalizeProfileContent(
+                group.speakerLabel,
+                parsed.content
+            )
+            if (content.length === 0) {
+                empty++
+                continue
+            }
+
+            await this.repository.replaceUserProfile(presetId, {
+                speakerKey: group.speakerKey,
+                speakerLabel: group.speakerLabel,
+                content,
+                sourceMemoryIds: unique(parsed.sourceMemoryIds)
+            })
             generated++
         }
 
@@ -359,158 +386,11 @@ export class LivingMemoryUserProfileService {
         return Math.max(...entries.map((entry) => +entry.updatedAt))
     }
 
-    private parseProfiles(
-        output: string,
-        groups: UserProfileGroup[]
-    ): { profiles: UserProfileInput[]; parseError: string | null } {
-        const normalized = output.trim()
-        const firstBracket = normalized.indexOf('[')
-        const lastBracket = normalized.lastIndexOf(']')
-        if (firstBracket < 0 || lastBracket < firstBracket) {
-            return {
-                profiles: [],
-                parseError: 'no JSON array delimiters found'
-            }
-        }
-
-        let parsed: unknown
-        try {
-            parsed = JSON.parse(normalized.slice(firstBracket, lastBracket + 1))
-        } catch (error) {
-            return { profiles: [], parseError: summarizeError(error) }
-        }
-
-        if (!Array.isArray(parsed)) {
-            return { profiles: [], parseError: 'parsed value is not an array' }
-        }
-
-        const groupByKey = new Map(
-            groups.map((group) => [group.speakerKey, group])
-        )
-        const allowedSourceMemoryIds = new Set(
-            groups.flatMap((group) =>
-                this.getProfileFallbackSourceMemoryIds(group)
-            )
-        )
-        const profiles: UserProfileInput[] = []
-        for (const [index, item] of parsed.entries()) {
-            const result = this.toUserProfileInput(
-                item,
-                groupByKey,
-                allowedSourceMemoryIds
-            )
-            if (result.parseError != null) {
-                return {
-                    profiles: [],
-                    parseError: `profile item ${index}: ${result.parseError}`
-                }
-            }
-            if (result.profile != null) {
-                profiles.push(result.profile)
-            }
-        }
-
-        return { profiles, parseError: null }
-    }
-
-    private toUserProfileInput(
-        item: unknown,
-        groupByKey: Map<string, UserProfileGroup>,
-        allowedSourceMemoryIds: Set<string>
-    ): ParsedUserProfileItem {
-        if (!isRecord(item)) {
-            return {
-                profile: null,
-                parseError: 'sourceMemoryIds must be a non-empty array'
-            }
-        }
-        if (
-            !Array.isArray(item.sourceMemoryIds) ||
-            item.sourceMemoryIds.length === 0
-        ) {
-            return {
-                profile: null,
-                parseError: 'sourceMemoryIds must be a non-empty array'
-            }
-        }
-        if (item.sourceMemoryIds.some((id) => typeof id !== 'string')) {
-            return {
-                profile: null,
-                parseError: 'sourceMemoryIds must contain only strings'
-            }
-        }
-        if (
-            item.sourceMemoryIds.some((id) => !allowedSourceMemoryIds.has(id))
-        ) {
-            return {
-                profile: null,
-                parseError:
-                    'sourceMemoryIds contains an id outside the allowed set'
-            }
-        }
-        if (
-            typeof item.speakerLabel !== 'string' ||
-            typeof item.content !== 'string'
-        ) {
-            return { profile: null, parseError: null }
-        }
-
-        const speakerKey = normalizeUserProfileSpeakerKey(item.speakerLabel)
-        const group = groupByKey.get(speakerKey)
-        if (group == null) {
-            return { profile: null, parseError: null }
-        }
-
-        const sourceMemoryIds = this.resolveProfileSourceMemoryIds(
-            item.sourceMemoryIds,
-            group
-        )
-        if (sourceMemoryIds == null) {
-            return {
-                profile: null,
-                parseError:
-                    'sourceMemoryIds contains an id outside the allowed set'
-            }
-        }
-
-        const content = this.normalizeProfileContent(
-            group.speakerLabel,
-            item.content
-        )
-        if (content.length === 0) {
-            return { profile: null, parseError: null }
-        }
-
-        return {
-            profile: {
-                speakerKey: group.speakerKey,
-                speakerLabel: group.speakerLabel,
-                content,
-                sourceMemoryIds
-            },
-            parseError: null
-        }
-    }
-
     private normalizeProfileContent(speakerLabel: string, content: string) {
         return truncateText(
             this.stripGeneratedTitle(speakerLabel, normalizeText(content)),
             maxProfileLength
         )
-    }
-
-    private resolveProfileSourceMemoryIds(
-        sourceMemoryIds: string[],
-        group: UserProfileGroup
-    ): string[] | null {
-        const allowedIds = new Set(
-            this.getProfileFallbackSourceMemoryIds(group)
-        )
-        if (sourceMemoryIds.some((id) => !allowedIds.has(id))) {
-            return null
-        }
-
-        return unique(sourceMemoryIds)
     }
 
     private getProfileFallbackSourceMemoryIds(group: UserProfileGroup) {

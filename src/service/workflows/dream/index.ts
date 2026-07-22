@@ -1,4 +1,3 @@
-import { HumanMessage, SystemMessage } from '@langchain/core/messages'
 import { Context } from 'koishi'
 import type { ChatLunaChatModel } from 'koishi-plugin-chatluna/llm-core/platform/model'
 import type { MemoryEntryRecord } from '../../../contracts/memory'
@@ -8,11 +7,7 @@ import type {
     UserProfileRepository
 } from '../../../contracts/workflows'
 import type { EmbeddingRepositoryLike } from '../../shared/embeddings'
-import {
-    isModelConfigured,
-    stringifyModelContent,
-    summarizeError
-} from '../../shared/utils'
+import { isModelConfigured, summarizeError } from '../../shared/utils'
 import { DreamClusterer } from './clustering'
 import { DreamExecutor, type DreamExecutorRepository } from './executor'
 import { LivingMemoryUserProfileService } from '../../user_profile'
@@ -23,10 +18,7 @@ import {
     dreamResultToolDescription,
     dreamResultToolName
 } from '../../prompts'
-import {
-    formatPromptMessagesTrace,
-    type PromptMessages
-} from '../../prompts/prompt_format'
+import { formatPromptMessagesTrace } from '../../prompts/prompt_format'
 import {
     addStats,
     createEmptyStageResult,
@@ -106,14 +98,6 @@ export class LivingMemoryDreamService {
         }
 
         const chatModel = model.value
-        const invokeModel = async (prompt: PromptMessages) => {
-            const result = await chatModel.invoke([
-                new SystemMessage(prompt.systemPrompt),
-                new HumanMessage(prompt.inputPrompt)
-            ])
-            return stringifyModelContent(result.content)
-        }
-
         const activeResult = await this.runStage(
             presetId,
             'active',
@@ -133,7 +117,7 @@ export class LivingMemoryDreamService {
         )
         const profileDetail = await this.regenerateUserProfilesAfterDream(
             presetId,
-            invokeModel
+            chatModel
         )
         const stats = sumStats([activeResult, archivedResult])
         const detail = [
@@ -160,7 +144,7 @@ export class LivingMemoryDreamService {
 
     private async regenerateUserProfilesAfterDream(
         presetId: string,
-        invokeModel: (prompt: PromptMessages) => Promise<string>
+        model: ChatLunaChatModel
     ) {
         if (!this.config.enableUserProfileInjection) {
             return 'user profiles skipped: disabled'
@@ -172,7 +156,7 @@ export class LivingMemoryDreamService {
             const result = await this.userProfiles.regenerate(
                 presetId,
                 finalEntries.filter((entry) => entry.status === 'active'),
-                invokeModel
+                model
             )
             return result.detail
         } catch (error) {
