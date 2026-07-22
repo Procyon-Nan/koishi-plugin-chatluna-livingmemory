@@ -19,7 +19,14 @@ import {
     MEMORY_TYPE_GUIDE
 } from '../src/service/prompts/memory_fields'
 import {
+    DREAM_ACTIVE_FORMAT,
+    DREAM_ARCHIVED_FORMAT,
     EXTRACTION_OUTPUT_FORMAT,
+    dreamActiveResultSchema,
+    dreamArchivedResultSchema,
+    dreamResultToolName,
+    extractionResultSchema,
+    extractionResultToolName,
     USER_PROFILE_OUTPUT_FORMAT
 } from '../src/service/prompts/schema'
 import { buildRecallRewritePrompt } from '../src/service/prompts/recall_query'
@@ -47,11 +54,106 @@ const memoryEntry: MemoryEntryRecord = {
 }
 
 it('uses a valid memory type in the extraction output example', () => {
-    const example = JSON.parse(EXTRACTION_OUTPUT_FORMAT) as { type: unknown }
+    const output = JSON.parse(EXTRACTION_OUTPUT_FORMAT) as {
+        memories: { type: unknown }[]
+    }
+    const example = output.memories[0]
 
-    assert.equal(example.type, 'fact')
-    assert.equal(typeof example.type, 'string')
-    assert.ok((memoryEntryTypes as readonly string[]).includes(example.type))
+    assert.equal(example?.type, 'fact')
+    assert.equal(typeof example?.type, 'string')
+    assert.ok(
+        (memoryEntryTypes as readonly unknown[]).includes(example?.type)
+    )
+})
+
+it('keeps structured-output examples aligned with their runtime schemas', () => {
+    assert.equal(
+        extractionResultSchema.safeParse(
+            JSON.parse(EXTRACTION_OUTPUT_FORMAT)
+        ).success,
+        true
+    )
+    assert.equal(
+        dreamActiveResultSchema.safeParse(JSON.parse(DREAM_ACTIVE_FORMAT))
+            .success,
+        true
+    )
+    assert.equal(
+        dreamArchivedResultSchema.safeParse(
+            JSON.parse(DREAM_ARCHIVED_FORMAT)
+        ).success,
+        true
+    )
+})
+
+it('enforces Dream stage actions and complete generated metadata', () => {
+    const reason = '测试原因'
+    const completeMemory = {
+        type: 'fact',
+        content: '完整内容',
+        summary: '完整摘要',
+        keywords: ['关键词'],
+        sentiment: '平静',
+        importance: 0.5
+    }
+
+    assert.equal(
+        dreamActiveResultSchema.safeParse({
+            operations: [
+                {
+                    action: 'deleteSource',
+                    targetMemoryId: 'memory-1',
+                    sourceMemoryIds: ['memory-2'],
+                    reason
+                }
+            ]
+        }).success,
+        false
+    )
+    assert.equal(
+        dreamArchivedResultSchema.safeParse({
+            operations: [
+                { action: 'archive', memoryId: 'memory-1', reason }
+            ]
+        }).success,
+        false
+    )
+
+    for (const schema of [
+        dreamActiveResultSchema,
+        dreamArchivedResultSchema
+    ]) {
+        assert.equal(
+            schema.safeParse({
+                operations: [
+                    {
+                        action: 'update',
+                        memoryId: 'memory-1',
+                        memory: { ...completeMemory, keywords: [] },
+                        reason
+                    }
+                ]
+            }).success,
+            false
+        )
+        assert.equal(
+            schema.safeParse({
+                operations: [
+                    {
+                        action: 'merge',
+                        targetMemoryId: 'memory-1',
+                        sourceMemoryIds: ['memory-2'],
+                        memory: {
+                            ...completeMemory,
+                            summary: undefined
+                        },
+                        reason
+                    }
+                ]
+            }).success,
+            false
+        )
+    }
 })
 
 it('shares persistent memory field rules between Extraction and Dream', () => {
@@ -82,6 +184,8 @@ it('shares persistent memory field rules between Extraction and Dream', () => {
         assert.ok(extraction.includes(requirement))
         assert.ok(dream.includes(requirement))
     }
+    assert.match(extraction, new RegExp(extractionResultToolName, 'u'))
+    assert.match(dream, new RegExp(dreamResultToolName, 'u'))
     assert.match(MEMORY_CONTENT_REQUIREMENT, /当前角色的第一人称关系视角/u)
     assert.doesNotMatch(MEMORY_CONTENT_REQUIREMENT, /你的第一人称关系视角/u)
 })

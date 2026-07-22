@@ -1,5 +1,6 @@
 import { HumanMessage, SystemMessage } from '@langchain/core/messages'
 import { Context } from 'koishi'
+import type { ChatLunaChatModel } from 'koishi-plugin-chatluna/llm-core/platform/model'
 import type { MemoryEntryRecord } from '../../../contracts/memory'
 import type {
     LivingMemoryConfig,
@@ -15,8 +16,13 @@ import {
 import { DreamClusterer } from './clustering'
 import { DreamExecutor, type DreamExecutorRepository } from './executor'
 import { LivingMemoryUserProfileService } from '../../user_profile'
-import { parseDreamOperations } from './parser'
-import { buildDreamPrompt } from '../../prompts'
+import {
+    buildDreamPrompt,
+    dreamActiveResultSchema,
+    dreamArchivedResultSchema,
+    dreamResultToolDescription,
+    dreamResultToolName
+} from '../../prompts'
 import {
     formatPromptMessagesTrace,
     type PromptMessages
@@ -29,6 +35,10 @@ import {
     sumStats
 } from './stats'
 import type { DreamRunResult, DreamStage, DreamStageResult } from './types'
+import {
+    invokeStructuredOutput,
+    isStructuredOutputModelInvocationError
+} from '../structured_output'
 
 export type { DreamRunResult } from './types'
 
@@ -108,7 +118,7 @@ export class LivingMemoryDreamService {
             presetId,
             'active',
             activeEntries,
-            invokeModel
+            chatModel
         )
         const refreshedEntries =
             await this.repository.listEntriesByPreset(presetId)
@@ -119,7 +129,7 @@ export class LivingMemoryDreamService {
             presetId,
             'archived',
             archivedEntries,
-            invokeModel
+            chatModel
         )
         const profileDetail = await this.regenerateUserProfilesAfterDream(
             presetId,
@@ -184,7 +194,7 @@ export class LivingMemoryDreamService {
         presetId: string,
         stage: DreamStage,
         entries: MemoryEntryRecord[],
-        invokeModel: (prompt: PromptMessages) => Promise<string>
+        model: ChatLunaChatModel
     ): Promise<DreamStageResult> {
         if (entries.length < 2) {
             return createEmptyStageResult(stage, entries.length)
@@ -222,10 +232,32 @@ export class LivingMemoryDreamService {
                 ].join('\n')
             )
 
-            let output: string
+            let structuredResult
             try {
-                output = await invokeModel(prompt)
+                structuredResult = await invokeStructuredOutput({
+                    model,
+                    prompt,
+                    toolName: dreamResultToolName,
+                    toolDescription: dreamResultToolDescription,
+                    schema:
+                        stage === 'active'
+                            ? dreamActiveResultSchema
+                            : dreamArchivedResultSchema,
+                    context: {
+                        presetId,
+                        conversationId: [
+                            'dream',
+                            presetId,
+                            stage,
+                            cluster.id
+                        ].join(':')
+                    }
+                })
             } catch (error) {
+                if (!isStructuredOutputModelInvocationError(error)) {
+                    throw error
+                }
+
                 stats.skipped++
                 this.debug(
                     [
@@ -244,11 +276,25 @@ export class LivingMemoryDreamService {
                     `memory dream llm output: presetId=${presetId}`,
                     `stage=${stage}`,
                     `clusterId=${cluster.id}`,
-                    output
+                    structuredResult.output
                 ].join('\n')
             )
 
-            const { operations, parseError } = parseDreamOperations(output)
+            if (structuredResult.parseError != null) {
+                this.debug(
+                    [
+                        `memory dream structured output failed: presetId=${presetId}`,
+                        `stage=${stage}`,
+                        `clusterId=${cluster.id}`,
+                        `error=${structuredResult.parseError}`
+                    ].join(' ')
+                )
+                throw new Error(
+                    `dream structured output failed: ${structuredResult.parseError}`
+                )
+            }
+
+            const operations = structuredResult.value?.operations ?? []
             if (operations.length === 0) {
                 stats.skipped++
                 this.debug(
@@ -256,9 +302,7 @@ export class LivingMemoryDreamService {
                         `memory dream cluster skipped: presetId=${presetId}`,
                         `stage=${stage}`,
                         `clusterId=${cluster.id}`,
-                        parseError != null
-                            ? `reason=parse-failed error=${parseError}`
-                            : 'reason=no-valid-operations'
+                        'reason=no-valid-operations'
                     ].join(' ')
                 )
                 continue

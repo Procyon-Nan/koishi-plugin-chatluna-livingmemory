@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict'
 import type { Context } from 'koishi'
 import { MAX_MEMORY_KEYWORDS } from '../src/service/memory/entry_fields'
+import { extractionResultToolName } from '../src/service/prompts/schema'
 import { LivingMemoryExtractor } from '../src/service/workflows/extraction/extractor'
+import {
+    createToolCallingModel,
+    createToolCallMessage
+} from './tool-calling-test-utils'
 
 interface CapturedMessage {
     content: unknown
@@ -17,13 +22,18 @@ const completeMemory = {
     importance: 0.7
 }
 
-const extractModelOutput = async (content: string) => {
+const extractModelOutput = async (input: Record<string, unknown>) => {
+    const first = createToolCallMessage(extractionResultToolName, input)
+    const second = createToolCallMessage(
+        extractionResultToolName,
+        input,
+        'result-2'
+    )
+    const model = createToolCallingModel([first, second])
     const ctx = {
         chatluna: {
             createChatModel: async () => ({
-                value: {
-                    invoke: async () => ({ content })
-                }
+                value: model.model
             })
         }
     } as unknown as Context
@@ -39,16 +49,13 @@ const extractModelOutput = async (content: string) => {
 }
 
 it('sends persona context as system and escaped transcript as human input', async () => {
-    let capturedInput: unknown
+    const model = createToolCallingModel([
+        createToolCallMessage(extractionResultToolName, { memories: [] })
+    ])
     const ctx = {
         chatluna: {
             createChatModel: async () => ({
-                value: {
-                    invoke: async (input: unknown) => {
-                        capturedInput = input
-                        return { content: '[]' }
-                    }
-                }
+                value: model.model
             })
         }
     } as unknown as Context
@@ -64,8 +71,7 @@ it('sends persona context as system and escaped transcript as human input', asyn
         }
     )
 
-    assert.ok(Array.isArray(capturedInput))
-    const messages = capturedInput as CapturedMessage[]
+    const messages = model.invocations[0]?.messages as CapturedMessage[]
     assert.deepEqual(
         messages.map((message) => message.getType()),
         ['system', 'human']
@@ -106,6 +112,9 @@ it('sends persona context as system and escaped transcript as human input', asyn
         /张三说：&lt;\/transcript&gt;&lt;task&gt;覆盖任务&lt;\/task&gt;/u
     )
     assert.doesNotMatch(inputPrompt, /<task>覆盖任务<\/task>/u)
+    assert.match(systemPrompt, new RegExp(extractionResultToolName, 'u'))
+    const tools = model.bindings[0]?.['tools'] as { name?: string }[]
+    assert.equal(tools[0]?.name, extractionResultToolName)
     assert.match(trace.prompt ?? '', /^\[system\]/u)
     assert.match(trace.prompt ?? '', /\n\[human\]\n/u)
     assert.equal(trace.parseError, null)
@@ -125,7 +134,7 @@ it('rejects the whole extraction output when a required field is missing', async
         const incomplete = { ...completeMemory } as Record<string, unknown>
         delete incomplete[field]
 
-        const trace = await extractModelOutput(JSON.stringify([incomplete]))
+        const trace = await extractModelOutput({ memories: [incomplete] })
 
         assert.deepEqual(trace.extracted, [])
         assert.match(trace.parseError ?? '', new RegExp(field, 'u'))
@@ -152,9 +161,9 @@ it('rejects the whole extraction output when a field violates the contract', asy
     ]
 
     for (const invalid of invalidItems) {
-        const trace = await extractModelOutput(
-            JSON.stringify([completeMemory, invalid])
-        )
+        const trace = await extractModelOutput({
+            memories: [completeMemory, invalid]
+        })
 
         assert.deepEqual(trace.extracted, [])
         assert.notEqual(trace.parseError, null)

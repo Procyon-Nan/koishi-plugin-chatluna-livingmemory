@@ -247,8 +247,8 @@ export class LivingMemoryExtractionCoordinator {
             throw error
         }
 
-        // 模型输出无法解析为合法 JSON 数组：不做修复或重试，仅持久化失败记录，
-        // 使任务列表如实反映“解析失败”而非“抽取 0 条”。
+        // 结果工具在一次纠正重试后仍无法通过校验：持久化失败记录，
+        // 使任务列表如实反映“结构化输出失败”而非“抽取 0 条”。
         if (trace.parseError != null) {
             this.debug(
                 [

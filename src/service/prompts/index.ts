@@ -29,5 +29,12 @@ export {
     EXTRACTION_OUTPUT_FORMAT,
     DREAM_ACTIVE_FORMAT,
     DREAM_ARCHIVED_FORMAT,
-    USER_PROFILE_OUTPUT_FORMAT
+    USER_PROFILE_OUTPUT_FORMAT,
+    dreamActiveResultSchema,
+    dreamArchivedResultSchema,
+    dreamResultToolDescription,
+    dreamResultToolName,
+    extractionResultSchema,
+    extractionResultToolDescription,
+    extractionResultToolName
 } from './schema'

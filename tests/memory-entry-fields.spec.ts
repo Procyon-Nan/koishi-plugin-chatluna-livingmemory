@@ -13,10 +13,15 @@ import {
 } from '../src/service/memory/entry_fields'
 import { LivingMemoryRepository } from '../src/service/persistence/repository'
 import { LivingMemoryExtractor } from '../src/service/workflows/extraction/extractor'
+import { extractionResultToolName } from '../src/service/prompts/schema'
 import {
     DreamExecutor,
     type DreamExecutorRepository
 } from '../src/service/workflows/dream/executor'
+import {
+    createToolCallingModel,
+    createToolCallMessage
+} from './tool-calling-test-utils'
 
 const keywordInput = () => [
     '  alpha  ',
@@ -62,23 +67,24 @@ it('normalizes importance and status consistently', () => {
 
 it('applies shared field rules to extracted memories', async () => {
     const extractionKeywords = ['  alpha  ', 'alpha', 'keyword-0']
+    const model = createToolCallingModel([
+        createToolCallMessage(extractionResultToolName, {
+            memories: [
+                {
+                    type: 'fact',
+                    content: '  extracted content  ',
+                    summary: '  extracted summary  ',
+                    sentiment: '  neutral  ',
+                    keywords: extractionKeywords,
+                    importance: 1
+                }
+            ]
+        })
+    ])
     const ctx = {
         chatluna: {
             createChatModel: async () => ({
-                value: {
-                    invoke: async () => ({
-                        content: JSON.stringify([
-                            {
-                                type: 'fact',
-                                content: '  extracted content  ',
-                                summary: '  extracted summary  ',
-                                sentiment: '  neutral  ',
-                                keywords: extractionKeywords,
-                                importance: 1
-                            }
-                        ])
-                    })
-                }
+                value: model.model
             })
         }
     } as unknown as Context

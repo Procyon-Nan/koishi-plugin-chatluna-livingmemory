@@ -11,13 +11,17 @@ import {
     MEMORY_TYPE_GUIDE
 } from './memory_fields'
 import { formatXmlBlock, type PromptMessages } from './prompt_format'
-import { DREAM_ACTIVE_FORMAT, DREAM_ARCHIVED_FORMAT } from './schema'
+import {
+    DREAM_ACTIVE_FORMAT,
+    DREAM_ARCHIVED_FORMAT,
+    dreamResultToolName
+} from './schema'
 
 export type DreamPromptMessages = PromptMessages
 
 /**
  * 构建 Dream 整理提示词。纯函数，按阶段（active / archived）切换操作指南与输出格式。
- * 输出格式串引用自 ./schema，与 workflows/dream/parser.ts 保持单一真相源。
+ * 结果工具参数格式引用自 ./schema，与运行时 Schema 保持单一真相源。
  */
 export const buildDreamPrompt = (
     presetId: string,
@@ -57,7 +61,7 @@ export const buildDreamPrompt = (
     const systemPrompt = [
         '<role>',
         '你是长期记忆 Dream 档案员。',
-        '你必须严格执行本消息规定的整理任务、操作边界和 JSON 输出契约。',
+        '你必须严格执行本消息规定的整理任务、操作边界和结果工具契约。',
         '</role>',
         '',
         '<task>',
@@ -87,8 +91,8 @@ export const buildDreamPrompt = (
         '</operation_rules>',
         '',
         '<output_contract>',
-        '输出必须是可解析 JSON，不要解释，不要 Markdown。',
-        '格式：',
+        `你必须且只能调用 ${dreamResultToolName} 一次提交结果。`,
+        '工具参数格式：',
         stage === 'active' ? activeFormat : archivedFormat,
         '',
         '字段要求：',
@@ -106,7 +110,8 @@ export const buildDreamPrompt = (
         stage === 'archived'
             ? '- archived 阶段输出的 memory 不能包含 active 状态；即使包含也会被代码层强制保持 archived。'
             : '- active 阶段的 update / merge target 会被代码层强制保持 active。',
-        '只输出 JSON，不要解释，不要 Markdown，不要使用代码块。',
+        `没有可执行操作时，仍然调用 ${dreamResultToolName}，并提交空 operations 数组。`,
+        '不要在普通文本中输出结果，不要解释，不要 Markdown，不要使用代码块。',
         '</output_contract>'
     ].join('\n')
 

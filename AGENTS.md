@@ -62,9 +62,14 @@ tree whenever architecture, data contracts, or workflow boundaries change.
 - `src/service/workflows/recall/` owns embedding-rerank retrieval, recall query
   rewrite, and the agentic-recall executor.
 - `src/service/workflows/extraction/` owns memory extraction orchestration and
-  extraction model parsing.
-- `src/service/workflows/dream/` owns Dream clustering, prompt parsing,
-  operation execution, stats, and Dream coordination. Dream processes active
+  extraction result normalization.
+- `src/service/workflows/structured_output.ts` owns the internal Tool Calling
+  result protocol shared by Extraction and Dream. Its result tools are scoped
+  to each structured-output invocation and are not registered as ChatLuna
+  tools.
+- `src/service/workflows/dream/` owns Dream clustering, structured result
+  validation, operation execution, stats, and Dream coordination. Dream
+  processes active
   memories and archived memories, then attempts user profile regeneration when
   profile injection is enabled. Profile regeneration failures are recorded in
   the completed Dream detail without failing the preceding Dream operations.
@@ -181,10 +186,13 @@ tree whenever architecture, data contracts, or workflow boundaries change.
   generation. Do not add empty, missing, or unavailable-prompt fallbacks; preset
   lookup and rendering failures indicate an integration error and must propagate
   through the owning workflow's existing failure semantics.
-- Extraction uses an interval baseline per scope. Payload construction, preset
-  prompt resolution, model, parse, and persistence failures create one failed
-  audit row; successful and skipped runs, including valid empty arrays, do not
-  create Job rows.
+- Extraction uses an interval baseline per scope. Its model must submit exactly
+  one `living_memory_extraction_result` tool call whose arguments pass the Zod
+  Schema. A missing or invalid result is returned to the model for one bounded
+  correction attempt. Payload construction, preset prompt resolution, model,
+  structured-output, and persistence failures create one failed audit row;
+  successful and skipped runs, including valid empty results, do not create Job
+  rows.
 - Dream active-stage operations allow keep, update, merge, and archive. Archived
   stage operations allow keep, update, merge, and deleteSource.
 - Dream merge preserves source-origin groups by combining the target memory
@@ -200,6 +208,11 @@ tree whenever architecture, data contracts, or workflow boundaries change.
   normal Dream coordinator for that preset instead of running a global schedule.
 - Dream-generated update and merge content must include complete metadata:
   type, content, summary, keywords, sentiment, and importance.
+- Each Dream cluster must submit exactly one `living_memory_dream_result` tool
+  call using the stage-specific Zod Schema. A missing or invalid result gets one
+  correction attempt; a second invalid result fails the Dream job instead of
+  being treated as an empty operation list. The result tool has no persistence
+  side effects, and validated operations still pass through `DreamExecutor`.
 - User profile generation and rendering must honor `enableUserProfileInjection`.
   Speaker recording can still happen independently so future profile generation
   has an index to work from.
@@ -283,7 +296,8 @@ tree whenever architecture, data contracts, or workflow boundaries change.
   source-origin contracts aligned.
 - For extraction changes, preserve interval baseline handling, lock behavior,
   job state transitions, the required preset-prompt resolver contract, and
-  parse-error semantics. Do not restore null, empty, unavailable, or
+  structured-output failure semantics. Do not register the internal result tool
+  globally or restore content-based JSON parsing, null, empty, unavailable, or
   render-failure prompt fallbacks.
 - For Dream changes, preserve stage-specific action allowlists, touched-memory
   guards, complete metadata validation, source-origin merge behavior, and
