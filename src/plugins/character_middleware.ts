@@ -189,12 +189,17 @@ const formatPromptVariable = (sections: PromptSections) => {
 export async function apply(ctx: Context, config: LivingMemoryConfig) {
     const logger = ctx.logger('chatluna-livingmemory')
     const events = ctx as unknown as CharacterEventRegistrar
+    const livingMemory = ctx.chatluna_living_memory
     const profileSpeakerLabelsByScope = new Map<string, string[]>()
     const debug = (message: string) => {
         if (config.debug) {
             logger.info(message)
         }
     }
+
+    ctx.on('dispose', () => {
+        livingMemory.clearExtractionState()
+    })
 
     ctx.effect(() =>
         ctx.chatluna.promptRenderer.registerFunctionProvider(

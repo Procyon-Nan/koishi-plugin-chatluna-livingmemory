@@ -322,6 +322,9 @@ tree whenever architecture, data contracts, or workflow boundaries change.
   chat-count baselines or bounded-history round recounting. Do not register the
   internal result tool globally or restore content-based JSON parsing, null,
   empty, unavailable, or render-failure prompt fallbacks.
+- Extraction round state is memory-only. Recreating the Living Memory service or
+  disposing the Character integration clears all scope state; no extraction-round
+  counter or pre-reload conversation history is recovered.
 - For Dream changes, preserve stage-specific action allowlists, touched-memory
   guards, complete metadata validation, source-origin merge behavior, and
   profile regeneration gating.

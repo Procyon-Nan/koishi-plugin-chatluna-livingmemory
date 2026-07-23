@@ -72,6 +72,10 @@ export class LivingMemoryExtractionCoordinator {
         private readonly debug: DebugLogger
     ) {}
 
+    clearAll() {
+        this.stateByScope.clear()
+    }
+
     clearByConversation(conversationId: string) {
         for (const key of this.stateByScope.keys()) {
             if (key.endsWith(`\n${conversationId}`)) {

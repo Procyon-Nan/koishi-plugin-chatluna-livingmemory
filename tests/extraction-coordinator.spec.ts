@@ -170,6 +170,24 @@ it('skips extraction when the configured interval is not reached', async () => {
     assert.equal(getExtractorCalls(), 0)
 })
 
+it('restarts extraction interval counting after all scopes are cleared', async () => {
+    const { coordinator, getExtractorCalls } = createExtractionCoordinator({
+        extractionInterval: 3,
+        extractionRounds: 3
+    })
+
+    await queueExtraction(coordinator, 2)
+    coordinator.clearAll()
+    await queueExtraction(coordinator, 2)
+
+    assert.equal(getExtractorCalls(), 0)
+
+    await queueExtraction(coordinator)
+    await waitFor(() => getExtractorCalls() === 1, 'post-reset extraction')
+
+    assert.equal(getExtractorCalls(), 1)
+})
+
 it('rejects an invalid completed-round contract', async () => {
     const { coordinator } = createExtractionCoordinator()
     const userOnlyRound = {
