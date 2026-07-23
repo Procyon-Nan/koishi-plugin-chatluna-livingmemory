@@ -42,14 +42,14 @@ interface ExtractionRoundRequest {
 interface BufferedExtractionRound {
     sequence: number
     round: LivingMemoryCompletedRound
-    request: ExtractionRoundRequest
 }
 
 interface ExtractionScopeState {
+    scope: Pick<MemoryScope, 'conversationId' | 'presetId'>
     lastCompletedSequence: number
     lastConsumedSequence: number
     rounds: BufferedExtractionRound[]
-    running: boolean
+    triggerRequests: Map<number, ExtractionRoundRequest>
 }
 
 export type ExtractionWorkflowRepository = Pick<
@@ -60,6 +60,7 @@ export type ExtractionWorkflowRepository = Pick<
 
 export class LivingMemoryExtractionCoordinator {
     private readonly stateByScope = new Map<string, ExtractionScopeState>()
+    private readonly runningScopeKeys = new Set<string>()
 
     constructor(
         private readonly config: LivingMemoryExtractionConfig,
@@ -119,21 +120,28 @@ export class LivingMemoryExtractionCoordinator {
 
         const key = scopeKey(scope)
         const state = this.stateByScope.get(key) ?? {
+            scope,
             lastCompletedSequence: 0,
             lastConsumedSequence: 0,
             rounds: [],
-            running: false
+            triggerRequests: new Map()
         }
 
         state.lastCompletedSequence += 1
+        state.scope = scope
         state.rounds.push({
             sequence: state.lastCompletedSequence,
-            round: completedRound,
-            request: {
+            round: completedRound
+        })
+        if (
+            state.lastCompletedSequence % this.config.extractionInterval ===
+            0
+        ) {
+            state.triggerRequests.set(state.lastCompletedSequence, {
                 scope,
                 resolvePresetPrompt: options.resolvePresetPrompt
-            }
-        })
+            })
+        }
         this.stateByScope.set(key, state)
 
         this.tryStart(key, state)
@@ -142,9 +150,9 @@ export class LivingMemoryExtractionCoordinator {
     private tryStart(key: string, state: ExtractionScopeState) {
         const pendingRounds =
             state.lastCompletedSequence - state.lastConsumedSequence
-        const latestScope = state.rounds[state.rounds.length - 1]?.request.scope
+        const latestScope = state.scope
 
-        if (state.running) {
+        if (this.runningScopeKeys.has(key)) {
             this.debug(
                 [
                     'queueExtraction pending: extraction running,',
@@ -183,8 +191,13 @@ export class LivingMemoryExtractionCoordinator {
             triggerIndex + 1
         )
         const rounds = selectedRounds.flatMap((item) => item.round.messages)
-        const request = state.rounds[triggerIndex].request
-        const sequenceAtStart = state.lastCompletedSequence
+        const request = state.triggerRequests.get(triggerSequence)
+        if (request == null) {
+            throw new Error(
+                `Extraction round buffer is missing trigger request ${triggerSequence}.`
+            )
+        }
+        state.triggerRequests.delete(triggerSequence)
 
         this.debug(
             [
@@ -198,36 +211,37 @@ export class LivingMemoryExtractionCoordinator {
             ].join(' ')
         )
 
-        state.running = true
+        this.runningScopeKeys.add(key)
         this.run(request.scope, rounds, request.resolvePresetPrompt)
-            .then(() => {
-                state.running = false
-                state.lastConsumedSequence = triggerSequence
-                const minimumSequenceToKeep = Math.max(
-                    1,
-                    state.lastConsumedSequence -
-                        this.config.extractionRounds +
-                        2
-                )
-                state.rounds = state.rounds.filter(
-                    (item) => item.sequence >= minimumSequenceToKeep
-                )
-                if (
-                    this.stateByScope.get(key) === state &&
-                    state.lastCompletedSequence - state.lastConsumedSequence >=
-                        this.config.extractionInterval
-                ) {
-                    this.tryStart(key, state)
-                }
-            })
             .catch((error) => {
-                state.running = false
                 this.logger.warn(error)
+            })
+            .finally(() => {
+                this.runningScopeKeys.delete(key)
+                const currentState = this.stateByScope.get(key)
+                if (currentState == null) {
+                    return
+                }
+
+                if (currentState === state) {
+                    state.lastConsumedSequence = triggerSequence
+                    const minimumSequenceToKeep = Math.max(
+                        1,
+                        state.lastConsumedSequence -
+                            this.config.extractionRounds +
+                            2
+                    )
+                    state.rounds = state.rounds.filter(
+                        (item) => item.sequence >= minimumSequenceToKeep
+                    )
+                }
+
                 if (
-                    this.stateByScope.get(key) === state &&
-                    state.lastCompletedSequence > sequenceAtStart
+                    currentState.lastCompletedSequence -
+                        currentState.lastConsumedSequence >=
+                    this.config.extractionInterval
                 ) {
-                    this.tryStart(key, state)
+                    this.tryStart(key, currentState)
                 }
             })
     }

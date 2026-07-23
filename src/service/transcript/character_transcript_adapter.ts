@@ -315,7 +315,9 @@ export const toCharacterCompletedRound = async (
     const responseMessages = await toCharacterTranscriptMessages(
         scope,
         session,
-        messages.slice(firstResponseIndex, lastAssistantIndex + 1)
+        messages
+            .slice(firstResponseIndex, lastAssistantIndex + 1)
+            .filter((message) => isCharacterBotMessage(session, message))
     )
     if (!responseMessages.some((message) => message.role === 'assistant')) {
         return {

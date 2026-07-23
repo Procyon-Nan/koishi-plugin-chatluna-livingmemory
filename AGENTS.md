@@ -58,7 +58,7 @@ tree whenever architecture, data contracts, or workflow boundaries change.
   projections, including source-message output and resolved snapshot pages.
 - `src/service/workflows/` contains async workflow orchestration for recall,
   extraction, and Dream. Coordinators own job state handling, in-memory locks,
-  snapshot cache refreshes, and extraction baselines.
+  snapshot cache refreshes, and completed-round extraction state.
 - `src/service/workflows/recall/` owns embedding-rerank retrieval, recall query
   rewrite, and the agentic-recall executor.
 - `src/service/workflows/extraction/` owns memory extraction orchestration and
@@ -145,8 +145,8 @@ tree whenever architecture, data contracts, or workflow boundaries change.
   before the current user input, and queues recall. These request-scoped
   injections remain available across the main agent's tool-call turns and are
   cleared on `after-chat`, `after-chat-error`, or history clear.
-- Main ChatLuna `after-chat` converts history to transcript messages and queues
-  extraction based on chat count with a required lazy resolver for the active
+- Main ChatLuna `after-chat` converts the current Human/AI pair to a completed
+  round and queues extraction with a required lazy resolver for the active
   preset system prompt.
 - Character integration uses a separate preset id based on
   `characterPresetSuffix`. Character prompt injection happens through the
@@ -189,10 +189,14 @@ tree whenever architecture, data contracts, or workflow boundaries change.
 - Extraction is driven by completed-round events rather than absolute chat
   counts or bounded-history recounting. ChatLuna submits the current Human/AI
   pair; Character builds the current round from its focus message and persisted
-  response block. The coordinator counts unconsumed rounds per scope, buffers
+  assistant response block; user messages received while a response is in
+  flight are not implicitly merged into that round. The coordinator counts
+  unconsumed rounds per scope, buffers
   the latest `extractionRounds`, and serializes threshold-triggered runs without
-  dropping rounds received while a run is active. Its model must submit exactly
-  one `living_memory_extraction_result` tool call whose arguments pass the Zod
+  dropping rounds received while a run is active. A completed trigger boundary
+  is consumed after the run reaches a terminal result; failed boundaries are
+  recorded but are not retried automatically. Its model must submit exactly one
+  `living_memory_extraction_result` tool call whose arguments pass the Zod
   Schema. A missing or invalid result is returned to the model for one bounded
   correction attempt. Payload construction, preset prompt resolution, model,
   structured-output, and persistence failures create one failed audit row;
@@ -313,10 +317,11 @@ tree whenever architecture, data contracts, or workflow boundaries change.
 - For extraction changes, preserve completed-round event counting, recent-round
   buffering, serialized pending-run behavior, job state transitions, the
   required preset-prompt resolver contract, and structured-output failure
-  semantics. Do not restore absolute chat-count baselines or bounded-history
-  round recounting. Do not register the internal result tool globally or restore
-  content-based JSON parsing, null, empty, unavailable, or render-failure prompt
-  fallbacks.
+  semantics. Failed trigger boundaries are terminal after their audit row is
+  written and must not be retried automatically. Do not restore absolute
+  chat-count baselines or bounded-history round recounting. Do not register the
+  internal result tool globally or restore content-based JSON parsing, null,
+  empty, unavailable, or render-failure prompt fallbacks.
 - For Dream changes, preserve stage-specific action allowlists, touched-memory
   guards, complete metadata validation, source-origin merge behavior, and
   profile regeneration gating.

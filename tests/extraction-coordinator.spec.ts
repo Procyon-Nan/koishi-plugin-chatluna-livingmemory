@@ -271,6 +271,30 @@ it('uses only the configured number of recent completed rounds', async () => {
     )
 })
 
+it('releases a consumed trigger resolver while retaining recent round context', async () => {
+    const { coordinator, getExtractorCalls } = createExtractionCoordinator({
+        extractionRounds: 2
+    })
+    const internal = coordinator as unknown as {
+        stateByScope: Map<
+            string,
+            {
+                rounds: unknown[]
+                triggerRequests: Map<number, unknown>
+            }
+        >
+    }
+
+    await queueExtraction(coordinator)
+    await waitFor(() => getExtractorCalls() === 1, 'first extraction')
+
+    const state = internal.stateByScope.get(
+        `${scope.presetId}\n${scope.conversationId}`
+    )
+    assert.equal(state?.rounds.length, 1)
+    assert.equal(state?.triggerRequests.size, 0)
+})
+
 it('keeps separate trigger boundaries when multiple intervals arrive in flight', async () => {
     const payloads: string[][] = []
     let resolveFirstTrace!: (trace: LivingMemoryExtractionTrace) => void
@@ -381,9 +405,9 @@ it('persists one failed extraction job when preset prompt resolution throws', as
     )
 })
 
-it('retries a failed boundary and preserves the next completed round', async () => {
+it('consumes a failed boundary and processes the next completed round once', async () => {
     let shouldFail = true
-    const { coordinator, jobStore, getExtractorCalls } =
+    const { coordinator, jobStore, debugMessages, getExtractorCalls } =
         createExtractionCoordinator({
             extractWithTrace: async () => {
                 if (shouldFail) {
@@ -399,9 +423,46 @@ it('retries a failed boundary and preserves the next completed round', async () 
 
     shouldFail = false
     await queueExtraction(coordinator)
-    await waitFor(() => getExtractorCalls() === 3, 'retried extraction')
+    await waitFor(
+        () =>
+            debugMessages.some((message) =>
+                message.includes('runExtraction completed')
+            ),
+        'next extraction completion'
+    )
 
+    assert.equal(getExtractorCalls(), 2)
     assert.equal(jobStore.jobs.length, 1)
+})
+
+it('keeps a cleared scope serialized until its active extraction finishes', async () => {
+    let resolveFirstTrace!: (trace: LivingMemoryExtractionTrace) => void
+    const firstTrace = new Promise<LivingMemoryExtractionTrace>((resolve) => {
+        resolveFirstTrace = resolve
+    })
+    let firstCall = true
+    const { coordinator, getExtractorCalls } = createExtractionCoordinator({
+        extractWithTrace: async () => {
+            if (firstCall) {
+                firstCall = false
+                return await firstTrace
+            }
+            return createExtractionTrace()
+        }
+    })
+
+    await queueExtraction(coordinator)
+    await waitFor(() => getExtractorCalls() === 1, 'active extraction')
+
+    coordinator.clearByConversation(scope.conversationId)
+    await queueExtraction(coordinator)
+    assert.equal(getExtractorCalls(), 1)
+
+    resolveFirstTrace(createExtractionTrace())
+    await waitFor(
+        () => getExtractorCalls() === 2,
+        'post-clear extraction completion'
+    )
 })
 
 it('persists one failed extraction job for parse errors', async () => {

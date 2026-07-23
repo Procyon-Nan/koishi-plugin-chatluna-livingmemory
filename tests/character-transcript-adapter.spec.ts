@@ -76,12 +76,14 @@ it('builds one completed Character round from the focus message and response blo
     )
 })
 
-it('keeps user messages received during the Character response in the completed round', async () => {
+it('excludes user messages received during the Character response from the completed round', async () => {
     const focus = message('user-1', '开始问题', 1)
     const messages = [
         focus,
         message('user-2', '响应期间的补充', 2),
-        message('bot-1', '综合回复', 3)
+        message('bot-1', '综合回复第一段', 3),
+        message('user-2', '响应期间的继续补充', 4),
+        message('bot-1', '综合回复第二段', 5)
     ]
 
     const result = await toCharacterCompletedRound(
@@ -93,8 +95,15 @@ it('keeps user messages received during the Character response in the completed 
 
     assert.equal(result.reason, null)
     assert.deepEqual(
-        result.round?.messages.map((item) => item.role),
-        ['user', 'user', 'assistant']
+        result.round?.messages.map((item) => [
+            item.role,
+            item.contentLines[0]
+        ]),
+        [
+            ['user', '开始问题'],
+            ['assistant', '综合回复第一段'],
+            ['assistant', '综合回复第二段']
+        ]
     )
 })
 
