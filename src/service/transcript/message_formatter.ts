@@ -12,7 +12,7 @@ export class LivingMemoryMessageFormatter implements MessageFormatter {
         messages: LivingMemoryTranscriptMessage[],
         roundCount: number
     ) {
-        return takeRecentRounds(messages, roundCount, 'pair')
+        return takeRecentRounds(messages, roundCount)
     }
 
     toExtractionPayload(

@@ -1,6 +1,6 @@
 import type { Session } from 'koishi'
 import type {
-    LivingMemoryTranscriptMessage,
+    LivingMemoryCompletedRound,
     MemoryScope
 } from '../../contracts/memory'
 import { createLivingMemoryTranscriptMessageResult } from './transcript_message'
@@ -93,8 +93,8 @@ export const isCharacterBotMessage = (
         .map((id) => toNonEmptyString(id))
         .filter((id): id is string => id != null)
 
-    if (messageId != null && botIds.includes(messageId)) {
-        return true
+    if (messageId != null && botIds.length > 0) {
+        return botIds.includes(messageId)
     }
 
     const messageName = toNonEmptyString(message.name)
@@ -204,7 +204,7 @@ export const toCharacterTranscriptMessageResult = async (
 export const toCharacterTranscriptMessages = async (
     scope: MemoryScope,
     session: Session,
-    messages: CharacterTranscriptSourceMessage[]
+    messages: readonly CharacterTranscriptSourceMessage[]
 ) => {
     const cache: CharacterGlobalNameCache = new Map()
     const converted = await Promise.all(
@@ -218,26 +218,116 @@ export const toCharacterTranscriptMessages = async (
     )
 }
 
-export const countCharacterCompletedRounds = (
-    messages: LivingMemoryTranscriptMessage[]
+export type CharacterCompletedRoundInvalidReason =
+    | 'focus-is-assistant'
+    | 'assistant-response-missing'
+    | 'missing-created-at'
+    | 'missing-speaker'
+    | 'empty-content'
+
+export type CharacterCompletedRoundResult =
+    | {
+          round: LivingMemoryCompletedRound
+          reason: null
+      }
+    | {
+          round: null
+          reason: CharacterCompletedRoundInvalidReason
+      }
+
+const findLastCharacterMessageIndex = (
+    messages: readonly CharacterTranscriptSourceMessage[],
+    target: CharacterTranscriptSourceMessage
 ) => {
-    let count = 0
-    let hasHuman = false
-    let inAiBlock = false
-
-    for (const message of messages) {
-        if (message.role === 'user') {
-            hasHuman = true
-            inAiBlock = false
-            continue
-        }
-
-        if (message.role === 'assistant' && hasHuman && !inAiBlock) {
-            count += 1
-            hasHuman = false
-            inAiBlock = true
+    for (let index = messages.length - 1; index >= 0; index--) {
+        if (isSameCharacterMessage(messages[index], target)) {
+            return index
         }
     }
 
-    return count
+    return -1
+}
+
+const findLastCharacterBotMessageIndex = (
+    session: Session,
+    messages: readonly CharacterTranscriptSourceMessage[],
+    minimumIndex: number
+) => {
+    for (let index = messages.length - 1; index >= minimumIndex; index--) {
+        if (isCharacterBotMessage(session, messages[index])) {
+            return index
+        }
+    }
+
+    return -1
+}
+
+export const toCharacterCompletedRound = async (
+    scope: MemoryScope,
+    session: Session,
+    messages: readonly CharacterTranscriptSourceMessage[],
+    focusMessage: CharacterTranscriptSourceMessage
+): Promise<CharacterCompletedRoundResult> => {
+    if (isCharacterBotMessage(session, focusMessage)) {
+        return {
+            round: null,
+            reason: 'focus-is-assistant'
+        }
+    }
+
+    const focusResult = await toCharacterTranscriptMessageResult(
+        scope,
+        session,
+        focusMessage
+    )
+    if (focusResult.message == null) {
+        return {
+            round: null,
+            reason: focusResult.reason
+        }
+    }
+
+    const focusIndex = findLastCharacterMessageIndex(messages, focusMessage)
+    const responseStartIndex = focusIndex >= 0 ? focusIndex + 1 : 0
+    const lastAssistantIndex = findLastCharacterBotMessageIndex(
+        session,
+        messages,
+        responseStartIndex
+    )
+    if (lastAssistantIndex < 0) {
+        return {
+            round: null,
+            reason: 'assistant-response-missing'
+        }
+    }
+
+    let firstResponseIndex = responseStartIndex
+    if (focusIndex < 0) {
+        firstResponseIndex = lastAssistantIndex
+        while (
+            firstResponseIndex > 0 &&
+            isCharacterBotMessage(session, messages[firstResponseIndex - 1])
+        ) {
+            firstResponseIndex -= 1
+        }
+    }
+
+    const responseMessages = await toCharacterTranscriptMessages(
+        scope,
+        session,
+        messages.slice(firstResponseIndex, lastAssistantIndex + 1)
+    )
+    if (!responseMessages.some((message) => message.role === 'assistant')) {
+        return {
+            round: null,
+            reason: 'assistant-response-missing'
+        }
+    }
+
+    return {
+        round: {
+            messages: [focusResult.message, ...responseMessages]
+        },
+        reason: null
+    }
 }

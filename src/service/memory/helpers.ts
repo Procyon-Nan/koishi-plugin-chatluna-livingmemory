@@ -1,14 +1,10 @@
 import { BaseMessage } from '@langchain/core/messages'
 import type { Context, Session } from 'koishi'
 import type { PresetTemplate } from 'koishi-plugin-chatluna/llm-core/prompt'
-import type {
-    LivingMemoryTranscriptMessage,
-    MemoryScope
-} from '../../contracts/memory'
+import type { MemoryScope } from '../../contracts/memory'
 
 export interface QueueExtractionOptions {
     resolvePresetPrompt: () => Promise<string>
-    preselectedMessages?: LivingMemoryTranscriptMessage[]
 }
 
 export type DebugLogger = (message: string) => void

@@ -149,6 +149,10 @@ export interface LivingMemoryTranscriptMessage {
     createdAt: Date
 }
 
+export interface LivingMemoryCompletedRound {
+    messages: LivingMemoryTranscriptMessage[]
+}
+
 export interface MemoryEntryRecord {
     id: string
     presetId: string

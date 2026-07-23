@@ -186,7 +186,12 @@ tree whenever architecture, data contracts, or workflow boundaries change.
   generation. Do not add empty, missing, or unavailable-prompt fallbacks; preset
   lookup and rendering failures indicate an integration error and must propagate
   through the owning workflow's existing failure semantics.
-- Extraction uses an interval baseline per scope. Its model must submit exactly
+- Extraction is driven by completed-round events rather than absolute chat
+  counts or bounded-history recounting. ChatLuna submits the current Human/AI
+  pair; Character builds the current round from its focus message and persisted
+  response block. The coordinator counts unconsumed rounds per scope, buffers
+  the latest `extractionRounds`, and serializes threshold-triggered runs without
+  dropping rounds received while a run is active. Its model must submit exactly
   one `living_memory_extraction_result` tool call whose arguments pass the Zod
   Schema. A missing or invalid result is returned to the model for one bounded
   correction attempt. Payload construction, preset prompt resolution, model,
@@ -305,11 +310,13 @@ tree whenever architecture, data contracts, or workflow boundaries change.
   `src/service/memory/tools/tool_runtime.ts`,
   `src/plugins/living_memory_tools.ts`, and persistence repository
   source-origin contracts aligned.
-- For extraction changes, preserve interval baseline handling, lock behavior,
-  job state transitions, the required preset-prompt resolver contract, and
-  structured-output failure semantics. Do not register the internal result tool
-  globally or restore content-based JSON parsing, null, empty, unavailable, or
-  render-failure prompt fallbacks.
+- For extraction changes, preserve completed-round event counting, recent-round
+  buffering, serialized pending-run behavior, job state transitions, the
+  required preset-prompt resolver contract, and structured-output failure
+  semantics. Do not restore absolute chat-count baselines or bounded-history
+  round recounting. Do not register the internal result tool globally or restore
+  content-based JSON parsing, null, empty, unavailable, or render-failure prompt
+  fallbacks.
 - For Dream changes, preserve stage-specific action allowlists, touched-memory
   guards, complete metadata validation, source-origin merge behavior, and
   profile regeneration gating.

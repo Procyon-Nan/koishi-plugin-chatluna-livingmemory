@@ -17,6 +17,7 @@ import type {
     LivingMemoryConfig
 } from '../../../contracts/workflows'
 import type {
+    LivingMemoryCompletedRound,
     LivingMemoryTranscriptMessage,
     MemoryScope
 } from '../../../contracts/memory'
@@ -28,10 +29,28 @@ type LivingMemoryExtractionConfig = Pick<
 
 type ExtractionFormatter = Pick<
     LivingMemoryMessageFormatter,
-    'takeRecentRounds' | 'toExtractionPayload'
+    'toExtractionPayload'
 >
 type ExtractionModel = Pick<LivingMemoryExtractor, 'extractWithTrace'>
 type ExtractionLogger = Pick<Logger, 'warn'>
+
+interface ExtractionRoundRequest {
+    scope: MemoryScope
+    resolvePresetPrompt: () => Promise<string>
+}
+
+interface BufferedExtractionRound {
+    sequence: number
+    round: LivingMemoryCompletedRound
+    request: ExtractionRoundRequest
+}
+
+interface ExtractionScopeState {
+    lastCompletedSequence: number
+    lastConsumedSequence: number
+    rounds: BufferedExtractionRound[]
+    running: boolean
+}
 
 export type ExtractionWorkflowRepository = Pick<
     JobRepository,
@@ -40,8 +59,7 @@ export type ExtractionWorkflowRepository = Pick<
     Pick<ExtractionRepository, 'appendMemories'>
 
 export class LivingMemoryExtractionCoordinator {
-    private readonly extractionLockByConversation = new Set<string>()
-    private readonly lastExtractionChatCountByScope = new Map<string, number>()
+    private readonly stateByScope = new Map<string, ExtractionScopeState>()
 
     constructor(
         private readonly config: LivingMemoryExtractionConfig,
@@ -54,27 +72,25 @@ export class LivingMemoryExtractionCoordinator {
     ) {}
 
     clearByConversation(conversationId: string) {
-        for (const key of this.lastExtractionChatCountByScope.keys()) {
+        for (const key of this.stateByScope.keys()) {
             if (key.endsWith(`\n${conversationId}`)) {
-                this.lastExtractionChatCountByScope.delete(key)
+                this.stateByScope.delete(key)
             }
         }
     }
 
     async queue(
         scope: MemoryScope,
-        chatCount: number,
-        messages: LivingMemoryTranscriptMessage[],
+        completedRound: LivingMemoryCompletedRound,
         options: QueueExtractionOptions
     ) {
         this.debug(
             [
-                'queueExtraction:',
+                'queueExtraction completed round:',
                 `conversationId=${scope.conversationId}`,
                 `presetId=${scope.presetId}`,
-                `chatCount=${chatCount}`,
                 `interval=${this.config.extractionInterval}`,
-                `messagesLength=${messages.length}`
+                `roundMessagesLength=${completedRound.messages.length}`
             ].join(' ')
         )
 
@@ -89,90 +105,130 @@ export class LivingMemoryExtractionCoordinator {
             return
         }
 
-        const lockKey = scopeKey(scope)
-        const lastExtractionChatCount =
-            this.lastExtractionChatCountByScope.get(lockKey)
+        const hasUser = completedRound.messages.some(
+            (message) => message.role === 'user'
+        )
+        const hasAssistant = completedRound.messages.some(
+            (message) => message.role === 'assistant'
+        )
+        if (!hasUser || !hasAssistant) {
+            throw new Error(
+                'Extraction completed round must contain both user and assistant messages.'
+            )
+        }
 
-        // 首次见到该 scope（含插件重载/重启后内存计数丢失的情形）：chatCount 的
-        // 来源（core 累加值 / character 现数）与抽取基线不保证同步归零，直接用其
-        // 绝对值会误触发立即抽取。改为以当前 chatCount 为基线、从 0 重新计时，
-        // 本次跳过，之后按增量 chatCount - 基线 判定。代价是重载后抽取倒计时会
-        // 重置一个 interval，与本插件“尽力而为、容忍滞后”的取舍一致。
-        if (lastExtractionChatCount == null) {
-            this.lastExtractionChatCountByScope.set(lockKey, chatCount)
+        const key = scopeKey(scope)
+        const state = this.stateByScope.get(key) ?? {
+            lastCompletedSequence: 0,
+            lastConsumedSequence: 0,
+            rounds: [],
+            running: false
+        }
+
+        state.lastCompletedSequence += 1
+        state.rounds.push({
+            sequence: state.lastCompletedSequence,
+            round: completedRound,
+            request: {
+                scope,
+                resolvePresetPrompt: options.resolvePresetPrompt
+            }
+        })
+        this.stateByScope.set(key, state)
+
+        this.tryStart(key, state)
+    }
+
+    private tryStart(key: string, state: ExtractionScopeState) {
+        const pendingRounds =
+            state.lastCompletedSequence - state.lastConsumedSequence
+        const latestScope = state.rounds[state.rounds.length - 1]?.request.scope
+
+        if (state.running) {
             this.debug(
                 [
-                    'queueExtraction skipped: baseline initialized,',
-                    `conversationId=${scope.conversationId}`,
-                    `presetId=${scope.presetId}`,
-                    `baselineChatCount=${chatCount}`,
+                    'queueExtraction pending: extraction running,',
+                    `conversationId=${latestScope?.conversationId ?? 'unknown'}`,
+                    `pendingRounds=${pendingRounds}`
+                ].join(' ')
+            )
+            return
+        }
+
+        if (pendingRounds < this.config.extractionInterval) {
+            this.debug(
+                [
+                    'queueExtraction pending: interval not reached,',
+                    `conversationId=${latestScope?.conversationId ?? 'unknown'}`,
+                    `pendingRounds=${pendingRounds}`,
                     `interval=${this.config.extractionInterval}`
                 ].join(' ')
             )
             return
         }
 
-        const roundsSinceLastExtraction = chatCount - lastExtractionChatCount
-
-        if (roundsSinceLastExtraction < this.config.extractionInterval) {
-            this.debug(
-                [
-                    'queueExtraction skipped: interval not reached,',
-                    `conversationId=${scope.conversationId}`,
-                    `chatCount=${chatCount}`,
-                    `lastExtractionChatCount=${lastExtractionChatCount ?? 'none'}`,
-                    `roundsSinceLastExtraction=${roundsSinceLastExtraction}`,
-                    `interval=${this.config.extractionInterval}`
-                ].join(' ')
+        const triggerSequence =
+            state.lastConsumedSequence + this.config.extractionInterval
+        const triggerIndex = state.rounds.findIndex(
+            (item) => item.sequence === triggerSequence
+        )
+        if (triggerIndex < 0) {
+            throw new Error(
+                `Extraction round buffer is missing trigger sequence ${triggerSequence}.`
             )
-            return
         }
 
-        if (this.extractionLockByConversation.has(lockKey)) {
-            this.debug(
-                `queueExtraction skipped: locked, conversationId=${scope.conversationId}`
-            )
-            return
-        }
-
-        const rounds =
-            options.preselectedMessages ??
-            this.formatter.takeRecentRounds(
-                messages,
-                this.config.extractionRounds
-            )
-        if (rounds.length === 0) {
-            this.debug(
-                [
-                    'queueExtraction skipped: no complete rounds,',
-                    `conversationId=${scope.conversationId}`,
-                    `messagesLength=${messages.length}`,
-                    `extractionRounds=${this.config.extractionRounds}`
-                ].join(' ')
-            )
-            return
-        }
+        const selectedRounds = state.rounds.slice(
+            Math.max(0, triggerIndex - this.config.extractionRounds + 1),
+            triggerIndex + 1
+        )
+        const rounds = selectedRounds.flatMap((item) => item.round.messages)
+        const request = state.rounds[triggerIndex].request
+        const sequenceAtStart = state.lastCompletedSequence
 
         this.debug(
             [
                 'queueExtraction accepted:',
-                `conversationId=${scope.conversationId}`,
-                `presetId=${scope.presetId}`,
-                `roundsLength=${rounds.length}`
+                `conversationId=${request.scope.conversationId}`,
+                `presetId=${request.scope.presetId}`,
+                `triggerSequence=${triggerSequence}`,
+                `pendingRounds=${pendingRounds}`,
+                `bufferedRounds=${selectedRounds.length}`,
+                `messagesLength=${rounds.length}`
             ].join(' ')
         )
 
-        this.extractionLockByConversation.add(lockKey)
-
-        this.run(scope, rounds, options.resolvePresetPrompt)
+        state.running = true
+        this.run(request.scope, rounds, request.resolvePresetPrompt)
             .then(() => {
-                this.lastExtractionChatCountByScope.set(lockKey, chatCount)
+                state.running = false
+                state.lastConsumedSequence = triggerSequence
+                const minimumSequenceToKeep = Math.max(
+                    1,
+                    state.lastConsumedSequence -
+                        this.config.extractionRounds +
+                        2
+                )
+                state.rounds = state.rounds.filter(
+                    (item) => item.sequence >= minimumSequenceToKeep
+                )
+                if (
+                    this.stateByScope.get(key) === state &&
+                    state.lastCompletedSequence - state.lastConsumedSequence >=
+                        this.config.extractionInterval
+                ) {
+                    this.tryStart(key, state)
+                }
             })
             .catch((error) => {
+                state.running = false
                 this.logger.warn(error)
-            })
-            .finally(() => {
-                this.extractionLockByConversation.delete(lockKey)
+                if (
+                    this.stateByScope.get(key) === state &&
+                    state.lastCompletedSequence > sequenceAtStart
+                ) {
+                    this.tryStart(key, state)
+                }
             })
     }
 

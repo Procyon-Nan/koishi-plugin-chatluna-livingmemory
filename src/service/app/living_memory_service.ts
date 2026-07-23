@@ -21,6 +21,7 @@ import {
     filterUserProfileList
 } from '../../query'
 import type {
+    LivingMemoryCompletedRound,
     LivingMemorySearchResult,
     LivingMemoryTranscriptMessage,
     MemoryMutationInput,
@@ -298,16 +299,10 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
 
     async queueExtraction(
         scope: MemoryScope,
-        chatCount: number,
-        messages: LivingMemoryTranscriptMessage[],
+        completedRound: LivingMemoryCompletedRound,
         options: QueueExtractionOptions
     ) {
-        await this.extractionCoordinator.queue(
-            scope,
-            chatCount,
-            messages,
-            options
-        )
+        await this.extractionCoordinator.queue(scope, completedRound, options)
     }
 
     async cleanupConversation(conversationId: string) {

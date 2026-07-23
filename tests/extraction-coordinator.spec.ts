@@ -57,9 +57,12 @@ const createExtractedMemory = (): ExtractedMemoryItem => ({
 interface ExtractionCoordinatorOptions {
     trace?: LivingMemoryExtractionTrace
     extractionInterval?: number
+    extractionRounds?: number
     extractWithTrace?: () => Promise<LivingMemoryExtractionTrace>
     queueAutoDream?: (presetId: string) => void
-    toExtractionPayload?: () => ExtractionPayload
+    toExtractionPayload?: (
+        messages: LivingMemoryTranscriptMessage[]
+    ) => ExtractionPayload
     appendMemories?: ExtractionWorkflowRepository['appendMemories']
 }
 
@@ -74,10 +77,9 @@ const createExtractionCoordinator = (
         extracted: ExtractedMemoryItem[]
     }[] = []
     const debugMessages: string[] = []
+    const warnings: unknown[] = []
     let extractorCalls = 0
     const formatter = {
-        takeRecentRounds: (messages: LivingMemoryTranscriptMessage[]) =>
-            messages,
         toExtractionPayload:
             options.toExtractionPayload ??
             (() => ({
@@ -112,13 +114,13 @@ const createExtractionCoordinator = (
     const coordinator = new LivingMemoryExtractionCoordinator(
         {
             extractionInterval: options.extractionInterval ?? 1,
-            extractionRounds: 1
+            extractionRounds: options.extractionRounds ?? 1
         },
         repository,
         formatter,
         extractor,
         options.queueAutoDream ?? (() => {}),
-        { warn: () => {} },
+        { warn: (error) => warnings.push(error) },
         (message) => debugMessages.push(message)
     )
     return {
@@ -126,44 +128,65 @@ const createExtractionCoordinator = (
         jobStore,
         appended,
         debugMessages,
+        warnings,
         getExtractorCalls: () => extractorCalls
     }
 }
 
 const queueExtraction = async (
     coordinator: LivingMemoryExtractionCoordinator,
-    firstChatCount = 0,
-    secondChatCount = 1,
+    completedRoundCount = 1,
     resolvePresetPrompt: () => Promise<string> = async () =>
         '你是测试助手。'
 ) => {
-    const messages = createExtractionMessages()
     const options = { resolvePresetPrompt }
-    await coordinator.queue(scope, firstChatCount, messages, options)
-    await coordinator.queue(scope, secondChatCount, messages, options)
+    for (let index = 0; index < completedRoundCount; index++) {
+        await coordinator.queue(
+            scope,
+            { messages: createExtractionMessages() },
+            options
+        )
+    }
 }
 
-it('skips the first extraction call while initializing its baseline', async () => {
-    const { coordinator, jobStore } = createExtractionCoordinator()
+it('counts the first completed round and extracts immediately at interval one', async () => {
+    const { coordinator, getExtractorCalls } = createExtractionCoordinator()
 
-    await coordinator.queue(scope, 0, createExtractionMessages(), {
+    await coordinator.queue(scope, { messages: createExtractionMessages() }, {
         resolvePresetPrompt: async () => '你是测试助手。'
     })
+    await waitFor(() => getExtractorCalls() === 1, 'first extraction')
 
-    assert.equal(jobStore.jobs.length, 0)
+    assert.equal(getExtractorCalls(), 1)
 })
 
 it('skips extraction when the configured interval is not reached', async () => {
-    const { coordinator, jobStore } = createExtractionCoordinator({
+    const { coordinator, getExtractorCalls } = createExtractionCoordinator({
         extractionInterval: 2
     })
 
-    await queueExtraction(coordinator, 0, 1)
+    await queueExtraction(coordinator)
 
-    assert.equal(jobStore.jobs.length, 0)
+    assert.equal(getExtractorCalls(), 0)
 })
 
-it('drops a same-scope extraction while the previous run is in flight', async () => {
+it('rejects an invalid completed-round contract', async () => {
+    const { coordinator } = createExtractionCoordinator()
+    const userOnlyRound = {
+        messages: createExtractionMessages().filter(
+            (message) => message.role === 'user'
+        )
+    }
+
+    await assert.rejects(
+        coordinator.queue(scope, userOnlyRound, {
+            resolvePresetPrompt: async () => '你是测试助手。'
+        }),
+        /must contain both user and assistant messages/u
+    )
+})
+
+it('preserves completed rounds while an extraction is in flight', async () => {
     const extractionTrace = createExtractionTrace({
         extracted: [createExtractedMemory()]
     })
@@ -171,6 +194,7 @@ it('drops a same-scope extraction while the previous run is in flight', async ()
     const tracePromise = new Promise<LivingMemoryExtractionTrace>((resolve) => {
         resolveTrace = resolve
     })
+    let firstCall = true
     const {
         coordinator,
         jobStore,
@@ -178,23 +202,120 @@ it('drops a same-scope extraction while the previous run is in flight', async ()
         getExtractorCalls
     } = createExtractionCoordinator({
         trace: extractionTrace,
-        extractWithTrace: async () => await tracePromise
+        extractWithTrace: async () => {
+            if (firstCall) {
+                firstCall = false
+                return await tracePromise
+            }
+            return extractionTrace
+        }
     })
     const options = {
         resolvePresetPrompt: async () => '你是测试助手。'
     }
 
-    await coordinator.queue(scope, 0, createExtractionMessages(), options)
-    await coordinator.queue(scope, 1, createExtractionMessages(), options)
+    await coordinator.queue(
+        scope,
+        { messages: createExtractionMessages() },
+        options
+    )
     await waitFor(() => getExtractorCalls() === 1, 'extraction model call')
-    await coordinator.queue(scope, 1, createExtractionMessages(), options)
+    await coordinator.queue(
+        scope,
+        { messages: createExtractionMessages() },
+        options
+    )
 
     assert.equal(getExtractorCalls(), 1)
     assert.equal(jobStore.jobs.length, 0)
 
     resolveTrace(extractionTrace)
-    await waitFor(() => appended.length === 1, 'locked extraction completion')
+    await waitFor(() => getExtractorCalls() === 2, 'queued extraction model call')
+    await waitFor(() => appended.length === 2, 'queued extraction completion')
     assert.equal(jobStore.jobs.length, 0)
+})
+
+it('uses only the configured number of recent completed rounds', async () => {
+    const payloads: LivingMemoryTranscriptMessage[][] = []
+    const { coordinator, getExtractorCalls } = createExtractionCoordinator({
+        extractionInterval: 3,
+        extractionRounds: 2,
+        toExtractionPayload: (messages) => {
+            payloads.push(messages)
+            return {
+                input: 'payload',
+                sourceOriginMessages: []
+            }
+        }
+    })
+
+    for (let index = 1; index <= 3; index++) {
+        const round = createExtractionMessages().map((message) => ({
+            ...message,
+            contentLines: [`round-${index}-${message.role}`]
+        }))
+        await coordinator.queue(scope, { messages: round }, {
+            resolvePresetPrompt: async () => '你是测试助手。'
+        })
+    }
+    await waitFor(() => getExtractorCalls() === 1, 'buffered extraction')
+
+    assert.deepEqual(
+        payloads[0]?.map((message) => message.contentLines[0]),
+        [
+            'round-2-user',
+            'round-2-assistant',
+            'round-3-user',
+            'round-3-assistant'
+        ]
+    )
+})
+
+it('keeps separate trigger boundaries when multiple intervals arrive in flight', async () => {
+    const payloads: string[][] = []
+    let resolveFirstTrace!: (trace: LivingMemoryExtractionTrace) => void
+    const firstTrace = new Promise<LivingMemoryExtractionTrace>((resolve) => {
+        resolveFirstTrace = resolve
+    })
+    let firstCall = true
+    const { coordinator, getExtractorCalls } = createExtractionCoordinator({
+        extractionInterval: 2,
+        extractionRounds: 2,
+        toExtractionPayload: (messages) => {
+            payloads.push(messages.map((message) => message.contentLines[0]))
+            return {
+                input: 'payload',
+                sourceOriginMessages: []
+            }
+        },
+        extractWithTrace: async () => {
+            if (firstCall) {
+                firstCall = false
+                return await firstTrace
+            }
+            return createExtractionTrace()
+        }
+    })
+    const options = {
+        resolvePresetPrompt: async () => '你是测试助手。'
+    }
+
+    for (let index = 1; index <= 6; index++) {
+        const round = createExtractionMessages().map((message) => ({
+            ...message,
+            contentLines: [`round-${index}-${message.role}`]
+        }))
+        await coordinator.queue(scope, { messages: round }, options)
+    }
+    assert.equal(getExtractorCalls(), 1)
+
+    resolveFirstTrace(createExtractionTrace())
+    await waitFor(() => getExtractorCalls() === 3, 'three interval boundaries')
+
+    assert.deepEqual(
+        payloads.map((payload) => payload[0]),
+        ['round-1-user', 'round-3-user', 'round-5-user']
+    )
 })
 
 it('writes extracted memories and queues auto Dream without persisting a job', async () => {
@@ -245,7 +366,7 @@ it('persists one failed extraction job when preset prompt resolution throws', as
     const { coordinator, jobStore, getExtractorCalls } =
         createExtractionCoordinator()
 
-    await queueExtraction(coordinator, 0, 1, async () => {
+    await queueExtraction(coordinator, 1, async () => {
         throw new Error('preset prompt resolution failure')
     })
     await waitFor(
@@ -258,6 +379,29 @@ it('persists one failed extraction job when preset prompt resolution throws', as
         jobStore.jobs[0]?.error ?? '',
         /preset prompt resolution failure/u
     )
+})
+
+it('retries a failed boundary and preserves the next completed round', async () => {
+    let shouldFail = true
+    const { coordinator, jobStore, getExtractorCalls } =
+        createExtractionCoordinator({
+            extractWithTrace: async () => {
+                if (shouldFail) {
+                    throw new Error('first extraction failure')
+                }
+                return createExtractionTrace()
+            }
+        })
+
+    await queueExtraction(coordinator)
+    await waitFor(() => jobStore.jobs.length === 1, 'first failed extraction')
+    assert.equal(getExtractorCalls(), 1)
+
+    shouldFail = false
+    await queueExtraction(coordinator)
+    await waitFor(() => getExtractorCalls() === 3, 'retried extraction')
+
+    assert.equal(jobStore.jobs.length, 1)
 })
 
 it('persists one failed extraction job for parse errors', async () => {

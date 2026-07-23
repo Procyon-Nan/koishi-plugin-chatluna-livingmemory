@@ -2,14 +2,13 @@ import { Context, type Session } from 'koishi'
 import type { LivingMemoryConfig } from '../contracts/workflows'
 import {
     type CharacterTranscriptSourceMessage,
-    countCharacterCompletedRounds,
     isCharacterBotMessage,
     isSameCharacterMessage,
     resolveCharacterScopeSpeakerName,
+    toCharacterCompletedRound,
     toCharacterTranscriptMessageResult,
     toCharacterTranscriptMessages
 } from '../service/transcript/character_transcript_adapter'
-import { takeRecentRounds } from '../service/shared/rounds'
 import { collectUserProfileSpeakerLabels } from '../service/user_profile'
 import {
     type CharacterPresetPromptSource,
@@ -31,7 +30,7 @@ interface CharacterBeforeChatEventPayload {
     conversationId?: string
     presetName: string
     preset: CharacterPresetPromptSource
-    messages: CharacterMessage[]
+    messages: readonly CharacterMessage[]
     focusMessage?: CharacterMessage
     triggerReason?: string
 }
@@ -42,7 +41,7 @@ interface CharacterAfterChatEventPayload {
     conversationId?: string
     presetName: string
     preset: CharacterPresetPromptSource
-    messages: CharacterMessage[]
+    messages: readonly CharacterMessage[]
     focusMessage?: CharacterMessage
     triggerReason?: string
     persistedHumanMessage?: unknown
@@ -190,7 +189,6 @@ const formatPromptVariable = (sections: PromptSections) => {
 export async function apply(ctx: Context, config: LivingMemoryConfig) {
     const logger = ctx.logger('chatluna-livingmemory')
     const events = ctx as unknown as CharacterEventRegistrar
-    const completedRoundCountByScope = new Map<string, number>()
     const profileSpeakerLabelsByScope = new Map<string, string[]>()
     const debug = (message: string) => {
         if (config.debug) {
@@ -333,50 +331,44 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 scopeKey,
                 collectUserProfileSpeakerLabels(messages)
             )
-            const observedChatCount = countCharacterCompletedRounds(messages)
-            const previousChatCount = completedRoundCountByScope.get(scopeKey)
-            const currentReplyCompletesRound =
-                payload.focusMessage != null &&
-                !isCharacterBotMessage(payload.session, payload.focusMessage)
-            const chatCount =
-                previousChatCount == null
-                    ? observedChatCount
-                    : currentReplyCompletesRound
-                      ? Math.max(previousChatCount + 1, observedChatCount)
-                      : previousChatCount
 
-            completedRoundCountByScope.set(scopeKey, chatCount)
-
-            const extractionMessages = currentReplyCompletesRound
-                ? takeRecentRounds(
-                      messages,
-                      config.extractionRounds,
-                      'ai-anchored'
-                  )
-                : []
+            const completedRound =
+                payload.focusMessage == null
+                    ? {
+                          round: null,
+                          reason: 'focus-message-missing' as const
+                      }
+                    : await toCharacterCompletedRound(
+                          scope,
+                          payload.session,
+                          payload.messages,
+                          payload.focusMessage
+                      )
 
             debug(
                 [
                     'character after-chat:',
                     `conversationId=${scope.conversationId}`,
                     `presetId=${scope.presetId}`,
-                    `chatCount=${chatCount}`,
                     `messagesLength=${payload.messages.length}`,
                     `transcriptMessagesLength=${messages.length}`,
-                    `extractionMessagesLength=${extractionMessages.length}`
+                    `completedRoundMessagesLength=${completedRound.round?.messages.length ?? 0}`,
+                    `completedRoundReason=${completedRound.reason ?? 'none'}`
                 ].join(' ')
             )
 
+            if (completedRound.round == null) {
+                return
+            }
+
             await ctx.chatluna_living_memory.queueExtraction(
                 scope,
-                chatCount,
-                messages,
+                completedRound.round,
                 {
                     resolvePresetPrompt: async () =>
                         await renderCharacterPresetPrompt(ctx, payload.preset, {
                             session: payload.session
-                        }),
-                    preselectedMessages: extractionMessages
+                        })
                 }
             )
         }
@@ -397,11 +389,6 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
             await ctx.chatluna_living_memory.cleanupConversation(
                 payload.sessionKey
             )
-            for (const key of completedRoundCountByScope.keys()) {
-                if (key.endsWith(`\n${payload.sessionKey}`)) {
-                    completedRoundCountByScope.delete(key)
-                }
-            }
             for (const key of profileSpeakerLabelsByScope.keys()) {
                 if (key.endsWith(`\n${payload.sessionKey}`)) {
                     profileSpeakerLabelsByScope.delete(key)

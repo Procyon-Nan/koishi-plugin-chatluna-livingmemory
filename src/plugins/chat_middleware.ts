@@ -342,7 +342,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
         async (
             conversationId,
             sourceMessage,
-            _responseMessage,
+            responseMessage,
             promptVariables,
             chatInterface,
             session
@@ -395,32 +395,51 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 }
             )
 
-            const messages = await chatInterface.chatHistory.getMessages()
-            const transcriptMessages = toChatLunaTranscriptMessages(
+            const completedAt = new Date()
+            const sourceTranscript = toChatLunaTranscriptMessageResult(
                 scope,
-                messages
+                sourceMessage,
+                { fallbackCreatedAt: completedAt }
             )
-            const chatCount =
-                typeof promptVariables.chatCount === 'number'
-                    ? promptVariables.chatCount
-                    : 0
+            const responseTranscript = toChatLunaTranscriptMessageResult(
+                scope,
+                responseMessage,
+                { fallbackCreatedAt: completedAt }
+            )
+
+            if (
+                sourceTranscript.message == null ||
+                responseTranscript.message == null
+            ) {
+                debug(
+                    [
+                        'after-chat extraction skipped: invalid completed round,',
+                        `conversationId=${conversationId}`,
+                        `presetId=${presetId}`,
+                        `sourceReason=${sourceTranscript.reason ?? 'none'}`,
+                        `responseReason=${responseTranscript.reason ?? 'none'}`
+                    ].join(' ')
+                )
+                return
+            }
+
+            const completedRound = {
+                messages: [sourceTranscript.message, responseTranscript.message]
+            }
 
             debug(
                 [
-                    'after-chat extraction queued:',
+                    'after-chat completed round queued:',
                     `conversationId=${conversationId}`,
                     `presetId=${presetId}`,
-                    `chatCount=${chatCount}`,
-                    `messagesLength=${messages.length}`,
-                    `transcriptMessagesLength=${transcriptMessages.length}`
+                    `roundMessagesLength=${completedRound.messages.length}`
                 ].join(' ')
             )
             const presetTemplate = chatInterface.preset.value
 
             await ctx.chatluna_living_memory.queueExtraction(
                 scope,
-                chatCount,
-                transcriptMessages,
+                completedRound,
                 {
                     resolvePresetPrompt: async () =>
                         await renderChatLunaPresetPrompt(
