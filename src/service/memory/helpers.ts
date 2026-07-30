@@ -151,3 +151,34 @@ export const renderCharacterPresetPrompt = async (
 
     return rendered.text.trim()
 }
+
+/**
+ * 从 presetId 解析角色名标签：Character 预设去掉后缀，ChatLuna 预设直接使用 presetId。
+ */
+export const resolveAssistantLabel = (presetId: string): string => {
+    if (presetId.endsWith(characterPresetSuffix)) {
+        return presetId.slice(0, -characterPresetSuffix.length)
+    }
+    return presetId
+}
+
+/**
+ * 解析预设的系统提示词文本，用于向 LLM 提供角色人设上下文。
+ * Character 预设通过 chatluna_character 获取，ChatLuna 预设通过 chatluna.preset 获取。
+ */
+export const resolvePresetPrompt = async (
+    ctx: Context,
+    presetId: string
+): Promise<string> => {
+    if (presetId.endsWith(characterPresetSuffix)) {
+        const presetName = presetId.slice(0, -characterPresetSuffix.length)
+        const character = (
+            ctx as Context & { chatluna_character: CharacterPresetProvider }
+        ).chatluna_character
+        const preset = await character.preset.getPreset(presetName, false)
+        return await renderCharacterPresetPrompt(ctx, preset)
+    }
+
+    const preset = ctx.chatluna.preset.getPreset(presetId).value
+    return await renderChatLunaPresetPrompt(ctx, preset)
+}

@@ -9,12 +9,7 @@ import type {
     LivingMemoryConfig,
     UserProfileRepository
 } from '../contracts/workflows'
-import {
-    type CharacterPresetProvider,
-    characterPresetSuffix,
-    renderCharacterPresetPrompt,
-    renderChatLunaPresetPrompt
-} from './memory/helpers'
+import { resolveAssistantLabel, resolvePresetPrompt } from './memory/helpers'
 import {
     buildUserProfilePrompt,
     createUserProfileResultSchema,
@@ -51,12 +46,6 @@ const normalizeSearchText = (value: string) =>
     normalizeText(value).toLowerCase()
 
 const unique = <T>(items: T[]) => Array.from(new Set(items))
-
-const toCharacterPresetName = (presetId: string) => {
-    return presetId.endsWith(characterPresetSuffix)
-        ? presetId.slice(0, -characterPresetSuffix.length)
-        : null
-}
 
 const truncateText = (value: string, maxLength: number) => {
     const chars = Array.from(value)
@@ -147,9 +136,8 @@ export class LivingMemoryUserProfileService {
             ...group,
             existingProfile: existingProfileByKey.get(group.speakerKey)
         }))
-        const characterPresetName = toCharacterPresetName(presetId)
-        const assistantLabel = characterPresetName ?? presetId
-        const presetPrompt = await this.resolvePresetPrompt(presetId)
+        const assistantLabel = resolveAssistantLabel(presetId)
+        const presetPrompt = await resolvePresetPrompt(this.ctx, presetId)
         const matchedEntryCount = profileGroups.reduce(
             (sum, group) => sum + group.matchedEntryCount,
             0
@@ -430,29 +418,5 @@ export class LivingMemoryUserProfileService {
         }
 
         return keys
-    }
-
-    private async resolvePresetPrompt(presetId: string) {
-        const characterPresetName = toCharacterPresetName(presetId)
-        if (characterPresetName != null) {
-            return await this.resolveCharacterPresetPrompt(characterPresetName)
-        }
-
-        return await this.resolveChatLunaPresetPrompt(presetId)
-    }
-
-    private async resolveChatLunaPresetPrompt(presetId: string) {
-        const preset = this.ctx.chatluna.preset.getPreset(presetId).value
-        return await renderChatLunaPresetPrompt(this.ctx, preset)
-    }
-
-    private async resolveCharacterPresetPrompt(presetName: string) {
-        const character = (
-            this.ctx as Context & {
-                chatluna_character: CharacterPresetProvider
-            }
-        ).chatluna_character
-        const preset = await character.preset.getPreset(presetName, false)
-        return await renderCharacterPresetPrompt(this.ctx, preset)
     }
 }

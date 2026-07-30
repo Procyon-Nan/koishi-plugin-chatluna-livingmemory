@@ -129,6 +129,7 @@ it('keeps Dream successful when post-Dream user profile generation fails', async
     assert.deepEqual(harness.events, [
         'list-entries',
         'create-model',
+        'resolve-preset',
         'list-entries',
         'list-entries',
         'list-speakers',
@@ -151,6 +152,7 @@ it('does not start post-Dream user profile generation when disabled', async () =
     assert.deepEqual(harness.events, [
         'list-entries',
         'create-model',
+        'resolve-preset',
         'list-entries'
     ])
 })

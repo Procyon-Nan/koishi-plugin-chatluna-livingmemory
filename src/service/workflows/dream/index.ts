@@ -8,6 +8,10 @@ import type {
 } from '../../../contracts/workflows'
 import type { EmbeddingRepositoryLike } from '../../shared/embeddings'
 import { isModelConfigured, summarizeError } from '../../shared/utils'
+import {
+    resolveAssistantLabel,
+    resolvePresetPrompt
+} from '../../memory/helpers'
 import { DreamClusterer } from './clustering'
 import { DreamExecutor, type DreamExecutorRepository } from './executor'
 import { LivingMemoryUserProfileService } from '../../user_profile'
@@ -98,8 +102,22 @@ export class LivingMemoryDreamService {
         }
 
         const chatModel = model.value
+        const assistantLabel = resolveAssistantLabel(presetId)
+        let presetPrompt = ''
+        try {
+            presetPrompt = await resolvePresetPrompt(this.ctx, presetId)
+        } catch (error) {
+            this.debug(
+                [
+                    `memory dream preset prompt unavailable: presetId=${presetId}`,
+                    `error=${summarizeError(error)}`
+                ].join(' ')
+            )
+        }
         const activeResult = await this.runStage(
             presetId,
+            assistantLabel,
+            presetPrompt,
             'active',
             activeEntries,
             chatModel
@@ -111,6 +129,8 @@ export class LivingMemoryDreamService {
         )
         const archivedResult = await this.runStage(
             presetId,
+            assistantLabel,
+            presetPrompt,
             'archived',
             archivedEntries,
             chatModel
@@ -176,6 +196,8 @@ export class LivingMemoryDreamService {
 
     private async runStage(
         presetId: string,
+        assistantLabel: string,
+        presetPrompt: string,
         stage: DreamStage,
         entries: MemoryEntryRecord[],
         model: ChatLunaChatModel
@@ -206,7 +228,13 @@ export class LivingMemoryDreamService {
         const stats = createEmptyStats()
 
         for (const cluster of clusters) {
-            const prompt = buildDreamPrompt(presetId, cluster, stage)
+            const prompt = buildDreamPrompt({
+                assistantLabel,
+                presetPrompt,
+                presetId,
+                cluster,
+                stage
+            })
             this.debug(
                 [
                     `memory dream llm input: presetId=${presetId}`,
