@@ -61,11 +61,7 @@ export class LivingMemoryRetriever {
             entries,
             {
                 logger: this.ctx.logger('chatluna-livingmemory'),
-                debug: (message) => {
-                    if (this.config.debug) {
-                        this.ctx.logger('chatluna-livingmemory').info(message)
-                    }
-                },
+                debug: (message) => this.debugLog(message),
                 // 查询向量由当前模型现算，其维度即当前模型的输出维度，
                 // 以此让维度不一致的旧缓存向量失效重算，避免 cosine 静默归零。
                 expectedDimension: queryVector.length
@@ -97,42 +93,69 @@ export class LivingMemoryRetriever {
             return []
         }
 
+        // 未配置 reranker 模型时，降级为仅按 embedding 余弦相似度取 top-K，
+        // 避免召回因缺少 reranker 而整轮失败。
         if (!isModelConfigured(this.config.rerankModel)) {
-            throw new Error('memory retrieve rerank model is not configured')
-        }
-
-        const reranker = await this.ctx.chatluna.createReranker(
-            this.config.rerankModel
-        )
-        if (reranker?.value == null) {
-            throw new Error(
-                `memory retrieve reranker unavailable: model=${this.config.rerankModel}`
+            this.debugLog(
+                'memory recall rerank model not configured, fallback to embedding-only top-K'
             )
+            return this.embeddingOnlyTopK(embeddingResults, limit)
         }
 
-        const rerankResults = await reranker.value.rerank(
-            candidates.map((c) => c.retrievalText),
-            input,
-            { topN: limit }
-        )
-
-        return rerankResults.map((result) => {
-            const candidate = candidates[result.index]
-            if (candidate == null) {
+        // reranker 已配置但创建或调用失败时，同样降级为 embedding-only top-K，
+        // 避免单次模型故障导致整轮召回失败。
+        try {
+            const reranker = await this.ctx.chatluna.createReranker(
+                this.config.rerankModel
+            )
+            if (reranker?.value == null) {
                 throw new Error(
-                    [
-                        'memory rerank index out of bounds:',
-                        `index=${result.index}`,
-                        `candidateCount=${candidates.length}`
-                    ].join(' ')
+                    `memory retrieve reranker unavailable: model=${this.config.rerankModel}`
                 )
             }
-            return {
-                id: candidate.id,
-                content: candidate.content,
-                score: result.relevanceScore
-            }
-        })
+
+            const rerankResults = await reranker.value.rerank(
+                candidates.map((c) => c.retrievalText),
+                input,
+                { topN: limit }
+            )
+
+            return rerankResults.map((result) => {
+                const candidate = candidates[result.index]
+                if (candidate == null) {
+                    throw new Error(
+                        [
+                            'memory rerank index out of bounds:',
+                            `index=${result.index}`,
+                            `candidateCount=${candidates.length}`
+                        ].join(' ')
+                    )
+                }
+                return {
+                    id: candidate.id,
+                    content: candidate.content,
+                    score: result.relevanceScore
+                }
+            })
+        } catch (error) {
+            this.ctx.logger('chatluna-livingmemory').warn(error)
+            return this.embeddingOnlyTopK(embeddingResults, limit)
+        }
+    }
+
+    private debugLog(message: string) {
+        if (this.config.debug) {
+            this.ctx.logger('chatluna-livingmemory').info(message)
+        }
+    }
+
+    private embeddingOnlyTopK(
+        results: { id: string; content: string; score: number }[],
+        limit: number
+    ): RetrievedMemoryItem[] {
+        return results
+            .slice(0, limit)
+            .map(({ id, content, score }) => ({ id, content, score }))
     }
 
     private async listActiveEntries(presetId: string) {
