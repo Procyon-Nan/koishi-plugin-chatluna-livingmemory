@@ -140,7 +140,7 @@ export const Config: Schema<Config> = Schema.intersect([
             .default('无'),
         recallTopK: Schema.number()
             .min(1)
-            .max(20)
+            .max(100)
             .step(1)
             .description(
                 'embedding-rerank 每次召回时返回的最相关记忆条数上限。'
