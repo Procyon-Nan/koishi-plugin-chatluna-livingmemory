@@ -117,7 +117,7 @@ it('applies shared field rules to Dream mutations', async () => {
         },
         applyDreamMerge: async () => {}
     }
-    const executor = new DreamExecutor(repository)
+    const executor = new DreamExecutor(repository, () => {})
     const now = new Date()
     const entry = {
         id: 'memory-1',

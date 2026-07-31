@@ -63,7 +63,7 @@ export class LivingMemoryDreamService {
         private readonly debug: (message: string) => void
     ) {
         this.clusterer = new DreamClusterer(ctx, config, repository, debug)
-        this.executor = new DreamExecutor(repository)
+        this.executor = new DreamExecutor(repository, debug)
         this.userProfiles = new LivingMemoryUserProfileService(
             ctx,
             config,

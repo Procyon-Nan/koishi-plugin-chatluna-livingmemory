@@ -74,6 +74,9 @@ export class DreamClusterer {
                     Array.isArray(item.vector) && item.vector.length > 0
             )
         if (indexed.length < 2) {
+            this.debug(
+                `memory dream hdbscan: insufficient valid vectors (${indexed.length}/${entries.length}), clustering skipped`
+            )
             return []
         }
 
@@ -183,7 +186,9 @@ export class DreamClusterer {
                 continue
             }
 
-            const prob = Number.isFinite(probabilities[i]) ? probabilities[i] : 0
+            const prob = Number.isFinite(probabilities[i])
+                ? probabilities[i]
+                : 0
             const existing = byLabel.get(label)
             if (existing != null) {
                 existing.entries.push(indexed[i].entry)

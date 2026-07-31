@@ -232,7 +232,7 @@ it('enforces Dream stage actions and touched-memory guards', async () => {
         },
         applyDreamMerge: async () => {}
     }
-    const executor = new DreamExecutor(repository)
+    const executor = new DreamExecutor(repository, () => {})
     const entry = createMemoryEntry('memory-1')
     const cluster = { id: 'cluster-1', reason: 'test', entries: [entry] }
 
@@ -273,7 +273,7 @@ it('delegates each Dream merge to one atomic repository operation', async () => 
             mergeInputs.push(input)
         }
     }
-    const executor = new DreamExecutor(repository)
+    const executor = new DreamExecutor(repository, () => {})
     const activeEntries = [
         createMemoryEntry('target-active'),
         createMemoryEntry('source-active-1'),
@@ -360,7 +360,7 @@ it('does not touch merge state when the atomic repository write fails', async ()
             throw new Error('merge write failed')
         }
     }
-    const executor = new DreamExecutor(repository)
+    const executor = new DreamExecutor(repository, () => {})
     const touchedMemoryIds = new Set(['already-touched'])
 
     await assert.rejects(

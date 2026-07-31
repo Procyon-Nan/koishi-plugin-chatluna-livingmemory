@@ -30,7 +30,10 @@ export type DreamExecutorRepository = Pick<
 type DreamGeneratedMemoryMutation = Omit<DreamMergeMutation, 'status'>
 
 export class DreamExecutor {
-    constructor(private readonly repository: DreamExecutorRepository) {}
+    constructor(
+        private readonly repository: DreamExecutorRepository,
+        private readonly debug: (message: string) => void
+    ) {}
 
     async executeOperations(
         stage: DreamStage,
@@ -45,12 +48,40 @@ export class DreamExecutor {
         const mergeDeletedSourceIds = new Set<string>()
 
         for (const operation of operations) {
-            if (
-                !this.isActionAllowed(stage, operation.action) ||
-                !this.operationIdsWithinCluster(operation, entryById)
-            ) {
+            if (!this.isActionAllowed(stage, operation.action)) {
                 stats.skipped++
+                this.debug(
+                    this.formatSkipLog(
+                        stage,
+                        cluster.id,
+                        operation.action,
+                        'action-not-allowed-in-stage'
+                    )
+                )
                 continue
+            }
+            if (!this.operationIdsWithinCluster(operation, entryById)) {
+                stats.skipped++
+                this.debug(
+                    this.formatSkipLog(
+                        stage,
+                        cluster.id,
+                        operation.action,
+                        'ids-not-in-cluster'
+                    )
+                )
+                continue
+            }
+
+            const logSkip = (reason: string) => {
+                this.debug(
+                    this.formatSkipLog(
+                        stage,
+                        cluster.id,
+                        operation.action,
+                        reason
+                    )
+                )
             }
 
             switch (operation.action) {
@@ -63,7 +94,8 @@ export class DreamExecutor {
                         operation,
                         entryById,
                         touchedMemoryIds,
-                        stats
+                        stats,
+                        logSkip
                     )
                     break
                 case 'archive':
@@ -71,7 +103,8 @@ export class DreamExecutor {
                         operation,
                         entryById,
                         touchedMemoryIds,
-                        stats
+                        stats,
+                        logSkip
                     )
                     break
                 case 'merge':
@@ -81,14 +114,16 @@ export class DreamExecutor {
                         entryById,
                         touchedMemoryIds,
                         stats,
-                        mergeDeletedSourceIds
+                        mergeDeletedSourceIds,
+                        logSkip
                     )
                     break
                 case 'deleteSource':
                     this.executeDeleteSource(
                         operation,
                         mergeDeletedSourceIds,
-                        stats
+                        stats,
+                        logSkip
                     )
                     break
             }
@@ -142,7 +177,8 @@ export class DreamExecutor {
     private executeDeleteSource(
         operation: DreamOperation,
         mergeDeletedSourceIds: Set<string>,
-        stats: DreamOperationStats
+        stats: DreamOperationStats,
+        logSkip: (reason: string) => void
     ) {
         const sourceIds = Array.isArray(operation.sourceMemoryIds)
             ? operation.sourceMemoryIds.filter(
@@ -154,6 +190,7 @@ export class DreamExecutor {
             !sourceIds.every((id) => mergeDeletedSourceIds.has(id))
         ) {
             stats.skipped++
+            logSkip('deleteSource-without-prior-merge')
         }
     }
 
@@ -162,18 +199,29 @@ export class DreamExecutor {
         operation: DreamOperation,
         entryById: Map<string, MemoryEntryRecord>,
         touchedMemoryIds: Set<string>,
-        stats: DreamOperationStats
+        stats: DreamOperationStats,
+        logSkip: (reason: string) => void
     ) {
         const memoryId = operation.memoryId
         const entry =
             typeof memoryId === 'string' ? entryById.get(memoryId) : null
-        if (entry == null || touchedMemoryIds.has(entry.id)) {
+        if (entry == null) {
             stats.skipped++
+            logSkip('entry-not-found')
+            return
+        }
+        if (touchedMemoryIds.has(entry.id)) {
+            stats.skipped++
+            logSkip('already-touched')
             return
         }
 
         const patch = this.sanitizeMemoryPatch(operation.memory)
-        this.assertCompleteMetadataForNewContent(operation, patch)
+        if (!this.hasCompleteMetadata(patch)) {
+            stats.skipped++
+            logSkip('incomplete-metadata')
+            return
+        }
 
         await this.repository.updateMemory(
             entry.id,
@@ -187,13 +235,20 @@ export class DreamExecutor {
         operation: DreamOperation,
         entryById: Map<string, MemoryEntryRecord>,
         touchedMemoryIds: Set<string>,
-        stats: DreamOperationStats
+        stats: DreamOperationStats,
+        logSkip: (reason: string) => void
     ) {
         const memoryId = operation.memoryId
         const entry =
             typeof memoryId === 'string' ? entryById.get(memoryId) : null
-        if (entry == null || touchedMemoryIds.has(entry.id)) {
+        if (entry == null) {
             stats.skipped++
+            logSkip('entry-not-found')
+            return
+        }
+        if (touchedMemoryIds.has(entry.id)) {
+            stats.skipped++
+            logSkip('already-touched')
             return
         }
 
@@ -207,7 +262,8 @@ export class DreamExecutor {
         entryById: Map<string, MemoryEntryRecord>,
         touchedMemoryIds: Set<string>,
         stats: DreamOperationStats,
-        mergeDeletedSourceIds: Set<string>
+        mergeDeletedSourceIds: Set<string>,
+        logSkip: (reason: string) => void
     ) {
         const targetId = operation.targetMemoryId
         const target =
@@ -226,18 +282,33 @@ export class DreamExecutor {
             .map((id) => entryById.get(id))
             .filter((entry): entry is MemoryEntryRecord => entry != null)
 
-        if (
-            target == null ||
-            touchedMemoryIds.has(target.id) ||
-            sources.length === 0 ||
-            sources.some((entry) => touchedMemoryIds.has(entry.id))
-        ) {
+        if (target == null) {
             stats.skipped++
+            logSkip('merge-target-not-found')
+            return
+        }
+        if (touchedMemoryIds.has(target.id)) {
+            stats.skipped++
+            logSkip('merge-target-already-touched')
+            return
+        }
+        if (sources.length === 0) {
+            stats.skipped++
+            logSkip('merge-no-valid-sources')
+            return
+        }
+        if (sources.some((entry) => touchedMemoryIds.has(entry.id))) {
+            stats.skipped++
+            logSkip('merge-source-already-touched')
             return
         }
 
         const patch = this.sanitizeMemoryPatch(operation.memory)
-        this.assertCompleteMetadataForNewContent(operation, patch)
+        if (!this.hasCompleteMetadata(patch)) {
+            stats.skipped++
+            logSkip('incomplete-metadata')
+            return
+        }
         const sourceOrigins = mergeMemorySourceOrigins([target, ...sources])
         const sourceMemoryIds = sources.map((source) => source.id)
 
@@ -335,21 +406,31 @@ export class DreamExecutor {
         return patch
     }
 
-    private assertCompleteMetadataForNewContent(
-        operation: DreamOperation,
+    private hasCompleteMetadata(
         patch: Partial<DreamGeneratedMemoryMutation>
-    ): asserts patch is DreamGeneratedMemoryMutation {
-        if (
-            patch.type == null ||
-            patch.content == null ||
-            patch.summary == null ||
-            (patch.keywords?.length ?? 0) === 0 ||
-            patch.sentiment == null ||
-            patch.importance == null
-        ) {
-            throw new Error(
-                `dream ${operation.action} failed: generated memory is incomplete`
-            )
-        }
+    ): patch is DreamGeneratedMemoryMutation {
+        return (
+            patch.type != null &&
+            patch.content != null &&
+            patch.summary != null &&
+            (patch.keywords?.length ?? 0) > 0 &&
+            patch.sentiment != null &&
+            patch.importance != null
+        )
+    }
+
+    private formatSkipLog(
+        stage: DreamStage,
+        clusterId: string,
+        action: string,
+        reason: string
+    ): string {
+        return [
+            'memory dream operation skipped:',
+            `stage=${stage}`,
+            `clusterId=${clusterId}`,
+            `action=${action}`,
+            `reason=${reason}`
+        ].join(' ')
     }
 }

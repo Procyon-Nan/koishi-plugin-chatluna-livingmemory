@@ -224,6 +224,13 @@ export class LivingMemoryUserProfileService {
             const parsed = parsedProfiles[0]
             if (parsed == null) {
                 empty++
+                this.debug(
+                    [
+                        `memory user profile skipped: presetId=${presetId}`,
+                        `speaker=${group.speakerLabel}`,
+                        'reason=empty-profiles'
+                    ].join(' ')
+                )
                 continue
             }
 
@@ -233,6 +240,13 @@ export class LivingMemoryUserProfileService {
             )
             if (content.length === 0) {
                 empty++
+                this.debug(
+                    [
+                        `memory user profile skipped: presetId=${presetId}`,
+                        `speaker=${group.speakerLabel}`,
+                        'reason=empty-content'
+                    ].join(' ')
+                )
                 continue
             }
 
