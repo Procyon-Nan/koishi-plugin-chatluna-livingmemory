@@ -163,15 +163,16 @@ it('retries Dream once after a non-tool response', async () => {
     assert.equal(result.kept, 1)
 })
 
-it('skips a Dream cluster after two invalid structured responses', async () => {
+it('skips a Dream cluster after three invalid structured responses', async () => {
     const harness = createDreamHarness([
         new AIMessage('第一次普通文本结果'),
-        new AIMessage('第二次普通文本结果')
+        new AIMessage('第二次普通文本结果'),
+        new AIMessage('第三次普通文本结果')
     ])
 
     const result = await harness.service.run('preset-1')
 
-    assert.equal(harness.model.invocations.length, 2)
+    assert.equal(harness.model.invocations.length, 3)
     assert.equal(result.skipped, 1)
     assert.ok(
         harness.debugMessages.some((message) =>
@@ -207,12 +208,13 @@ it('skips a Dream cluster when non-parser protocol errors remain invalid', async
         })
     const harness = createDreamHarness([
         invalidFunctionResult(),
+        invalidFunctionResult(),
         invalidFunctionResult()
     ])
 
     const result = await harness.service.run('preset-1')
 
-    assert.equal(harness.model.invocations.length, 2)
+    assert.equal(harness.model.invocations.length, 3)
     assert.equal(result.skipped, 1)
     assert.ok(
         harness.debugMessages.some((message) =>

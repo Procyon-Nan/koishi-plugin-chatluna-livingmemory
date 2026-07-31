@@ -188,15 +188,16 @@ it('propagates model invocation errors without a correction retry', async () => 
     assert.equal(harness.invocations.length, 1)
 })
 
-it('returns a parse error after two invalid structured responses', async () => {
+it('returns a parse error after three invalid structured responses', async () => {
     const { harness, result } = invoke([
         new AIMessage('第一次普通文本结果'),
-        new AIMessage('第二次普通文本结果')
+        new AIMessage('第二次普通文本结果'),
+        new AIMessage('第三次普通文本结果')
     ])
 
     const resolved = await result
 
     assert.equal(resolved.value, null)
     assert.match(resolved.parseError ?? '', /without calling submit_result/u)
-    assert.equal(harness.invocations.length, 2)
+    assert.equal(harness.invocations.length, 3)
 })

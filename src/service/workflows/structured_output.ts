@@ -18,7 +18,7 @@ import type { ChatLunaChatModel } from 'koishi-plugin-chatluna/llm-core/platform
 import type { PromptMessages } from '../prompts/prompt_format'
 import { summarizeError } from '../shared/utils'
 
-const structuredOutputMaxModelCalls = 2
+const structuredOutputMaxModelCalls = 3
 const outputParsingFailureCode = 'OUTPUT_PARSING_FAILURE'
 const modelInvocationErrors = new WeakSet<object>()
 
