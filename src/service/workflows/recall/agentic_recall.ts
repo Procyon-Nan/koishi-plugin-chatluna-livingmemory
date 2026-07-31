@@ -223,13 +223,6 @@ const hasToolCalls = (message: BaseMessage) => {
     return Array.isArray(rawToolCalls) && rawToolCalls.length > 0
 }
 
-const countSearchCalls = (steps: AgentStep[] | undefined) => {
-    return (
-        steps?.filter((step) => step.action.tool === livingMemorySearchToolName)
-            .length ?? 0
-    )
-}
-
 const orderRecordedSearchCalls = (
     calls: RecordedAgenticSearchCall[],
     steps: AgentStep[] | undefined
@@ -492,10 +485,8 @@ export class LivingMemoryAgenticRecallExecutor {
         const trace = this.createTrace(
             promptTrace,
             result.output.trim(),
-            countSearchCalls(result.intermediateSteps),
             matchedMemories,
-            toolCallSummaries,
-            usedFinalizationCall
+            toolCallSummaries
         )
 
         if (
@@ -556,41 +547,19 @@ export class LivingMemoryAgenticRecallExecutor {
     private createTrace(
         prompt: string,
         finalOutput: string,
-        toolCallCount: number,
         matchedMemories: AgenticMemorySnapshotMemoryItem[],
-        toolCallSummaries: AgenticMemorySearchToolCallSummary[],
-        allowNoMemoryFallback: boolean
+        toolCallSummaries: AgenticMemorySearchToolCallSummary[]
     ): LivingMemoryAgenticRecallTrace {
-        if (toolCallCount === 0 && !allowNoMemoryFallback) {
-            throw new Error(
-                'agentic recall finished without calling living_memory_search.'
-            )
-        }
-
         const uniqueMemories = uniqueMatchedMemories(matchedMemories)
-        let resolvedOutput = finalOutput
-
-        if (
-            allowNoMemoryFallback &&
-            (resolvedOutput.length === 0 ||
-                (resolvedOutput !== agenticRecallNoMemoryOutput &&
-                    uniqueMemories.length === 0))
-        ) {
-            resolvedOutput = agenticRecallNoMemoryOutput
-        }
-
-        if (resolvedOutput.length === 0) {
-            throw new Error('agentic recall final output is empty.')
-        }
+        const noMemories = uniqueMemories.length === 0
+        const resolvedOutput =
+            finalOutput.length === 0 ||
+            (finalOutput !== agenticRecallNoMemoryOutput && noMemories)
+                ? agenticRecallNoMemoryOutput
+                : finalOutput
 
         const finalText =
             resolvedOutput === agenticRecallNoMemoryOutput ? '' : resolvedOutput
-
-        if (finalText.length > 0 && uniqueMemories.length === 0) {
-            throw new Error(
-                'agentic recall produced memory text without matched memories.'
-            )
-        }
 
         return {
             prompt,

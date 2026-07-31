@@ -490,7 +490,7 @@ it('normalizes a sixth-call tool request to <NO_MEMORY>', async () => {
     assert.equal(harness.directInvocations.length, 1)
 })
 
-it('rejects an ordinary final memory text without matched memories', async () => {
+it('normalizes an ordinary final memory text without matched memories to <NO_MEMORY>', async () => {
     const harness = createHarness({
         responses: [
             createSearchCall('search-1'),
@@ -499,10 +499,11 @@ it('rejects an ordinary final memory text without matched memories', async () =>
         search: async () => []
     })
 
-    await assert.rejects(
-        harness.run(),
-        /produced memory text without matched memories/u
-    )
+    const trace = await harness.run()
+
+    assert.equal(trace.finalOutput, '<NO_MEMORY>')
+    assert.equal(trace.item.finalText, '')
+    assert.equal(trace.item.matchedMemories.length, 0)
 })
 
 it('allows a second successful search with different arguments', async () => {
