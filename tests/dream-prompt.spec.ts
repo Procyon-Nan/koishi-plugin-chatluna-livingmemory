@@ -163,20 +163,19 @@ it('retries Dream once after a non-tool response', async () => {
     assert.equal(result.kept, 1)
 })
 
-it('fails Dream after two invalid structured responses', async () => {
+it('skips a Dream cluster after two invalid structured responses', async () => {
     const harness = createDreamHarness([
         new AIMessage('第一次普通文本结果'),
         new AIMessage('第二次普通文本结果')
     ])
 
-    await assert.rejects(
-        harness.service.run('preset-1'),
-        /dream structured output failed/u
-    )
+    const result = await harness.service.run('preset-1')
+
     assert.equal(harness.model.invocations.length, 2)
+    assert.equal(result.skipped, 1)
     assert.ok(
         harness.debugMessages.some((message) =>
-            message.includes('memory dream structured output failed')
+            message.includes('reason=structured-output-failed')
         )
     )
 })
@@ -195,7 +194,7 @@ it('skips a Dream cluster when the model invocation fails', async () => {
     )
 })
 
-it('fails Dream when non-parser protocol errors remain invalid', async () => {
+it('skips a Dream cluster when non-parser protocol errors remain invalid', async () => {
     const invalidFunctionResult = () =>
         new AIMessage({
             content: [{ type: 'text', text: '普通文本结果' }],
@@ -211,9 +210,13 @@ it('fails Dream when non-parser protocol errors remain invalid', async () => {
         invalidFunctionResult()
     ])
 
-    await assert.rejects(
-        harness.service.run('preset-1'),
-        /dream structured output failed/u
-    )
+    const result = await harness.service.run('preset-1')
+
     assert.equal(harness.model.invocations.length, 2)
+    assert.equal(result.skipped, 1)
+    assert.ok(
+        harness.debugMessages.some((message) =>
+            message.includes('reason=structured-output-failed')
+        )
+    )
 })

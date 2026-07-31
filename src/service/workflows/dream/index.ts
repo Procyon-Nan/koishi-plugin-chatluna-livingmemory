@@ -294,17 +294,17 @@ export class LivingMemoryDreamService {
             )
 
             if (structuredResult.parseError != null) {
+                stats.skipped++
                 this.debug(
                     [
-                        `memory dream structured output failed: presetId=${presetId}`,
+                        `memory dream cluster skipped: presetId=${presetId}`,
                         `stage=${stage}`,
                         `clusterId=${cluster.id}`,
+                        'reason=structured-output-failed',
                         `error=${structuredResult.parseError}`
                     ].join(' ')
                 )
-                throw new Error(
-                    `dream structured output failed: ${structuredResult.parseError}`
-                )
+                continue
             }
 
             const operations = structuredResult.value?.operations ?? []
