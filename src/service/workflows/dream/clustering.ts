@@ -1,35 +1,47 @@
 import { Context } from 'koishi'
-import type {
-    MemoryEntryRecord,
-    MemoryEntryType
-} from '../../../contracts/memory'
+import type { MemoryEntryRecord } from '../../../contracts/memory'
 import type { LivingMemoryConfig } from '../../../contracts/workflows'
+import { HDBSCAN } from 'hdbscan-ts'
 import {
     type EmbeddingRepositoryLike,
     ensureEntryEmbeddings
 } from '../../shared/embeddings'
+import { isModelConfigured, summarizeError } from '../../shared/utils'
+import type { DreamCluster } from './types'
 import {
-    cosineSimilarity,
-    isModelConfigured,
-    summarizeError
-} from '../../shared/utils'
-import type { CandidateGroup, DreamCluster } from './types'
-import {
-    EMBEDDING_SIMILARITY_THRESHOLD,
-    keywordOverlap,
-    MAX_BUCKET_SIZE,
+    HDBSCAN_MIN_CLUSTER_SIZE,
+    HDBSCAN_MIN_SAMPLES,
     MAX_CLUSTER_SIZE,
     MAX_DREAM_CLUSTERS,
-    neutralSentiments,
-    normalizeTerm,
-    STRONG_KEYWORD_OVERLAP,
-    toMonthBucket,
-    toTimestamp,
-    UnionFind,
-    unique
+    toTimestamp
 } from './util'
 
 type DreamClustererConfig = Pick<LivingMemoryConfig, 'embeddingModel'>
+
+interface HdbscanGroup {
+    label: number
+    entries: MemoryEntryRecord[]
+    cohesion: number
+}
+
+// L2 归一化后 euclidean 距离与 cosine 距离单调等价：
+// ||a − b||² = 2 − 2·cos(a, b)（当 ||a|| = ||b|| = 1）。
+// hdbscan-ts 内置 euclidean 距离，归一化后聚类结果与 cosine HDBSCAN 一致。
+const l2Normalize = (vector: number[]): number[] => {
+    let normSq = 0
+    for (let i = 0; i < vector.length; i++) {
+        normSq += vector[i] * vector[i]
+    }
+    const norm = Math.sqrt(normSq)
+    if (norm === 0) {
+        return vector
+    }
+    const result = new Array<number>(vector.length)
+    for (let i = 0; i < vector.length; i++) {
+        result[i] = vector[i] / norm
+    }
+    return result
+}
 
 export class DreamClusterer {
     constructor(
@@ -40,160 +52,68 @@ export class DreamClusterer {
     ) {}
 
     async buildClusters(entries: MemoryEntryRecord[]): Promise<DreamCluster[]> {
-        const cheapGroups = this.limitCandidateGroups(
-            this.buildCheapGroups(entries)
-        )
-        const embeddingGroups = await this.tryBuildEmbeddingGroups(cheapGroups)
-        return this.toDreamClusters(embeddingGroups ?? cheapGroups)
-    }
-
-    private buildCheapGroups(entries: MemoryEntryRecord[]): CandidateGroup[] {
-        const buckets = new Map<string, MemoryEntryRecord[]>()
-        const addBucket = (key: string, entry: MemoryEntryRecord) => {
-            const bucket = buckets.get(key) ?? []
-            bucket.push(entry)
-            buckets.set(key, bucket)
+        if (entries.length < 2) {
+            return []
         }
 
-        for (const entry of entries) {
-            for (const keyword of entry.keywords.map(normalizeTerm)) {
-                if (keyword.length >= 2) {
-                    addBucket(`type:${entry.type}:keyword:${keyword}`, entry)
-                }
-            }
-
-            const sentiment = normalizeTerm(entry.sentiment ?? '')
-            if (sentiment.length > 0 && !neutralSentiments.has(sentiment)) {
-                addBucket(`type:${entry.type}:sentiment:${sentiment}`, entry)
-            }
-
-            addBucket(
-                `type:${entry.type}:month:${toMonthBucket(entry.updatedAt)}`,
-                entry
-            )
+        const vectorById = await this.ensureVectors(entries)
+        if (vectorById == null) {
+            return []
         }
 
-        const groups: CandidateGroup[] = []
-        for (const [key, bucket] of buckets) {
-            this.pushChunkedGroups(groups, key, bucket)
-        }
-
-        const entriesByType = new Map<MemoryEntryType, MemoryEntryRecord[]>()
-        for (const entry of entries) {
-            const group = entriesByType.get(entry.type) ?? []
-            group.push(entry)
-            entriesByType.set(entry.type, group)
-        }
-
-        for (const [type, group] of entriesByType) {
-            const sorted = [...group].sort(
-                (left, right) =>
-                    toTimestamp(right.updatedAt) - toTimestamp(left.updatedAt)
-            )
-            for (let index = 0; index < sorted.length - 1; index += 4) {
-                const window = sorted.slice(index, index + MAX_CLUSTER_SIZE)
-                this.pushGroup(groups, `type:${type}:time-window`, window)
-            }
-        }
-
-        return this.dedupeGroups(groups)
-    }
-
-    private pushChunkedGroups(
-        groups: CandidateGroup[],
-        reason: string,
-        entries: MemoryEntryRecord[]
-    ) {
-        const sorted = unique(entries).sort(
-            (left, right) =>
-                toTimestamp(right.updatedAt) - toTimestamp(left.updatedAt)
-        )
-        if (sorted.length > MAX_BUCKET_SIZE) {
-            return
-        }
-
-        for (
-            let index = 0;
-            index < sorted.length - 1;
-            index += MAX_CLUSTER_SIZE
-        ) {
-            this.pushGroup(
-                groups,
-                reason,
-                sorted.slice(index, index + MAX_CLUSTER_SIZE)
-            )
-        }
-    }
-
-    private pushGroup(
-        groups: CandidateGroup[],
-        reason: string,
-        entries: MemoryEntryRecord[]
-    ) {
-        const uniqueEntries = unique(entries)
-        if (uniqueEntries.length >= 2) {
-            groups.push({ reason, entries: uniqueEntries })
-        }
-    }
-
-    private dedupeGroups(groups: CandidateGroup[]): CandidateGroup[] {
-        const seen = new Set<string>()
-        const deduped: CandidateGroup[] = []
-
-        for (const group of groups) {
-            const key = group.entries
-                .map((entry) => entry.id)
-                .sort()
-                .join('|')
-            if (seen.has(key)) {
-                continue
-            }
-
-            seen.add(key)
-            deduped.push(group)
-        }
-
-        return deduped
-    }
-
-    private limitCandidateGroups(groups: CandidateGroup[]) {
-        return groups
-            .map((group) => ({
-                group,
-                score: this.scoreCandidateGroup(group)
+        // 只保留有有效向量的条目，保持向量与条目的索引对齐
+        const indexed = entries
+            .map((entry) => ({
+                entry,
+                vector: vectorById.get(entry.id)
             }))
-            .sort((left, right) => right.score - left.score)
-            .slice(0, MAX_DREAM_CLUSTERS * 3)
-            .map((item) => item.group)
-    }
+            .filter(
+                (
+                    item
+                ): item is { entry: MemoryEntryRecord; vector: number[] } =>
+                    Array.isArray(item.vector) && item.vector.length > 0
+            )
+        if (indexed.length < 2) {
+            return []
+        }
 
-    private scoreCandidateGroup(group: CandidateGroup) {
-        const reasonScore = group.reason.includes(':keyword:')
-            ? 4
-            : group.reason.includes(':sentiment:')
-              ? 3
-              : group.reason.includes(':month:')
-                ? 2
-                : 1
-        const importanceScore =
-            group.entries.reduce(
-                (sum, entry) => sum + (entry.importance ?? 0.5),
-                0
-            ) / group.entries.length
-        const latestTimestamp = Math.max(
-            ...group.entries.map((entry) => toTimestamp(entry.updatedAt))
+        const normalized = indexed.map((item) => l2Normalize(item.vector))
+
+        const hdbscan = new HDBSCAN({
+            minClusterSize: HDBSCAN_MIN_CLUSTER_SIZE,
+            minSamples: HDBSCAN_MIN_SAMPLES
+        })
+        const labels = hdbscan.fit(normalized)
+        const probabilities = hdbscan.probabilities_
+
+        const distinctClusters = new Set(labels.filter((label) => label !== -1))
+        const noiseCount = labels.filter((label) => label === -1).length
+        this.debug(
+            [
+                `memory dream hdbscan: entries=${indexed.length}`,
+                `clusters=${distinctClusters.size}`,
+                `noise=${noiseCount}`
+            ].join(' ')
         )
 
-        return reasonScore * 10 + importanceScore + latestTimestamp / 1e15
+        const groups = this.groupByLabel(indexed, labels, probabilities)
+        if (groups.length === 0) {
+            this.debug(
+                'memory dream hdbscan: all points classified as noise, no clusters'
+            )
+            return []
+        }
+
+        return this.toDreamClusters(groups)
     }
 
-    private async tryBuildEmbeddingGroups(
-        groups: CandidateGroup[]
-    ): Promise<CandidateGroup[] | null> {
-        if (
-            !isModelConfigured(this.config.embeddingModel) ||
-            groups.length === 0
-        ) {
+    private async ensureVectors(
+        entries: MemoryEntryRecord[]
+    ): Promise<Map<string, number[]> | null> {
+        if (!isModelConfigured(this.config.embeddingModel)) {
+            this.debug(
+                'memory dream clustering skipped: embedding model not configured'
+            )
             return null
         }
 
@@ -203,15 +123,13 @@ export class DreamClusterer {
             )
             if (embeddings?.value == null) {
                 this.debug(
-                    'memory dream embedding unavailable, fallback to keyword clusters'
+                    'memory dream clustering skipped: embedding model unavailable'
                 )
                 return null
             }
 
-            const entries = unique(groups.flatMap((group) => group.entries))
-
-            // Dream 无天然查询向量作维度锚，用一条代表性条目现算一次以探测当前
-            // 模型的输出维度，使维度不一致的旧缓存向量失效重算（详见 ensureEntryEmbeddings）。
+            // 维度探测：用一条代表性条目现算一次以探测当前模型输出维度，
+            // 使维度不一致的旧缓存向量失效重算（详见 ensureEntryEmbeddings）。
             let expectedDimension = 0
             const probeEntry = entries[0]
             if (probeEntry != null) {
@@ -227,7 +145,7 @@ export class DreamClusterer {
                 }
             }
 
-            const vectorById = await ensureEntryEmbeddings(
+            return await ensureEntryEmbeddings(
                 embeddings.value,
                 this.repository,
                 this.config.embeddingModel,
@@ -238,54 +156,10 @@ export class DreamClusterer {
                     expectedDimension
                 }
             )
-
-            const refined: CandidateGroup[] = []
-            for (const group of groups) {
-                const unionFind = new UnionFind(
-                    group.entries.map((entry) => entry.id)
-                )
-
-                for (
-                    let leftIndex = 0;
-                    leftIndex < group.entries.length;
-                    leftIndex++
-                ) {
-                    for (
-                        let rightIndex = leftIndex + 1;
-                        rightIndex < group.entries.length;
-                        rightIndex++
-                    ) {
-                        const left = group.entries[leftIndex]
-                        const right = group.entries[rightIndex]
-                        const similarity = cosineSimilarity(
-                            vectorById.get(left.id) ?? [],
-                            vectorById.get(right.id) ?? []
-                        )
-
-                        if (
-                            similarity >= EMBEDDING_SIMILARITY_THRESHOLD ||
-                            (left.type === right.type &&
-                                keywordOverlap(left, right) >=
-                                    STRONG_KEYWORD_OVERLAP)
-                        ) {
-                            unionFind.union(left.id, right.id)
-                        }
-                    }
-                }
-
-                for (const entries of unionFind.groups(group.entries)) {
-                    refined.push({
-                        reason: `embedding:${group.reason}`,
-                        entries
-                    })
-                }
-            }
-
-            return this.dedupeGroups(refined)
         } catch (error) {
             this.debug(
                 [
-                    'memory dream embedding failed, fallback to keyword clusters',
+                    'memory dream clustering failed: embedding error',
                     `error=${summarizeError(error)}`
                 ].join(' ')
             )
@@ -293,22 +167,78 @@ export class DreamClusterer {
         }
     }
 
-    private toDreamClusters(groups: CandidateGroup[]): DreamCluster[] {
+    private groupByLabel(
+        indexed: { entry: MemoryEntryRecord }[],
+        labels: number[],
+        probabilities: number[]
+    ): HdbscanGroup[] {
+        const byLabel = new Map<
+            number,
+            { entries: MemoryEntryRecord[]; probSum: number }
+        >()
+
+        for (let i = 0; i < indexed.length; i++) {
+            const label = labels[i]
+            if (label === -1) {
+                continue
+            }
+
+            const prob = Number.isFinite(probabilities[i]) ? probabilities[i] : 0
+            const existing = byLabel.get(label)
+            if (existing != null) {
+                existing.entries.push(indexed[i].entry)
+                existing.probSum += prob
+            } else {
+                byLabel.set(label, {
+                    entries: [indexed[i].entry],
+                    probSum: prob
+                })
+            }
+        }
+
+        return [...byLabel.entries()].map(([label, { entries, probSum }]) => ({
+            label,
+            entries,
+            cohesion: entries.length > 0 ? probSum / entries.length : 0
+        }))
+    }
+
+    private scoreCluster(group: HdbscanGroup) {
+        const importanceScore =
+            group.entries.reduce(
+                (sum, entry) => sum + (entry.importance ?? 0.5),
+                0
+            ) / group.entries.length
+        const latestTimestamp = Math.max(
+            ...group.entries.map((entry) => toTimestamp(entry.updatedAt))
+        )
+
+        return group.cohesion * 10 + importanceScore + latestTimestamp / 1e15
+    }
+
+    private toDreamClusters(groups: HdbscanGroup[]): DreamCluster[] {
+        const sorted = groups
+            .map((group) => ({ group, score: this.scoreCluster(group) }))
+            .sort((left, right) => right.score - left.score)
+
         const clusters: DreamCluster[] = []
         const seen = new Set<string>()
 
-        for (const group of groups) {
-            const sorted = [...group.entries].sort(
+        for (const { group } of sorted) {
+            const sortedEntries = [...group.entries].sort(
                 (left, right) =>
                     toTimestamp(right.updatedAt) - toTimestamp(left.updatedAt)
             )
             for (
                 let index = 0;
-                index < sorted.length - 1;
+                index < sortedEntries.length - 1;
                 index += MAX_CLUSTER_SIZE
             ) {
-                const entries = sorted.slice(index, index + MAX_CLUSTER_SIZE)
-                const key = entries
+                const chunk = sortedEntries.slice(
+                    index,
+                    index + MAX_CLUSTER_SIZE
+                )
+                const key = chunk
                     .map((entry) => entry.id)
                     .sort()
                     .join('|')
@@ -319,8 +249,8 @@ export class DreamClusterer {
                 seen.add(key)
                 clusters.push({
                     id: `cluster-${clusters.length + 1}`,
-                    reason: group.reason,
-                    entries
+                    reason: `hdbscan:${group.label}`,
+                    entries: chunk
                 })
                 if (clusters.length >= MAX_DREAM_CLUSTERS) {
                     return clusters

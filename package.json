@@ -36,6 +36,7 @@
   ],
   "dependencies": {
     "@langchain/core": "^0.3.80",
+    "hdbscan-ts": "^1.0.17",
     "zod": "3.25.76"
   },
   "resolutions": {

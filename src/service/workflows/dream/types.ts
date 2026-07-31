@@ -1,10 +1,5 @@
 import type { MemoryEntryRecord } from '../../../contracts/memory'
 
-export interface CandidateGroup {
-    reason: string
-    entries: MemoryEntryRecord[]
-}
-
 export interface DreamCluster {
     id: string
     reason: string

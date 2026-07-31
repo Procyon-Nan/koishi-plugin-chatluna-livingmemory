@@ -16,6 +16,7 @@ interface CapturedMessage {
 }
 
 const now = new Date('2026-07-18T12:00:00.000Z')
+const testEmbedding = [1, 0, 0]
 const createMemory = (id: string, content: string): MemoryEntryRecord => ({
     id,
     presetId: 'preset-1',
@@ -28,8 +29,8 @@ const createMemory = (id: string, content: string): MemoryEntryRecord => ({
     importance: 0.7,
     sourceConversationId: 'conversation-1',
     sourceOrigins: [],
-    embedding: null,
-    embeddingModelId: null,
+    embedding: testEmbedding,
+    embeddingModelId: 'test-embedding',
     createdAt: now,
     updatedAt: now
 })
@@ -45,8 +46,16 @@ const createDreamHarness = (
     const debugMessages: string[] = []
     const ctx = {
         chatluna: {
-            createChatModel: async () => ({ value: model.model })
-        }
+            createChatModel: async () => ({ value: model.model }),
+            createEmbeddings: async () => ({
+                value: {
+                    embedQuery: async () => testEmbedding,
+                    embedDocuments: async (texts: string[]) =>
+                        texts.map(() => testEmbedding)
+                }
+            })
+        },
+        logger: () => ({ warn: () => {} })
     } as unknown as Context
     const repository = {
         listEntriesByPreset: async () => memories
@@ -55,7 +64,7 @@ const createDreamHarness = (
         ctx,
         {
             dreamModel: 'test-model',
-            embeddingModel: '无',
+            embeddingModel: 'test-embedding',
             enableUserProfileInjection: false,
             userProfileMemoryLimit: 20
         },
