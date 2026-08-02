@@ -1,6 +1,8 @@
 import { send } from '@koishijs/client'
 import type {
     DreamTriggerResult,
+    LivingMemoryPresetExport,
+    LivingMemoryPresetImportResult,
     MemoryEntryRecord,
     MemoryEntryStatus,
     MemoryEntryType,
@@ -131,4 +133,17 @@ export async function rebuildEmbeddings(
     presetId: string
 ): Promise<{ rebuilt: number }> {
     return await send('living-memory/rebuildEmbeddings', presetId)
+}
+
+export async function exportPreset(
+    presetId: string
+): Promise<LivingMemoryPresetExport> {
+    return await send('living-memory/exportPreset', presetId)
+}
+
+export async function importPreset(
+    targetPresetId: string,
+    data: LivingMemoryPresetExport
+): Promise<LivingMemoryPresetImportResult> {
+    return await send('living-memory/importPreset', targetPresetId, data)
 }

@@ -32,7 +32,7 @@ export const buildAgenticRecallPrompt = (params: AgenticRecallPromptInput) => {
     const escapedAssistantLabel = escapeXmlText(assistantLabel)
     const systemPrompt = [
         '<role>',
-        `你是${escapedAssistantLabel}，你正在以本人视角召回可能与接下来对话有关的记忆。`,
+        `你是${escapedAssistantLabel}，你正在以本人视角回想可能与接下来对话有关的记忆。`,
         '你必须严格执行本消息规定的记忆搜索任务、工具边界和纯文本输出契约。',
         '</role>',
         '',

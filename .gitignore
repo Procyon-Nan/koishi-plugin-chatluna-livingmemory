@@ -19,3 +19,11 @@ Thumbs.db
 
 # local planning workspace
 tmp/
+
+# agent
+.codex
+.agents
+.claude/
+
+# codegraph
+.codegraph/

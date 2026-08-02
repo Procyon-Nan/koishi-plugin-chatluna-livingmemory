@@ -2,7 +2,10 @@ import { existsSync, realpathSync } from 'fs'
 import { resolve } from 'path'
 import { Context } from 'koishi'
 import type {} from '@koishijs/plugin-console'
-import type { MemoryMutationInput } from '../contracts/memory'
+import type {
+    LivingMemoryPresetExport,
+    MemoryMutationInput
+} from '../contracts/memory'
 import type {
     CreateMemoryRequest,
     JobListQuery,
@@ -140,5 +143,16 @@ export function apply(ctx: Context, _config?: LivingMemoryConfig) {
         'living-memory/rebuildEmbeddings',
         async (presetId: string) =>
             await service(ctx).rebuildEmbeddings(presetId)
+    )
+
+    ctx.console.addListener(
+        'living-memory/exportPreset',
+        async (presetId: string) => await service(ctx).exportPreset(presetId)
+    )
+
+    ctx.console.addListener(
+        'living-memory/importPreset',
+        async (targetPresetId: string, data: LivingMemoryPresetExport) =>
+            await service(ctx).importPreset(targetPresetId, data)
     )
 }

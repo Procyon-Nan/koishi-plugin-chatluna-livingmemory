@@ -18,6 +18,8 @@ import {
 } from '../../query'
 import type {
     LivingMemoryCompletedRound,
+    LivingMemoryPresetExport,
+    LivingMemoryPresetImportResult,
     LivingMemoryTranscriptMessage,
     MemoryMutationInput,
     MemoryScope
@@ -428,6 +430,22 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         )
 
         return { rebuilt: embeddingMap.size }
+    }
+
+    async exportPreset(presetId: string): Promise<LivingMemoryPresetExport> {
+        return await this.repository.exportPresetData(presetId)
+    }
+
+    async importPreset(
+        targetPresetId: string,
+        data: LivingMemoryPresetExport
+    ): Promise<LivingMemoryPresetImportResult> {
+        const result = await this.repository.importPresetData(
+            targetPresetId,
+            data
+        )
+        this.snapshotCache.clearByPreset(targetPresetId)
+        return result
     }
 
     async cleanupStaleJobs(maxAge: number = Time.week) {

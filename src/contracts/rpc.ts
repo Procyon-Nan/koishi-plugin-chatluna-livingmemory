@@ -1,4 +1,6 @@
 import type {
+    LivingMemoryPresetExport,
+    LivingMemoryPresetImportResult,
     MemoryEntryRecord,
     MemoryEntryStatus,
     MemoryEntryType,
@@ -104,4 +106,11 @@ export interface LivingMemoryConsoleEvents {
     'living-memory/rebuildEmbeddings': (
         presetId: string
     ) => Promise<{ rebuilt: number }>
+    'living-memory/exportPreset': (
+        presetId: string
+    ) => Promise<LivingMemoryPresetExport>
+    'living-memory/importPreset': (
+        targetPresetId: string,
+        data: LivingMemoryPresetExport
+    ) => Promise<LivingMemoryPresetImportResult>
 }

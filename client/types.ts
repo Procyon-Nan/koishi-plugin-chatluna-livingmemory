@@ -169,6 +169,21 @@ export interface MemoryListResult extends PageResult<MemoryEntryRecord> {
     facets: MemoryListFacets
 }
 
+export interface LivingMemoryPresetExport {
+    version: number
+    exportedAt: string
+    sourcePresetId: string
+    entries: Record<string, unknown>[]
+    userProfiles: Record<string, unknown>[]
+    presetSpeakers: Record<string, unknown>[]
+}
+
+export interface LivingMemoryPresetImportResult {
+    entries: number
+    userProfiles: number
+    presetSpeakers: number
+}
+
 declare module '@koishijs/client' {
     interface Events {
         'living-memory/listPresetIds': () => string[]
@@ -222,5 +237,12 @@ declare module '@koishijs/client' {
         }
         'living-memory/runDream': (presetId: string) => DreamTriggerResult
         'living-memory/clearPresetData': (presetId: string) => { success: true }
+        'living-memory/exportPreset': (
+            presetId: string
+        ) => LivingMemoryPresetExport
+        'living-memory/importPreset': (
+            targetPresetId: string,
+            data: LivingMemoryPresetExport
+        ) => LivingMemoryPresetImportResult
     }
 }

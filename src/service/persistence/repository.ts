@@ -1,5 +1,7 @@
 import { Context } from 'koishi'
 import type {
+    LivingMemoryPresetExport,
+    LivingMemoryPresetImportResult,
     MemoryEntryRecord,
     MemoryJobKind,
     MemoryJobRecord,
@@ -26,6 +28,7 @@ import type {
 } from '../../contracts/workflows'
 import { LivingMemoryEntryRepository } from './entries'
 import { LivingMemoryJobRepository } from './jobs'
+import { createPresetSpeakerId } from './normalizers'
 import { LivingMemorySnapshotRepository } from './snapshots'
 import { defineLivingMemoryTables } from './tables'
 import { LivingMemoryUserProfileRepository } from './user_profiles'
@@ -258,6 +261,120 @@ export class LivingMemoryRepository
                 presetId
             })
         ])
+    }
+
+    async exportPresetData(
+        presetId: string
+    ): Promise<LivingMemoryPresetExport> {
+        const [entries, userProfiles, presetSpeakers] = await Promise.all([
+            this.entries.listEntriesByPreset(presetId),
+            this.userProfiles.listUserProfilesByPreset(presetId),
+            this.userProfiles.listPresetSpeakers(presetId)
+        ])
+
+        return {
+            version: 1,
+            exportedAt: new Date().toISOString(),
+            sourcePresetId: presetId,
+            entries: entries.map((entry) => ({
+                id: entry.id,
+                type: entry.type,
+                status: entry.status,
+                content: entry.content,
+                keywords: [...entry.keywords],
+                summary: entry.summary,
+                sentiment: entry.sentiment,
+                importance: entry.importance,
+                sourceConversationId: entry.sourceConversationId,
+                sourceOrigins: entry.sourceOrigins,
+                createdAt: entry.createdAt.toISOString(),
+                updatedAt: entry.updatedAt.toISOString()
+            })),
+            userProfiles: userProfiles.map((profile) => ({
+                id: profile.id,
+                speakerKey: profile.speakerKey,
+                speakerLabel: profile.speakerLabel,
+                content: profile.content,
+                sourceMemoryIds: [...profile.sourceMemoryIds],
+                createdAt: profile.createdAt.toISOString(),
+                updatedAt: profile.updatedAt.toISOString()
+            })),
+            presetSpeakers: presetSpeakers.map((speaker) => ({
+                speakerKey: speaker.speakerKey,
+                speakerLabel: speaker.speakerLabel,
+                speakerId: speaker.speakerId,
+                createdAt: speaker.createdAt.toISOString(),
+                updatedAt: speaker.updatedAt.toISOString()
+            }))
+        }
+    }
+
+    async importPresetData(
+        targetPresetId: string,
+        data: LivingMemoryPresetExport
+    ): Promise<LivingMemoryPresetImportResult> {
+        if (data.entries.length > 0) {
+            await this.ctx.database.upsert(
+                'living_memory_entry',
+                data.entries.map((entry) => ({
+                    id: entry.id,
+                    presetId: targetPresetId,
+                    type: entry.type,
+                    status: entry.status,
+                    content: entry.content,
+                    keywords: entry.keywords,
+                    summary: entry.summary,
+                    sentiment: entry.sentiment,
+                    importance: entry.importance,
+                    sourceConversationId: entry.sourceConversationId,
+                    sourceOrigins: entry.sourceOrigins,
+                    embedding: null,
+                    embeddingModelId: null,
+                    createdAt: new Date(entry.createdAt),
+                    updatedAt: new Date(entry.updatedAt)
+                }))
+            )
+        }
+
+        if (data.userProfiles.length > 0) {
+            await this.ctx.database.upsert(
+                'living_memory_user_profile',
+                data.userProfiles.map((profile) => ({
+                    id: profile.id,
+                    presetId: targetPresetId,
+                    speakerKey: profile.speakerKey,
+                    speakerLabel: profile.speakerLabel,
+                    content: profile.content,
+                    sourceMemoryIds: profile.sourceMemoryIds,
+                    createdAt: new Date(profile.createdAt),
+                    updatedAt: new Date(profile.updatedAt)
+                }))
+            )
+        }
+
+        if (data.presetSpeakers.length > 0) {
+            await this.ctx.database.upsert(
+                'living_memory_preset_speaker',
+                data.presetSpeakers.map((speaker) => ({
+                    id: createPresetSpeakerId(
+                        targetPresetId,
+                        speaker.speakerKey
+                    ),
+                    presetId: targetPresetId,
+                    speakerKey: speaker.speakerKey,
+                    speakerLabel: speaker.speakerLabel,
+                    speakerId: speaker.speakerId,
+                    createdAt: new Date(speaker.createdAt),
+                    updatedAt: new Date(speaker.updatedAt)
+                }))
+            )
+        }
+
+        return {
+            entries: data.entries.length,
+            userProfiles: data.userProfiles.length,
+            presetSpeakers: data.presetSpeakers.length
+        }
     }
 
     async listDistinctPresetIds(): Promise<string[]> {

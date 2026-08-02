@@ -246,3 +246,51 @@ export interface MemoryMutationInput {
     sentiment?: string | null
     importance?: number | null
 }
+
+export interface LivingMemoryPresetExportEntry {
+    id: string
+    type: MemoryEntryType
+    status: MemoryEntryStatus
+    content: string
+    keywords: string[]
+    summary: string | null
+    sentiment: string | null
+    importance: number | null
+    sourceConversationId: string | null
+    sourceOrigins: MemorySourceOrigin[]
+    createdAt: string
+    updatedAt: string
+}
+
+export interface LivingMemoryPresetExportUserProfile {
+    id: string
+    speakerKey: string
+    speakerLabel: string
+    content: string
+    sourceMemoryIds: string[]
+    createdAt: string
+    updatedAt: string
+}
+
+export interface LivingMemoryPresetExportSpeaker {
+    speakerKey: string
+    speakerLabel: string
+    speakerId: string | null
+    createdAt: string
+    updatedAt: string
+}
+
+export interface LivingMemoryPresetExport {
+    version: 1
+    exportedAt: string
+    sourcePresetId: string
+    entries: LivingMemoryPresetExportEntry[]
+    userProfiles: LivingMemoryPresetExportUserProfile[]
+    presetSpeakers: LivingMemoryPresetExportSpeaker[]
+}
+
+export interface LivingMemoryPresetImportResult {
+    entries: number
+    userProfiles: number
+    presetSpeakers: number
+}

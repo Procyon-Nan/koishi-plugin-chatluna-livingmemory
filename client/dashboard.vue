@@ -99,7 +99,18 @@
                             <template #dropdown>
                                 <el-dropdown-menu>
                                     <el-dropdown-item
+                                        command="export-preset"
+                                    >
+                                        导出记忆
+                                    </el-dropdown-item>
+                                    <el-dropdown-item
+                                        command="import-preset"
+                                    >
+                                        导入记忆
+                                    </el-dropdown-item>
+                                    <el-dropdown-item
                                         command="rebuild-embeddings"
+                                        divided
                                     >
                                         重建向量
                                     </el-dropdown-item>
@@ -199,6 +210,14 @@
         </div>
     </k-layout>
 
+    <input
+        ref="importFileInput"
+        type="file"
+        accept=".json,application/json"
+        style="display: none"
+        @change="onImportFileSelected"
+    />
+
     <memory-editor-dialog
         v-model="memoryDialogVisible"
         :preset-id="presetId"
@@ -219,7 +238,11 @@ import MemoriesTab from './components/memories-tab.vue'
 import MemoryEditorDialog from './components/memory-editor-dialog.vue'
 import ProfilesTab from './components/profiles-tab.vue'
 import SnapshotsTab from './components/snapshots-tab.vue'
-import type { MemoryConfigWarning, MemoryEntryRecord } from './types'
+import type {
+    LivingMemoryPresetExport,
+    MemoryConfigWarning,
+    MemoryEntryRecord
+} from './types'
 
 type DashboardTab = 'memories' | 'profiles' | 'snapshots' | 'jobs'
 
@@ -232,6 +255,7 @@ const dreamPending = ref(false)
 const actionPending = ref(false)
 const memoryDialogVisible = ref(false)
 const editingMemory = ref<MemoryEntryRecord | null>(null)
+const importFileInput = ref<HTMLInputElement | null>(null)
 
 const presetId = ref('')
 const presetIds = ref<string[]>([])
@@ -421,11 +445,103 @@ const doClearPresetData = async () => {
     }
 }
 
+const formatExportFilename = (presetId: string) => {
+    const now = new Date()
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const stamp = [
+        now.getFullYear(),
+        pad(now.getMonth() + 1),
+        pad(now.getDate()),
+        '-',
+        pad(now.getHours()),
+        pad(now.getMinutes()),
+        pad(now.getSeconds())
+    ].join('')
+    return `livingmemory-${presetId}-${stamp}.json`
+}
+
+const doExportPreset = async () => {
+    try {
+        const data = await api.exportPreset(presetId.value)
+        const blob = new Blob([JSON.stringify(data, null, 2)], {
+            type: 'application/json'
+        })
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = formatExportFilename(presetId.value)
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        URL.revokeObjectURL(url)
+        ElMessage.success(
+            `已导出 ${data.entries.length} 条记忆、${data.userProfiles.length} 个用户画像、${data.presetSpeakers.length} 个说话者`
+        )
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        ElMessage.error(`导出失败：${message}`)
+    }
+}
+
+const triggerImportFile = () => {
+    importFileInput.value?.click()
+}
+
+const onImportFileSelected = async (event: Event) => {
+    const input = event.target as HTMLInputElement
+    const file = input.files?.[0]
+    if (file == null) return
+    input.value = ''
+
+    let data: LivingMemoryPresetExport
+    try {
+        const text = await file.text()
+        data = JSON.parse(text) as LivingMemoryPresetExport
+    } catch {
+        ElMessage.error('无法解析文件，请选择有效的 JSON 文件')
+        return
+    }
+
+    if (data.version !== 1) {
+        ElMessage.error(`不支持的导出版本：${data.version}`)
+        return
+    }
+
+    try {
+        await ElMessageBox.confirm(
+            `将导入 ${data.entries.length} 条记忆、${data.userProfiles.length} 个用户画像、${data.presetSpeakers.length} 个说话者到预设 ${presetId.value}。相同 ID 的记录将被覆盖，导入后需要重建向量。是否继续？`,
+            '导入记忆',
+            {
+                type: 'warning',
+                confirmButtonText: '确认导入',
+                cancelButtonText: '取消'
+            }
+        )
+    } catch {
+        return
+    }
+
+    try {
+        const result = await api.importPreset(presetId.value, data)
+        ElMessage.success(
+            `已导入 ${result.entries} 条记忆、${result.userProfiles} 个用户画像、${result.presetSpeakers} 个说话者`
+        )
+        await refreshAll(true)
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        ElMessage.error(`导入失败：${message}`)
+    }
+}
+
 const onPresetAction = async (command: string) => {
     if (!ensurePreset()) return
     actionPending.value = true
     try {
-        if (command === 'rebuild-embeddings') {
+        if (command === 'export-preset') {
+            await doExportPreset()
+        } else if (command === 'import-preset') {
+            triggerImportFile()
+        } else if (command === 'rebuild-embeddings') {
             await doRebuildEmbeddings()
         } else if (command === 'clear-preset-data') {
             await doClearPresetData()
