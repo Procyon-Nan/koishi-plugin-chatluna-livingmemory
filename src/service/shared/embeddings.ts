@@ -26,13 +26,9 @@ export interface EnsureEntryEmbeddingsOptions {
 }
 
 export const toMemoryRetrievalText = (
-    entry: Pick<MemoryEntryRecord, 'content' | 'summary' | 'keywords'>
+    entry: Pick<MemoryEntryRecord, 'content'>
 ) => {
-    return [
-        `摘要：${entry.summary ?? ''}`,
-        `关键词：${entry.keywords.join('、')}`,
-        `内容：${entry.content}`
-    ].join('\n')
+    return entry.content
 }
 
 const isCachedVectorValid = (
