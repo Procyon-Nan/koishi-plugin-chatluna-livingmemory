@@ -5,11 +5,13 @@ import type { Context } from 'koishi'
 import type { ChatLunaChatModel } from 'koishi-plugin-chatluna/llm-core/platform/model'
 import type {
     LivingMemorySearchInput,
+    LivingMemorySearchMemoryType,
     LivingMemorySearchResult,
     MemoryScope
 } from '../src/contracts/memory'
 import { livingMemorySearchToolName } from '../src/service/memory/tools/search_contract'
 import { LivingMemoryAgenticRecallExecutor } from '../src/service/workflows/recall/agentic_recall'
+import type { LivingMemoryEmbeddingSearchEngine } from '../src/service/workflows/recall/embedding_search_engine'
 import { currentMessage, scope } from './workflow-test-utils'
 
 interface ModelInvocation {
@@ -19,20 +21,22 @@ interface ModelInvocation {
 
 interface SearchInvocation {
     presetId: string
-    input: LivingMemorySearchInput & { maxCandidates: number }
+    query: { broadTexts: string[]; specificTexts: string[] }
+    memoryTypes: LivingMemorySearchMemoryType[]
+    maxCandidates: number
 }
 
 interface AgenticRecallHarnessOptions {
     responses: (BaseMessage | Error)[]
     finalResponse?: BaseMessage | Error
     search?: (
-        presetId: string,
-        input: SearchInvocation['input']
+        invocation: SearchInvocation
     ) => Promise<LivingMemorySearchResult[]>
 }
 
 const config = {
     agenticRecallModel: 'test/model',
+    embeddingModel: 'test-embedding',
     debug: false,
     memorySearchToolMaxResults: 30,
     recallHistoryWindowRounds: 3
@@ -144,25 +148,22 @@ const createHarness = (options: AgenticRecallHarnessOptions) => {
             return takeResponse(options.finalResponse)
         }
     } as unknown as ChatLunaChatModel
-    const livingMemory = {
-        searchMemories: async (
-            presetId: string,
-            input: SearchInvocation['input']
-        ) => {
-            searchInvocations.push({ presetId, input })
-            return await (options.search?.(presetId, input) ?? [])
+    const mockEngine = {
+        search: async (searchOptions: SearchInvocation) => {
+            searchInvocations.push(searchOptions)
+            return await (options.search?.(searchOptions) ?? [])
         }
-    }
+    } as unknown as LivingMemoryEmbeddingSearchEngine
     const context = {
         chatluna: {
             createChatModel: async () => ({ value: model })
         },
-        get: () => livingMemory,
         logger: () => ({ info: () => {}, warn: () => {} })
     } as unknown as Context
     const executor = new LivingMemoryAgenticRecallExecutor(
         context,
         config,
+        mockEngine,
         () => {}
     )
 
@@ -303,18 +304,18 @@ it('handles every tool call in a multi-call model response', async () => {
             ]),
             new AIMessage('我记得两段相关内容。')
         ],
-        search: async (_presetId, input) => {
-            if (input.broadSearchTexts[0] === '记忆') {
+        search: async (invocation) => {
+            if (invocation.query.broadTexts[0] === '记忆') {
                 await firstSearchCanComplete
             } else {
                 releaseFirstSearch()
             }
             return [
                 createSearchResult(
-                    input.broadSearchTexts[0] === '记忆'
+                    invocation.query.broadTexts[0] === '记忆'
                         ? 'memory-1'
                         : 'memory-2',
-                    input.broadSearchTexts[0]
+                    invocation.query.broadTexts[0]
                 )
             ]
         }
@@ -457,8 +458,8 @@ it('accepts a valid sixth-call finalization when prior searches matched memory',
             )
         ),
         finalResponse: new AIMessage('我记得在多次查询中确认的事实。'),
-        search: async (_presetId, input) => [
-            createSearchResult(`memory-${input.broadSearchTexts[0]}`)
+        search: async (invocation) => [
+            createSearchResult(`memory-${invocation.query.broadTexts[0]}`)
         ]
     })
 
@@ -513,12 +514,12 @@ it('allows a second successful search with different arguments', async () => {
             createSearchCall('search-2', validSearchInput('计划')),
             new AIMessage('我记得不同查询共同确认的内容。')
         ],
-        search: async (_presetId, input) => [
+        search: async (invocation) => [
             createSearchResult(
-                input.broadSearchTexts[0] === '记忆'
+                invocation.query.broadTexts[0] === '记忆'
                     ? 'memory-1'
                     : 'memory-2',
-                input.broadSearchTexts[0]
+                invocation.query.broadTexts[0]
             )
         ]
     })

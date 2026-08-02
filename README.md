@@ -46,7 +46,7 @@ yarn build chatluna-livingmemory
 | dreamModel | 在 `Dream` 记忆整理流程中进行决策 | 必需 |
 | recallRewriteModel | 在 `embedding-rerank` 策略中生成更合适的查询文本 | 可选 |
 | agenticRecallModel | 在 `agentic-recall` 策略中完成记忆的召回 | `agentic-recall` 必需 |
-| embeddingModel | 使用 `embedding-rerank` 策略中对文本进行向量化 | `embedding-rerank` 必需 |
+| embeddingModel | 在记忆召回中对文本进行向量化 | 必需 |
 | rerankerModel | 使用 `embedding-rerank` 策略中进行召回结果的重排序 | `embedding-rerank` 必需 |
 
 如果你不知道应该如何配置 Embedding 嵌入模型 和 Reranker 重排序模型，请参考[此文档](https://github.com/Procyon-Nan/koishi-plugin-chatluna-livingmemory/blob/main/docs/embedding-reranker-guide.md)进行配置
@@ -91,14 +91,14 @@ input: |
 
 ## 记忆查询工具
 
-`living_memory_search` 是提供给模型调用的记忆查询工具。它会在当前预设的 active 记忆中进行词面检索，并按匹配相关度、重要度和更新时间排序返回结果。
+`living_memory_search` 是提供给模型调用的记忆查询工具。它会在当前预设的 active 记忆中进行语义相似度检索，并按匹配相关度排序返回结果。
 
 模型可填写的工具参数包括：
 
 | 字段 | 说明 |
 | --- | --- |
-| `broadSearchTexts` | 必填，1 到 5 个短查询词，每个查询词 2 到 6 个字符 |
-| `specificSearchTexts` | 可选，1 到 5 个长查询词，每个查询词 7 到 20 个字符 |
+| `broadSearchTexts` | 必填，1 到 5 个宽泛查询词，每个查询词 2 到 30 个字符 |
+| `specificSearchTexts` | 可选，1 到 5 个具体查询词，每个查询词 2 到 100 个字符 |
 | `memoryTypes` | 必填，记忆类别，可选 `identity`、`preference`、`fact`、`plan`、`context`、`other`，或单独使用 `all` |
 
 工具返回结果包含记忆 `id`、记忆内容、摘要、关键词、重要度、创建时间、更新时间，以及命中的 `broadSearchTexts` / `specificSearchTexts`。返回结果不会包含 `status` 或来源消息。
