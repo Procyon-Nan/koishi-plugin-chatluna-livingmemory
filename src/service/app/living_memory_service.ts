@@ -47,6 +47,8 @@ import {
     createLivingMemoryServiceStatus,
     validateLivingMemoryConfig
 } from './config_status'
+import { ensureEntryEmbeddings } from '../shared/embeddings'
+import { isModelConfigured } from '../shared/utils'
 import {
     createLivingMemoryScope,
     type CreateLivingMemoryScopeOptions
@@ -386,6 +388,46 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     async clearPresetData(presetId: string) {
         await this.repository.clearAllByPreset(presetId)
         this.snapshotCache.clearByPreset(presetId)
+    }
+
+    async rebuildEmbeddings(presetId: string): Promise<{ rebuilt: number }> {
+        if (!isModelConfigured(this.config.embeddingModel)) {
+            throw new Error('embedding model is not configured')
+        }
+
+        const all = await this.repository.listEntriesByPreset(presetId)
+        const entries = all.filter((entry) => entry.status === 'active')
+        if (entries.length === 0) {
+            return { rebuilt: 0 }
+        }
+
+        const result = await this.ctx.chatluna.createEmbeddings(
+            this.config.embeddingModel
+        )
+        if (result?.value == null) {
+            throw new Error(
+                `embedding unavailable: model=${this.config.embeddingModel}`
+            )
+        }
+
+        const embeddingMap = await ensureEntryEmbeddings(
+            result.value,
+            this.repository,
+            this.config.embeddingModel,
+            entries.map((entry) => ({
+                ...entry,
+                embedding: null,
+                embeddingModelId: null
+            })),
+            {
+                logger: this.serviceLogger,
+                ...(this.config.debug
+                    ? { debug: (msg: string) => this.debug(msg) }
+                    : {})
+            }
+        )
+
+        return { rebuilt: embeddingMap.size }
     }
 
     async cleanupStaleJobs(maxAge: number = Time.week) {

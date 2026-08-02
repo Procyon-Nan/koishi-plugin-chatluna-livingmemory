@@ -83,15 +83,35 @@
                         >
                             执行 Dream
                         </el-button>
-                        <el-button
+                        <el-dropdown
                             :disabled="!presetId"
-                            :loading="clearPending"
-                            type="danger"
-                            plain
-                            @click="doClearPresetData"
+                            @command="onPresetAction"
                         >
-                            清空预设数据
-                        </el-button>
+                            <el-button
+                                :disabled="!presetId"
+                                :loading="actionPending"
+                            >
+                                操作
+                                <el-icon class="el-icon--right">
+                                    <arrow-down />
+                                </el-icon>
+                            </el-button>
+                            <template #dropdown>
+                                <el-dropdown-menu>
+                                    <el-dropdown-item
+                                        command="rebuild-embeddings"
+                                    >
+                                        重建向量
+                                    </el-dropdown-item>
+                                    <el-dropdown-item
+                                        command="clear-preset-data"
+                                        divided
+                                    >
+                                        清空预设数据
+                                    </el-dropdown-item>
+                                </el-dropdown-menu>
+                            </template>
+                        </el-dropdown>
                     </div>
                 </div>
             </el-card>
@@ -192,6 +212,7 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useColorMode } from '@koishijs/client'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { ArrowDown } from '@element-plus/icons-vue'
 import * as api from './api'
 import JobsTab from './components/jobs-tab.vue'
 import MemoriesTab from './components/memories-tab.vue'
@@ -208,7 +229,7 @@ interface RefreshableTab {
 
 const loading = ref(false)
 const dreamPending = ref(false)
-const clearPending = ref(false)
+const actionPending = ref(false)
 const memoryDialogVisible = ref(false)
 const editingMemory = ref<MemoryEntryRecord | null>(null)
 
@@ -351,9 +372,31 @@ const runDreamJob = async () => {
     }
 }
 
-const doClearPresetData = async () => {
-    if (!ensurePreset()) return
+const doRebuildEmbeddings = async () => {
+    try {
+        await ElMessageBox.confirm(
+            '确认重建全部嵌入向量？此操作会消耗 embedding API 调用。',
+            '重建向量',
+            {
+                type: 'warning',
+                confirmButtonText: '确认重建',
+                cancelButtonText: '取消'
+            }
+        )
+    } catch {
+        return
+    }
 
+    try {
+        const result = await api.rebuildEmbeddings(presetId.value)
+        ElMessage.success(`已重建 ${result.rebuilt} 条记忆的嵌入向量`)
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        ElMessage.error(`重建向量失败：${message}`)
+    }
+}
+
+const doClearPresetData = async () => {
     try {
         await ElMessageBox.confirm(
             `该操作会清空预设 ${presetId.value} 的全部记忆、用户画像、快照和任务记录，且不可恢复。是否继续？`,
@@ -368,7 +411,6 @@ const doClearPresetData = async () => {
         return
     }
 
-    clearPending.value = true
     try {
         await api.clearPresetData(presetId.value)
         ElMessage.success('该预设的数据已清空')
@@ -376,8 +418,20 @@ const doClearPresetData = async () => {
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         ElMessage.error(`清空失败：${message}`)
+    }
+}
+
+const onPresetAction = async (command: string) => {
+    if (!ensurePreset()) return
+    actionPending.value = true
+    try {
+        if (command === 'rebuild-embeddings') {
+            await doRebuildEmbeddings()
+        } else if (command === 'clear-preset-data') {
+            await doClearPresetData()
+        }
     } finally {
-        clearPending.value = false
+        actionPending.value = false
     }
 }
 

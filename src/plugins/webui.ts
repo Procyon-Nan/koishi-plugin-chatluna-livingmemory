@@ -135,4 +135,10 @@ export function apply(ctx: Context, _config?: LivingMemoryConfig) {
             await service(ctx).clearPresetData(presetId)
         })
     )
+
+    ctx.console.addListener(
+        'living-memory/rebuildEmbeddings',
+        async (presetId: string) =>
+            await service(ctx).rebuildEmbeddings(presetId)
+    )
 }

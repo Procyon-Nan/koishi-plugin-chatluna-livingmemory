@@ -101,4 +101,7 @@ export interface LivingMemoryConsoleEvents {
     'living-memory/clearPresetData': (
         presetId: string
     ) => Promise<{ success: true }>
+    'living-memory/rebuildEmbeddings': (
+        presetId: string
+    ) => Promise<{ rebuilt: number }>
 }
