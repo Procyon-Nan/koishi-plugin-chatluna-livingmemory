@@ -4,7 +4,7 @@ import { livingMemorySearchMemoryTypes } from '../../../contracts/memory'
 export const livingMemorySearchToolName = 'living_memory_search'
 export const livingMemoryGetMessagesToolName = 'living_memory_get_messages'
 
-export const memorySearchMaxTextCount = 5
+export const memorySearchMaxTextCount = 6
 export const memoryGetMessagesMaxIdCount = 10
 
 export const searchTextRule = {
