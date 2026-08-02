@@ -7,18 +7,6 @@ export const livingMemoryGetMessagesToolName = 'living_memory_get_messages'
 export const memorySearchMaxTextCount = 5
 export const memoryGetMessagesMaxIdCount = 10
 
-export const broadSearchTextRule = {
-    fieldName: 'broadSearchTexts',
-    minLength: 2,
-    maxLength: 6
-} as const
-
-export const specificSearchTextRule = {
-    fieldName: 'specificSearchTexts',
-    minLength: 7,
-    maxLength: 20
-} as const
-
 export const embeddingBroadTextRule = {
     fieldName: 'broadSearchTexts',
     minLength: 2,
@@ -32,10 +20,7 @@ export const embeddingSpecificTextRule = {
 } as const
 
 export type MemorySearchTextRule =
-    | typeof broadSearchTextRule
-    | typeof specificSearchTextRule
-    | typeof embeddingBroadTextRule
-    | typeof embeddingSpecificTextRule
+    typeof embeddingBroadTextRule | typeof embeddingSpecificTextRule
 
 export const normalizeSearchText = (value: string) => {
     return value.replace(/\s+/gu, ' ').trim().toLowerCase()
@@ -63,43 +48,6 @@ const createSearchTextSchema = (rule: MemorySearchTextRule) =>
             message: formatSearchTextLengthError(rule)
         }
     )
-
-const broadSearchTextDescription =
-    `Short broad search phrases. Provide 1 to ${memorySearchMaxTextCount} ` +
-    `phrases, each ${formatSearchTextLengthRange(broadSearchTextRule)} ` +
-    'characters after trimming.'
-
-const specificSearchTextDescription =
-    `Optional longer specific search phrases. Provide 1 to ${memorySearchMaxTextCount} ` +
-    `phrases, each ${formatSearchTextLengthRange(specificSearchTextRule)} ` +
-    'characters after trimming.'
-
-export const livingMemorySearchInputSchema = z.object({
-    broadSearchTexts: z
-        .array(createSearchTextSchema(broadSearchTextRule))
-        .min(1)
-        .max(memorySearchMaxTextCount)
-        .describe(broadSearchTextDescription),
-    specificSearchTexts: z
-        .array(createSearchTextSchema(specificSearchTextRule))
-        .min(1)
-        .max(memorySearchMaxTextCount)
-        .optional()
-        .describe(specificSearchTextDescription),
-    memoryTypes: z
-        .array(z.enum(livingMemorySearchMemoryTypes))
-        .min(1)
-        .refine(
-            (memoryTypes) =>
-                !memoryTypes.includes('all') || memoryTypes.length === 1,
-            {
-                message: 'memoryTypes cannot mix all with other types.'
-            }
-        )
-        .describe(
-            'Memory categories to search. Use concrete categories or all.'
-        )
-})
 
 const embeddingBroadTextDescription =
     `Short broad semantic phrases. Provide 1 to ${memorySearchMaxTextCount} ` +

@@ -6,22 +6,32 @@ import {
     livingMemoryGetMessagesToolDescription
 } from '../src/service/memory/tools/get_messages_tool'
 import {
-    livingMemoryGetMessagesInputSchema,
-    livingMemorySearchInputSchema
+    livingMemoryEmbeddingSearchInputSchema,
+    livingMemoryGetMessagesInputSchema
 } from '../src/service/memory/tools/search_contract'
 import {
-    LivingMemorySearchTool,
-    livingMemorySearchToolDescription
-} from '../src/service/memory/tools/search_tool'
+    livingMemoryEmbeddingSearchToolDescription,
+    LivingMemoryEmbeddingSearchTool
+} from '../src/service/memory/tools/embedding_search_tool'
+import {
+    createEmbeddingSearchCache,
+    type LivingMemoryEmbeddingSearchEngine
+} from '../src/service/workflows/recall/embedding_search_engine'
 
 const context = {
     logger: () => ({ info: () => {}, warn: () => {} })
 } as unknown as Context
 
-const searchTool = new LivingMemorySearchTool(context, {
-    debug: false,
-    memorySearchToolMaxResults: 30
-})
+const mockEngine = {
+    search: async () => []
+} as unknown as LivingMemoryEmbeddingSearchEngine
+
+const searchTool = new LivingMemoryEmbeddingSearchTool(
+    mockEngine,
+    createEmbeddingSearchCache(),
+    context,
+    { debug: false, memorySearchToolMaxResults: 30 }
+)
 const getMessagesTool = new LivingMemoryGetMessagesTool(context, {
     debug: false
 })
@@ -35,9 +45,15 @@ const rejectsStringifiedArray = async (promise: Promise<unknown>) => {
 }
 
 it('exposes the strict search schema directly to the model-facing tool', async () => {
-    assert.equal(searchTool.schema, livingMemorySearchInputSchema)
-    assert.match(livingMemorySearchToolDescription, /required JSON array/u)
-    assert.match(livingMemorySearchToolDescription, /Never encode an array/u)
+    assert.equal(searchTool.schema, livingMemoryEmbeddingSearchInputSchema)
+    assert.match(
+        livingMemoryEmbeddingSearchToolDescription,
+        /required JSON array/u
+    )
+    assert.match(
+        livingMemoryEmbeddingSearchToolDescription,
+        /Never encode an array/u
+    )
 
     await rejectsStringifiedArray(
         searchTool.invoke({

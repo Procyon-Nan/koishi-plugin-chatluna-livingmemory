@@ -4,10 +4,6 @@ import { LivingMemoryDreamService } from '../workflows/dream'
 import { LivingMemoryExtractor } from '../workflows/extraction/extractor'
 import { LivingMemoryMessageFormatter } from '../transcript/message_formatter'
 import { LivingMemoryRecallQueryBuilder } from '../workflows/recall/query_builder'
-import {
-    type LivingMemorySearchOptions,
-    searchLivingMemoryEntries
-} from '../memory/tools/search'
 import { LivingMemoryRepository } from '../persistence/repository'
 import { LivingMemoryRetriever } from '../workflows/recall/retriever'
 import {
@@ -22,7 +18,6 @@ import {
 } from '../../query'
 import type {
     LivingMemoryCompletedRound,
-    LivingMemorySearchResult,
     LivingMemoryTranscriptMessage,
     MemoryMutationInput,
     MemoryScope
@@ -329,19 +324,6 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     async listMemories(query: MemoryListQuery) {
         const items = await this.repository.listEntriesByPreset(query.presetId)
         return filterMemoryList(items, query)
-    }
-
-    async searchMemories(
-        presetId: string,
-        options: LivingMemorySearchOptions
-    ): Promise<LivingMemorySearchResult[]> {
-        const items = await this.repository.listEntriesByPreset(presetId)
-        return searchLivingMemoryEntries(items, {
-            maxCandidates: options.maxCandidates,
-            broadSearchTexts: options.broadSearchTexts,
-            specificSearchTexts: options.specificSearchTexts,
-            memoryTypes: options.memoryTypes
-        })
     }
 
     async getMemory(memoryId: string) {

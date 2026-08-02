@@ -6,16 +6,21 @@ import {
     livingMemoryGetMessagesToolDescription
 } from '../service/memory/tools/get_messages_tool'
 import {
-    LivingMemorySearchTool,
-    livingMemorySearchToolDescription
-} from '../service/memory/tools/search_tool'
+    LivingMemoryEmbeddingSearchTool,
+    livingMemoryEmbeddingSearchToolDescription
+} from '../service/memory/tools/embedding_search_tool'
 import {
     livingMemoryGetMessagesToolName,
     livingMemorySearchToolName
 } from '../service/memory/tools/search_contract'
+import { LivingMemoryRepository } from '../service/persistence/repository'
+import {
+    createEmbeddingSearchCache,
+    LivingMemoryEmbeddingSearchEngine
+} from '../service/workflows/recall/embedding_search_engine'
 
 const toChatLunaStructuredTool = (
-    tool: LivingMemorySearchTool | LivingMemoryGetMessagesTool
+    tool: LivingMemoryEmbeddingSearchTool | LivingMemoryGetMessagesTool
 ): ReturnType<ChatLunaTool['createTool']> => {
     // ChatLuna and this package can resolve different @langchain/core copies in
     // local workspaces, so keep the cast at the registration boundary.
@@ -35,10 +40,17 @@ const livingMemoryToolMeta = {
 
 export function apply(ctx: Context, config: LivingMemoryConfig) {
     ctx.on('ready', () => {
+        const searchEngine = new LivingMemoryEmbeddingSearchEngine(
+            ctx,
+            config,
+            new LivingMemoryRepository(ctx),
+            ctx.logger('chatluna-livingmemory')
+        )
+
         const disposeSearch = ctx.chatluna.platform.registerTool(
             livingMemorySearchToolName,
             {
-                description: livingMemorySearchToolDescription,
+                description: livingMemoryEmbeddingSearchToolDescription,
                 selector(_history: unknown[]) {
                     return true
                 },
@@ -48,7 +60,12 @@ export function apply(ctx: Context, config: LivingMemoryConfig) {
                 },
                 createTool() {
                     return toChatLunaStructuredTool(
-                        new LivingMemorySearchTool(ctx, config)
+                        new LivingMemoryEmbeddingSearchTool(
+                            searchEngine,
+                            createEmbeddingSearchCache(),
+                            ctx,
+                            config
+                        )
                     )
                 }
             }
