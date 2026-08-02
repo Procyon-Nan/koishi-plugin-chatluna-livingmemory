@@ -68,6 +68,18 @@ export const validateLivingMemoryConfig = (
         })
     }
 
+    if (
+        config.recallStrategy === 'agentic-recall' &&
+        !isModelConfigured(config.embeddingModel)
+    ) {
+        warnings.push({
+            code: 'embedding-model-missing',
+            field: 'embeddingModel',
+            message:
+                'agentic-recall 已启用，但未配置 embeddingModel；记忆召回将失败。'
+        })
+    }
+
     if (config.enableAutoDream && !isModelConfigured(config.dreamModel)) {
         warnings.push({
             code: 'auto-dream-model-missing',

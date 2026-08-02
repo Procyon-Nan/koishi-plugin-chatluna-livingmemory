@@ -46,6 +46,7 @@ import { LivingMemoryPresetCatalog } from '../memory/preset_catalog'
 import { LivingMemoryRecallCoordinator } from '../workflows/recall/coordinator'
 import { LivingMemorySnapshotCache } from '../memory/snapshot/snapshot_cache'
 import { LivingMemoryAgenticRecallExecutor } from '../workflows/recall/agentic_recall'
+import { LivingMemoryEmbeddingSearchEngine } from '../workflows/recall/embedding_search_engine'
 import type { QueueExtractionOptions } from '../memory/helpers'
 import {
     createLivingMemoryServiceStatus,
@@ -97,6 +98,12 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         const agenticRecall = new LivingMemoryAgenticRecallExecutor(
             ctx,
             config,
+            new LivingMemoryEmbeddingSearchEngine(
+                ctx,
+                config,
+                this.repository,
+                ctx.logger('chatluna-livingmemory')
+            ),
             debug
         )
         this.userProfiles = new LivingMemoryUserProfileService(
