@@ -19,9 +19,23 @@ export const specificSearchTextRule = {
     maxLength: 20
 } as const
 
+export const embeddingBroadTextRule = {
+    fieldName: 'broadSearchTexts',
+    minLength: 2,
+    maxLength: 30
+} as const
+
+export const embeddingSpecificTextRule = {
+    fieldName: 'specificSearchTexts',
+    minLength: 2,
+    maxLength: 100
+} as const
+
 export type MemorySearchTextRule =
     | typeof broadSearchTextRule
     | typeof specificSearchTextRule
+    | typeof embeddingBroadTextRule
+    | typeof embeddingSpecificTextRule
 
 export const normalizeSearchText = (value: string) => {
     return value.replace(/\s+/gu, ' ').trim().toLowerCase()
@@ -72,6 +86,43 @@ export const livingMemorySearchInputSchema = z.object({
         .max(memorySearchMaxTextCount)
         .optional()
         .describe(specificSearchTextDescription),
+    memoryTypes: z
+        .array(z.enum(livingMemorySearchMemoryTypes))
+        .min(1)
+        .refine(
+            (memoryTypes) =>
+                !memoryTypes.includes('all') || memoryTypes.length === 1,
+            {
+                message: 'memoryTypes cannot mix all with other types.'
+            }
+        )
+        .describe(
+            'Memory categories to search. Use concrete categories or all.'
+        )
+})
+
+const embeddingBroadTextDescription =
+    `Short broad semantic phrases. Provide 1 to ${memorySearchMaxTextCount} ` +
+    `phrases, each ${formatSearchTextLengthRange(embeddingBroadTextRule)} ` +
+    'characters after trimming.'
+
+const embeddingSpecificTextDescription =
+    `Optional longer specific semantic phrases. Provide 1 to ${memorySearchMaxTextCount} ` +
+    `phrases, each ${formatSearchTextLengthRange(embeddingSpecificTextRule)} ` +
+    'characters after trimming.'
+
+export const livingMemoryEmbeddingSearchInputSchema = z.object({
+    broadSearchTexts: z
+        .array(createSearchTextSchema(embeddingBroadTextRule))
+        .min(1)
+        .max(memorySearchMaxTextCount)
+        .describe(embeddingBroadTextDescription),
+    specificSearchTexts: z
+        .array(createSearchTextSchema(embeddingSpecificTextRule))
+        .min(1)
+        .max(memorySearchMaxTextCount)
+        .optional()
+        .describe(embeddingSpecificTextDescription),
     memoryTypes: z
         .array(z.enum(livingMemorySearchMemoryTypes))
         .min(1)
