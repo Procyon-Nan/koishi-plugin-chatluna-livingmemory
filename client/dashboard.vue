@@ -60,16 +60,12 @@
                     </div>
 
                     <div class="toolbar-actions">
-                        <div class="refresh-btn-wrapper">
-                            <el-button
-                                :loading="loading"
-                                type="primary"
-                                class="refresh-button"
-                                @click="manualRefresh"
-                            >
-                                刷新
-                            </el-button>
-                        </div>
+                        <el-button
+                            :loading="loading"
+                            @click="manualRefresh"
+                        >
+                            刷新
+                        </el-button>
                         <el-button
                             :disabled="!presetId"
                             @click="openCreateDialog"

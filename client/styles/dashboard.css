@@ -363,6 +363,7 @@
 /* Button overrides */
 :deep(.el-button),
 :global(.lm-dialog .el-button) {
+    margin: 0 !important;
     border-radius: 4px !important;
     font-weight: 500 !important;
     font-family: var(--lm-font-sans);
@@ -408,13 +409,14 @@
 }
 
 :deep(.el-button--danger.is-plain) {
-    background-color: var(--lm-danger-light) !important;
-    border: 1px solid var(--lm-danger) !important;
-    color: var(--lm-danger) !important;
+    background-color: var(--lm-bg-primary) !important;
+    border: 1px solid var(--lm-border) !important;
+    color: var(--lm-text-secondary) !important;
 }
 
 :deep(.el-button--danger.is-plain:hover) {
     background-color: var(--lm-danger) !important;
+    border-color: var(--lm-danger) !important;
     color: #ffffff !important;
 }
 
@@ -424,20 +426,6 @@
     border-color: var(--lm-border) !important;
     color: var(--lm-text-tertiary) !important;
     opacity: 0.6;
-}
-
-/* Prevent layout shifts when loading is active on the refresh button */
-.refresh-btn-wrapper {
-    display: inline-flex;
-    width: 68px; /* Fixed width matching the exact size of the refresh button */
-    height: 32px;
-}
-
-.refresh-btn-wrapper :deep(.refresh-button) {
-    width: 100% !important;
-    padding: 0 !important;
-    justify-content: center;
-    align-items: center;
 }
 
 .toolbar-actions {
