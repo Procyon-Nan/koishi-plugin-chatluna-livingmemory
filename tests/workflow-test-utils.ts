@@ -166,7 +166,6 @@ export const createAgenticTrace = (
             memoryTypes: ['all'],
             maxCandidates: 3
         },
-        matchedSearchTexts: finalText.length > 0 ? ['记忆查询'] : [],
         matchedMemories:
             finalText.length > 0
                 ? [
@@ -178,7 +177,6 @@ export const createAgenticTrace = (
                           importance: 0.5,
                           createdAt: new Date('2026-07-01T00:00:00.000Z'),
                           updatedAt: new Date('2026-07-01T00:00:00.000Z'),
-                          matchedSearchTexts: ['记忆查询']
                       }
                   ]
                 : []

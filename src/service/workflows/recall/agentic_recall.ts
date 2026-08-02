@@ -157,8 +157,7 @@ const copyMatchedMemory = (
     summary: item.summary,
     importance: item.importance,
     createdAt: new Date(item.createdAt),
-    updatedAt: new Date(item.updatedAt),
-    matchedSearchTexts: [...item.matchedSearchTexts]
+    updatedAt: new Date(item.updatedAt)
 })
 
 const uniqueMatchedMemories = (
@@ -571,9 +570,6 @@ export class LivingMemoryAgenticRecallExecutor {
                 toolCallSummary: aggregateToolCallSummary(
                     toolCallSummaries,
                     this.config.memorySearchToolMaxResults
-                ),
-                matchedSearchTexts: uniqueTexts(
-                    uniqueMemories.map((item) => item.matchedSearchTexts)
                 ),
                 matchedMemories: uniqueMemories
             }

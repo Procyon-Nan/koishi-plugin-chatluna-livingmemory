@@ -52,9 +52,7 @@ export interface LivingMemorySearchResult extends Pick<
     | 'importance'
     | 'createdAt'
     | 'updatedAt'
-> {
-    matchedSearchTexts: string[]
-}
+> {}
 
 export interface MemoryReference {
     memoryId: string
@@ -81,13 +79,11 @@ export interface AgenticMemorySnapshotMemoryItem extends Pick<
     | 'importance'
     | 'createdAt'
     | 'updatedAt'
-    | 'matchedSearchTexts'
 > {}
 
 export interface AgenticMemorySnapshotItem {
     finalText: string
     toolCallSummary: AgenticMemorySearchToolCallSummary
-    matchedSearchTexts: string[]
     matchedMemories: AgenticMemorySnapshotMemoryItem[]
 }
 

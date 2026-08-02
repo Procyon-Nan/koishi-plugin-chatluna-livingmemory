@@ -34,7 +34,6 @@ export const livingMemoryEmbeddingSearchToolDescription = [
     '- memoryTypes: required JSON array of memory categories, or ["all"] to search every category.',
     '- Pass arrays directly. Never encode an array as a JSON string.',
     '- The tool searches active memories owned by the current preset using embedding cosine similarity.',
-    '- Each result includes matchedSearchTexts showing which queries were semantically relevant.',
     '- Results are sorted by best similarity score across all provided query texts.'
 ].join('\n')
 

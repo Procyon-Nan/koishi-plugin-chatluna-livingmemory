@@ -85,8 +85,7 @@ const createMultipleSearchCalls = (
 }
 
 const createSearchResult = (
-    id: string,
-    searchText = '记忆'
+    id: string
 ): LivingMemorySearchResult => ({
     id,
     type: 'fact',
@@ -95,8 +94,7 @@ const createSearchResult = (
     summary: `summary-${id}`,
     importance: 0.8,
     createdAt: new Date('2026-07-01T00:00:00.000Z'),
-    updatedAt: new Date('2026-07-01T00:00:00.000Z'),
-    matchedSearchTexts: [searchText]
+    updatedAt: new Date('2026-07-01T00:00:00.000Z')
 })
 
 const toMessages = (input: unknown): BaseMessage[] => {
@@ -311,8 +309,7 @@ it('handles every tool call in a multi-call model response', async () => {
                 createSearchResult(
                     invocation.query.texts[0] === '记忆'
                         ? 'memory-1'
-                        : 'memory-2',
-                    invocation.query.texts[0]
+                        : 'memory-2'
                 )
             ]
         }
@@ -515,8 +512,7 @@ it('allows a second successful search with different arguments', async () => {
             createSearchResult(
                 invocation.query.texts[0] === '记忆'
                     ? 'memory-1'
-                    : 'memory-2',
-                invocation.query.texts[0]
+                    : 'memory-2'
             )
         ]
     })

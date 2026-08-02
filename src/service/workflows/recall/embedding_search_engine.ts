@@ -49,7 +49,6 @@ export const createEmbeddingSearchCache = (): EmbeddingSearchCache => ({
 interface MergedScore {
     entry: MemoryEntryRecord
     score: number
-    matchedTexts: string[]
 }
 
 export class LivingMemoryEmbeddingSearchEngine {
@@ -141,7 +140,6 @@ export class LivingMemoryEmbeddingSearchEngine {
 
         for (let qi = 0; qi < queryVectors.length; qi++) {
             const queryVector = queryVectors[qi]
-            const text = texts[qi]
 
             const ranked = rankEntriesByQueryVector(
                 filtered,
@@ -154,16 +152,12 @@ export class LivingMemoryEmbeddingSearchEngine {
                 if (merged == null) {
                     merged = {
                         entry,
-                        score: -Infinity,
-                        matchedTexts: []
+                        score: -Infinity
                     }
                     mergedByEntry.set(entry.id, merged)
                 }
                 if (score > merged.score) {
                     merged.score = score
-                }
-                if (score > 0) {
-                    merged.matchedTexts.push(text)
                 }
             }
         }
@@ -171,7 +165,7 @@ export class LivingMemoryEmbeddingSearchEngine {
         return [...mergedByEntry.values()]
             .sort((left, right) => right.score - left.score)
             .slice(0, options.maxCandidates)
-            .map(({ entry, matchedTexts }) => ({
+            .map(({ entry }) => ({
                 id: entry.id,
                 type: entry.type,
                 content: entry.content,
@@ -179,8 +173,7 @@ export class LivingMemoryEmbeddingSearchEngine {
                 summary: entry.summary,
                 importance: entry.importance,
                 createdAt: entry.createdAt,
-                updatedAt: entry.updatedAt,
-                matchedSearchTexts: matchedTexts
+                updatedAt: entry.updatedAt
             }))
     }
 
