@@ -21,7 +21,7 @@ interface ModelInvocation {
 
 interface SearchInvocation {
     presetId: string
-    query: { broadTexts: string[]; specificTexts: string[] }
+    query: { texts: string[] }
     memoryTypes: LivingMemorySearchMemoryType[]
     maxCandidates: number
 }
@@ -49,7 +49,7 @@ const testScope: MemoryScope = {
 }
 
 const validSearchInput = (text: string): LivingMemorySearchInput => ({
-    broadSearchTexts: [text],
+    searchTexts: [text],
     memoryTypes: ['all']
 })
 
@@ -86,7 +86,7 @@ const createMultipleSearchCalls = (
 
 const createSearchResult = (
     id: string,
-    broadSearchText = '记忆'
+    searchText = '记忆'
 ): LivingMemorySearchResult => ({
     id,
     type: 'fact',
@@ -96,8 +96,7 @@ const createSearchResult = (
     importance: 0.8,
     createdAt: new Date('2026-07-01T00:00:00.000Z'),
     updatedAt: new Date('2026-07-01T00:00:00.000Z'),
-    matchedBroadSearchTexts: [broadSearchText],
-    matchedSpecificSearchTexts: []
+    matchedSearchTexts: [searchText]
 })
 
 const toMessages = (input: unknown): BaseMessage[] => {
@@ -196,7 +195,7 @@ it('runs one search through AgentRunner and preserves preset-scoped trace data',
     assert.equal(trace.finalOutput, '我记得一段可靠的往事。')
     assert.equal(trace.item.matchedMemories.length, 1)
     assert.equal(trace.item.matchedMemories[0]?.content, 'content-memory-1')
-    assert.deepEqual(trace.item.toolCallSummary.broadSearchTexts, ['记忆'])
+    assert.deepEqual(trace.item.toolCallSummary.searchTexts, ['记忆'])
     assert.equal(harness.searchInvocations[0]?.presetId, scope.presetId)
     assert.equal(harness.boundInvocations.length, 2)
     assert.equal(harness.directInvocations.length, 0)
@@ -231,8 +230,7 @@ it('rejects stringified arrays and allows corrected search input', async () => {
     const harness = createHarness({
         responses: [
             createSearchCall('invalid-1', {
-                broadSearchTexts: '["记忆"]',
-                specificSearchTexts: '["具体记忆内容"]',
+                searchTexts: '["记忆"]',
                 memoryTypes: '["all"]'
             }),
             createSearchCall('search-2'),
@@ -252,8 +250,7 @@ it('rejects stringified arrays and allows corrected search input', async () => {
         /Received tool input did not match expected schema/u
     )
     assert.match(invalidOutput, /Expected array, received string/u)
-    assert.match(invalidOutput, /broadSearchTexts/u)
-    assert.match(invalidOutput, /specificSearchTexts/u)
+    assert.match(invalidOutput, /searchTexts/u)
     assert.match(invalidOutput, /memoryTypes/u)
     assert.equal(harness.searchInvocations.length, 1)
 })
@@ -262,15 +259,15 @@ it('never normalizes repeated stringified array inputs', async () => {
     const harness = createHarness({
         responses: [
             createSearchCall('invalid-1', {
-                broadSearchTexts: '["记忆"]',
+                searchTexts: '["记忆"]',
                 memoryTypes: '["all"]'
             }),
             createSearchCall('invalid-2', {
-                broadSearchTexts: '["计划"]',
+                searchTexts: '["计划"]',
                 memoryTypes: '["all"]'
             }),
             createSearchCall('invalid-3', {
-                broadSearchTexts: '["关系"]',
+                searchTexts: '["关系"]',
                 memoryTypes: '["all"]'
             }),
             new AIMessage('<NO_MEMORY>')
@@ -305,17 +302,17 @@ it('handles every tool call in a multi-call model response', async () => {
             new AIMessage('我记得两段相关内容。')
         ],
         search: async (invocation) => {
-            if (invocation.query.broadTexts[0] === '记忆') {
+            if (invocation.query.texts[0] === '记忆') {
                 await firstSearchCanComplete
             } else {
                 releaseFirstSearch()
             }
             return [
                 createSearchResult(
-                    invocation.query.broadTexts[0] === '记忆'
+                    invocation.query.texts[0] === '记忆'
                         ? 'memory-1'
                         : 'memory-2',
-                    invocation.query.broadTexts[0]
+                    invocation.query.texts[0]
                 )
             ]
         }
@@ -459,7 +456,7 @@ it('accepts a valid sixth-call finalization when prior searches matched memory',
         ),
         finalResponse: new AIMessage('我记得在多次查询中确认的事实。'),
         search: async (invocation) => [
-            createSearchResult(`memory-${invocation.query.broadTexts[0]}`)
+            createSearchResult(`memory-${invocation.query.texts[0]}`)
         ]
     })
 
@@ -516,10 +513,10 @@ it('allows a second successful search with different arguments', async () => {
         ],
         search: async (invocation) => [
             createSearchResult(
-                invocation.query.broadTexts[0] === '记忆'
+                invocation.query.texts[0] === '记忆'
                     ? 'memory-1'
                     : 'memory-2',
-                invocation.query.broadTexts[0]
+                invocation.query.texts[0]
             )
         ]
     })
@@ -528,7 +525,7 @@ it('allows a second successful search with different arguments', async () => {
 
     assert.equal(harness.searchInvocations.length, 2)
     assert.equal(trace.item.matchedMemories.length, 2)
-    assert.deepEqual(trace.item.toolCallSummary.broadSearchTexts, [
+    assert.deepEqual(trace.item.toolCallSummary.searchTexts, [
         '记忆',
         '计划'
     ])

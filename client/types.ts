@@ -69,8 +69,7 @@ export interface MemorySnapshotResolvedItem extends MemoryReference {
 }
 
 export interface AgenticMemorySearchToolCallSummary {
-    broadSearchTexts: string[]
-    specificSearchTexts?: string[]
+    searchTexts: string[]
     memoryTypes: LivingMemorySearchMemoryType[]
     maxCandidates: number
 }
@@ -83,15 +82,13 @@ export interface AgenticMemorySnapshotMemoryItem {
     importance: number | null
     createdAt: Date
     updatedAt: Date
-    matchedBroadSearchTexts: string[]
-    matchedSpecificSearchTexts: string[]
+    matchedSearchTexts: string[]
 }
 
 export interface AgenticMemorySnapshotItem {
     finalText: string
     toolCallSummary: AgenticMemorySearchToolCallSummary
-    matchedBroadSearchTexts: string[]
-    matchedSpecificSearchTexts: string[]
+    matchedSearchTexts: string[]
     matchedMemories: AgenticMemorySnapshotMemoryItem[]
 }
 

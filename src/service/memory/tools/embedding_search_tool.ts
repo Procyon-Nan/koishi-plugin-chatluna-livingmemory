@@ -4,12 +4,11 @@ import type { Context } from 'koishi'
 import type { z } from 'zod'
 import type { LivingMemoryConfig } from '../../../contracts/workflows'
 import {
-    embeddingBroadTextRule,
-    embeddingSpecificTextRule,
     formatSearchTextLengthRange,
     livingMemoryEmbeddingSearchInputSchema,
     livingMemorySearchToolName,
-    memorySearchMaxTextCount
+    memorySearchMaxTextCount,
+    searchTextRule
 } from './search_contract'
 import {
     getLivingMemoryToolConfigurable,
@@ -29,16 +28,13 @@ export const livingMemoryEmbeddingSearchToolDescription = [
     'Search active memories in the current preset by semantic similarity.',
     '',
     'Use this tool when you need to look up existing memories by meaning, not exact wording.',
-    `- broadSearchTexts: required JSON array containing 1 to ${memorySearchMaxTextCount} short, broad phrases. ` +
-        `Each phrase must be ${formatSearchTextLengthRange(embeddingBroadTextRule)} characters after trimming. ` +
-        'Use broad topics, categories, or general needs.',
-    `- specificSearchTexts: optional JSON array containing 1 to ${memorySearchMaxTextCount} longer, specific phrases. ` +
-        `Each phrase must be ${formatSearchTextLengthRange(embeddingSpecificTextRule)} characters after trimming when provided.`,
-    '  Use concrete descriptions, scenarios, or factual phrases.',
+    `- searchTexts: required JSON array containing 1 to ${memorySearchMaxTextCount} semantic query phrases. ` +
+        `Each phrase must be ${formatSearchTextLengthRange(searchTextRule)} characters after trimming. ` +
+        'Use broad topics, concrete descriptions, or factual phrases.',
     '- memoryTypes: required JSON array of memory categories, or ["all"] to search every category.',
     '- Pass arrays directly. Never encode an array as a JSON string.',
     '- The tool searches active memories owned by the current preset using embedding cosine similarity.',
-    '- Each result includes matchedBroadSearchTexts and matchedSpecificSearchTexts showing which queries were semantically relevant.',
+    '- Each result includes matchedSearchTexts showing which queries were semantically relevant.',
     '- Results are sorted by best similarity score across all provided query texts.'
 ].join('\n')
 
@@ -85,8 +81,7 @@ export class LivingMemoryEmbeddingSearchTool extends StructuredTool {
             {
                 presetId,
                 query: {
-                    broadTexts: input.broadSearchTexts,
-                    specificTexts: input.specificSearchTexts ?? []
+                    texts: input.searchTexts
                 },
                 memoryTypes: input.memoryTypes,
                 maxCandidates: this.config.memorySearchToolMaxResults

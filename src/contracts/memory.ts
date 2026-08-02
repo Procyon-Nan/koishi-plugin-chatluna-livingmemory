@@ -38,8 +38,7 @@ export type LivingMemorySearchMemoryType =
     (typeof livingMemorySearchMemoryTypes)[number]
 
 export interface LivingMemorySearchInput {
-    broadSearchTexts: string[]
-    specificSearchTexts?: string[]
+    searchTexts: string[]
     memoryTypes: LivingMemorySearchMemoryType[]
 }
 
@@ -54,8 +53,7 @@ export interface LivingMemorySearchResult extends Pick<
     | 'createdAt'
     | 'updatedAt'
 > {
-    matchedBroadSearchTexts: string[]
-    matchedSpecificSearchTexts: string[]
+    matchedSearchTexts: string[]
 }
 
 export interface MemoryReference {
@@ -69,8 +67,7 @@ export interface MemorySnapshotResolvedReference extends MemoryReference {
 }
 
 export interface AgenticMemorySearchToolCallSummary {
-    broadSearchTexts: string[]
-    specificSearchTexts?: string[]
+    searchTexts: string[]
     memoryTypes: LivingMemorySearchMemoryType[]
     maxCandidates: number
 }
@@ -84,15 +81,13 @@ export interface AgenticMemorySnapshotMemoryItem extends Pick<
     | 'importance'
     | 'createdAt'
     | 'updatedAt'
-    | 'matchedBroadSearchTexts'
-    | 'matchedSpecificSearchTexts'
+    | 'matchedSearchTexts'
 > {}
 
 export interface AgenticMemorySnapshotItem {
     finalText: string
     toolCallSummary: AgenticMemorySearchToolCallSummary
-    matchedBroadSearchTexts: string[]
-    matchedSpecificSearchTexts: string[]
+    matchedSearchTexts: string[]
     matchedMemories: AgenticMemorySnapshotMemoryItem[]
 }
 

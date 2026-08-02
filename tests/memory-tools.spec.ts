@@ -57,8 +57,7 @@ it('exposes the strict search schema directly to the model-facing tool', async (
 
     await rejectsStringifiedArray(
         searchTool.invoke({
-            broadSearchTexts: '["关系", "称呼"]',
-            specificSearchTexts: '["蔷薇称Procyon为爸爸"]',
+            searchTexts: '["关系", "称呼"]',
             memoryTypes: '["all"]'
         } as never)
     )

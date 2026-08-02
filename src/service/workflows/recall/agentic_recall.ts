@@ -128,10 +128,7 @@ const normalizeToolCallSummary = (
     input: LivingMemorySearchInput,
     maxCandidates: number
 ): AgenticMemorySearchToolCallSummary => ({
-    broadSearchTexts: input.broadSearchTexts,
-    ...(input.specificSearchTexts == null
-        ? {}
-        : { specificSearchTexts: input.specificSearchTexts }),
+    searchTexts: input.searchTexts,
     memoryTypes: input.memoryTypes,
     maxCandidates
 })
@@ -140,15 +137,10 @@ const aggregateToolCallSummary = (
     summaries: AgenticMemorySearchToolCallSummary[],
     maxCandidates: number
 ): AgenticMemorySearchToolCallSummary => {
-    const specificSearchTexts = uniqueTexts(
-        summaries.map((summary) => summary.specificSearchTexts)
-    )
-
     return {
-        broadSearchTexts: uniqueTexts(
-            summaries.map((summary) => summary.broadSearchTexts)
+        searchTexts: uniqueTexts(
+            summaries.map((summary) => summary.searchTexts)
         ),
-        ...(specificSearchTexts.length > 0 ? { specificSearchTexts } : {}),
         memoryTypes: uniqueMemoryTypes(
             summaries.map((summary) => summary.memoryTypes)
         ),
@@ -166,8 +158,7 @@ const copyMatchedMemory = (
     importance: item.importance,
     createdAt: new Date(item.createdAt),
     updatedAt: new Date(item.updatedAt),
-    matchedBroadSearchTexts: [...item.matchedBroadSearchTexts],
-    matchedSpecificSearchTexts: [...item.matchedSpecificSearchTexts]
+    matchedSearchTexts: [...item.matchedSearchTexts]
 })
 
 const uniqueMatchedMemories = (
@@ -482,9 +473,7 @@ export class LivingMemoryAgenticRecallExecutor {
                 toolCallSummaries.push(
                     normalizeToolCallSummary(
                         {
-                            broadSearchTexts: parsedInput.data.broadSearchTexts,
-                            specificSearchTexts:
-                                parsedInput.data.specificSearchTexts,
+                            searchTexts: parsedInput.data.searchTexts,
                             memoryTypes: parsedInput.data.memoryTypes
                         },
                         this.config.memorySearchToolMaxResults
@@ -583,13 +572,8 @@ export class LivingMemoryAgenticRecallExecutor {
                     toolCallSummaries,
                     this.config.memorySearchToolMaxResults
                 ),
-                matchedBroadSearchTexts: uniqueTexts(
-                    uniqueMemories.map((item) => item.matchedBroadSearchTexts)
-                ),
-                matchedSpecificSearchTexts: uniqueTexts(
-                    uniqueMemories.map(
-                        (item) => item.matchedSpecificSearchTexts
-                    )
+                matchedSearchTexts: uniqueTexts(
+                    uniqueMemories.map((item) => item.matchedSearchTexts)
                 ),
                 matchedMemories: uniqueMemories
             }

@@ -45,16 +45,9 @@
                     </div>
                     <div class="snapshot-tool-summary">
                         <span>
-                            短查询：{{
+                            查询：{{
                                 formatSearchTexts(
-                                    item.toolCallSummary.broadSearchTexts
-                                )
-                            }}
-                        </span>
-                        <span>
-                            长查询：{{
-                                formatSearchTexts(
-                                    item.toolCallSummary.specificSearchTexts
+                                    item.toolCallSummary.searchTexts
                                 )
                             }}
                         </span>
@@ -117,16 +110,9 @@
                             </div>
                             <div class="snapshot-match-texts">
                                 <span>
-                                    短命中：{{
+                                    命中查询：{{
                                         formatSearchTexts(
-                                            memory.matchedBroadSearchTexts
-                                        )
-                                    }}
-                                </span>
-                                <span>
-                                    长命中：{{
-                                        formatSearchTexts(
-                                            memory.matchedSpecificSearchTexts
+                                            memory.matchedSearchTexts
                                         )
                                     }}
                                 </span>

@@ -21,8 +21,7 @@ type EmbeddingSearchEngineConfig = Pick<
 >
 
 interface EmbeddingSearchQuery {
-    broadTexts: string[]
-    specificTexts: string[]
+    texts: string[]
 }
 
 interface EmbeddingSearchOptions {
@@ -50,8 +49,7 @@ export const createEmbeddingSearchCache = (): EmbeddingSearchCache => ({
 interface MergedScore {
     entry: MemoryEntryRecord
     score: number
-    matchedBroad: string[]
-    matchedSpecific: string[]
+    matchedTexts: string[]
 }
 
 export class LivingMemoryEmbeddingSearchEngine {
@@ -99,14 +97,12 @@ export class LivingMemoryEmbeddingSearchEngine {
         }
 
         // 3. 批量 embed 查询文本（每次调用的查询不同）
-        const broadTexts = options.query.broadTexts
-        const specificTexts = options.query.specificTexts
-        const allTexts = [...broadTexts, ...specificTexts]
-        if (allTexts.length === 0) {
+        const texts = options.query.texts
+        if (texts.length === 0) {
             return []
         }
 
-        const queryVectors = await cache.embeddings.embedDocuments(allTexts)
+        const queryVectors = await cache.embeddings.embedDocuments(texts)
         if (queryVectors.length === 0 || queryVectors[0].length === 0) {
             throw new Error('agentic recall embedding query vectors are empty')
         }
@@ -145,10 +141,7 @@ export class LivingMemoryEmbeddingSearchEngine {
 
         for (let qi = 0; qi < queryVectors.length; qi++) {
             const queryVector = queryVectors[qi]
-            const isBroad = qi < broadTexts.length
-            const text = isBroad
-                ? broadTexts[qi]
-                : specificTexts[qi - broadTexts.length]
+            const text = texts[qi]
 
             const ranked = rankEntriesByQueryVector(
                 filtered,
@@ -162,8 +155,7 @@ export class LivingMemoryEmbeddingSearchEngine {
                     merged = {
                         entry,
                         score: -Infinity,
-                        matchedBroad: [],
-                        matchedSpecific: []
+                        matchedTexts: []
                     }
                     mergedByEntry.set(entry.id, merged)
                 }
@@ -171,11 +163,7 @@ export class LivingMemoryEmbeddingSearchEngine {
                     merged.score = score
                 }
                 if (score > 0) {
-                    if (isBroad) {
-                        merged.matchedBroad.push(text)
-                    } else {
-                        merged.matchedSpecific.push(text)
-                    }
+                    merged.matchedTexts.push(text)
                 }
             }
         }
@@ -183,7 +171,7 @@ export class LivingMemoryEmbeddingSearchEngine {
         return [...mergedByEntry.values()]
             .sort((left, right) => right.score - left.score)
             .slice(0, options.maxCandidates)
-            .map(({ entry, matchedBroad, matchedSpecific }) => ({
+            .map(({ entry, matchedTexts }) => ({
                 id: entry.id,
                 type: entry.type,
                 content: entry.content,
@@ -192,8 +180,7 @@ export class LivingMemoryEmbeddingSearchEngine {
                 importance: entry.importance,
                 createdAt: entry.createdAt,
                 updatedAt: entry.updatedAt,
-                matchedBroadSearchTexts: matchedBroad,
-                matchedSpecificSearchTexts: matchedSpecific
+                matchedSearchTexts: matchedTexts
             }))
     }
 

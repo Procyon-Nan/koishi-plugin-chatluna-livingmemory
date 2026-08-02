@@ -71,12 +71,11 @@ it('formats importance values and distinguishes snapshot strategies', () => {
             {
                 finalText: 'result',
                 toolCallSummary: {
-                    broadSearchTexts: ['query'],
+                    searchTexts: ['query'],
                     memoryTypes: ['all'],
                     maxCandidates: 30
                 },
-                matchedBroadSearchTexts: [],
-                matchedSpecificSearchTexts: [],
+                matchedSearchTexts: [],
                 matchedMemories: [
                     {
                         type: 'fact',
@@ -86,8 +85,7 @@ it('formats importance values and distinguishes snapshot strategies', () => {
                         importance: 0.8,
                         createdAt: new Date('2026-07-01T00:00:00.000Z'),
                         updatedAt: new Date('2026-07-01T00:00:00.000Z'),
-                        matchedBroadSearchTexts: [],
-                        matchedSpecificSearchTexts: []
+                        matchedSearchTexts: []
                     }
                 ]
             }
