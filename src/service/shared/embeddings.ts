@@ -1,4 +1,5 @@
 import type { MemoryEntryRecord } from '../../contracts/memory'
+import { cosineSimilarity } from './utils'
 
 export interface EmbeddingsLike {
     embedDocuments(texts: string[]): Promise<number[][]>
@@ -103,4 +104,33 @@ export async function ensureEntryEmbeddings(
     }
 
     return result
+}
+
+export interface ScoredEntry {
+    entry: MemoryEntryRecord
+    score: number
+}
+
+/**
+ * 对每条记忆计算与查询向量的余弦相似度，按分数降序排列。
+ * 向量缺失或维度不匹配时 throw，与 LivingMemoryRetriever 原有行为一致。
+ */
+export const rankEntriesByQueryVector = (
+    entries: readonly MemoryEntryRecord[],
+    embeddingMap: Map<string, number[]>,
+    queryVector: number[]
+): ScoredEntry[] => {
+    return entries
+        .map((entry) => {
+            const vector = embeddingMap.get(entry.id)
+            if (vector == null || vector.length !== queryVector.length) {
+                throw new Error(`entry embedding invalid: id=${entry.id}`)
+            }
+
+            return {
+                entry,
+                score: cosineSimilarity(queryVector, vector)
+            }
+        })
+        .sort((left, right) => right.score - left.score)
 }

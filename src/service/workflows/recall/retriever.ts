@@ -4,9 +4,10 @@ import type {
     RecallRepository,
     RetrievedMemoryItem
 } from '../../../contracts/workflows'
-import { cosineSimilarity, isModelConfigured } from '../../shared/utils'
+import { isModelConfigured } from '../../shared/utils'
 import {
     ensureEntryEmbeddings,
+    rankEntriesByQueryVector,
     toMemoryRetrievalText
 } from '../../shared/embeddings'
 
@@ -73,23 +74,16 @@ export class LivingMemoryRetriever {
             }
         )
 
-        const embeddingResults = entries
-            .map((entry) => {
-                const vector = vectorById.get(entry.id)
-                if (vector == null || vector.length !== queryVector.length) {
-                    throw new Error(
-                        `memory retrieve entry embedding invalid: id=${entry.id}`
-                    )
-                }
-
-                return {
-                    id: entry.id,
-                    content: entry.content,
-                    retrievalText: toMemoryRetrievalText(entry),
-                    score: cosineSimilarity(queryVector, vector)
-                }
-            })
-            .sort((left, right) => right.score - left.score)
+        const embeddingResults = rankEntriesByQueryVector(
+            entries,
+            vectorById,
+            queryVector
+        ).map(({ entry, score }) => ({
+            id: entry.id,
+            content: entry.content,
+            retrievalText: toMemoryRetrievalText(entry),
+            score
+        }))
 
         // 未配置 reranker 模型时，降级为仅按 embedding 余弦相似度取 top-K，
         // 避免召回因缺少 reranker 而整轮失败。
