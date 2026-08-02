@@ -337,6 +337,17 @@ export class LivingMemoryRepository
         }
 
         if (data.userProfiles.length > 0) {
+            // 用户画像按 presetId + speakerKey 去重：导入前先删除目标预设下
+            // 与导入数据 speakerKey 冲突的已有画像，使导入侧完全覆盖目标侧。
+            const speakerKeys = [
+                ...new Set(
+                    data.userProfiles.map((profile) => profile.speakerKey)
+                )
+            ]
+            await this.ctx.database.remove('living_memory_user_profile', {
+                presetId: targetPresetId,
+                speakerKey: { $in: speakerKeys }
+            })
             await this.ctx.database.upsert(
                 'living_memory_user_profile',
                 data.userProfiles.map((profile) => ({
