@@ -97,10 +97,10 @@ input: |
 
 | 字段 | 说明 |
 | --- | --- |
-| `searchTexts` | 必填，1 到 5 个语义查询短语，每个 2 到 100 个字符 |
+| `searchTexts` | 必填，1 到 6 个语义查询短语，每个 2 到 100 个字符 |
 | `memoryTypes` | 必填，记忆类别，可选 `identity`、`preference`、`fact`、`plan`、`context`、`other`，或单独使用 `all` |
 
-工具返回结果包含记忆 `id`、记忆内容、摘要、关键词、重要度、创建时间、更新时间，以及命中的 `matchedSearchTexts`。返回结果不会包含 `status` 或来源消息。
+工具返回结果包含记忆 `id`、记忆类别、记忆内容、摘要、关键词、重要度、创建时间、更新时间。返回结果不会包含 `status` 或来源消息。
 
 `living_memory_get_messages` 用于在当前预设内按记忆 `id` 批量查看来源消息。它只接受 `living_memory_search` 返回的记忆 `id`，每次最多查询 10 条记忆。返回结果包含目标记忆的基本信息、按 `originIndex` 编号的 `sourceOrigins`，以及未找到或不属于当前预设的 `notFoundMemoryIds`。
 
