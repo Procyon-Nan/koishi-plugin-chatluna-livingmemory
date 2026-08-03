@@ -25,16 +25,16 @@ type LivingMemoryEmbeddingSearchToolConfig = Pick<
 >
 
 export const livingMemoryEmbeddingSearchToolDescription = [
-    'Search active memories in the current preset by semantic similarity.',
+    '在当前预设中按语义相似度搜索活跃记忆。',
     '',
-    'Use this tool when you need to look up existing memories by meaning, not exact wording.',
-    `- searchTexts: required JSON array containing 1 to ${memorySearchMaxTextCount} semantic query phrases. ` +
-        `Each phrase must be ${formatSearchTextLengthRange(searchTextRule)} characters after trimming. ` +
-        'Use broad topics, concrete descriptions, or factual phrases.',
-    '- memoryTypes: required JSON array of memory categories, or ["all"] to search every category.',
-    '- Pass arrays directly. Never encode an array as a JSON string.',
-    '- The tool searches active memories owned by the current preset using embedding cosine similarity.',
-    '- Results are sorted by best similarity score across all provided query texts.'
+    '当你需要按含义查找已有记忆、而非精确匹配措辞时使用此工具。',
+    `- searchTexts：必填 JSON 数组，包含 1 到 ${memorySearchMaxTextCount} 条语义查询短语。` +
+        `每条短语在去除首尾空白后须为 ${formatSearchTextLengthRange(searchTextRule)} 个字符。` +
+        '使用宽泛的话题、具体的描述或事实性表述。',
+    '- memoryTypes：必填 JSON 数组，包含记忆类别；也可传 ["all"] 搜索全部类别。',
+    '- 直接传递数组，禁止把数组编码成 JSON 字符串。',
+    '- 本工具基于嵌入向量余弦相似度搜索当前预设拥有的活跃记忆。',
+    '- 结果按所有查询文本中的最高相似度得分排序。'
 ].join('\n')
 
 type LivingMemoryEmbeddingSearchToolInput = z.infer<

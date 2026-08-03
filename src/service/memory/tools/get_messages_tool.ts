@@ -16,15 +16,15 @@ import {
 type LivingMemoryGetMessagesToolConfig = Pick<LivingMemoryConfig, 'debug'>
 
 export const livingMemoryGetMessagesToolDescription = [
-    'Get source conversation messages for memories in the current preset by memory id.',
+    '按记忆 ID 获取当前预设中记忆的来源对话消息。',
     '',
-    'Use this tool when you need to inspect whether specific memories are supported by their source conversation messages.',
-    `- memoryIds: required JSON array containing 1 to ${memoryGetMessagesMaxIdCount} memory ids from living_memory_search results.`,
-    '- Pass the array directly. Never encode it as a JSON string.',
-    '- The tool only reads memories owned by the current preset.',
-    '- Each result includes the target memory id, type, content, summary, keywords, importance, timestamps, and sourceOrigins.',
-    '- sourceOrigins are indexed with originIndex for display. Missing source origins mean the memory has no recorded source messages.',
-    '- The result also includes notFoundMemoryIds for ids that do not exist in the current preset.'
+    '当你需要查看特定记忆是否有来源对话消息支撑时使用此工具。',
+    `- memoryIds：必填 JSON 数组，包含 1 到 ${memoryGetMessagesMaxIdCount} 个来自 living_memory_search 结果的记忆 ID。`,
+    '- 直接传递数组，禁止把数组编码成 JSON 字符串。',
+    '- 本工具仅读取当前预设拥有的记忆。',
+    '- 每条结果包含目标记忆 ID、类别（type）、内容（content）、摘要（summary）、关键词（keywords）、重要度（importance）、时间戳以及 sourceOrigins。',
+    '- sourceOrigins 以 originIndex 索引展示。缺失的来源表示该记忆没有记录的来源消息。',
+    '- 结果中还包含 notFoundMemoryIds，列出在当前预设中不存在的 ID。'
 ].join('\n')
 
 type LivingMemoryGetMessagesToolInput = z.infer<

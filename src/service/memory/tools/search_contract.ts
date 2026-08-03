@@ -24,11 +24,11 @@ export const countSearchTextCharacters = (value: string) => {
 }
 
 export const formatSearchTextLengthRange = (rule: MemorySearchTextRule) => {
-    return `${rule.minLength} to ${rule.maxLength}`
+    return `${rule.minLength} 到 ${rule.maxLength}`
 }
 
 export const formatSearchTextLengthError = (rule: MemorySearchTextRule) => {
-    return `Each ${rule.fieldName} item must be ${formatSearchTextLengthRange(rule)} characters after trimming.`
+    return `${rule.fieldName} 的每个条目在去除首尾空白后必须是 ${formatSearchTextLengthRange(rule)} 个字符。`
 }
 
 const createSearchTextSchema = (rule: MemorySearchTextRule) =>
@@ -43,9 +43,9 @@ const createSearchTextSchema = (rule: MemorySearchTextRule) =>
     )
 
 const searchTextDescription =
-    `Semantic query phrases. Provide 1 to ${memorySearchMaxTextCount} ` +
-    `phrases, each ${formatSearchTextLengthRange(searchTextRule)} ` +
-    'characters after trimming. Use broad topics, concrete descriptions, or factual phrases.'
+    `语义查询短语。提供 1 到 ${memorySearchMaxTextCount} 条短语，` +
+    `每条在去除首尾空白后为 ${formatSearchTextLengthRange(searchTextRule)} 个字符。` +
+    '使用宽泛的话题、具体的描述或事实性表述。'
 
 export const livingMemoryEmbeddingSearchInputSchema = z.object({
     searchTexts: z
@@ -60,17 +60,15 @@ export const livingMemoryEmbeddingSearchInputSchema = z.object({
             (memoryTypes) =>
                 !memoryTypes.includes('all') || memoryTypes.length === 1,
             {
-                message: 'memoryTypes cannot mix all with other types.'
+                message: 'memoryTypes 不能将 all 与其他类别混用。'
             }
         )
-        .describe(
-            'Memory categories to search. Use concrete categories or all.'
-        )
+        .describe('要搜索的记忆类别。使用具体类别或 all。')
 })
 
 const memoryIdsDescription =
-    `Memory ids to inspect. Provide 1 to ${memoryGetMessagesMaxIdCount} ids ` +
-    'from living_memory_search results.'
+    `要查看的记忆 ID。提供 1 到 ${memoryGetMessagesMaxIdCount} 个 ` +
+    '来自 living_memory_search 结果的 ID。'
 
 export const livingMemoryGetMessagesInputSchema = z.object({
     memoryIds: z

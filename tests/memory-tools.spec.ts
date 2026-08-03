@@ -48,11 +48,11 @@ it('exposes the strict search schema directly to the model-facing tool', async (
     assert.equal(searchTool.schema, livingMemoryEmbeddingSearchInputSchema)
     assert.match(
         livingMemoryEmbeddingSearchToolDescription,
-        /required JSON array/u
+        /必填 JSON 数组/u
     )
     assert.match(
         livingMemoryEmbeddingSearchToolDescription,
-        /Never encode an array/u
+        /禁止把数组编码成 JSON 字符串/u
     )
 
     await rejectsStringifiedArray(
@@ -65,8 +65,8 @@ it('exposes the strict search schema directly to the model-facing tool', async (
 
 it('exposes the strict source-message schema and rejects stringified ids', async () => {
     assert.equal(getMessagesTool.schema, livingMemoryGetMessagesInputSchema)
-    assert.match(livingMemoryGetMessagesToolDescription, /required JSON array/u)
-    assert.match(livingMemoryGetMessagesToolDescription, /Never encode it/u)
+    assert.match(livingMemoryGetMessagesToolDescription, /必填 JSON 数组/u)
+    assert.match(livingMemoryGetMessagesToolDescription, /禁止把数组编码成 JSON 字符串/u)
 
     await rejectsStringifiedArray(
         getMessagesTool.invoke({ memoryIds: '["memory-1"]' } as never)
