@@ -118,9 +118,7 @@ export class LivingMemoryEmbeddingSearchEngine {
                     // 首条查询向量的维度即当前模型输出维度，
                     // 以此让维度不一致的旧缓存向量失效重算。
                     expectedDimension: queryVectors[0].length,
-                    ...(this.config.debug
-                        ? { debug: (msg: string) => this.logger.info(msg) }
-                        : {})
+                    debug: (msg: string) => this.debugLog(msg)
                 }
             )
         }
@@ -175,6 +173,12 @@ export class LivingMemoryEmbeddingSearchEngine {
                 createdAt: entry.createdAt,
                 updatedAt: entry.updatedAt
             }))
+    }
+
+    private debugLog(message: string) {
+        if (this.config.debug) {
+            this.logger.info(message)
+        }
     }
 
     private resolveMemoryTypes(

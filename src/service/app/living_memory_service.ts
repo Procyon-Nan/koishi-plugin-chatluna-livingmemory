@@ -241,9 +241,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
                 stale,
                 {
                     logger: this.serviceLogger,
-                    ...(this.config.debug
-                        ? { debug: (msg: string) => this.debug(msg) }
-                        : {})
+                    debug: (msg: string) => this.debug(msg)
                 }
             )
 
@@ -475,9 +473,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             })),
             {
                 logger: this.serviceLogger,
-                ...(this.config.debug
-                    ? { debug: (msg: string) => this.debug(msg) }
-                    : {})
+                debug: (msg: string) => this.debug(msg)
             }
         )
 
