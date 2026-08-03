@@ -88,6 +88,20 @@ export class LivingMemoryRepository
         return this.entries.getEntriesByPresetAndIds(presetId, ids)
     }
 
+    async getEntriesWithStaleEmbeddings(
+        currentModelId: string
+    ): Promise<MemoryEntryRecord[]> {
+        const all = await this.ctx.database.get('living_memory_entry', {
+            status: 'active'
+        })
+        return all.filter(
+            (entry) =>
+                entry.embeddingModelId !== currentModelId ||
+                !Array.isArray(entry.embedding) ||
+                entry.embedding.length === 0
+        )
+    }
+
     appendMemories(
         scope: MemoryScope,
         sourceOriginMessages: MemorySourceMessage[],

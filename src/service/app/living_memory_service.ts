@@ -190,6 +190,12 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
                 `memory config warning [${warning.code}] ${warning.message}`
             )
         }
+
+        if (isModelConfigured(this.config.embeddingModel)) {
+            this.rebuildStaleEmbeddingsBackground().catch((error) => {
+                this.serviceLogger.warn(error)
+            })
+        }
     }
 
     validateConfig(): MemoryConfigWarning[] {
@@ -203,6 +209,52 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     private debug(message: string) {
         if (this.config.debug) {
             this.serviceLogger.info(message)
+        }
+    }
+
+    private async rebuildStaleEmbeddingsBackground() {
+        try {
+            const result = await this.ctx.chatluna.createEmbeddings(
+                this.config.embeddingModel
+            )
+            if (result?.value == null) {
+                this.serviceLogger.warn(
+                    'memory startup embedding rebuild skipped: ' +
+                        'embedding provider not available, will lazy backfill on recall'
+                )
+                return
+            }
+
+            const stale = await this.repository.getEntriesWithStaleEmbeddings(
+                this.config.embeddingModel
+            )
+            if (stale.length === 0) return
+
+            this.serviceLogger.info(
+                `memory startup embedding rebuild: detected ${stale.length} stale entries, rebuilding in background...`
+            )
+
+            await ensureEntryEmbeddings(
+                result.value,
+                this.repository,
+                this.config.embeddingModel,
+                stale,
+                {
+                    logger: this.serviceLogger,
+                    ...(this.config.debug
+                        ? { debug: (msg: string) => this.debug(msg) }
+                        : {})
+                }
+            )
+
+            this.serviceLogger.info(
+                `memory startup embedding rebuild complete: ${stale.length} entries re-embedded`
+            )
+        } catch (error) {
+            this.serviceLogger.warn(
+                'memory startup embedding rebuild failed, will lazy backfill on recall'
+            )
+            this.serviceLogger.warn(error)
         }
     }
 
