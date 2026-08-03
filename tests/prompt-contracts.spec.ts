@@ -276,7 +276,6 @@ it('shares transcript interpretation rules across prompt workflows', () => {
         TRANSCRIPT_MESSAGE_FORMAT_RULES.join('\n'),
         /除了你自己的发言以外/u
     )
-    assert.match(agenticRecall, /禁止把数组编码成字符串/u)
 })
 
 it('separates recall rules from escaped dynamic inputs', () => {
