@@ -45,12 +45,12 @@ import { formatPromptMessagesTrace } from '../../prompts/prompt_format'
 import { isModelConfigured, stringifyModelContent } from '../../shared/utils'
 import type { DebugLogger } from '../../memory/helpers'
 import {
-    livingMemoryEmbeddingSearchInputSchema,
+    livingMemorySearchInputSchema,
     livingMemorySearchToolName
 } from '../../memory/tools/search_contract'
 import {
-    LivingMemoryEmbeddingSearchTool,
-    livingMemoryEmbeddingSearchToolDescription
+    LivingMemorySearchTool,
+    livingMemorySearchToolDescription
 } from '../../memory/tools/embedding_search_tool'
 import {
     createEmbeddingSearchCache,
@@ -66,9 +66,7 @@ type LivingMemoryAgenticRecallConfig = Pick<
     | 'embeddingModel'
 >
 
-type AgenticSearchToolInput = z.infer<
-    typeof livingMemoryEmbeddingSearchInputSchema
->
+type AgenticSearchToolInput = z.infer<typeof livingMemorySearchInputSchema>
 
 interface RecordedAgenticSearchCall {
     inputKey: string
@@ -206,7 +204,7 @@ const toToolOutputText = (output: unknown) => {
 }
 
 const createSearchInputKey = (input: unknown) => {
-    const parsedInput = livingMemoryEmbeddingSearchInputSchema.safeParse(input)
+    const parsedInput = livingMemorySearchInputSchema.safeParse(input)
     return JSON.stringify(parsedInput.success ? parsedInput.data : input)
 }
 
@@ -266,11 +264,11 @@ const formatDecisionOutput = (decision: AgenticRecallDecision) => {
 
 class RecordingLivingMemorySearchTool extends StructuredTool {
     name = livingMemorySearchToolName
-    description = livingMemoryEmbeddingSearchToolDescription
-    schema = livingMemoryEmbeddingSearchInputSchema
+    description = livingMemorySearchToolDescription
+    schema = livingMemorySearchInputSchema
 
     constructor(
-        private readonly delegate: LivingMemoryEmbeddingSearchTool,
+        private readonly delegate: LivingMemorySearchTool,
         private readonly calls: RecordedAgenticSearchCall[],
         private readonly agentContext: { requestId: string }
     ) {
@@ -358,7 +356,7 @@ export class LivingMemoryAgenticRecallExecutor {
         const recordedSearchCalls: RecordedAgenticSearchCall[] = []
         const searchCache = createEmbeddingSearchCache()
         const searchTool = new RecordingLivingMemorySearchTool(
-            new LivingMemoryEmbeddingSearchTool(
+            new LivingMemorySearchTool(
                 this.embeddingSearchEngine,
                 searchCache,
                 this.ctx,
@@ -466,8 +464,9 @@ export class LivingMemoryAgenticRecallExecutor {
         )
 
         for (const call of orderedSearchCalls) {
-            const parsedInput =
-                livingMemoryEmbeddingSearchInputSchema.safeParse(call.input)
+            const parsedInput = livingMemorySearchInputSchema.safeParse(
+                call.input
+            )
             if (parsedInput.success) {
                 toolCallSummaries.push(
                     normalizeToolCallSummary(

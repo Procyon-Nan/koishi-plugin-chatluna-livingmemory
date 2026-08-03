@@ -5,7 +5,7 @@ import type { z } from 'zod'
 import type { LivingMemoryConfig } from '../../../contracts/workflows'
 import {
     formatSearchTextLengthRange,
-    livingMemoryEmbeddingSearchInputSchema,
+    livingMemorySearchInputSchema,
     livingMemorySearchToolName,
     memorySearchMaxTextCount,
     searchTextRule
@@ -19,12 +19,12 @@ import type {
     LivingMemoryEmbeddingSearchEngine
 } from '../../workflows/recall/embedding_search_engine'
 
-type LivingMemoryEmbeddingSearchToolConfig = Pick<
+type LivingMemorySearchToolConfig = Pick<
     LivingMemoryConfig,
     'debug' | 'memorySearchToolMaxResults'
 >
 
-export const livingMemoryEmbeddingSearchToolDescription = [
+export const livingMemorySearchToolDescription = [
     '在当前预设中按语义相似度搜索活跃记忆。',
     '',
     '当你需要按含义查找已有记忆、而非精确匹配措辞时使用此工具。',
@@ -37,22 +37,20 @@ export const livingMemoryEmbeddingSearchToolDescription = [
     '- 结果按所有查询文本中的最高相似度得分排序。'
 ].join('\n')
 
-type LivingMemoryEmbeddingSearchToolInput = z.infer<
-    typeof livingMemoryEmbeddingSearchInputSchema
->
+type LivingMemorySearchToolInput = z.infer<typeof livingMemorySearchInputSchema>
 
-export class LivingMemoryEmbeddingSearchTool extends StructuredTool {
+export class LivingMemorySearchTool extends StructuredTool {
     name = livingMemorySearchToolName
-    description = livingMemoryEmbeddingSearchToolDescription
+    description = livingMemorySearchToolDescription
 
-    schema = livingMemoryEmbeddingSearchInputSchema
+    schema = livingMemorySearchInputSchema
     private readonly runtime: LivingMemoryToolRuntime
 
     constructor(
         private readonly engine: LivingMemoryEmbeddingSearchEngine,
         private readonly cache: EmbeddingSearchCache,
         ctx: Context,
-        private readonly config: LivingMemoryEmbeddingSearchToolConfig
+        private readonly config: LivingMemorySearchToolConfig
     ) {
         super({ verboseParsingErrors: true })
         this.runtime = new LivingMemoryToolRuntime({
@@ -63,7 +61,7 @@ export class LivingMemoryEmbeddingSearchTool extends StructuredTool {
     }
 
     async _call(
-        input: LivingMemoryEmbeddingSearchToolInput,
+        input: LivingMemorySearchToolInput,
         _runManager: unknown,
         runConfig?: ToolRunnableConfig
     ) {

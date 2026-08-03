@@ -5,7 +5,7 @@ import type {
     UserProfileRecord
 } from '../src/contracts/memory'
 import { livingMemoryGetMessagesToolName } from '../src/service/memory/tools/search_contract'
-import { livingMemoryEmbeddingSearchToolDescription } from '../src/service/memory/tools/embedding_search_tool'
+import { livingMemorySearchToolDescription } from '../src/service/memory/tools/embedding_search_tool'
 import { buildAgenticRecallPrompt } from '../src/service/prompts/agentic_recall'
 import { buildDreamPrompt } from '../src/service/prompts/dream'
 import { buildExtractionPrompt } from '../src/service/prompts/extraction'
@@ -244,7 +244,7 @@ it('uses the shared memory entry and user profile output formats', () => {
 
 it('keeps the search tool description within its own capability boundary', () => {
     assert.doesNotMatch(
-        livingMemoryEmbeddingSearchToolDescription,
+        livingMemorySearchToolDescription,
         new RegExp(livingMemoryGetMessagesToolName, 'u')
     )
 })

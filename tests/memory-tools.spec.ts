@@ -6,12 +6,12 @@ import {
     livingMemoryGetMessagesToolDescription
 } from '../src/service/memory/tools/get_messages_tool'
 import {
-    livingMemoryEmbeddingSearchInputSchema,
+    livingMemorySearchInputSchema,
     livingMemoryGetMessagesInputSchema
 } from '../src/service/memory/tools/search_contract'
 import {
-    livingMemoryEmbeddingSearchToolDescription,
-    LivingMemoryEmbeddingSearchTool
+    livingMemorySearchToolDescription,
+    LivingMemorySearchTool
 } from '../src/service/memory/tools/embedding_search_tool'
 import {
     createEmbeddingSearchCache,
@@ -26,7 +26,7 @@ const mockEngine = {
     search: async () => []
 } as unknown as LivingMemoryEmbeddingSearchEngine
 
-const searchTool = new LivingMemoryEmbeddingSearchTool(
+const searchTool = new LivingMemorySearchTool(
     mockEngine,
     createEmbeddingSearchCache(),
     context,
@@ -45,13 +45,13 @@ const rejectsStringifiedArray = async (promise: Promise<unknown>) => {
 }
 
 it('exposes the strict search schema directly to the model-facing tool', async () => {
-    assert.equal(searchTool.schema, livingMemoryEmbeddingSearchInputSchema)
+    assert.equal(searchTool.schema, livingMemorySearchInputSchema)
     assert.match(
-        livingMemoryEmbeddingSearchToolDescription,
+        livingMemorySearchToolDescription,
         /必填 JSON 数组/u
     )
     assert.match(
-        livingMemoryEmbeddingSearchToolDescription,
+        livingMemorySearchToolDescription,
         /禁止把数组编码成 JSON 字符串/u
     )
 

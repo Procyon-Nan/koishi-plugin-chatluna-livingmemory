@@ -6,8 +6,8 @@ import {
     livingMemoryGetMessagesToolDescription
 } from '../service/memory/tools/get_messages_tool'
 import {
-    LivingMemoryEmbeddingSearchTool,
-    livingMemoryEmbeddingSearchToolDescription
+    LivingMemorySearchTool,
+    livingMemorySearchToolDescription
 } from '../service/memory/tools/embedding_search_tool'
 import {
     livingMemoryGetMessagesToolName,
@@ -20,7 +20,7 @@ import {
 } from '../service/workflows/recall/embedding_search_engine'
 
 const toChatLunaStructuredTool = (
-    tool: LivingMemoryEmbeddingSearchTool | LivingMemoryGetMessagesTool
+    tool: LivingMemorySearchTool | LivingMemoryGetMessagesTool
 ): ReturnType<ChatLunaTool['createTool']> => {
     // ChatLuna and this package can resolve different @langchain/core copies in
     // local workspaces, so keep the cast at the registration boundary.
@@ -50,7 +50,7 @@ export function apply(ctx: Context, config: LivingMemoryConfig) {
         const disposeSearch = ctx.chatluna.platform.registerTool(
             livingMemorySearchToolName,
             {
-                description: livingMemoryEmbeddingSearchToolDescription,
+                description: livingMemorySearchToolDescription,
                 selector(_history: unknown[]) {
                     return true
                 },
@@ -60,7 +60,7 @@ export function apply(ctx: Context, config: LivingMemoryConfig) {
                 },
                 createTool() {
                     return toChatLunaStructuredTool(
-                        new LivingMemoryEmbeddingSearchTool(
+                        new LivingMemorySearchTool(
                             searchEngine,
                             createEmbeddingSearchCache(),
                             ctx,

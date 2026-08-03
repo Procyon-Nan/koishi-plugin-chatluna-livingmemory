@@ -47,7 +47,7 @@ const searchTextDescription =
     `每条在去除首尾空白后为 ${formatSearchTextLengthRange(searchTextRule)} 个字符。` +
     '使用宽泛的话题、具体的描述或事实性表述。'
 
-export const livingMemoryEmbeddingSearchInputSchema = z.object({
+export const livingMemorySearchInputSchema = z.object({
     searchTexts: z
         .array(createSearchTextSchema(searchTextRule))
         .min(1)
