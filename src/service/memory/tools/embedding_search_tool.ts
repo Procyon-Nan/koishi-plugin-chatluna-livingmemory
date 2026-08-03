@@ -7,7 +7,9 @@ import {
     formatSearchTextLengthRange,
     livingMemorySearchInputSchema,
     livingMemorySearchToolName,
+    memorySearchMaxKeywordCount,
     memorySearchMaxTextCount,
+    searchKeywordRule,
     searchTextRule
 } from './search_contract'
 import {
@@ -25,16 +27,19 @@ type LivingMemorySearchToolConfig = Pick<
 >
 
 export const livingMemorySearchToolDescription = [
-    '在当前预设中按语义相似度搜索活跃记忆。',
+    '在你的记忆库中搜索记忆。',
     '',
-    '当你需要按含义查找已有记忆、而非精确匹配措辞时使用此工具。',
-    `- searchTexts：必填 JSON 数组，包含 1 到 ${memorySearchMaxTextCount} 条语义查询短语。` +
-        `每条短语在去除首尾空白后须为 ${formatSearchTextLengthRange(searchTextRule)} 个字符。` +
-        '使用宽泛的话题、具体的描述或事实性表述。',
+    '当你需要查找自己的记忆时使用此工具。',
+    `- searchTexts：必填 JSON 数组，包含 1 到 ${memorySearchMaxTextCount} 条语义查询短语，` +
+        `每条在去除首尾空白后须为 ${formatSearchTextLengthRange(searchTextRule)} 个字符。` +
+        '必须包含完整的句子结构（如主谓宾、人物+动作+场景、主语+的+形容词等），' +
+        '使用第一人称的自然语言描述。不同短语应覆盖不同的语义角度。' ,
+    `- searchKeywords：选填 JSON 数组，最多 ${memorySearchMaxKeywordCount} 个精确关键词，` +
+        `每个在去除首尾空白后须为 ${formatSearchTextLengthRange(searchKeywordRule)} 个字符。` +
+        '关键词应为具体实体、名称或术语，不应是完整句子。用于关键词匹配。',
     '- memoryTypes：必填 JSON 数组，包含记忆类别；也可传 ["all"] 搜索全部类别。',
     '- 直接传递数组，禁止把数组编码成 JSON 字符串。',
-    '- 本工具基于嵌入向量余弦相似度搜索当前预设拥有的活跃记忆。',
-    '- 结果按所有查询文本中的最高相似度得分排序。'
+    '- 本工具返回的记忆条目依照计算后的相关度得分排序。'
 ].join('\n')
 
 type LivingMemorySearchToolInput = z.infer<typeof livingMemorySearchInputSchema>

@@ -70,6 +70,7 @@ export interface MemorySnapshotResolvedItem extends MemoryReference {
 
 export interface AgenticMemorySearchToolCallSummary {
     searchTexts: string[]
+    searchKeywords: string[]
     memoryTypes: LivingMemorySearchMemoryType[]
     maxCandidates: number
 }

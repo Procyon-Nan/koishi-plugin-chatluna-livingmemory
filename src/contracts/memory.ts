@@ -39,6 +39,7 @@ export type LivingMemorySearchMemoryType =
 
 export interface LivingMemorySearchInput {
     searchTexts: string[]
+    searchKeywords?: string[]
     memoryTypes: LivingMemorySearchMemoryType[]
 }
 
@@ -66,6 +67,7 @@ export interface MemorySnapshotResolvedReference extends MemoryReference {
 
 export interface AgenticMemorySearchToolCallSummary {
     searchTexts: string[]
+    searchKeywords: string[]
     memoryTypes: LivingMemorySearchMemoryType[]
     maxCandidates: number
 }

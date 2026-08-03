@@ -127,6 +127,7 @@ const normalizeToolCallSummary = (
     maxCandidates: number
 ): AgenticMemorySearchToolCallSummary => ({
     searchTexts: input.searchTexts,
+    searchKeywords: input.searchKeywords ?? [],
     memoryTypes: input.memoryTypes,
     maxCandidates
 })
@@ -138,6 +139,9 @@ const aggregateToolCallSummary = (
     return {
         searchTexts: uniqueTexts(
             summaries.map((summary) => summary.searchTexts)
+        ),
+        searchKeywords: uniqueTexts(
+            summaries.map((summary) => summary.searchKeywords)
         ),
         memoryTypes: uniqueMemoryTypes(
             summaries.map((summary) => summary.memoryTypes)
@@ -472,6 +476,8 @@ export class LivingMemoryAgenticRecallExecutor {
                     normalizeToolCallSummary(
                         {
                             searchTexts: parsedInput.data.searchTexts,
+                            searchKeywords:
+                                parsedInput.data.searchKeywords ?? [],
                             memoryTypes: parsedInput.data.memoryTypes
                         },
                         this.config.memorySearchToolMaxResults
