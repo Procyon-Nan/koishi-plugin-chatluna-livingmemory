@@ -110,6 +110,7 @@ export interface LivingMemoryConfig {
     extractionInterval: number
     recallTopK: number
     memorySearchToolMaxResults: number
+    memorySearchMinSimilarity: number
     debug: boolean
 }
 

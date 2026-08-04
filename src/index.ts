@@ -115,6 +115,15 @@ export const Config: Schema<Config> = Schema.intersect([
                 'living_memory_search 查询工具每次最多返回的记忆条数。'
             )
             .default(30),
+        memorySearchMinSimilarity: Schema.number()
+            .min(0)
+            .max(1)
+            .step(0.05)
+            .description(
+                'living_memory_search 的最低余弦相似度阈值。低于此分数的语义命中将被过滤；' +
+                    '设为 0 表示不设阈值。关键词命中的条目不受此限制。'
+            )
+            .default(0),
         debug: Schema.boolean()
             .description('输出记忆召回、记忆总结和触发诊断日志。')
             .default(false)

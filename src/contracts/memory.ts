@@ -55,6 +55,12 @@ export interface LivingMemorySearchResult extends Pick<
     | 'updatedAt'
 > {}
 
+export interface LivingMemorySearchDetailedResult extends LivingMemorySearchResult {
+    cosineScore: number
+    keywordMatchCount: number
+    boostedScore: number
+}
+
 export interface MemoryReference {
     memoryId: string
     score?: number | null

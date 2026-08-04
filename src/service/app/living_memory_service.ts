@@ -20,6 +20,8 @@ import type {
     LivingMemoryCompletedRound,
     LivingMemoryPresetExport,
     LivingMemoryPresetImportResult,
+    LivingMemorySearchDetailedResult,
+    LivingMemorySearchInput,
     LivingMemoryTranscriptMessage,
     MemoryMutationInput,
     MemoryScope
@@ -43,7 +45,10 @@ import { LivingMemoryPresetCatalog } from '../memory/preset_catalog'
 import { LivingMemoryRecallCoordinator } from '../workflows/recall/coordinator'
 import { LivingMemorySnapshotCache } from '../memory/snapshot/snapshot_cache'
 import { LivingMemoryAgenticRecallExecutor } from '../workflows/recall/agentic_recall'
-import { LivingMemoryEmbeddingSearchEngine } from '../workflows/recall/embedding_search_engine'
+import {
+    createEmbeddingSearchCache,
+    LivingMemoryEmbeddingSearchEngine
+} from '../workflows/recall/embedding_search_engine'
 import type { QueueExtractionOptions } from '../memory/helpers'
 import {
     createLivingMemoryServiceStatus,
@@ -76,6 +81,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     private readonly dreamCoordinator: LivingMemoryDreamCoordinator
     private readonly presetCatalog: LivingMemoryPresetCatalog
     private readonly userProfiles: LivingMemoryUserProfileService
+    private readonly searchEngine: LivingMemoryEmbeddingSearchEngine
 
     constructor(
         public readonly ctx: Context,
@@ -94,15 +100,16 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         const extractor = new LivingMemoryExtractor(ctx, config.extractModel)
         const formatter = new LivingMemoryMessageFormatter()
         const recallQuery = new LivingMemoryRecallQueryBuilder(ctx, config)
+        this.searchEngine = new LivingMemoryEmbeddingSearchEngine(
+            ctx,
+            config,
+            this.repository,
+            ctx.logger('chatluna-livingmemory')
+        )
         const agenticRecall = new LivingMemoryAgenticRecallExecutor(
             ctx,
             config,
-            new LivingMemoryEmbeddingSearchEngine(
-                ctx,
-                config,
-                this.repository,
-                ctx.logger('chatluna-livingmemory')
-            ),
+            this.searchEngine,
             debug
         )
         this.userProfiles = new LivingMemoryUserProfileService(
@@ -382,6 +389,24 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
 
     async getMemory(memoryId: string) {
         return await this.repository.getEntryById(memoryId)
+    }
+
+    async searchMemoriesDetailed(
+        presetId: string,
+        input: LivingMemorySearchInput
+    ): Promise<LivingMemorySearchDetailedResult[]> {
+        return await this.searchEngine.searchDetailed(
+            {
+                presetId,
+                query: {
+                    texts: input.searchTexts,
+                    keywords: input.searchKeywords ?? []
+                },
+                memoryTypes: input.memoryTypes,
+                maxCandidates: this.config.memorySearchToolMaxResults
+            },
+            createEmbeddingSearchCache()
+        )
     }
 
     async getMemorySourceMessages(presetId: string, memoryIds: string[]) {

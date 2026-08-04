@@ -1,5 +1,6 @@
 import { type Context, type Logger } from 'koishi'
 import type {
+    LivingMemorySearchDetailedResult,
     LivingMemorySearchMemoryType,
     LivingMemorySearchResult,
     MemoryEntryRecord
@@ -17,7 +18,7 @@ import {
 
 type EmbeddingSearchEngineConfig = Pick<
     LivingMemoryConfig,
-    'embeddingModel' | 'debug'
+    'embeddingModel' | 'memorySearchMinSimilarity' | 'debug'
 >
 
 interface EmbeddingSearchQuery {
@@ -47,16 +48,18 @@ export const createEmbeddingSearchCache = (): EmbeddingSearchCache => ({
     embeddings: null
 })
 
-interface MergedScore {
-    entry: MemoryEntryRecord
-    score: number
-}
-
 /** 语义命中且关键词也命中时，每个命中关键词的分数增量 */
 const KEYWORD_MATCH_BOOST = 0.15
 
 /** 仅关键词命中（无语义命中）时，每个命中关键词的基础分数 */
 const KEYWORD_ONLY_BASE_SCORE = 0.3
+
+interface ScoredEntry {
+    entry: MemoryEntryRecord
+    cosineScore: number
+    keywordMatchCount: number
+    boostedScore: number
+}
 
 /**
  * 统计 entry.keywords 中与查询关键词精确匹配（大小写不敏感）的数量。
@@ -86,6 +89,29 @@ export class LivingMemoryEmbeddingSearchEngine {
         options: EmbeddingSearchOptions,
         cache: EmbeddingSearchCache
     ): Promise<LivingMemorySearchResult[]> {
+        const scored = await this.searchScored(options, cache)
+        return scored.map(({ entry }) => this.toSearchResult(entry))
+    }
+
+    async searchDetailed(
+        options: EmbeddingSearchOptions,
+        cache: EmbeddingSearchCache
+    ): Promise<LivingMemorySearchDetailedResult[]> {
+        const scored = await this.searchScored(options, cache)
+        return scored.map(
+            ({ entry, cosineScore, keywordMatchCount, boostedScore }) => ({
+                ...this.toSearchResult(entry),
+                cosineScore,
+                keywordMatchCount,
+                boostedScore
+            })
+        )
+    }
+
+    private async searchScored(
+        options: EmbeddingSearchOptions,
+        cache: EmbeddingSearchCache
+    ): Promise<ScoredEntry[]> {
         if (!isModelConfigured(this.config.embeddingModel)) {
             throw new Error('agentic recall embedding model is not configured')
         }
@@ -156,8 +182,11 @@ export class LivingMemoryEmbeddingSearchEngine {
             return []
         }
 
-        // 6. 对每个查询向量调用共享的 rankEntriesByQueryVector，按 best score 合并
-        const mergedByEntry = new Map<string, MergedScore>()
+        // 6. 对每个查询向量调用共享的 rankEntriesByQueryVector，按 best cosine score 合并
+        const bestCosineByEntry = new Map<
+            string,
+            { entry: MemoryEntryRecord; cosineScore: number }
+        >()
 
         for (let qi = 0; qi < queryVectors.length; qi++) {
             const queryVector = queryVectors[qi]
@@ -169,68 +198,86 @@ export class LivingMemoryEmbeddingSearchEngine {
             )
 
             for (const { entry, score } of ranked) {
-                let merged = mergedByEntry.get(entry.id)
-                if (merged == null) {
-                    merged = {
+                const existing = bestCosineByEntry.get(entry.id)
+                if (existing == null) {
+                    bestCosineByEntry.set(entry.id, {
                         entry,
-                        score: -Infinity
-                    }
-                    mergedByEntry.set(entry.id, merged)
+                        cosineScore: score
+                    })
+                } else if (score > existing.cosineScore) {
+                    existing.cosineScore = score
                 }
-                if (score > merged.score) {
-                    merged.score = score
+            }
+        }
+
+        // 6.5 阈值过滤：滤掉 cosine 低于阈值的条目（threshold > 0 时）
+        const threshold = this.config.memorySearchMinSimilarity
+        if (threshold > 0) {
+            for (const [id, record] of bestCosineByEntry) {
+                if (record.cosineScore < threshold) {
+                    bestCosineByEntry.delete(id)
                 }
             }
         }
 
         // 7. 关键词 boost 融合
         const queryKeywords = options.query.keywords
-        if (queryKeywords.length > 0) {
-            const keywordSet = new Set(
-                queryKeywords
-                    .map((k) => k.trim().toLowerCase())
-                    .filter((k) => k.length > 0)
-            )
+        const keywordSet =
+            queryKeywords.length > 0
+                ? new Set(
+                      queryKeywords
+                          .map((k) => k.trim().toLowerCase())
+                          .filter((k) => k.length > 0)
+                  )
+                : null
 
-            if (keywordSet.size > 0) {
-                // 7a. 语义结果中命中关键词的条目：按命中数累加 boost
-                for (const merged of mergedByEntry.values()) {
-                    const matchCount = countKeywordMatches(
-                        merged.entry,
-                        keywordSet
-                    )
-                    if (matchCount > 0) {
-                        merged.score += KEYWORD_MATCH_BOOST * matchCount
-                    }
-                }
+        const scored: ScoredEntry[] = []
 
-                // 7b. 不在语义结果中但关键词命中的条目：以 base score 补充召回
-                for (const entry of filtered) {
-                    if (mergedByEntry.has(entry.id)) continue
-                    const matchCount = countKeywordMatches(entry, keywordSet)
-                    if (matchCount > 0) {
-                        mergedByEntry.set(entry.id, {
-                            entry,
-                            score: KEYWORD_ONLY_BASE_SCORE * matchCount
-                        })
-                    }
+        // 7a. 语义结果中命中关键词的条目：按命中数累加 boost
+        for (const { entry, cosineScore } of bestCosineByEntry.values()) {
+            const matchCount =
+                keywordSet != null ? countKeywordMatches(entry, keywordSet) : 0
+            scored.push({
+                entry,
+                cosineScore,
+                keywordMatchCount: matchCount,
+                boostedScore: cosineScore + KEYWORD_MATCH_BOOST * matchCount
+            })
+        }
+
+        // 7b. 不在语义结果中（被阈值过滤或无语义命中）但关键词命中的条目
+        if (keywordSet != null && keywordSet.size > 0) {
+            for (const entry of filtered) {
+                if (bestCosineByEntry.has(entry.id)) continue
+                const matchCount = countKeywordMatches(entry, keywordSet)
+                if (matchCount > 0) {
+                    scored.push({
+                        entry,
+                        cosineScore: 0,
+                        keywordMatchCount: matchCount,
+                        boostedScore: KEYWORD_ONLY_BASE_SCORE * matchCount
+                    })
                 }
             }
         }
 
-        return [...mergedByEntry.values()]
-            .sort((left, right) => right.score - left.score)
+        // 8. 排序、截断
+        return scored
+            .sort((left, right) => right.boostedScore - left.boostedScore)
             .slice(0, options.maxCandidates)
-            .map(({ entry }) => ({
-                id: entry.id,
-                type: entry.type,
-                content: entry.content,
-                keywords: [...entry.keywords],
-                summary: entry.summary,
-                importance: entry.importance,
-                createdAt: entry.createdAt,
-                updatedAt: entry.updatedAt
-            }))
+    }
+
+    private toSearchResult(entry: MemoryEntryRecord): LivingMemorySearchResult {
+        return {
+            id: entry.id,
+            type: entry.type,
+            content: entry.content,
+            keywords: [...entry.keywords],
+            summary: entry.summary,
+            importance: entry.importance,
+            createdAt: entry.createdAt,
+            updatedAt: entry.updatedAt
+        }
     }
 
     private debugLog(message: string) {
