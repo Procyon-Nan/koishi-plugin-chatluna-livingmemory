@@ -281,9 +281,10 @@
 
 /* Custom Overrides for Input & Selects */
 :deep(.el-input__wrapper),
-:deep(.el-select .el-input__wrapper),
+:deep(.el-select__wrapper),
 :deep(.el-textarea__inner),
 :global(.lm-dialog .el-input__wrapper),
+:global(.lm-dialog .el-select__wrapper),
 :global(.lm-dialog .el-textarea__inner) {
     background-color: var(--lm-bg-secondary) !important;
     border: 1px solid var(--lm-border) !important;
@@ -291,6 +292,8 @@
     border-radius: 4px !important;
     padding: 4px 12px !important;
     color: var(--lm-text-primary) !important;
+    min-height: 34px !important;
+    box-sizing: border-box !important;
     transition:
         border-color 150ms ease,
         background-color 150ms ease;
@@ -301,20 +304,23 @@
 }
 
 :deep(.el-input__wrapper:hover),
-:deep(.el-select .el-input__wrapper:hover),
+:deep(.el-select__wrapper:hover),
 :deep(.el-input__wrapper.is-focus),
-:deep(.el-select .el-input__wrapper.is-focus),
+:deep(.el-select__wrapper.is-focused),
 :deep(.el-textarea__inner:hover),
 :deep(.el-textarea__inner:focus),
 :global(.lm-dialog .el-input__wrapper:hover),
+:global(.lm-dialog .el-select__wrapper:hover),
 :global(.lm-dialog .el-textarea__inner:hover),
 :global(.lm-dialog .el-input__wrapper.is-focus),
+:global(.lm-dialog .el-select__wrapper.is-focused),
 :global(.lm-dialog .el-textarea__inner:focus) {
     border-color: var(--lm-border-hover) !important;
     background-color: var(--lm-bg-primary) !important;
 }
 
 :deep(.el-input__inner),
+:deep(.el-select__placeholder),
 :deep(.el-textarea__inner),
 :global(.lm-dialog .el-input__inner),
 :global(.lm-dialog .el-textarea__inner) {
@@ -324,6 +330,7 @@
 }
 
 :deep(.el-input__inner::placeholder),
+:deep(.el-select__placeholder.is-transparent),
 :deep(.el-textarea__inner::placeholder),
 :global(.lm-dialog .el-input__inner::placeholder) {
     color: var(--lm-text-tertiary) !important;
@@ -468,11 +475,11 @@
     flex-direction: column;
 }
 
-.main-content-card :deep(.el-card__header) {
+.main-content-card > :deep(.el-card__header) {
     display: none;
 }
 
-.main-content-card :deep(.el-card__body) {
+.main-content-card > :deep(.el-card__body) {
     padding: 0 20px 20px 20px !important;
     display: flex;
     flex-direction: column;

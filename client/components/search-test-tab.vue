@@ -3,7 +3,7 @@
         <div class="search-form">
             <div class="form-row">
                 <div class="form-field">
-                    <label class="field-label">searchTexts</label>
+                    <label class="field-label">搜索文本</label>
                     <el-input
                         v-model="searchText"
                         placeholder="输入第一人称描述语句"
@@ -12,7 +12,7 @@
                     />
                 </div>
                 <div class="form-field">
-                    <label class="field-label">searchKeywords（选填）</label>
+                    <label class="field-label">关键词（选填）</label>
                     <el-select
                         v-model="searchKeywords"
                         multiple
@@ -286,6 +286,7 @@ const cosineScoreClass = (score: number): string => {
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
+    line-height: 16px;
     color: var(--lm-text-tertiary);
     font-family: var(--lm-font-mono);
 }
@@ -293,6 +294,18 @@ const cosineScoreClass = (score: number): string => {
 .form-actions {
     flex-shrink: 0;
     padding-bottom: 2px;
+}
+
+/*
+ * Force el-input wrapper to exactly 34px so it matches el-select's
+ * min-height. EP's el-input inner height defaults to calc(32px - 2px)
+ * = 30px; with padding 8px the wrapper would be 38px. We set both
+ * --el-input-height (to shrink the inner element) and an explicit
+ * height on the wrapper for a guaranteed match.
+ */
+.search-form :deep(.el-input__wrapper) {
+    --el-input-height: 28px;
+    height: 34px !important;
 }
 
 /* ---------- Type button group ---------- */
