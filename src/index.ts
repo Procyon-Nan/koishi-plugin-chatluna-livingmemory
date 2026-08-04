@@ -58,25 +58,6 @@ export const Config: Schema<Config> = Schema.intersect([
         ] as const)
             .description('记忆召回策略。')
             .default('embedding-rerank'),
-        enableAutoDream: Schema.boolean()
-            .description(
-                '当某个预设自上次 Dream 后新增记忆达到阈值时，自动触发该预设的 Dream。'
-            )
-            .default(false),
-        autoDreamMemoryGrowthThreshold: Schema.number()
-            .min(10)
-            .max(200)
-            .step(1)
-            .description(
-                '自动 Dream 的新增记忆阈值。预设从未执行过 Dream 时，从该预设全部记忆开始计数。'
-            )
-            .default(30),
-        userProfileMemoryLimit: Schema.number()
-            .min(5)
-            .max(100)
-            .step(1)
-            .description('生成单个用户画像时可送入 LLM 的相关记忆条数上限。')
-            .default(20),
         extractionRounds: Schema.number()
             .min(1)
             .max(100)
@@ -104,7 +85,19 @@ export const Config: Schema<Config> = Schema.intersect([
         debug: Schema.boolean()
             .description('输出记忆召回、记忆总结和触发诊断日志。')
             .default(false)
-    }).description('基础设置'),
+    }).description('基础配置'),
+    Schema.object({
+        mainModel: Schema.dynamic('model')
+            .description(
+                '主 LLM 模型，用于记忆提取和 Dream 记忆整理与合并决策。'
+            )
+            .default('无'),
+        subModel: Schema.dynamic('model')
+            .description(
+                '子 LLM 模型，用于 embedding-rerank 查询改写和 agentic-recall 记忆召回。'
+            )
+            .default('无')
+    }).description('模型配置'),
     Schema.object({
         memorySearchToolMaxResults: Schema.number()
             .min(1)
@@ -125,17 +118,26 @@ export const Config: Schema<Config> = Schema.intersect([
             .default(0)
     }).description('工具配置'),
     Schema.object({
-        mainModel: Schema.dynamic('model')
+        enableAutoDream: Schema.boolean()
             .description(
-                '主 LLM 模型，用于记忆提取和 Dream 记忆整理与合并决策。'
+                '当某个预设自上次 Dream 后新增记忆达到阈值时，自动触发该预设的 Dream。'
             )
-            .default('无'),
-        subModel: Schema.dynamic('model')
+            .default(false),
+        autoDreamMemoryGrowthThreshold: Schema.number()
+            .min(10)
+            .max(200)
+            .step(1)
             .description(
-                '子 LLM 模型，用于 embedding-rerank 查询改写和 agentic-recall 记忆召回。'
+                '自动 Dream 的新增记忆阈值。预设从未执行过 Dream 时，从该预设全部记忆开始计数。'
             )
-            .default('无')
-    }).description('模型配置'),
+            .default(30),
+        userProfileMemoryLimit: Schema.number()
+            .min(5)
+            .max(100)
+            .step(1)
+            .description('生成单个用户画像时可送入 LLM 的相关记忆条数上限。')
+            .default(20)
+    }).description('Dream 流程配置'),
     Schema.object({
         enableRecallQueryRewrite: Schema.boolean()
             .description(
@@ -158,7 +160,7 @@ export const Config: Schema<Config> = Schema.intersect([
                 'embedding-rerank 每次召回时返回的最相关记忆条数上限。'
             )
             .default(5)
-    }).description('embedding-rerank 策略设置')
+    }).description('embedding-rerank 配置')
 ])
 
 export * from './types'
