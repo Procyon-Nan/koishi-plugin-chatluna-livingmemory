@@ -1,6 +1,8 @@
 import type {
     LivingMemoryPresetExport,
     LivingMemoryPresetImportResult,
+    LivingMemorySearchDetailedResult,
+    LivingMemorySearchInput,
     MemoryEntryRecord,
     MemoryEntryStatus,
     MemoryEntryType,
@@ -113,4 +115,8 @@ export interface LivingMemoryConsoleEvents {
         targetPresetId: string,
         data: LivingMemoryPresetExport
     ) => Promise<LivingMemoryPresetImportResult>
+    'living-memory/searchMemoriesDetailed': (
+        presetId: string,
+        input: LivingMemorySearchInput
+    ) => Promise<LivingMemorySearchDetailedResult[]>
 }

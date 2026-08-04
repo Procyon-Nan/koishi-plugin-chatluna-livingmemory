@@ -3,6 +3,8 @@ import type {
     DreamTriggerResult,
     LivingMemoryPresetExport,
     LivingMemoryPresetImportResult,
+    LivingMemorySearchDetailedResult,
+    LivingMemorySearchInput,
     MemoryEntryRecord,
     MemoryEntryStatus,
     MemoryEntryType,
@@ -146,4 +148,11 @@ export async function importPreset(
     data: LivingMemoryPresetExport
 ): Promise<LivingMemoryPresetImportResult> {
     return await send('living-memory/importPreset', targetPresetId, data)
+}
+
+export async function searchMemoriesDetailed(
+    presetId: string,
+    input: LivingMemorySearchInput
+): Promise<LivingMemorySearchDetailedResult[]> {
+    return await send('living-memory/searchMemoriesDetailed', presetId, input)
 }

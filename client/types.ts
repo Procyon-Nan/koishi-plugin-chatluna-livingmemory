@@ -18,6 +18,26 @@ export type MemoryRecallStrategy = 'embedding-rerank' | 'agentic-recall'
 
 export type LivingMemorySearchMemoryType = MemoryEntryType | 'all'
 
+export interface LivingMemorySearchInput {
+    searchTexts: string[]
+    searchKeywords?: string[]
+    memoryTypes: LivingMemorySearchMemoryType[]
+}
+
+export interface LivingMemorySearchDetailedResult {
+    id: string
+    type: MemoryEntryType
+    content: string
+    keywords: string[]
+    summary: string | null
+    importance: number | null
+    createdAt: Date
+    updatedAt: Date
+    cosineScore: number
+    keywordMatchCount: number
+    boostedScore: number
+}
+
 export interface MemorySourceMessage {
     role: 'user' | 'assistant' | 'system'
     speakerLabel?: string

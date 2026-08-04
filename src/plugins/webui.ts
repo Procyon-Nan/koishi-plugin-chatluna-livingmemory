@@ -4,6 +4,7 @@ import { Context } from 'koishi'
 import type {} from '@koishijs/plugin-console'
 import type {
     LivingMemoryPresetExport,
+    LivingMemorySearchInput,
     MemoryMutationInput
 } from '../contracts/memory'
 import type {
@@ -154,5 +155,11 @@ export function apply(ctx: Context, _config?: LivingMemoryConfig) {
         'living-memory/importPreset',
         async (targetPresetId: string, data: LivingMemoryPresetExport) =>
             await service(ctx).importPreset(targetPresetId, data)
+    )
+
+    ctx.console.addListener(
+        'living-memory/searchMemoriesDetailed',
+        async (presetId: string, input: LivingMemorySearchInput) =>
+            await service(ctx).searchMemoriesDetailed(presetId, input)
     )
 }

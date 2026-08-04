@@ -200,6 +200,15 @@
                                 @total-change="jobTotal = $event"
                             />
                         </el-tab-pane>
+
+                        <el-tab-pane name="search-test">
+                            <template #label>
+                                <span class="tab-label-container">
+                                    <span>召回测试</span>
+                                </span>
+                            </template>
+                            <search-test-tab :preset-id="presetId" />
+                        </el-tab-pane>
                     </el-tabs>
                 </el-card>
             </div>
@@ -233,6 +242,7 @@ import JobsTab from './components/jobs-tab.vue'
 import MemoriesTab from './components/memories-tab.vue'
 import MemoryEditorDialog from './components/memory-editor-dialog.vue'
 import ProfilesTab from './components/profiles-tab.vue'
+import SearchTestTab from './components/search-test-tab.vue'
 import SnapshotsTab from './components/snapshots-tab.vue'
 import type {
     LivingMemoryPresetExport,
@@ -240,7 +250,7 @@ import type {
     MemoryEntryRecord
 } from './types'
 
-type DashboardTab = 'memories' | 'profiles' | 'snapshots' | 'jobs'
+type DashboardTab = 'memories' | 'profiles' | 'snapshots' | 'jobs' | 'search-test'
 
 interface RefreshableTab {
     refresh(resetPage?: boolean): Promise<boolean>
