@@ -308,6 +308,38 @@ const cosineScoreClass = (score: number): string => {
     height: 34px !important;
 }
 
+/*
+ * Theme el-select internal tags — EP defaults to primary-light-9
+ * background which renders as a harsh white block in dark mode.
+ * Use subtle bg-secondary + border to match project's plain tag style.
+ * Increase tag size and tighten wrapper gap for a denser look.
+ */
+.search-form :deep(.el-select__wrapper) {
+    padding-top: 2px !important;
+    padding-bottom: 2px !important;
+}
+
+.search-form :deep(.el-select__selection.is-near) {
+    margin-left: -10px;
+}
+
+.search-form :deep(.el-select__selection .el-tag) {
+    background-color: var(--lm-bg-secondary) !important;
+    border-color: var(--lm-border-hover) !important;
+    color: var(--lm-text-primary) !important;
+    font-size: 12px !important;
+    padding: 4px 10px !important;
+}
+
+.search-form :deep(.el-select__selection .el-tag__close) {
+    color: var(--lm-text-tertiary) !important;
+}
+
+.search-form :deep(.el-select__selection .el-tag__close:hover) {
+    background-color: var(--lm-danger) !important;
+    color: #ffffff !important;
+}
+
 /* ---------- Type button group ---------- */
 
 .type-button-group {
