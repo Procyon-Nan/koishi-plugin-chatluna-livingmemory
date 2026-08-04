@@ -33,10 +33,11 @@ export const livingMemorySearchToolDescription = [
     `- searchTexts：必填 JSON 数组，包含 1 到 ${memorySearchMaxTextCount} 条语义查询短语，` +
         `每条在去除首尾空白后须为 ${formatSearchTextLengthRange(searchTextRule)} 个字符。` +
         '必须包含完整的句子结构（如主谓宾、人物+动作+场景、主语+的+形容词等），' +
-        '使用第一人称的自然语言描述。不同短语应覆盖不同的语义角度。' ,
+        '使用第一人称的自然语言描述。不同短语应覆盖不同的语义角度。',
     `- searchKeywords：选填 JSON 数组，最多 ${memorySearchMaxKeywordCount} 个精确关键词，` +
         `每个在去除首尾空白后须为 ${formatSearchTextLengthRange(searchKeywordRule)} 个字符。` +
-        '关键词应为具体实体、名称或术语，不应是完整句子。用于关键词匹配。',
+        '关键词应为具体的事物、活动、地点等实体名称，不应是完整句子。' +
+        '禁止使用用户昵称、用户名或称呼作为关键词，这类词匹配无意义。',
     '- memoryTypes：必填 JSON 数组，包含记忆类别；也可传 ["all"] 搜索全部类别。',
     '- 直接传递数组，禁止把数组编码成 JSON 字符串。',
     '- 本工具返回的记忆条目依照计算后的相关度得分排序。'
@@ -83,7 +84,8 @@ export class LivingMemorySearchTool extends StructuredTool {
             {
                 presetId,
                 query: {
-                    texts: input.searchTexts
+                    texts: input.searchTexts,
+                    keywords: input.searchKeywords ?? []
                 },
                 memoryTypes: input.memoryTypes,
                 maxCandidates: this.config.memorySearchToolMaxResults

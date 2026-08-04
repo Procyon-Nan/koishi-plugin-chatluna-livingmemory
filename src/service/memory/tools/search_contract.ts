@@ -62,7 +62,8 @@ const searchTextDescription =
 const searchKeywordDescription =
     `用于关键词匹配的精确关键词。提供 0 到 ${memorySearchMaxKeywordCount} 个关键词，` +
     `每个在去除首尾空白后为 ${formatSearchTextLengthRange(searchKeywordRule)} 个字符。` +
-    '关键词应为具体实体、名称或术语，不应是完整句子。'
+    '关键词应为具体的事物、活动、地点等实体名称，不应是完整句子。' +
+    '禁止使用用户昵称、用户名或称呼作为关键词，这类词匹配无意义。'
 
 export const livingMemorySearchInputSchema = z.object({
     searchTexts: z

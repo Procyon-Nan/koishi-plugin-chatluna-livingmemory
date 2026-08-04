@@ -22,6 +22,7 @@ type EmbeddingSearchEngineConfig = Pick<
 
 interface EmbeddingSearchQuery {
     texts: string[]
+    keywords: string[]
 }
 
 interface EmbeddingSearchOptions {
@@ -49,6 +50,28 @@ export const createEmbeddingSearchCache = (): EmbeddingSearchCache => ({
 interface MergedScore {
     entry: MemoryEntryRecord
     score: number
+}
+
+/** 语义命中且关键词也命中时，每个命中关键词的分数增量 */
+const KEYWORD_MATCH_BOOST = 0.15
+
+/** 仅关键词命中（无语义命中）时，每个命中关键词的基础分数 */
+const KEYWORD_ONLY_BASE_SCORE = 0.3
+
+/**
+ * 统计 entry.keywords 中与查询关键词精确匹配（大小写不敏感）的数量。
+ */
+const countKeywordMatches = (
+    entry: Pick<MemoryEntryRecord, 'keywords'>,
+    keywordSet: Set<string>
+): number => {
+    let count = 0
+    for (const kw of entry.keywords) {
+        if (keywordSet.has(kw.toLowerCase())) {
+            count += 1
+        }
+    }
+    return count
 }
 
 export class LivingMemoryEmbeddingSearchEngine {
@@ -156,6 +179,41 @@ export class LivingMemoryEmbeddingSearchEngine {
                 }
                 if (score > merged.score) {
                     merged.score = score
+                }
+            }
+        }
+
+        // 7. 关键词 boost 融合
+        const queryKeywords = options.query.keywords
+        if (queryKeywords.length > 0) {
+            const keywordSet = new Set(
+                queryKeywords
+                    .map((k) => k.trim().toLowerCase())
+                    .filter((k) => k.length > 0)
+            )
+
+            if (keywordSet.size > 0) {
+                // 7a. 语义结果中命中关键词的条目：按命中数累加 boost
+                for (const merged of mergedByEntry.values()) {
+                    const matchCount = countKeywordMatches(
+                        merged.entry,
+                        keywordSet
+                    )
+                    if (matchCount > 0) {
+                        merged.score += KEYWORD_MATCH_BOOST * matchCount
+                    }
+                }
+
+                // 7b. 不在语义结果中但关键词命中的条目：以 base score 补充召回
+                for (const entry of filtered) {
+                    if (mergedByEntry.has(entry.id)) continue
+                    const matchCount = countKeywordMatches(entry, keywordSet)
+                    if (matchCount > 0) {
+                        mergedByEntry.set(entry.id, {
+                            entry,
+                            score: KEYWORD_ONLY_BASE_SCORE * matchCount
+                        })
+                    }
                 }
             }
         }
