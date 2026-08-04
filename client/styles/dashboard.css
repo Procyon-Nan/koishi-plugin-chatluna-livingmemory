@@ -282,6 +282,7 @@
 /* Custom Overrides for Input & Selects */
 :deep(.el-input__wrapper),
 :deep(.el-select .el-input__wrapper),
+:deep(.el-textarea__inner),
 :global(.lm-dialog .el-input__wrapper),
 :global(.lm-dialog .el-textarea__inner) {
     background-color: var(--lm-bg-secondary) !important;
@@ -295,10 +296,16 @@
         background-color 150ms ease;
 }
 
+:deep(.el-textarea__inner) {
+    resize: none !important;
+}
+
 :deep(.el-input__wrapper:hover),
 :deep(.el-select .el-input__wrapper:hover),
 :deep(.el-input__wrapper.is-focus),
 :deep(.el-select .el-input__wrapper.is-focus),
+:deep(.el-textarea__inner:hover),
+:deep(.el-textarea__inner:focus),
 :global(.lm-dialog .el-input__wrapper:hover),
 :global(.lm-dialog .el-textarea__inner:hover),
 :global(.lm-dialog .el-input__wrapper.is-focus),
@@ -308,6 +315,7 @@
 }
 
 :deep(.el-input__inner),
+:deep(.el-textarea__inner),
 :global(.lm-dialog .el-input__inner),
 :global(.lm-dialog .el-textarea__inner) {
     color: var(--lm-text-primary) !important;
@@ -316,6 +324,7 @@
 }
 
 :deep(.el-input__inner::placeholder),
+:deep(.el-textarea__inner::placeholder),
 :global(.lm-dialog .el-input__inner::placeholder) {
     color: var(--lm-text-tertiary) !important;
 }

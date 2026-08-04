@@ -568,3 +568,34 @@ onMounted(() => {
 </script>
 
 <style scoped src="./styles/dashboard.css"></style>
+
+<style>
+/* Themed scrollbars — non-scoped so pseudo-elements reach child components */
+.living-memory-dashboard,
+.living-memory-dashboard * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--lm-border-hover) transparent;
+}
+
+.living-memory-dashboard::-webkit-scrollbar,
+.living-memory-dashboard *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.living-memory-dashboard::-webkit-scrollbar-track,
+.living-memory-dashboard *::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.living-memory-dashboard::-webkit-scrollbar-thumb,
+.living-memory-dashboard *::-webkit-scrollbar-thumb {
+    background-color: var(--lm-border-hover);
+    border-radius: 3px;
+}
+
+.living-memory-dashboard::-webkit-scrollbar-thumb:hover,
+.living-memory-dashboard *::-webkit-scrollbar-thumb:hover {
+    background-color: var(--lm-text-tertiary);
+}
+</style>

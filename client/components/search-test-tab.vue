@@ -3,47 +3,64 @@
         <div class="search-form">
             <div class="form-row">
                 <div class="form-field">
-                    <label class="field-label">searchTexts（每行一条）</label>
+                    <label class="field-label">searchTexts</label>
                     <el-input
-                        v-model="searchTextsRaw"
-                        type="textarea"
-                        :rows="3"
-                        placeholder="我今天去了图书馆&#10;我最近在准备期末考试"
+                        v-model="searchText"
+                        placeholder="输入第一人称描述语句"
+                        clearable
+                        @keyup.enter="doSearch"
                     />
                 </div>
                 <div class="form-field">
-                    <label class="field-label">
-                        searchKeywords（每行一个，选填）
-                    </label>
-                    <el-input
-                        v-model="searchKeywordsRaw"
-                        type="textarea"
-                        :rows="3"
-                        placeholder="考试&#10;图书馆"
+                    <label class="field-label">searchKeywords（选填）</label>
+                    <el-select
+                        v-model="searchKeywords"
+                        multiple
+                        filterable
+                        allow-create
+                        default-first-option
+                        :reserve-keyword="false"
+                        placeholder="输入关键词后回车添加"
+                        :popper-class="
+                            isDark
+                                ? 'lm-select-popper lm-theme-dark'
+                                : 'lm-select-popper lm-theme-light'
+                        "
                     />
                 </div>
             </div>
-            <div class="form-row">
+            <div class="form-row form-row-bottom">
                 <div class="form-field">
-                    <label class="field-label">memoryTypes</label>
-                    <el-select
-                        v-model="selectedTypes"
-                        multiple
-                        placeholder="选择记忆类别"
-                        class="type-select"
-                    >
-                        <el-option label="全部" value="all" />
-                        <el-option
+                    <label class="field-label">记忆类别</label>
+                    <div class="type-button-group">
+                        <button
+                            :class="[
+                                'type-btn',
+                                { active: isAllSelected }
+                            ]"
+                            @click="selectAll"
+                        >
+                            全部
+                        </button>
+                        <button
                             v-for="t in memoryEntryTypes"
                             :key="t"
-                            :label="getMemoryTypeLabel(t)"
-                            :value="t"
-                        />
-                    </el-select>
+                            :class="[
+                                'type-btn',
+                                {
+                                    active:
+                                        !isAllSelected &&
+                                        selectedTypes.includes(t)
+                                }
+                            ]"
+                            @click="toggleType(t)"
+                        >
+                            {{ getMemoryTypeLabel(t) }}
+                        </button>
+                    </div>
                 </div>
                 <div class="form-actions">
                     <el-button
-                        type="primary"
                         :loading="searching"
                         :disabled="!presetId"
                         @click="doSearch"
@@ -54,118 +71,168 @@
             </div>
         </div>
 
-        <div v-if="hasSearched && results.length === 0" class="empty-hint">
-            未找到匹配的记忆。
-        </div>
+        <div v-loading="searching" class="result-panel">
+            <el-empty
+                v-if="hasSearched && !searching && results.length === 0"
+                description="未找到匹配的记忆"
+                :image-size="64"
+            />
 
-        <el-table
-            v-if="results.length > 0"
-            :data="results"
-            stripe
-            class="result-table"
-        >
-            <el-table-column type="index" label="#" width="48" />
-            <el-table-column label="内容" min-width="280">
-                <template #default="{ row }">
-                    <div class="result-content">{{ row.content }}</div>
-                    <div v-if="row.summary" class="result-summary">
-                        {{ row.summary }}
+            <div v-if="results.length > 0" class="result-card-list">
+                <article
+                    v-for="(item, index) in results"
+                    :key="item.id"
+                    :class="[
+                        'result-card',
+                        `result-card--${item.type}`
+                    ]"
+                >
+                    <div class="result-card-main">
+                        <div class="result-card-header">
+                            <div class="result-card-kicker">
+                                <span
+                                    :class="[
+                                        'type-text-span',
+                                        getMemoryTagType(item.type)
+                                    ]"
+                                >
+                                    {{ getMemoryTypeLabel(item.type) }}
+                                </span>
+                                <span class="result-rank">
+                                    #{{ index + 1 }}
+                                </span>
+                            </div>
+                            <div class="score-panel">
+                                <div class="score-item">
+                                    <span class="score-label">cosine</span>
+                                    <span
+                                        :class="[
+                                            'score-value',
+                                            cosineScoreClass(
+                                                item.cosineScore
+                                            )
+                                        ]"
+                                    >
+                                        {{ item.cosineScore.toFixed(4) }}
+                                    </span>
+                                </div>
+                                <div class="score-item">
+                                    <span class="score-label">关键词</span>
+                                    <span
+                                        :class="[
+                                            'score-value',
+                                            item.keywordMatchCount > 0
+                                                ? 'score-hit'
+                                                : 'score-zero'
+                                        ]"
+                                    >
+                                        {{ item.keywordMatchCount }}
+                                    </span>
+                                </div>
+                                <div class="score-divider" />
+                                <div class="score-item">
+                                    <span class="score-label">boosted</span>
+                                    <strong class="score-value score-boosted">
+                                        {{ item.boostedScore.toFixed(4) }}
+                                    </strong>
+                                </div>
+                            </div>
+                        </div>
+
+                        <p
+                            v-if="item.summary"
+                            class="result-card-summary"
+                        >
+                            {{ item.summary }}
+                        </p>
+                        <p class="result-card-content">
+                            {{ item.content }}
+                        </p>
+
+                        <div
+                            v-if="item.keywords.length > 0"
+                            class="result-card-footer"
+                        >
+                            <div class="result-keywords">
+                                <el-tag
+                                    v-for="kw in item.keywords"
+                                    :key="kw"
+                                    size="small"
+                                    effect="plain"
+                                >
+                                    {{ kw }}
+                                </el-tag>
+                            </div>
+                        </div>
                     </div>
-                </template>
-            </el-table-column>
-            <el-table-column label="类型" width="90">
-                <template #default="{ row }">
-                    {{ getMemoryTypeLabel(row.type) }}
-                </template>
-            </el-table-column>
-            <el-table-column label="关键词" min-width="140">
-                <template #default="{ row }">
-                    <el-tag
-                        v-for="kw in row.keywords"
-                        :key="kw"
-                        size="small"
-                        class="result-keyword-tag"
-                    >
-                        {{ kw }}
-                    </el-tag>
-                </template>
-            </el-table-column>
-            <el-table-column label="cosine" width="100" align="center">
-                <template #default="{ row }">
-                    <span :class="cosineScoreClass(row.cosineScore)">
-                        {{ row.cosineScore.toFixed(4) }}
-                    </span>
-                </template>
-            </el-table-column>
-            <el-table-column label="关键词命中" width="90" align="center">
-                <template #default="{ row }">
-                    <span
-                        :class="
-                            row.keywordMatchCount > 0
-                                ? 'keyword-hit'
-                                : 'keyword-miss'
-                        "
-                    >
-                        {{ row.keywordMatchCount }}
-                    </span>
-                </template>
-            </el-table-column>
-            <el-table-column label="boosted" width="100" align="center">
-                <template #default="{ row }">
-                    <strong>{{ row.boostedScore.toFixed(4) }}</strong>
-                </template>
-            </el-table-column>
-        </el-table>
+                </article>
+            </div>
+        </div>
     </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
+import { useColorMode } from '@koishijs/client'
 import { ElMessage } from 'element-plus'
 import * as api from '../api'
-import { getMemoryTypeLabel } from '../utils/display'
-import { memoryEntryTypes } from '../types'
-import type {
-    LivingMemorySearchDetailedResult,
-    LivingMemorySearchInput
+import { getMemoryTypeLabel, getMemoryTagType } from '../utils/display'
+import {
+    memoryEntryTypes,
+    type LivingMemorySearchDetailedResult,
+    type LivingMemorySearchInput,
+    type MemoryEntryType
 } from '../types'
 
 const props = defineProps<{
     presetId: string
 }>()
 
-const searchTextsRaw = ref('')
-const searchKeywordsRaw = ref('')
+const colorMode = useColorMode()
+const isDark = computed(() => colorMode.value === 'dark')
+
+const searchText = ref('')
+const searchKeywords = ref<string[]>([])
 const selectedTypes = ref<string[]>(['all'])
 const searching = ref(false)
 const hasSearched = ref(false)
 const results = ref<LivingMemorySearchDetailedResult[]>([])
 
-const parseLines = (raw: string): string[] =>
-    raw
-        .split('\n')
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0)
+const isAllSelected = computed(() => selectedTypes.value.includes('all'))
+
+const selectAll = () => {
+    selectedTypes.value = ['all']
+}
+
+const toggleType = (type: MemoryEntryType) => {
+    const current = selectedTypes.value.filter((t) => t !== 'all')
+    const idx = current.indexOf(type)
+    if (idx >= 0) {
+        current.splice(idx, 1)
+    } else {
+        current.push(type)
+    }
+    selectedTypes.value = current.length > 0 ? current : ['all']
+}
 
 const doSearch = async () => {
-    const searchTexts = parseLines(searchTextsRaw.value)
-    if (searchTexts.length === 0) {
-        ElMessage.warning('请至少输入一条 searchTexts')
+    const text = searchText.value.trim()
+    if (!text) {
+        ElMessage.warning('请输入搜索内容')
         return
     }
-
-    const searchKeywords = parseLines(searchKeywordsRaw.value)
-    const memoryTypes = selectedTypes.value.length > 0
-        ? selectedTypes.value
-        : ['all']
 
     searching.value = true
     hasSearched.value = true
     try {
         results.value = await api.searchMemoriesDetailed(props.presetId, {
-            searchTexts,
-            searchKeywords: searchKeywords.length > 0 ? searchKeywords : undefined,
-            memoryTypes: memoryTypes as LivingMemorySearchInput['memoryTypes']
+            searchTexts: [text],
+            searchKeywords:
+                searchKeywords.value.length > 0
+                    ? searchKeywords.value
+                    : undefined,
+            memoryTypes:
+                selectedTypes.value as LivingMemorySearchInput['memoryTypes']
         })
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
@@ -177,19 +244,23 @@ const doSearch = async () => {
 }
 
 const cosineScoreClass = (score: number): string => {
-    if (score < 0.3) return 'cosine-low'
-    if (score < 0.5) return 'cosine-mid'
-    return 'cosine-high'
+    if (score < 0.3) return 'score-low'
+    if (score < 0.5) return 'score-mid'
+    return 'score-high'
 }
 </script>
 
+<style scoped src="../styles/tab-content.css"></style>
 <style scoped>
 .search-test-tab {
     display: flex;
     flex-direction: column;
     gap: 16px;
-    padding: 4px 0;
+    flex: 1;
+    min-height: 0;
 }
+
+/* ---------- Search form ---------- */
 
 .search-form {
     display: flex;
@@ -211,65 +282,266 @@ const cosineScoreClass = (score: number): string => {
 }
 
 .field-label {
-    font-size: 13px;
-    color: var(--el-text-color-secondary);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--lm-text-tertiary);
+    font-family: var(--lm-font-mono);
 }
 
 .form-actions {
     flex-shrink: 0;
+    padding-bottom: 2px;
 }
 
-.type-select {
-    width: 100%;
+/* ---------- Type button group ---------- */
+
+.type-button-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
 }
 
-.empty-hint {
-    color: var(--el-text-color-secondary);
-    text-align: center;
-    padding: 24px 0;
-}
-
-.result-table {
-    width: 100%;
-}
-
-.result-content {
-    font-size: 14px;
-    line-height: 1.5;
-    word-break: break-word;
-}
-
-.result-summary {
+.type-btn {
+    padding: 6px 14px;
+    border-radius: 4px;
+    border: 1px solid var(--lm-border);
+    background-color: var(--lm-bg-secondary);
+    color: var(--lm-text-secondary);
     font-size: 12px;
-    color: var(--el-text-color-secondary);
-    margin-top: 4px;
+    font-family: var(--lm-font-sans);
+    cursor: pointer;
+    transition: all 120ms ease;
 }
 
-.result-keyword-tag {
-    margin: 2px 4px 2px 0;
+.type-btn:hover {
+    background-color: var(--lm-bg-hover);
+    color: var(--lm-text-primary);
+    border-color: var(--lm-border-hover);
 }
 
-.cosine-low {
-    color: var(--el-color-danger);
+.type-btn.active {
+    background-color: var(--lm-primary-light);
+    border-color: var(--lm-primary);
+    color: var(--lm-primary);
     font-weight: 600;
 }
 
-.cosine-mid {
-    color: var(--el-color-warning);
+/* ---------- Result panel ---------- */
+
+.result-panel {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 14px;
+    border: 1px solid var(--lm-border);
+    border-radius: 4px;
+    background-color: var(--lm-bg-secondary);
+}
+
+.result-card-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* ---------- Result card (mirrors memory-card structure) ---------- */
+
+.result-card {
+    --memory-accent: var(--lm-primary);
+    position: relative;
+    padding: 16px 16px 16px 18px;
+    border: 1px solid var(--lm-border);
+    border-radius: 6px;
+    background-color: var(--lm-bg-primary);
+    box-shadow: var(--lm-shadow);
+    transition: border-color 150ms ease;
+}
+
+.result-card::before {
+    content: '';
+    position: absolute;
+    inset: 12px auto 12px 0;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background-color: var(--memory-accent);
+}
+
+.result-card:hover {
+    border-color: var(--lm-border-hover);
+}
+
+.result-card--identity {
+    --memory-accent: var(--lm-primary);
+}
+
+.result-card--preference {
+    --memory-accent: var(--lm-success);
+}
+
+.result-card--fact {
+    --memory-accent: var(--lm-text-secondary);
+}
+
+.result-card--plan {
+    --memory-accent: var(--lm-warning);
+}
+
+.result-card--context {
+    --memory-accent: var(--lm-danger);
+}
+
+.result-card--other {
+    --memory-accent: var(--lm-text-tertiary);
+}
+
+.result-card-main {
+    min-width: 0;
+}
+
+/* Header: type + rank (left), scores (right) */
+
+.result-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.result-card-kicker {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.result-rank {
+    font-family: var(--lm-font-mono);
+    font-size: 11px;
+    color: var(--lm-text-tertiary);
+}
+
+/* Score panel */
+
+.score-panel {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.score-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.score-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--lm-text-tertiary);
+    font-family: var(--lm-font-mono);
+}
+
+.score-value {
+    font-family: var(--lm-font-mono);
+    font-size: 13px;
+}
+
+.score-divider {
+    width: 1px;
+    height: 24px;
+    background-color: var(--lm-border);
+}
+
+.score-low {
+    color: var(--lm-danger);
     font-weight: 600;
 }
 
-.cosine-high {
-    color: var(--el-color-success);
+.score-mid {
+    color: var(--lm-warning);
     font-weight: 600;
 }
 
-.keyword-hit {
-    color: var(--el-color-success);
+.score-high {
+    color: var(--lm-success);
     font-weight: 600;
 }
 
-.keyword-miss {
-    color: var(--el-text-color-placeholder);
+.score-hit {
+    color: var(--lm-success);
+    font-weight: 600;
+}
+
+.score-zero {
+    color: var(--lm-text-tertiary);
+}
+
+.score-boosted {
+    font-size: 14px;
+    color: var(--lm-primary);
+}
+
+/* Content */
+
+.result-card-summary {
+    margin: 0 0 4px;
+    color: var(--lm-text-primary);
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.5;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.result-card-content {
+    margin: 8px 0 0;
+    color: var(--lm-text-primary);
+    font-size: 14px;
+    line-height: 1.65;
+    white-space: pre-wrap;
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* Footer */
+
+.result-card-footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--lm-border);
+}
+
+.result-keywords {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+/* Responsive */
+
+@media (max-width: 768px) {
+    .form-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .result-card-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .score-panel {
+        flex-wrap: wrap;
+    }
 }
 </style>
