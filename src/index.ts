@@ -58,12 +58,6 @@ export const Config: Schema<Config> = Schema.intersect([
         ] as const)
             .description('记忆召回策略。')
             .default('embedding-rerank'),
-        extractModel: Schema.dynamic('model')
-            .description('用于从对话中提取记忆的 LLM 模型。')
-            .default('无'),
-        dreamModel: Schema.dynamic('model')
-            .description('用于 Dream 记忆整理与合并决策的 LLM 模型。')
-            .default('无'),
         enableAutoDream: Schema.boolean()
             .description(
                 '当某个预设自上次 Dream 后新增记忆达到阈值时，自动触发该预设的 Dream。'
@@ -107,6 +101,11 @@ export const Config: Schema<Config> = Schema.intersect([
                 '记忆召回流程使用的最近对话轮数，用于查询改写和 agentic-recall 规划（1 轮 = 1 次用户消息 + 1 次助手回复）。'
             )
             .default(3),
+        debug: Schema.boolean()
+            .description('输出记忆召回、记忆总结和触发诊断日志。')
+            .default(false)
+    }).description('基础设置'),
+    Schema.object({
         memorySearchToolMaxResults: Schema.number()
             .min(1)
             .max(60)
@@ -123,22 +122,26 @@ export const Config: Schema<Config> = Schema.intersect([
                 'living_memory_search 的最低余弦相似度阈值。低于此分数的语义命中将被过滤；' +
                     '设为 0 表示不设阈值。关键词命中的条目不受此限制。'
             )
-            .default(0),
-        debug: Schema.boolean()
-            .description('输出记忆召回、记忆总结和触发诊断日志。')
-            .default(false)
-    }).description('基础设置'),
+            .default(0)
+    }).description('工具配置'),
+    Schema.object({
+        mainModel: Schema.dynamic('model')
+            .description(
+                '主 LLM 模型，用于记忆提取和 Dream 记忆整理与合并决策。'
+            )
+            .default('无'),
+        subModel: Schema.dynamic('model')
+            .description(
+                '子 LLM 模型，用于 embedding-rerank 查询改写和 agentic-recall 记忆召回。'
+            )
+            .default('无')
+    }).description('模型配置'),
     Schema.object({
         enableRecallQueryRewrite: Schema.boolean()
             .description(
                 '是否在 embedding-rerank 召回前使用 LLM 根据历史信息改写检索的查询文本。'
             )
             .default(false),
-        recallRewriteModel: Schema.dynamic('model')
-            .description(
-                '用于 embedding-rerank 查询改写的 LLM 模型。仅在启用召回查询改写时使用。'
-            )
-            .default('无'),
         embeddingModel: Schema.dynamic('embeddings')
             .description('用于 embedding-rerank 向量化检索的嵌入模型。')
             .default('无'),
@@ -155,12 +158,7 @@ export const Config: Schema<Config> = Schema.intersect([
                 'embedding-rerank 每次召回时返回的最相关记忆条数上限。'
             )
             .default(5)
-    }).description('embedding-rerank 策略设置'),
-    Schema.object({
-        agenticRecallModel: Schema.dynamic('model')
-            .description('用于 agentic-recall 记忆召回策略的 LLM 模型。')
-            .default('无')
-    }).description('agentic-recall 设置')
+    }).description('embedding-rerank 策略设置')
 ])
 
 export * from './types'

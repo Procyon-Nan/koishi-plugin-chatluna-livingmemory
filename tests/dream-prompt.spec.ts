@@ -63,7 +63,7 @@ const createDreamHarness = (
     const service = new LivingMemoryDreamService(
         ctx,
         {
-            dreamModel: 'test-model',
+            mainModel: 'test-model',
             embeddingModel: 'test-embedding',
             enableUserProfileInjection: false,
             userProfileMemoryLimit: 20

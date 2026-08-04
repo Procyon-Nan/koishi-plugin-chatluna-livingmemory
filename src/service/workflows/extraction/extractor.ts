@@ -38,14 +38,14 @@ export interface LivingMemoryExtractionContext {
 export class LivingMemoryExtractor {
     constructor(
         private readonly ctx: Context,
-        private readonly extractModel: string
+        private readonly mainModel: string
     ) {}
 
     async extractWithTrace(
         input: string,
         context: LivingMemoryExtractionContext
     ): Promise<LivingMemoryExtractionTrace> {
-        if (!isModelConfigured(this.extractModel)) {
+        if (!isModelConfigured(this.mainModel)) {
             return {
                 extracted: [],
                 prompt: null,
@@ -55,7 +55,7 @@ export class LivingMemoryExtractor {
             }
         }
 
-        const model = await this.ctx.chatluna.createChatModel(this.extractModel)
+        const model = await this.ctx.chatluna.createChatModel(this.mainModel)
         if (model.value == null) {
             return {
                 extracted: [],

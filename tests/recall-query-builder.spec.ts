@@ -20,7 +20,7 @@ it('does not recognize [skip] as a recall rewrite control value', async () => {
     const builder = new LivingMemoryRecallQueryBuilder(ctx, {
         enableRecallQueryRewrite: true,
         recallHistoryWindowRounds: 3,
-        recallRewriteModel: 'test-model'
+        subModel: 'test-model'
     })
 
     const unsafeCurrentMessage = {

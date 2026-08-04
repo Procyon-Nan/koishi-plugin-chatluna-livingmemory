@@ -33,38 +33,38 @@ export const validateLivingMemoryConfig = (
 
     if (
         config.extractionInterval > 0 &&
-        !isModelConfigured(config.extractModel)
+        !isModelConfigured(config.mainModel)
     ) {
         warnings.push({
             code: 'extract-model-missing',
-            field: 'extractModel',
+            field: 'mainModel',
             message:
-                '自动记忆提取已启用（extractionInterval > 0），但未配置 extractModel；提取流程将被跳过。'
+                '自动记忆提取已启用（extractionInterval > 0），但未配置 mainModel；提取流程将被跳过。'
         })
     }
 
     if (
         config.recallStrategy === 'embedding-rerank' &&
         config.enableRecallQueryRewrite &&
-        !isModelConfigured(config.recallRewriteModel)
+        !isModelConfigured(config.subModel)
     ) {
         warnings.push({
             code: 'recall-rewrite-model-missing',
-            field: 'recallRewriteModel',
+            field: 'subModel',
             message:
-                '召回查询改写已启用，但未配置 recallRewriteModel；将回退到原始查询。'
+                '召回查询改写已启用，但未配置 subModel；将回退到原始查询。'
         })
     }
 
     if (
         config.recallStrategy === 'agentic-recall' &&
-        !isModelConfigured(config.agenticRecallModel)
+        !isModelConfigured(config.subModel)
     ) {
         warnings.push({
             code: 'agentic-recall-model-missing',
-            field: 'agenticRecallModel',
+            field: 'subModel',
             message:
-                'agentic-recall 已启用，但未配置 agenticRecallModel；记忆召回将失败。'
+                'agentic-recall 已启用，但未配置 subModel；记忆召回将失败。'
         })
     }
 
@@ -80,12 +80,12 @@ export const validateLivingMemoryConfig = (
         })
     }
 
-    if (config.enableAutoDream && !isModelConfigured(config.dreamModel)) {
+    if (config.enableAutoDream && !isModelConfigured(config.mainModel)) {
         warnings.push({
             code: 'auto-dream-model-missing',
-            field: 'dreamModel',
+            field: 'mainModel',
             message:
-                '自动 Dream 已启用，但未配置 dreamModel；自动 Dream 任务将不会创建。'
+                '自动 Dream 已启用，但未配置 mainModel；自动 Dream 任务将不会创建。'
         })
     }
 

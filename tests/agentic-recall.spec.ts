@@ -35,7 +35,7 @@ interface AgenticRecallHarnessOptions {
 }
 
 const config = {
-    agenticRecallModel: 'test/model',
+    subModel: 'test/model',
     embeddingModel: 'test-embedding',
     debug: false,
     memorySearchToolMaxResults: 30,

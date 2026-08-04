@@ -97,7 +97,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             config,
             this.repository
         )
-        const extractor = new LivingMemoryExtractor(ctx, config.extractModel)
+        const extractor = new LivingMemoryExtractor(ctx, config.mainModel)
         const formatter = new LivingMemoryMessageFormatter()
         const recallQuery = new LivingMemoryRecallQueryBuilder(ctx, config)
         this.searchEngine = new LivingMemoryEmbeddingSearchEngine(

@@ -105,7 +105,7 @@ const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
     const service = new LivingMemoryDreamService(
         ctx,
         {
-            dreamModel: 'dream-model',
+            mainModel: 'dream-model',
             embeddingModel: 'embedding-model',
             enableUserProfileInjection,
             userProfileMemoryLimit: 20
@@ -167,7 +167,7 @@ it('locks a Dream preset while its job is running', async () => {
         {
             enableAutoDream: false,
             autoDreamMemoryGrowthThreshold: 1,
-            dreamModel: 'dream-model'
+            mainModel: 'dream-model'
         },
         { run: async () => await dreamResult },
         createDreamCoordinatorRepository(jobStore),
@@ -389,7 +389,7 @@ it('skips auto Dream when memory growth is below the threshold', async () => {
         {
             enableAutoDream: true,
             autoDreamMemoryGrowthThreshold: 3,
-            dreamModel: 'dream-model'
+            mainModel: 'dream-model'
         },
         {
             run: async () => {
@@ -418,7 +418,7 @@ it('starts auto Dream when memory growth reaches the threshold', async () => {
         {
             enableAutoDream: true,
             autoDreamMemoryGrowthThreshold: 3,
-            dreamModel: 'dream-model'
+            mainModel: 'dream-model'
         },
         {
             run: async () => {
@@ -454,7 +454,7 @@ it('clears snapshot cache only when successful Dream changes memories', async ()
             {
                 enableAutoDream: false,
                 autoDreamMemoryGrowthThreshold: 3,
-                dreamModel: 'dream-model'
+                mainModel: 'dream-model'
             },
             { run: async () => result },
             createDreamCoordinatorRepository(jobStore),
@@ -493,7 +493,7 @@ it('clears snapshot cache when Dream fails after possible writes', async () => {
         {
             enableAutoDream: false,
             autoDreamMemoryGrowthThreshold: 3,
-            dreamModel: 'dream-model'
+            mainModel: 'dream-model'
         },
         {
             run: async () => {

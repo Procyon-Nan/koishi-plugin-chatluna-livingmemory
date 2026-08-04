@@ -95,15 +95,13 @@ export interface LivingMemoryConfig {
     enableSnapshotInjection: boolean
     enableUserProfileInjection: boolean
     recallStrategy: MemoryRecallStrategy
-    extractModel: string
-    dreamModel: string
+    mainModel: string
+    subModel: string
     enableAutoDream: boolean
     autoDreamMemoryGrowthThreshold: number
     userProfileMemoryLimit: number
     enableRecallQueryRewrite: boolean
     recallHistoryWindowRounds: number
-    recallRewriteModel: string
-    agenticRecallModel: string
     embeddingModel: string
     rerankModel: string
     extractionRounds: number

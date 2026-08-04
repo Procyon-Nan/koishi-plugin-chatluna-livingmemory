@@ -40,7 +40,7 @@ export type { DreamRunResult } from './types'
 
 type LivingMemoryDreamConfig = Pick<
     LivingMemoryConfig,
-    | 'dreamModel'
+    | 'mainModel'
     | 'embeddingModel'
     | 'enableUserProfileInjection'
     | 'userProfileMemoryLimit'
@@ -84,7 +84,7 @@ export class LivingMemoryDreamService {
             (entry) => entry.status === 'active'
         )
 
-        if (!isModelConfigured(this.config.dreamModel)) {
+        if (!isModelConfigured(this.config.mainModel)) {
             return this.createResult(entries.length, 0, {
                 skippedReason: 'model-not-configured',
                 detail: 'dream skipped: model-not-configured'
@@ -92,7 +92,7 @@ export class LivingMemoryDreamService {
         }
 
         const model = await this.ctx.chatluna.createChatModel(
-            this.config.dreamModel
+            this.config.mainModel
         )
         if (model.value == null) {
             return this.createResult(entries.length, 0, {

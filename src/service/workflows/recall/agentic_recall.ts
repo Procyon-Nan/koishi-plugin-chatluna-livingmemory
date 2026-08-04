@@ -59,7 +59,7 @@ import {
 
 type LivingMemoryAgenticRecallConfig = Pick<
     LivingMemoryConfig,
-    | 'agenticRecallModel'
+    | 'subModel'
     | 'debug'
     | 'memorySearchToolMaxResults'
     | 'recallHistoryWindowRounds'
@@ -320,16 +320,16 @@ export class LivingMemoryAgenticRecallExecutor {
         currentMessage: LivingMemoryTranscriptMessage,
         historyMessages: LivingMemoryTranscriptMessage[]
     ): Promise<LivingMemoryAgenticRecallTrace> {
-        if (!isModelConfigured(this.config.agenticRecallModel)) {
-            throw new Error('agenticRecallModel is not configured.')
+        if (!isModelConfigured(this.config.subModel)) {
+            throw new Error('subModel is not configured.')
         }
 
         const model = await this.ctx.chatluna.createChatModel(
-            this.config.agenticRecallModel
+            this.config.subModel
         )
         const chatModel = model.value
         if (chatModel == null) {
-            throw new Error('agenticRecallModel is unavailable.')
+            throw new Error('subModel is unavailable.')
         }
 
         const assistantLabel = toAssistantLabel(scope)

@@ -13,7 +13,7 @@ import type { MemoryScope } from '../../../contracts/memory'
 
 type LivingMemoryDreamCoordinatorConfig = Pick<
     LivingMemoryConfig,
-    'autoDreamMemoryGrowthThreshold' | 'dreamModel' | 'enableAutoDream'
+    'autoDreamMemoryGrowthThreshold' | 'mainModel' | 'enableAutoDream'
 >
 
 type DreamService = Pick<LivingMemoryDreamService, 'run'>
@@ -52,7 +52,7 @@ export class LivingMemoryDreamCoordinator {
             return
         }
 
-        if (!isModelConfigured(this.config.dreamModel)) {
+        if (!isModelConfigured(this.config.mainModel)) {
             this.debug(
                 [
                     'memory auto dream skipped:',

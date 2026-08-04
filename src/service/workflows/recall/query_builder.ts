@@ -21,7 +21,7 @@ type LivingMemoryRecallQueryConfig = Pick<
     LivingMemoryConfig,
     | 'enableRecallQueryRewrite'
     | 'recallHistoryWindowRounds'
-    | 'recallRewriteModel'
+    | 'subModel'
 >
 
 const normalizeQueryLines = (lines: string[]) => {
@@ -144,7 +144,7 @@ export class LivingMemoryRecallQueryBuilder {
             )
         }
 
-        if (!isModelConfigured(this.config.recallRewriteModel)) {
+        if (!isModelConfigured(this.config.subModel)) {
             return this.fallbackResult(
                 rawInput,
                 cleanedQuery,
@@ -158,7 +158,7 @@ export class LivingMemoryRecallQueryBuilder {
         let model: Awaited<ReturnType<Context['chatluna']['createChatModel']>>
         try {
             model = await this.ctx.chatluna.createChatModel(
-                this.config.recallRewriteModel
+                this.config.subModel
             )
         } catch (error) {
             return this.fallbackResult(
