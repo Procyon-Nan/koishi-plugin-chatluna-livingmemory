@@ -23,13 +23,10 @@ export interface DreamRunResult extends DreamOperationStats {
 }
 
 export type DreamStage = 'active' | 'archived'
+export type DreamTrigger = 'manual' | 'auto'
 
 export type DreamAction =
-    | 'keep'
-    | 'merge'
-    | 'update'
-    | 'archive'
-    | 'deleteSource'
+    'keep' | 'merge' | 'update' | 'archive' | 'deleteSource'
 
 export interface DreamStageResult extends DreamOperationStats {
     stage: DreamStage

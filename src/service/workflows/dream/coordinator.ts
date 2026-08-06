@@ -10,6 +10,7 @@ import type {
     LivingMemoryConfig
 } from '../../../contracts/workflows'
 import type { MemoryScope } from '../../../contracts/memory'
+import type { DreamTrigger } from './types'
 
 type LivingMemoryDreamCoordinatorConfig = Pick<
     LivingMemoryConfig,
@@ -83,7 +84,7 @@ export class LivingMemoryDreamCoordinator {
             return
         }
 
-        const result = await this.run(presetId)
+        const result = await this.run(presetId, 'auto')
         const reason = result.reason == null ? '' : ` reason=${result.reason}`
         this.debug(
             [
@@ -96,7 +97,10 @@ export class LivingMemoryDreamCoordinator {
         )
     }
 
-    async run(presetId: string): Promise<DreamTriggerResult> {
+    async run(
+        presetId: string,
+        trigger: DreamTrigger = 'manual'
+    ): Promise<DreamTriggerResult> {
         if (this.dreamLockByPreset.has(presetId)) {
             const runningJobId = this.dreamLockByPreset.get(presetId)
             return {
@@ -123,7 +127,7 @@ export class LivingMemoryDreamCoordinator {
             )
 
             this.dreamLockByPreset.set(presetId, job.id)
-            this.runJob(scope, job.id)
+            this.runJob(scope, job.id, trigger)
                 .catch((error) => {
                     this.logger.warn(error)
                 })
@@ -150,10 +154,14 @@ export class LivingMemoryDreamCoordinator {
         }
     }
 
-    private async runJob(scope: MemoryScope, jobId: string) {
+    private async runJob(
+        scope: MemoryScope,
+        jobId: string,
+        trigger: DreamTrigger
+    ) {
         try {
             await this.jobTracker.markRunning(jobId)
-            const result = await this.dream.run(scope.presetId)
+            const result = await this.dream.run(scope.presetId, trigger)
             this.debug(
                 [
                     `memory dream completed: jobId=${jobId}`,

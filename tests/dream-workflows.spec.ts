@@ -159,6 +159,7 @@ it('does not start post-Dream user profile generation when disabled', async () =
 
 it('locks a Dream preset while its job is running', async () => {
     const jobStore = createJobStore()
+    const dreamTriggers: string[] = []
     let resolveDream!: (result: DreamRunResult) => void
     const dreamResult = new Promise<DreamRunResult>((resolve) => {
         resolveDream = resolve
@@ -169,7 +170,12 @@ it('locks a Dream preset while its job is running', async () => {
             autoDreamMemoryGrowthThreshold: 1,
             mainModel: 'dream-model'
         },
-        { run: async () => await dreamResult },
+        {
+            run: async (_presetId, trigger) => {
+                dreamTriggers.push(trigger)
+                return await dreamResult
+            }
+        },
         createDreamCoordinatorRepository(jobStore),
         { clearByPreset: () => {} },
         new LivingMemoryJobTracker(jobStore),
@@ -190,6 +196,7 @@ it('locks a Dream preset while its job is running', async () => {
         () => jobStore.jobs[0]?.status === 'completed',
         'Dream completion'
     )
+    assert.deepEqual(dreamTriggers, ['manual'])
 })
 
 const completeDreamOperation = (
@@ -317,10 +324,7 @@ it('delegates each Dream merge to one atomic repository operation', async () => 
     assert.equal(mergeInputs[0]?.sourceDisposition, 'archive')
     assert.deepEqual(
         mergeInputs[0]?.sources.map((source) => source.id),
-        [
-        'source-active-1',
-        'source-active-2'
-        ]
+        ['source-active-1', 'source-active-2']
     )
     assert.equal(mergeInputs[0]?.patch.status, 'active')
     assert.equal(mergeInputs[1]?.sourceDisposition, 'delete')
@@ -414,6 +418,7 @@ it('starts auto Dream when memory growth reaches the threshold', async () => {
     const jobStore = createJobStore()
     let countCalls = 0
     let dreamCalls = 0
+    const dreamTriggers: string[] = []
     const coordinator = new LivingMemoryDreamCoordinator(
         {
             enableAutoDream: true,
@@ -421,8 +426,9 @@ it('starts auto Dream when memory growth reaches the threshold', async () => {
             mainModel: 'dream-model'
         },
         {
-            run: async () => {
+            run: async (_presetId, trigger) => {
                 dreamCalls += 1
+                dreamTriggers.push(trigger)
                 return createDreamRunResult()
             }
         },
@@ -443,6 +449,7 @@ it('starts auto Dream when memory growth reaches the threshold', async () => {
     )
 
     assert.equal(dreamCalls, 1)
+    assert.deepEqual(dreamTriggers, ['auto'])
     assert.equal(jobStore.jobs.length, 1)
 })
 

@@ -4,10 +4,12 @@ import type { LivingMemoryConfig } from '../../../contracts/workflows'
 import { HDBSCAN } from 'hdbscan-ts'
 import {
     type EmbeddingRepositoryLike,
+    type EmbeddingsLike,
     ensureEntryEmbeddings
 } from '../../shared/embeddings'
 import { isModelConfigured, summarizeError } from '../../shared/utils'
-import type { DreamCluster } from './types'
+import { partitionDreamEntries } from './partitioning'
+import type { DreamCluster, DreamTrigger } from './types'
 import {
     HDBSCAN_MIN_CLUSTER_SIZE,
     HDBSCAN_MIN_SAMPLES,
@@ -23,6 +25,18 @@ interface HdbscanGroup {
     entries: MemoryEntryRecord[]
     cohesion: number
 }
+
+interface EmbeddingContext {
+    embeddings: EmbeddingsLike
+    expectedDimension: number
+}
+
+export interface DreamHdbscanResult {
+    labels: number[]
+    probabilities: number[]
+}
+
+export type DreamHdbscanRunner = (vectors: number[][]) => DreamHdbscanResult
 
 // L2 归一化后 euclidean 距离与 cosine 距离单调等价：
 // ||a − b||² = 2 − 2·cos(a, b)（当 ||a|| = ||b|| = 1）。
@@ -43,6 +57,108 @@ const l2Normalize = (vector: number[]): number[] => {
     return result
 }
 
+export const runDreamHdbscan: DreamHdbscanRunner = (vectors) => {
+    const hdbscan = new HDBSCAN({
+        minClusterSize: HDBSCAN_MIN_CLUSTER_SIZE,
+        minSamples: HDBSCAN_MIN_SAMPLES
+    })
+    const labels = hdbscan.fit(vectors)
+    return { labels, probabilities: hdbscan.probabilities_ }
+}
+
+const readVectors = (
+    entries: readonly MemoryEntryRecord[],
+    vectorById: ReadonlyMap<string, number[]>
+) =>
+    entries.map((entry) => {
+        const vector = vectorById.get(entry.id)
+        if (vector == null) {
+            throw new Error(`dream embedding missing: id=${entry.id}`)
+        }
+        return l2Normalize(vector)
+    })
+
+const groupEntriesByLabel = (
+    entries: readonly MemoryEntryRecord[],
+    labels: readonly number[]
+) => {
+    if (labels.length !== entries.length) {
+        throw new Error(
+            `dream hdbscan returned ${labels.length} labels for ${entries.length} entries`
+        )
+    }
+
+    const groups = new Map<number, MemoryEntryRecord[]>()
+    entries.forEach((entry, index) => {
+        const label = labels[index]
+        if (!Number.isInteger(label) || label < -1) {
+            throw new Error(`dream hdbscan returned invalid label: ${label}`)
+        }
+        const group = groups.get(label)
+        if (group == null) {
+            groups.set(label, [entry])
+        } else {
+            group.push(entry)
+        }
+    })
+    return groups
+}
+
+export const buildManualDreamClustersFromVectors = (
+    partitions: readonly MemoryEntryRecord[][],
+    vectorById: ReadonlyMap<string, number[]>,
+    runHdbscan: DreamHdbscanRunner = runDreamHdbscan
+): DreamCluster[] => {
+    const clusters: DreamCluster[] = []
+    const firstPassNoise: MemoryEntryRecord[] = []
+    const appendCluster = (reason: string, entries: MemoryEntryRecord[]) => {
+        clusters.push({
+            id: `cluster-${clusters.length + 1}`,
+            reason,
+            entries
+        })
+    }
+
+    partitions.forEach((partition, partitionIndex) => {
+        const result = runHdbscan(readVectors(partition, vectorById))
+        const groups = groupEntriesByLabel(partition, result.labels)
+        for (const [label, entries] of groups) {
+            if (label === -1) {
+                firstPassNoise.push(...entries)
+            } else {
+                appendCluster(
+                    `hdbscan:primary:${partitionIndex + 1}:${label}`,
+                    entries
+                )
+            }
+        }
+    })
+
+    if (firstPassNoise.length === 0) {
+        return clusters
+    }
+    if (firstPassNoise.length === 1) {
+        appendCluster('hdbscan:final-noise', firstPassNoise)
+        return clusters
+    }
+
+    const secondPass = runHdbscan(readVectors(firstPassNoise, vectorById))
+    const secondPassGroups = groupEntriesByLabel(
+        firstPassNoise,
+        secondPass.labels
+    )
+    const finalNoise = secondPassGroups.get(-1)
+    for (const [label, entries] of secondPassGroups) {
+        if (label !== -1) {
+            appendCluster(`hdbscan:noise:${label}`, entries)
+        }
+    }
+    if (finalNoise != null) {
+        appendCluster('hdbscan:final-noise', finalNoise)
+    }
+    return clusters
+}
+
 export class DreamClusterer {
     constructor(
         private readonly ctx: Context,
@@ -51,46 +167,62 @@ export class DreamClusterer {
         private readonly debug: (message: string) => void
     ) {}
 
-    async buildClusters(entries: MemoryEntryRecord[]): Promise<DreamCluster[]> {
+    async buildClusters(
+        entries: MemoryEntryRecord[],
+        trigger: DreamTrigger
+    ): Promise<DreamCluster[]> {
         if (entries.length < 2) {
             return []
         }
 
-        const vectorById = await this.ensureVectors(entries)
-        if (vectorById == null) {
-            return []
+        if (trigger === 'manual') {
+            return await this.buildManualClusters(entries)
+        }
+        return await this.buildAutomaticClusters(entries)
+    }
+
+    private async buildManualClusters(entries: MemoryEntryRecord[]) {
+        const partitions = partitionDreamEntries(entries)
+        const embeddingContext = await this.createEmbeddingContext(entries)
+        const vectorById = new Map<string, number[]>()
+
+        for (const partition of partitions) {
+            const partitionVectors = await this.ensureVectors(
+                partition,
+                embeddingContext
+            )
+            for (const [id, vector] of partitionVectors) {
+                vectorById.set(id, vector)
+            }
         }
 
-        // 只保留有有效向量的条目，保持向量与条目的索引对齐
-        const indexed = entries
-            .map((entry) => ({
-                entry,
-                vector: vectorById.get(entry.id)
-            }))
-            .filter(
-                (
-                    item
-                ): item is { entry: MemoryEntryRecord; vector: number[] } =>
-                    Array.isArray(item.vector) && item.vector.length > 0
-            )
-        if (indexed.length < 2) {
-            this.debug(
-                `memory dream hdbscan: insufficient valid vectors (${indexed.length}/${entries.length}), clustering skipped`
-            )
-            return []
-        }
+        const clusters = buildManualDreamClustersFromVectors(
+            partitions,
+            vectorById
+        )
+        this.debug(
+            [
+                `memory dream manual clustering: entries=${entries.length}`,
+                `partitions=${partitions.length}`,
+                `clusters=${clusters.length}`
+            ].join(' ')
+        )
+        return clusters
+    }
 
+    private async buildAutomaticClusters(entries: MemoryEntryRecord[]) {
+        const embeddingContext = await this.createEmbeddingContext(entries)
+        const vectorById = await this.ensureVectors(entries, embeddingContext)
+        const indexed = entries.map((entry) => ({
+            entry,
+            vector: vectorById.get(entry.id) as number[]
+        }))
         const normalized = indexed.map((item) => l2Normalize(item.vector))
-
-        const hdbscan = new HDBSCAN({
-            minClusterSize: HDBSCAN_MIN_CLUSTER_SIZE,
-            minSamples: HDBSCAN_MIN_SAMPLES
-        })
-        const labels = hdbscan.fit(normalized)
-        const probabilities = hdbscan.probabilities_
-
-        const distinctClusters = new Set(labels.filter((label) => label !== -1))
-        const noiseCount = labels.filter((label) => label === -1).length
+        const result = runDreamHdbscan(normalized)
+        const distinctClusters = new Set(
+            result.labels.filter((label) => label !== -1)
+        )
+        const noiseCount = result.labels.filter((label) => label === -1).length
         this.debug(
             [
                 `memory dream hdbscan: entries=${indexed.length}`,
@@ -99,75 +231,108 @@ export class DreamClusterer {
             ].join(' ')
         )
 
-        const groups = this.groupByLabel(indexed, labels, probabilities)
+        const groups = this.groupByLabel(
+            indexed,
+            result.labels,
+            result.probabilities
+        )
         if (groups.length === 0) {
             this.debug(
                 'memory dream hdbscan: all points classified as noise, no clusters'
             )
             return []
         }
-
         return this.toDreamClusters(groups)
     }
 
-    private async ensureVectors(
-        entries: MemoryEntryRecord[]
-    ): Promise<Map<string, number[]> | null> {
+    private async createEmbeddingContext(
+        entries: readonly MemoryEntryRecord[]
+    ): Promise<EmbeddingContext> {
         if (!isModelConfigured(this.config.embeddingModel)) {
-            this.debug(
-                'memory dream clustering skipped: embedding model not configured'
-            )
-            return null
+            throw new Error('dream embedding model is not configured')
         }
 
+        let embeddings
         try {
-            const embeddings = await this.ctx.chatluna.createEmbeddings(
+            embeddings = await this.ctx.chatluna.createEmbeddings(
                 this.config.embeddingModel
             )
-            if (embeddings?.value == null) {
-                this.debug(
-                    'memory dream clustering skipped: embedding model unavailable'
-                )
-                return null
-            }
+        } catch (error) {
+            throw new Error(
+                `dream embedding model creation failed: ${summarizeError(error)}`
+            )
+        }
+        if (embeddings?.value == null) {
+            throw new Error('dream embedding model is unavailable')
+        }
 
-            // 维度探测：用一条代表性条目现算一次以探测当前模型输出维度，
-            // 使维度不一致的旧缓存向量失效重算（详见 ensureEntryEmbeddings）。
-            let expectedDimension = 0
-            const probeEntry = entries[0]
-            if (probeEntry != null) {
-                try {
-                    const probeVector = await embeddings.value.embedQuery(
-                        probeEntry.content
-                    )
-                    expectedDimension = probeVector.length
-                } catch (error) {
-                    this.debug(
-                        `memory dream embedding dimension probe failed: ${summarizeError(error)}`
-                    )
-                }
-            }
+        let probeVector: number[]
+        try {
+            probeVector = await embeddings.value.embedQuery(entries[0].content)
+        } catch (error) {
+            throw new Error(
+                `dream embedding dimension probe failed: ${summarizeError(error)}`
+            )
+        }
+        if (
+            !Array.isArray(probeVector) ||
+            probeVector.length === 0 ||
+            probeVector.some((value) => !Number.isFinite(value))
+        ) {
+            throw new Error(
+                'dream embedding dimension probe returned invalid vector'
+            )
+        }
 
-            return await ensureEntryEmbeddings(
-                embeddings.value,
+        return {
+            embeddings: embeddings.value,
+            expectedDimension: probeVector.length
+        }
+    }
+
+    private async ensureVectors(
+        entries: MemoryEntryRecord[],
+        context: EmbeddingContext
+    ): Promise<Map<string, number[]>> {
+        let vectors: Map<string, number[]>
+        try {
+            vectors = await ensureEntryEmbeddings(
+                context.embeddings,
                 this.repository,
                 this.config.embeddingModel,
                 entries,
                 {
                     logger: this.ctx.logger('chatluna-livingmemory'),
                     debug: (message) => this.debug(message),
-                    expectedDimension
+                    expectedDimension: context.expectedDimension
                 }
             )
         } catch (error) {
-            this.debug(
-                [
-                    'memory dream clustering failed: embedding error',
-                    `error=${summarizeError(error)}`
-                ].join(' ')
+            throw new Error(
+                `dream embedding generation failed: ${summarizeError(error)}`
             )
-            return null
         }
+
+        for (const entry of entries) {
+            const vector = vectors.get(entry.id)
+            if (
+                !Array.isArray(vector) ||
+                vector.length !== context.expectedDimension ||
+                vector.some((value) => !Number.isFinite(value))
+            ) {
+                throw new Error(`dream embedding invalid: id=${entry.id}`)
+            }
+            let normSq = 0
+            for (const value of vector) {
+                normSq += value * value
+            }
+            if (normSq === 0) {
+                throw new Error(
+                    `dream embedding is zero vector: id=${entry.id}`
+                )
+            }
+        }
+        return vectors
     }
 
     private groupByLabel(
@@ -225,7 +390,6 @@ export class DreamClusterer {
         const sorted = groups
             .map((group) => ({ group, score: this.scoreCluster(group) }))
             .sort((left, right) => right.score - left.score)
-
         const clusters: DreamCluster[] = []
         const seen = new Set<string>()
 
@@ -262,7 +426,6 @@ export class DreamClusterer {
                 }
             }
         }
-
         return clusters
     }
 }

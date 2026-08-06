@@ -459,7 +459,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     }
 
     async runDream(presetId: string): Promise<DreamTriggerResult> {
-        return await this.dreamCoordinator.run(presetId)
+        return await this.dreamCoordinator.run(presetId, 'manual')
     }
 
     async clearPresetData(presetId: string) {
