@@ -7,7 +7,7 @@
 ## 功能
 
 - 以预设（preset）为核心，全自动、异步地进行长期记忆的生成与召回
-- 标准 ChatLuna 会话会在系统提示词后注入用户画像，并在历史上下文之后、当前用户输入之前注入记忆快照；character（伪装）插件通过预设中的 `{living_memory}` 变量注入记忆快照
+- 标准 ChatLuna 会话会在系统提示词后注入用户画像，并在历史上下文之后、当前用户输入之前注入记忆快照；Character（伪装）插件通过预设中的 `{living_memory}` 变量注入记忆快照和相关用户画像
 - 提供 `embedding-rerank` 与 `agentic-recall（实验性）` 两种记忆召回策略
 - 提供 `living_memory_search` 与 `living_memory_get_messages` 记忆工具，供模型查询记忆并按记忆 id 查看来源消息
 - 通过以 `Dream` 命名的记忆整理流程来执行记忆库的合并、更新与归档
@@ -40,16 +40,14 @@ yarn build chatluna-livingmemory
 
 2. 配置模型：
 
-| 模型类型 | 模型用途 | 是否必需 |
+| 配置项 | 模型用途 | 是否必需 |
 | --- | --- | --- |
-| extractModel | 从历史对话中提取并生成记忆内容 | 必需 |
-| dreamModel | 在 `Dream` 记忆整理流程中进行决策 | 必需 |
-| recallRewriteModel | 在 `embedding-rerank` 策略中生成更合适的查询文本 | 可选 |
-| agenticRecallModel | 在 `agentic-recall` 策略中完成记忆的召回 | `agentic-recall` 必需 |
-| embeddingModel | 在记忆召回中对文本进行向量化 | 必需 |
-| rerankerModel | 使用 `embedding-rerank` 策略中进行召回结果的重排序 | `embedding-rerank` 必需 |
+| `mainModel` | 提取长期记忆，并在 Dream 中整理记忆和生成用户画像 | 启用自动提取或 Dream 时必需 |
+| `subModel` | 改写 `embedding-rerank` 查询，或执行 `agentic-recall` | 查询改写或 `agentic-recall` 启用时必需 |
+| `embeddingModel` | 为记忆检索、模型工具和 Dream 聚类生成向量 | 两种召回策略均必需 |
+| `rerankModel` | 对 `embedding-rerank` 的候选记忆重排序 | 可选；未配置或调用失败时使用 embedding 排序 |
 
-如果你不知道应该如何配置 Embedding 嵌入模型 和 Reranker 重排序模型，请参考[此文档](https://github.com/Procyon-Nan/koishi-plugin-chatluna-livingmemory/blob/main/docs/embedding-reranker-guide.md)进行配置
+如果你不知道应该如何配置 Embedding 嵌入模型和 Reranker 重排序模型，请参考[此文档](https://github.com/Procyon-Nan/koishi-plugin-chatluna-livingmemory/blob/main/docs/embedding-reranker-guide.md)进行配置。
 
 参考测试组合：
 
@@ -59,14 +57,13 @@ yarn build chatluna-livingmemory
 
 3. 在插件配置中选择记忆召回策略：
 
-   - `embedding-rerank`：使用 embedding 检索候选记忆，并通过 reranker 重排序后取 top_k 写入记忆快照。
+   - `embedding-rerank`：可选使用 `subModel` 改写查询，使用 embedding 检索候选记忆，并在 reranker 可用时重排序，最后将 top-K 记忆引用写入快照。
 
-   - `agentic-recall（实验性）`：由 recall agent 结合近期对话和最后一条信息，调用 `living_memory_search` 工具查询记忆，再生成纯文本记忆内容写入记忆快照。
+   - `agentic-recall（实验性）`：由 `subModel` 结合近期对话和当前消息，调用 `living_memory_search` 查询记忆，再将最终记忆文本和搜索轨迹写入快照。
 
+4. 对于 ChatLuna 主插件，在插件配置中开启 `开启记忆快照注入`。开启后，会在历史上下文之后、当前用户输入之前自动注入最近一次成功召回的记忆快照；同一次主插件请求内如果发生工具调用，后续模型调用会继续使用同一份记忆快照注入。开启用户画像注入后，相关用户画像会以 system 语义插入在系统提示词之后，并同样在同一次主插件请求内保持可用。
 
-5. 对于 ChatLuna 主插件，在插件配置中开启 `开启记忆快照注入`。开启后，会在历史上下文之后、当前用户输入之前自动注入最近一次成功召回的记忆快照；同一次主插件请求内如果发生工具调用，后续模型调用会继续使用同一份记忆快照注入。开启用户画像注入后，相关用户画像会以 system 语义插入在系统提示词之后，并同样在同一次主插件请求内保持可用。
-
-6. 对于 Character（伪装）插件，需要在 Character 的预设文件 input 中写入变量以进行记忆快照的注入，例如：
+5. 对于 Character（伪装）插件，需要在 Character 的预设文件 input 中写入变量以注入记忆快照和已启用的用户画像，例如：
 
 ```text
 input: |
@@ -74,7 +71,7 @@ input: |
     {living_memory}
 ```
 
-7. 在 Koishi Console 侧边栏进入 livingmemory WebUI，进行记忆的查看和管理。
+6. 在 Koishi Console 侧边栏进入 livingmemory WebUI，进行记忆的查看和管理。
 
 ## 记忆隔离机制
 
