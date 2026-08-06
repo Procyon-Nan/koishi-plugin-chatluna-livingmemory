@@ -33,6 +33,38 @@ import { LivingMemorySnapshotRepository } from './snapshots'
 import { defineLivingMemoryTables } from './tables'
 import { LivingMemoryUserProfileRepository } from './user_profiles'
 
+const PRESET_IMPORT_BATCH_SIZE = 100
+
+const runPresetImportBatches = async <T>(
+    stage: string,
+    records: readonly T[],
+    applyBatch: (batch: T[]) => Promise<unknown>
+) => {
+    const totalBatches = Math.ceil(records.length / PRESET_IMPORT_BATCH_SIZE)
+
+    for (
+        let offset = 0;
+        offset < records.length;
+        offset += PRESET_IMPORT_BATCH_SIZE
+    ) {
+        const batch = records.slice(offset, offset + PRESET_IMPORT_BATCH_SIZE)
+        const batchNumber = Math.floor(offset / PRESET_IMPORT_BATCH_SIZE) + 1
+
+        try {
+            await applyBatch(batch)
+        } catch (error) {
+            const detail =
+                error instanceof Error ? error.message : String(error)
+            throw new Error(
+                `preset import failed during ${stage} batch ` +
+                    `${batchNumber}/${totalBatches} ` +
+                    `(records ${offset + 1}-${offset + batch.length}): ${detail}`,
+                { cause: error }
+            )
+        }
+    }
+}
+
 export class LivingMemoryRepository
     implements
         RecallRepository,
@@ -353,75 +385,82 @@ export class LivingMemoryRepository
                 resolveImportId('entry', sourceId)
             )
         }
+        const entryRows = data.entries.map((entry) => ({
+            id: resolveEntryImportId(entry.id),
+            presetId: targetPresetId,
+            type: entry.type,
+            status: entry.status,
+            content: entry.content,
+            keywords: entry.keywords,
+            summary: entry.summary,
+            sentiment: entry.sentiment,
+            importance: entry.importance,
+            sourceConversationId: entry.sourceConversationId,
+            sourceOrigins: entry.sourceOrigins,
+            embedding: null,
+            embeddingModelId: null,
+            createdAt: new Date(entry.createdAt),
+            updatedAt: new Date(entry.updatedAt)
+        }))
+        const speakerKeys = [
+            ...new Set(data.userProfiles.map((profile) => profile.speakerKey))
+        ]
+        const userProfileRows = data.userProfiles.map((profile) => ({
+            id: resolveImportId('user-profile', profile.id),
+            presetId: targetPresetId,
+            speakerKey: profile.speakerKey,
+            speakerLabel: profile.speakerLabel,
+            content: profile.content,
+            sourceMemoryIds: profile.sourceMemoryIds.map(resolveEntryImportId),
+            createdAt: new Date(profile.createdAt),
+            updatedAt: new Date(profile.updatedAt)
+        }))
+        const presetSpeakerRows = data.presetSpeakers.map((speaker) => ({
+            id: createPresetSpeakerId(targetPresetId, speaker.speakerKey),
+            presetId: targetPresetId,
+            speakerKey: speaker.speakerKey,
+            speakerLabel: speaker.speakerLabel,
+            speakerId: speaker.speakerId,
+            createdAt: new Date(speaker.createdAt),
+            updatedAt: new Date(speaker.updatedAt)
+        }))
 
-        if (data.entries.length > 0) {
-            await this.ctx.database.upsert(
-                'living_memory_entry',
-                data.entries.map((entry) => ({
-                    id: resolveEntryImportId(entry.id),
-                    presetId: targetPresetId,
-                    type: entry.type,
-                    status: entry.status,
-                    content: entry.content,
-                    keywords: entry.keywords,
-                    summary: entry.summary,
-                    sentiment: entry.sentiment,
-                    importance: entry.importance,
-                    sourceConversationId: entry.sourceConversationId,
-                    sourceOrigins: entry.sourceOrigins,
-                    embedding: null,
-                    embeddingModelId: null,
-                    createdAt: new Date(entry.createdAt),
-                    updatedAt: new Date(entry.updatedAt)
-                }))
+        await this.ctx.database.withTransaction(async (database) => {
+            await runPresetImportBatches(
+                'entries',
+                entryRows,
+                async (batch) => {
+                    await database.upsert('living_memory_entry', batch)
+                }
             )
-        }
 
-        if (data.userProfiles.length > 0) {
             // 用户画像按 presetId + speakerKey 去重：导入前先删除目标预设下
             // 与导入数据 speakerKey 冲突的已有画像，使导入侧完全覆盖目标侧。
-            const speakerKeys = [
-                ...new Set(
-                    data.userProfiles.map((profile) => profile.speakerKey)
-                )
-            ]
-            await this.ctx.database.remove('living_memory_user_profile', {
-                presetId: targetPresetId,
-                speakerKey: { $in: speakerKeys }
-            })
-            await this.ctx.database.upsert(
-                'living_memory_user_profile',
-                data.userProfiles.map((profile) => ({
-                    id: resolveImportId('user-profile', profile.id),
-                    presetId: targetPresetId,
-                    speakerKey: profile.speakerKey,
-                    speakerLabel: profile.speakerLabel,
-                    content: profile.content,
-                    sourceMemoryIds:
-                        profile.sourceMemoryIds.map(resolveEntryImportId),
-                    createdAt: new Date(profile.createdAt),
-                    updatedAt: new Date(profile.updatedAt)
-                }))
+            await runPresetImportBatches(
+                'user profile cleanup',
+                speakerKeys,
+                async (batch) => {
+                    await database.remove('living_memory_user_profile', {
+                        presetId: targetPresetId,
+                        speakerKey: { $in: batch }
+                    })
+                }
             )
-        }
-
-        if (data.presetSpeakers.length > 0) {
-            await this.ctx.database.upsert(
-                'living_memory_preset_speaker',
-                data.presetSpeakers.map((speaker) => ({
-                    id: createPresetSpeakerId(
-                        targetPresetId,
-                        speaker.speakerKey
-                    ),
-                    presetId: targetPresetId,
-                    speakerKey: speaker.speakerKey,
-                    speakerLabel: speaker.speakerLabel,
-                    speakerId: speaker.speakerId,
-                    createdAt: new Date(speaker.createdAt),
-                    updatedAt: new Date(speaker.updatedAt)
-                }))
+            await runPresetImportBatches(
+                'user profiles',
+                userProfileRows,
+                async (batch) => {
+                    await database.upsert('living_memory_user_profile', batch)
+                }
             )
-        }
+            await runPresetImportBatches(
+                'preset speakers',
+                presetSpeakerRows,
+                async (batch) => {
+                    await database.upsert('living_memory_preset_speaker', batch)
+                }
+            )
+        })
 
         return {
             entries: data.entries.length,

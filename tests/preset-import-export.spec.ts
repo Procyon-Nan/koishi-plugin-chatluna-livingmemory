@@ -1,5 +1,28 @@
 import assert from 'node:assert/strict'
 import { withLivingMemoryRepository } from './persistence-test-utils'
+import type {
+    LivingMemoryPresetExport,
+    LivingMemoryPresetExportEntry
+} from '../src/contracts/memory'
+import { createPresetImportId } from '../src/service/persistence/normalizers'
+
+const createExportEntry = (
+    id: string,
+    index: number
+): LivingMemoryPresetExportEntry => ({
+    id,
+    type: 'fact',
+    status: 'active',
+    content: `memory-${index}`,
+    keywords: [`keyword-${index}`],
+    summary: null,
+    sentiment: null,
+    importance: null,
+    sourceConversationId: `conversation-${index}`,
+    sourceOrigins: [],
+    createdAt: '2026-08-06T00:00:00.000Z',
+    updatedAt: '2026-08-06T00:00:00.000Z'
+})
 
 it('copies preset data without moving source records', async () => {
     await withLivingMemoryRepository(async (_ctx, repository) => {
@@ -107,5 +130,108 @@ it('preserves record ids when restoring the source preset', async () => {
         assert.equal(restored.length, 1)
         assert.equal(restored[0].id, memory.id)
         assert.equal(restored[0].content, 'original memory')
+    })
+})
+
+it('imports large preset exports in bounded batches', async () => {
+    await withLivingMemoryRepository(async (_ctx, repository) => {
+        const targetPresetId = 'large-import-target'
+        const entries = Array.from({ length: 1001 }, (_, index) =>
+            createExportEntry(index.toString(16).padStart(64, '0'), index)
+        )
+        const data: LivingMemoryPresetExport = {
+            version: 1,
+            exportedAt: '2026-08-06T00:00:00.000Z',
+            sourcePresetId: 'large-import-source',
+            entries,
+            userProfiles: Array.from({ length: 101 }, (_, index) => ({
+                id: `profile-${index}`,
+                speakerKey: `speaker-${index}`,
+                speakerLabel: `Speaker ${index}`,
+                content: `profile-${index}`,
+                sourceMemoryIds: [entries[index].id],
+                createdAt: '2026-08-06T00:00:00.000Z',
+                updatedAt: '2026-08-06T00:00:00.000Z'
+            })),
+            presetSpeakers: Array.from({ length: 101 }, (_, index) => ({
+                speakerKey: `speaker-${index}`,
+                speakerLabel: `Speaker ${index}`,
+                speakerId: null,
+                createdAt: '2026-08-06T00:00:00.000Z',
+                updatedAt: '2026-08-06T00:00:00.000Z'
+            }))
+        }
+
+        const result = await repository.importPresetData(targetPresetId, data)
+
+        assert.deepEqual(result, {
+            entries: 1001,
+            userProfiles: 101,
+            presetSpeakers: 101
+        })
+        assert.equal(
+            (await repository.listEntriesByPreset(targetPresetId)).length,
+            1001
+        )
+        const profiles =
+            await repository.listUserProfilesByPreset(targetPresetId)
+        assert.equal(profiles.length, 101)
+        const firstProfile = profiles.find(
+            (profile) => profile.speakerKey === 'speaker-0'
+        )
+        assert.ok(firstProfile)
+        assert.deepEqual(firstProfile.sourceMemoryIds, [
+            createPresetImportId('entry', targetPresetId, entries[0].id)
+        ])
+        assert.equal(
+            (await repository.listPresetSpeakers(targetPresetId)).length,
+            101
+        )
+        assert.deepEqual(await repository.listJobsByPreset(targetPresetId), [])
+    })
+})
+
+it('rolls back all batches when a later import batch fails', async () => {
+    await withLivingMemoryRepository(async (_ctx, repository) => {
+        const targetPresetId = 'rollback-import-target'
+        const entries = Array.from({ length: 102 }, (_, index) => {
+            const id =
+                index < 100
+                    ? index.toString(16).padStart(64, '0')
+                    : 'f'.repeat(64)
+            return createExportEntry(id, index)
+        })
+        const data: LivingMemoryPresetExport = {
+            version: 1,
+            exportedAt: '2026-08-06T00:00:00.000Z',
+            sourcePresetId: 'rollback-import-source',
+            entries,
+            userProfiles: [],
+            presetSpeakers: []
+        }
+
+        await assert.rejects(
+            repository.importPresetData(targetPresetId, data),
+            /preset import failed during entries batch 2\/2/
+        )
+        assert.deepEqual(
+            await repository.listEntriesByPreset(targetPresetId),
+            []
+        )
+
+        const created = await repository.createMemory(
+            {
+                conversationId: 'rollback-health-check',
+                presetId: targetPresetId
+            },
+            {
+                type: 'fact',
+                content: 'database remains writable after rollback'
+            }
+        )
+        assert.equal(
+            created.content,
+            'database remains writable after rollback'
+        )
     })
 })
