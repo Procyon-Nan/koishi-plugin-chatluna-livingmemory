@@ -120,7 +120,7 @@ const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
 it('keeps Dream successful when post-Dream user profile generation fails', async () => {
     const harness = createDreamServiceHarness(true)
 
-    const result = await harness.service.run(scope.presetId)
+    const result = await harness.service.run(scope.presetId, 'manual')
 
     assert.match(
         result.detail,
@@ -146,7 +146,7 @@ it('keeps Dream successful when post-Dream user profile generation fails', async
 it('does not start post-Dream user profile generation when disabled', async () => {
     const harness = createDreamServiceHarness(false)
 
-    const result = await harness.service.run(scope.presetId)
+    const result = await harness.service.run(scope.presetId, 'manual')
 
     assert.match(result.detail, /user profiles skipped: disabled/u)
     assert.deepEqual(harness.events, [
@@ -183,8 +183,8 @@ it('locks a Dream preset while its job is running', async () => {
         debug
     )
 
-    const first = await coordinator.run(scope.presetId)
-    const second = await coordinator.run(scope.presetId)
+    const first = await coordinator.runManual(scope.presetId)
+    const second = await coordinator.runManual(scope.presetId)
 
     assert.equal(first.started, true)
     assert.equal(second.started, false)
@@ -475,7 +475,7 @@ it('clears snapshot cache only when successful Dream changes memories', async ()
             debug
         )
 
-        await coordinator.run(scope.presetId)
+        await coordinator.runManual(scope.presetId)
         await waitFor(
             () => jobStore.jobs[0]?.status === 'completed',
             'Dream cache decision'
@@ -518,7 +518,7 @@ it('clears snapshot cache when Dream fails after possible writes', async () => {
         debug
     )
 
-    await coordinator.run(scope.presetId)
+    await coordinator.runManual(scope.presetId)
     await waitFor(() => jobStore.jobs[0]?.status === 'failed', 'Dream failure')
 
     assert.deepEqual(clearedPresets, [scope.presetId])

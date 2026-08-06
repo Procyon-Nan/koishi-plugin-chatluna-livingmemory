@@ -97,9 +97,13 @@ export class LivingMemoryDreamCoordinator {
         )
     }
 
-    async run(
+    runManual(presetId: string): Promise<DreamTriggerResult> {
+        return this.run(presetId, 'manual')
+    }
+
+    private async run(
         presetId: string,
-        trigger: DreamTrigger = 'manual'
+        trigger: DreamTrigger
     ): Promise<DreamTriggerResult> {
         if (this.dreamLockByPreset.has(presetId)) {
             const runningJobId = this.dreamLockByPreset.get(presetId)

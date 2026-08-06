@@ -47,6 +47,7 @@ type LivingMemoryDreamConfig = Pick<
     LivingMemoryConfig,
     | 'mainModel'
     | 'embeddingModel'
+    | 'debug'
     | 'enableUserProfileInjection'
     | 'userProfileMemoryLimit'
 >
@@ -79,7 +80,7 @@ export class LivingMemoryDreamService {
 
     async run(
         presetId: string,
-        trigger: DreamTrigger = 'manual'
+        trigger: DreamTrigger
     ): Promise<DreamRunResult> {
         const entries = await this.repository.listEntriesByPreset(presetId)
         if (entries.length < 2) {
@@ -218,7 +219,7 @@ export class LivingMemoryDreamService {
         }
 
         const clusters = await this.clusterer.buildClusters(entries, trigger)
-        this.debug(
+        this.trace(() =>
             [
                 `memory dream clusters: presetId=${presetId}`,
                 `stage=${stage}`,
@@ -227,9 +228,7 @@ export class LivingMemoryDreamService {
                 clusters
                     .map(
                         (cluster) =>
-                            `${cluster.id} reason=${cluster.reason} ids=${cluster.entries
-                                .map((entry) => entry.id)
-                                .join(',')}`
+                            `${cluster.id} reason=${cluster.reason} entryCount=${cluster.entries.length}`
                     )
                     .join('\n')
             ].join('\n')
@@ -246,7 +245,7 @@ export class LivingMemoryDreamService {
                 cluster,
                 stage
             })
-            this.debug(
+            this.trace(() =>
                 [
                     `memory dream llm input: presetId=${presetId}`,
                     `stage=${stage}`,
@@ -295,7 +294,7 @@ export class LivingMemoryDreamService {
                 continue
             }
 
-            this.debug(
+            this.trace(() =>
                 [
                     `memory dream llm output: presetId=${presetId}`,
                     `stage=${stage}`,
@@ -374,6 +373,12 @@ export class LivingMemoryDreamService {
             skipped: 0,
             skippedReason: options.skippedReason,
             detail: options.detail
+        }
+    }
+
+    private trace(buildMessage: () => string) {
+        if (this.config.debug) {
+            this.debug(buildMessage())
         }
     }
 }

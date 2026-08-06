@@ -65,6 +65,7 @@ const createDreamHarness = (
         {
             mainModel: 'test-model',
             embeddingModel: 'test-embedding',
+            debug: true,
             enableUserProfileInjection: false,
             userProfileMemoryLimit: 20
         },
@@ -96,7 +97,7 @@ it('invokes Dream with system rules and escaped human memory data', async () => 
     ]
     const harness = createDreamHarness([validKeepResult()], memories)
 
-    await harness.service.run('preset-1')
+    await harness.service.run('preset-1', 'manual')
 
     assert.equal(harness.model.invocations.length, 1)
     const messages = harness.model.invocations[0]
@@ -138,7 +139,7 @@ it('accepts a stringified operations array through bounded normalization', async
         })
     ])
 
-    const result = await harness.service.run('preset-1')
+    const result = await harness.service.run('preset-1', 'manual')
 
     assert.equal(harness.model.invocations.length, 1)
     assert.equal(result.kept, 1)
@@ -157,7 +158,7 @@ it('retries Dream once after a non-tool response', async () => {
         validKeepResult()
     ])
 
-    const result = await harness.service.run('preset-1')
+    const result = await harness.service.run('preset-1', 'manual')
 
     assert.equal(harness.model.invocations.length, 2)
     assert.equal(result.kept, 1)
@@ -170,7 +171,7 @@ it('skips a Dream cluster after three invalid structured responses', async () =>
         new AIMessage('第三次普通文本结果')
     ])
 
-    const result = await harness.service.run('preset-1')
+    const result = await harness.service.run('preset-1', 'manual')
 
     assert.equal(harness.model.invocations.length, 3)
     assert.equal(result.skipped, 1)
@@ -184,7 +185,7 @@ it('skips a Dream cluster after three invalid structured responses', async () =>
 it('skips a Dream cluster when the model invocation fails', async () => {
     const harness = createDreamHarness([new Error('network unavailable')])
 
-    const result = await harness.service.run('preset-1')
+    const result = await harness.service.run('preset-1', 'manual')
 
     assert.equal(harness.model.invocations.length, 1)
     assert.equal(result.skipped, 1)
@@ -212,7 +213,7 @@ it('skips a Dream cluster when non-parser protocol errors remain invalid', async
         invalidFunctionResult()
     ])
 
-    const result = await harness.service.run('preset-1')
+    const result = await harness.service.run('preset-1', 'manual')
 
     assert.equal(harness.model.invocations.length, 3)
     assert.equal(result.skipped, 1)
