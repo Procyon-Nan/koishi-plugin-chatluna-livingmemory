@@ -28,7 +28,7 @@ import type {
 } from '../../contracts/workflows'
 import { LivingMemoryEntryRepository } from './entries'
 import { LivingMemoryJobRepository } from './jobs'
-import { createPresetSpeakerId } from './normalizers'
+import { createPresetImportId, createPresetSpeakerId } from './normalizers'
 import { LivingMemorySnapshotRepository } from './snapshots'
 import { defineLivingMemoryTables } from './tables'
 import { LivingMemoryUserProfileRepository } from './user_profiles'
@@ -327,11 +327,38 @@ export class LivingMemoryRepository
         targetPresetId: string,
         data: LivingMemoryPresetExport
     ): Promise<LivingMemoryPresetImportResult> {
+        const isCrossPresetImport = targetPresetId !== data.sourcePresetId
+        const resolveImportId = (
+            recordType: 'entry' | 'user-profile',
+            sourceId: string
+        ) => {
+            if (isCrossPresetImport) {
+                return createPresetImportId(
+                    recordType,
+                    targetPresetId,
+                    sourceId
+                )
+            }
+            return sourceId
+        }
+        const entryIdBySourceId = new Map(
+            data.entries.map((entry) => [
+                entry.id,
+                resolveImportId('entry', entry.id)
+            ])
+        )
+        const resolveEntryImportId = (sourceId: string) => {
+            return (
+                entryIdBySourceId.get(sourceId) ??
+                resolveImportId('entry', sourceId)
+            )
+        }
+
         if (data.entries.length > 0) {
             await this.ctx.database.upsert(
                 'living_memory_entry',
                 data.entries.map((entry) => ({
-                    id: entry.id,
+                    id: resolveEntryImportId(entry.id),
                     presetId: targetPresetId,
                     type: entry.type,
                     status: entry.status,
@@ -365,12 +392,13 @@ export class LivingMemoryRepository
             await this.ctx.database.upsert(
                 'living_memory_user_profile',
                 data.userProfiles.map((profile) => ({
-                    id: profile.id,
+                    id: resolveImportId('user-profile', profile.id),
                     presetId: targetPresetId,
                     speakerKey: profile.speakerKey,
                     speakerLabel: profile.speakerLabel,
                     content: profile.content,
-                    sourceMemoryIds: profile.sourceMemoryIds,
+                    sourceMemoryIds:
+                        profile.sourceMemoryIds.map(resolveEntryImportId),
                     createdAt: new Date(profile.createdAt),
                     updatedAt: new Date(profile.updatedAt)
                 }))

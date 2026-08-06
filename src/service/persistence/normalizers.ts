@@ -54,6 +54,16 @@ export const createPresetSpeakerId = (presetId: string, speakerKey: string) => {
         .digest('hex')
 }
 
+export const createPresetImportId = (
+    recordType: 'entry' | 'user-profile',
+    presetId: string,
+    sourceId: string
+) => {
+    return createHash('sha256')
+        .update(`import\u0000${recordType}\u0000${presetId}\u0000${sourceId}`)
+        .digest('hex')
+}
+
 export const normalizePresetSpeakerRecord = (
     record: PresetSpeakerRecord
 ): PresetSpeakerRecord => ({
