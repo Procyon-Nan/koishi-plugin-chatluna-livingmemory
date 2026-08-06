@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import type { Context } from 'koishi'
-import { buildAutomaticDreamClustersFromVectors } from '../src/service/workflows/dream/automatic_clustering'
 import { DreamClusterer } from '../src/service/workflows/dream/clustering'
 import type { DreamHdbscanRunner } from '../src/service/workflows/dream/hdbscan'
 import { buildManualDreamClustersFromVectors } from '../src/service/workflows/dream/manual_clustering'
@@ -253,80 +252,46 @@ it('skips the global noise pass when the first pass has no noise', () => {
     assert.equal(clusters.length, 2)
 })
 
-it('routes manual and automatic Dream through their distinct clustering paths', async () => {
-    const createClusterer = (callSizes: number[]) => {
-        const ctx = {
-            chatluna: {
-                createEmbeddings: async () => ({
-                    value: {
-                        embedQuery: async () => [1, 1],
-                        embedDocuments: async () => {
-                            throw new Error('cached vectors should be reused')
-                        }
+it('partitions manual Dream before running HDBSCAN', async () => {
+    const callSizes: number[] = []
+    const ctx = {
+        chatluna: {
+            createEmbeddings: async () => ({
+                value: {
+                    embedQuery: async () => [1, 1],
+                    embedDocuments: async () => {
+                        throw new Error('cached vectors should be reused')
                     }
-                })
-            },
-            logger: () => ({ warn: () => {} })
-        } as unknown as Context
-        const runHdbscan: DreamHdbscanRunner = (vectors) => {
-            callSizes.push(vectors.length)
-            return {
-                labels: vectors.map(() => 0),
-                probabilities: vectors.map(() => 1)
-            }
+                }
+            })
+        },
+        logger: () => ({ warn: () => {} })
+    } as unknown as Context
+    const runHdbscan: DreamHdbscanRunner = (vectors) => {
+        callSizes.push(vectors.length)
+        return {
+            labels: vectors.map(() => 0),
+            probabilities: vectors.map(() => 1)
         }
-        return new DreamClusterer(
-            ctx,
-            { embeddingModel: 'embedding-model' },
-            { updateEntryEmbeddings: async () => {} },
-            () => {},
-            runHdbscan
-        )
     }
+    const clusterer = new DreamClusterer(
+        ctx,
+        { embeddingModel: 'embedding-model' },
+        { updateEntryEmbeddings: async () => {} },
+        () => {},
+        runHdbscan
+    )
     const entries = createEntries(351).map((entry, index) => ({
         ...entry,
         embedding: [index + 1, 1],
         embeddingModelId: 'embedding-model'
     }))
-    const manualCallSizes: number[] = []
-    const automaticCallSizes: number[] = []
 
-    await createClusterer(manualCallSizes).buildClusters(entries, 'manual')
-    await createClusterer(automaticCallSizes).buildClusters(entries, 'auto')
+    await clusterer.buildClusters(entries)
 
     assert.deepEqual(
-        [...manualCallSizes].sort((left, right) => left - right),
+        [...callSizes].sort((left, right) => left - right),
         [175, 176]
-    )
-    assert.deepEqual(automaticCallSizes, [351])
-})
-
-it('keeps the final single-entry chunk in automatic Dream', () => {
-    const entries = createEntries(9)
-    const vectorById = new Map(
-        entries.map((entry, index) => [entry.id, [index + 1, 1]])
-    )
-    const clusters = buildAutomaticDreamClustersFromVectors(
-        entries,
-        vectorById,
-        () => {},
-        (vectors) => ({
-            labels: vectors.map(() => 0),
-            probabilities: vectors.map(() => 1)
-        })
-    )
-
-    assert.deepEqual(
-        clusters.map((cluster) => cluster.entries.length),
-        [8, 1]
-    )
-    assert.equal(
-        new Set(
-            clusters.flatMap((cluster) =>
-                cluster.entries.map((entry) => entry.id)
-            )
-        ).size,
-        entries.length
     )
 })
 
@@ -351,7 +316,7 @@ it('fails Dream when an entry embedding is invalid', async () => {
     )
 
     await assert.rejects(
-        clusterer.buildClusters(entries, 'manual'),
+        clusterer.buildClusters(entries),
         /dream embedding invalid/u
     )
 })

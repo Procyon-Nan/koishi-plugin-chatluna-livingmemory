@@ -1,9 +1,6 @@
 import type { MemoryEntryType } from '../../../contracts/memory'
 import { memoryEntryTypes } from '../../../contracts/memory'
 
-export const AUTO_DREAM_MAX_CLUSTER_SIZE = 8
-export const AUTO_DREAM_MAX_CLUSTERS = 32
-
 export const HDBSCAN_MIN_CLUSTER_SIZE = 2
 export const HDBSCAN_MIN_SAMPLES = 1
 

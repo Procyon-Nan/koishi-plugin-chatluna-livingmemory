@@ -30,12 +30,7 @@ import {
     formatStageDetail,
     sumStats
 } from './stats'
-import type {
-    DreamRunResult,
-    DreamStage,
-    DreamStageResult,
-    DreamTrigger
-} from './types'
+import type { DreamRunResult, DreamStage, DreamStageResult } from './types'
 import {
     invokeStructuredOutput,
     isStructuredOutputModelInvocationError
@@ -78,10 +73,7 @@ export class LivingMemoryDreamService {
         )
     }
 
-    async run(
-        presetId: string,
-        trigger: DreamTrigger
-    ): Promise<DreamRunResult> {
+    async run(presetId: string): Promise<DreamRunResult> {
         const entries = await this.repository.listEntriesByPreset(presetId)
         if (entries.length < 2) {
             return this.createResult(entries.length, 0, {
@@ -129,8 +121,7 @@ export class LivingMemoryDreamService {
             presetPrompt,
             'active',
             activeEntries,
-            chatModel,
-            trigger
+            chatModel
         )
         const refreshedEntries =
             await this.repository.listEntriesByPreset(presetId)
@@ -143,8 +134,7 @@ export class LivingMemoryDreamService {
             presetPrompt,
             'archived',
             archivedEntries,
-            chatModel,
-            trigger
+            chatModel
         )
         const profileDetail = await this.regenerateUserProfilesAfterDream(
             presetId,
@@ -211,14 +201,13 @@ export class LivingMemoryDreamService {
         presetPrompt: string,
         stage: DreamStage,
         entries: MemoryEntryRecord[],
-        model: ChatLunaChatModel,
-        trigger: DreamTrigger
+        model: ChatLunaChatModel
     ): Promise<DreamStageResult> {
         if (entries.length < 2) {
             return createEmptyStageResult(stage, entries.length)
         }
 
-        const clusters = await this.clusterer.buildClusters(entries, trigger)
+        const clusters = await this.clusterer.buildClusters(entries)
         this.trace(() =>
             [
                 `memory dream clusters: presetId=${presetId}`,

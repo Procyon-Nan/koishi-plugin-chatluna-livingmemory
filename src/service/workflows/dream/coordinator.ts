@@ -1,6 +1,5 @@
 import type { Logger } from 'koishi'
 import type { LivingMemoryDreamService } from './index'
-import { isModelConfigured } from '../../shared/utils'
 import { type DebugLogger } from '../../memory/helpers'
 import type { LivingMemoryJobTracker } from '../job_tracker'
 import type { LivingMemorySnapshotCache } from '../../memory/snapshot/snapshot_cache'
@@ -10,11 +9,10 @@ import type {
     LivingMemoryConfig
 } from '../../../contracts/workflows'
 import type { MemoryScope } from '../../../contracts/memory'
-import type { DreamTrigger } from './types'
 
 type LivingMemoryDreamCoordinatorConfig = Pick<
     LivingMemoryConfig,
-    'autoDreamMemoryGrowthThreshold' | 'mainModel' | 'enableAutoDream'
+    'autoDreamMemoryGrowthThreshold' | 'enableAutoDream'
 >
 
 type DreamService = Pick<LivingMemoryDreamService, 'run'>
@@ -53,17 +51,6 @@ export class LivingMemoryDreamCoordinator {
             return
         }
 
-        if (!isModelConfigured(this.config.mainModel)) {
-            this.debug(
-                [
-                    'memory auto dream skipped:',
-                    `presetId=${presetId}`,
-                    'reason=model-not-configured'
-                ].join(' ')
-            )
-            return
-        }
-
         const latestDreamJob =
             await this.repository.getLatestJobByPresetAndKind(presetId, 'dream')
         const newMemoryCount = await this.repository.countEntriesCreatedAfter(
@@ -84,27 +71,21 @@ export class LivingMemoryDreamCoordinator {
             return
         }
 
-        const result = await this.run(presetId, 'auto')
-        const reason = result.reason == null ? '' : ` reason=${result.reason}`
         this.debug(
             [
-                'memory auto dream triggered:',
+                'memory auto dream threshold reached:',
                 `presetId=${presetId}`,
                 `newMemories=${newMemoryCount}`,
-                `threshold=${threshold}`,
-                `started=${result.started}`
-            ].join(' ') + reason
+                `threshold=${threshold}`
+            ].join(' ')
         )
     }
 
     runManual(presetId: string): Promise<DreamTriggerResult> {
-        return this.run(presetId, 'manual')
+        return this.run(presetId)
     }
 
-    private async run(
-        presetId: string,
-        trigger: DreamTrigger
-    ): Promise<DreamTriggerResult> {
+    private async run(presetId: string): Promise<DreamTriggerResult> {
         if (this.dreamLockByPreset.has(presetId)) {
             const runningJobId = this.dreamLockByPreset.get(presetId)
             return {
@@ -131,7 +112,7 @@ export class LivingMemoryDreamCoordinator {
             )
 
             this.dreamLockByPreset.set(presetId, job.id)
-            this.runJob(scope, job.id, trigger)
+            this.runJob(scope, job.id)
                 .catch((error) => {
                     this.logger.warn(error)
                 })
@@ -158,14 +139,10 @@ export class LivingMemoryDreamCoordinator {
         }
     }
 
-    private async runJob(
-        scope: MemoryScope,
-        jobId: string,
-        trigger: DreamTrigger
-    ) {
+    private async runJob(scope: MemoryScope, jobId: string) {
         try {
             await this.jobTracker.markRunning(jobId)
-            const result = await this.dream.run(scope.presetId, trigger)
+            const result = await this.dream.run(scope.presetId)
             this.debug(
                 [
                     `memory dream completed: jobId=${jobId}`,

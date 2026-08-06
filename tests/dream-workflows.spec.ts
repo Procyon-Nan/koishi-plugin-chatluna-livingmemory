@@ -120,7 +120,7 @@ const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
 it('keeps Dream successful when post-Dream user profile generation fails', async () => {
     const harness = createDreamServiceHarness(true)
 
-    const result = await harness.service.run(scope.presetId, 'manual')
+    const result = await harness.service.run(scope.presetId)
 
     assert.match(
         result.detail,
@@ -146,7 +146,7 @@ it('keeps Dream successful when post-Dream user profile generation fails', async
 it('does not start post-Dream user profile generation when disabled', async () => {
     const harness = createDreamServiceHarness(false)
 
-    const result = await harness.service.run(scope.presetId, 'manual')
+    const result = await harness.service.run(scope.presetId)
 
     assert.match(result.detail, /user profiles skipped: disabled/u)
     assert.deepEqual(harness.events, [
@@ -159,7 +159,7 @@ it('does not start post-Dream user profile generation when disabled', async () =
 
 it('locks a Dream preset while its job is running', async () => {
     const jobStore = createJobStore()
-    const dreamTriggers: string[] = []
+    let dreamCalls = 0
     let resolveDream!: (result: DreamRunResult) => void
     const dreamResult = new Promise<DreamRunResult>((resolve) => {
         resolveDream = resolve
@@ -167,12 +167,11 @@ it('locks a Dream preset while its job is running', async () => {
     const coordinator = new LivingMemoryDreamCoordinator(
         {
             enableAutoDream: false,
-            autoDreamMemoryGrowthThreshold: 1,
-            mainModel: 'dream-model'
+            autoDreamMemoryGrowthThreshold: 1
         },
         {
-            run: async (_presetId, trigger) => {
-                dreamTriggers.push(trigger)
+            run: async () => {
+                dreamCalls += 1
                 return await dreamResult
             }
         },
@@ -196,7 +195,7 @@ it('locks a Dream preset while its job is running', async () => {
         () => jobStore.jobs[0]?.status === 'completed',
         'Dream completion'
     )
-    assert.deepEqual(dreamTriggers, ['manual'])
+    assert.equal(dreamCalls, 1)
 })
 
 const completeDreamOperation = (
@@ -392,8 +391,7 @@ it('skips auto Dream when memory growth is below the threshold', async () => {
     const coordinator = new LivingMemoryDreamCoordinator(
         {
             enableAutoDream: true,
-            autoDreamMemoryGrowthThreshold: 3,
-            mainModel: 'dream-model'
+            autoDreamMemoryGrowthThreshold: 3
         },
         {
             run: async () => {
@@ -414,43 +412,37 @@ it('skips auto Dream when memory growth is below the threshold', async () => {
     assert.equal(jobStore.jobs.length, 0)
 })
 
-it('starts auto Dream when memory growth reaches the threshold', async () => {
+it('keeps the auto Dream threshold entry without running a workflow', async () => {
     const jobStore = createJobStore()
-    let countCalls = 0
     let dreamCalls = 0
-    const dreamTriggers: string[] = []
+    const debugMessages: string[] = []
     const coordinator = new LivingMemoryDreamCoordinator(
         {
             enableAutoDream: true,
-            autoDreamMemoryGrowthThreshold: 3,
-            mainModel: 'dream-model'
+            autoDreamMemoryGrowthThreshold: 3
         },
         {
-            run: async (_presetId, trigger) => {
+            run: async () => {
                 dreamCalls += 1
-                dreamTriggers.push(trigger)
                 return createDreamRunResult()
             }
         },
-        createDreamCoordinatorRepository(jobStore, async () => {
-            countCalls += 1
-            return countCalls === 1 ? 3 : 0
-        }),
+        createDreamCoordinatorRepository(jobStore, async () => 3),
         { clearByPreset: () => {} },
         new LivingMemoryJobTracker(jobStore),
         logger,
-        debug
+        (message) => debugMessages.push(message)
     )
 
     await coordinator.queueAutoIfThresholdReached(scope.presetId)
-    await waitFor(
-        () => jobStore.jobs[0]?.status === 'completed',
-        'automatic Dream completion'
-    )
 
-    assert.equal(dreamCalls, 1)
-    assert.deepEqual(dreamTriggers, ['auto'])
-    assert.equal(jobStore.jobs.length, 1)
+    assert.equal(dreamCalls, 0)
+    assert.equal(jobStore.jobs.length, 0)
+    assert.ok(
+        debugMessages.some((message) =>
+            message.includes('memory auto dream threshold reached')
+        )
+    )
 })
 
 it('clears snapshot cache only when successful Dream changes memories', async () => {
@@ -460,8 +452,7 @@ it('clears snapshot cache only when successful Dream changes memories', async ()
         const coordinator = new LivingMemoryDreamCoordinator(
             {
                 enableAutoDream: false,
-                autoDreamMemoryGrowthThreshold: 3,
-                mainModel: 'dream-model'
+                autoDreamMemoryGrowthThreshold: 3
             },
             { run: async () => result },
             createDreamCoordinatorRepository(jobStore),
@@ -499,8 +490,7 @@ it('clears snapshot cache when Dream fails after possible writes', async () => {
     const coordinator = new LivingMemoryDreamCoordinator(
         {
             enableAutoDream: false,
-            autoDreamMemoryGrowthThreshold: 3,
-            mainModel: 'dream-model'
+            autoDreamMemoryGrowthThreshold: 3
         },
         {
             run: async () => {

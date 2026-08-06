@@ -7,11 +7,9 @@ import {
     ensureEntryEmbeddings
 } from '../../shared/embeddings'
 import { isModelConfigured, summarizeError } from '../../shared/utils'
-import { buildAutomaticDreamClustersFromVectors } from './automatic_clustering'
 import { type DreamHdbscanRunner, runDreamHdbscan } from './hdbscan'
 import { buildManualDreamClustersFromVectors } from './manual_clustering'
 import { partitionDreamEntries } from './partitioning'
-import type { DreamTrigger } from './types'
 
 type DreamClustererConfig = Pick<LivingMemoryConfig, 'embeddingModel'>
 
@@ -29,18 +27,10 @@ export class DreamClusterer {
         private readonly runHdbscan: DreamHdbscanRunner = runDreamHdbscan
     ) {}
 
-    async buildClusters(entries: MemoryEntryRecord[], trigger: DreamTrigger) {
+    async buildClusters(entries: MemoryEntryRecord[]) {
         if (entries.length < 2) {
             return []
         }
-
-        if (trigger === 'manual') {
-            return await this.buildManualClusters(entries)
-        }
-        return await this.buildAutomaticClusters(entries)
-    }
-
-    private async buildManualClusters(entries: MemoryEntryRecord[]) {
         const embeddingContext = await this.createEmbeddingContext(entries)
         const partitions = partitionDreamEntries(entries)
         const vectorById = new Map<string, number[]>()
@@ -68,17 +58,6 @@ export class DreamClusterer {
             ].join(' ')
         )
         return clusters
-    }
-
-    private async buildAutomaticClusters(entries: MemoryEntryRecord[]) {
-        const embeddingContext = await this.createEmbeddingContext(entries)
-        const vectorById = await this.ensureVectors(entries, embeddingContext)
-        return buildAutomaticDreamClustersFromVectors(
-            entries,
-            vectorById,
-            this.debug,
-            this.runHdbscan
-        )
     }
 
     private async createEmbeddingContext(
