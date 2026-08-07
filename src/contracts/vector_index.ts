@@ -1,0 +1,126 @@
+import type {
+    MemoryEntryStatus,
+    MemoryEntryType
+} from './memory'
+
+export const memoryVectorIndexStates = [
+    'ready',
+    'building',
+    'dirty',
+    'unavailable'
+] as const
+
+export type MemoryVectorIndexState =
+    (typeof memoryVectorIndexStates)[number]
+
+export interface MemoryVectorIndexManifest {
+    schemaVersion: number
+    embeddingModelId: string
+    dimension: number
+    sqliteVecVersion: string
+    generation: string
+    builtAt: number
+}
+
+export interface MemoryVectorIndexPresetStatus {
+    presetId: string
+    state: MemoryVectorIndexState
+    expectedCount: number
+    indexedCount: number
+    lastError: string | null
+    updatedAt: number
+}
+
+export interface MemoryVectorIndexStatus {
+    state: MemoryVectorIndexState
+    manifest: MemoryVectorIndexManifest | null
+    presets: MemoryVectorIndexPresetStatus[]
+    currentJobId: string | null
+    lastError: string | null
+}
+
+export interface MemoryIndexDocument {
+    id: string
+    presetId: string
+    status: MemoryEntryStatus
+    type: MemoryEntryType
+    isConsolidated: boolean
+    content: string
+    keywords: string[]
+    updatedAt: Date
+}
+
+export interface MemoryIndexUpsert {
+    document: MemoryIndexDocument
+    vectorAction: 'replace' | 'preserve'
+}
+
+export interface MemoryIndexDelete {
+    id: string
+    presetId: string
+}
+
+export interface MemoryIndexMutationBatch {
+    presetId: string
+    upserts: MemoryIndexUpsert[]
+    deletes: MemoryIndexDelete[]
+}
+
+export interface MemoryVectorSearchHit {
+    memoryId: string
+    cosineScore: number
+}
+
+export interface MemoryHybridSearchHit extends MemoryVectorSearchHit {
+    keywordMatchCount: number
+    boostedScore: number
+}
+
+export interface MemorySemanticSearchInput {
+    presetId: string
+    searchTexts: string[]
+    status: MemoryEntryStatus
+    memoryTypes: MemoryEntryType[] | null
+    maxCandidates: number
+}
+
+export interface MemoryHybridSearchInput
+    extends MemorySemanticSearchInput {
+    keywords: string[]
+    minSimilarity: number
+}
+
+export interface IncrementalDreamNeighborInput {
+    presetId: string
+    seedMemoryId: string
+    status: MemoryEntryStatus
+    excludedMemoryIds: string[]
+    limit: number
+}
+
+export interface MemoryVectorSearch {
+    searchSemantic(
+        input: MemorySemanticSearchInput
+    ): Promise<MemoryVectorSearchHit[]>
+    searchHybrid(
+        input: MemoryHybridSearchInput
+    ): Promise<MemoryHybridSearchHit[]>
+}
+
+export interface IncrementalDreamNeighborSearch {
+    findConsolidatedNeighbors(
+        input: IncrementalDreamNeighborInput
+    ): Promise<string[]>
+}
+
+export interface ManualDreamVectorReader {
+    readVectors(
+        presetId: string,
+        memoryIds: string[]
+    ): Promise<Map<string, number[]>>
+}
+
+export interface MemoryIndexMutationSink {
+    applyMutation(batch: MemoryIndexMutationBatch): Promise<void>
+    clearPreset(presetId: string): Promise<void>
+}
