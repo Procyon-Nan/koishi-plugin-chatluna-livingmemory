@@ -31,6 +31,7 @@ const createMemory = (id: string, content: string): MemoryEntryRecord => ({
     sourceOrigins: [],
     embedding: testEmbedding,
     embeddingModelId: 'test-embedding',
+    isConsolidated: false,
     createdAt: now,
     updatedAt: now
 })
@@ -53,12 +54,19 @@ const createDreamHarness = (
                     embedDocuments: async (texts: string[]) =>
                         texts.map(() => testEmbedding)
                 }
-            })
+            }),
+            preset: {
+                getPreset: () => ({ value: {} })
+            },
+            promptRenderer: {
+                renderPresetTemplate: async () => ({ messages: [] })
+            }
         },
         logger: () => ({ warn: () => {} })
     } as unknown as Context
     const repository = {
-        listEntriesByPreset: async () => memories
+        listEntriesByPreset: async () => memories,
+        setMemoryConsolidation: async () => {}
     } as unknown as DreamRepository
     const service = new LivingMemoryDreamService(
         ctx,
@@ -100,8 +108,7 @@ it('invokes Dream with system rules and escaped human memory data', async () => 
     await harness.service.run('preset-1')
 
     assert.equal(harness.model.invocations.length, 1)
-    const messages = harness.model.invocations[0]
-        ?.messages as CapturedMessage[]
+    const messages = harness.model.invocations[0]?.messages as CapturedMessage[]
     assert.deepEqual(
         messages.map((message) => message.getType()),
         ['system', 'human']
@@ -145,9 +152,7 @@ it('accepts a stringified operations array through bounded normalization', async
     assert.equal(result.kept, 1)
     assert.ok(
         harness.debugMessages.some((message) =>
-            message.includes(
-                'decoded stringified JSON array field: operations'
-            )
+            message.includes('decoded stringified JSON array field: operations')
         )
     )
 })

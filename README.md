@@ -10,7 +10,7 @@
 - 标准 ChatLuna 会话会在系统提示词后注入用户画像，并在历史上下文之后、当前用户输入之前注入记忆快照；Character（伪装）插件通过预设中的 `{living_memory}` 变量注入记忆快照和相关用户画像
 - 提供 `embedding-rerank` 与 `agentic-recall（实验性）` 两种记忆召回策略
 - 提供 `living_memory_search` 与 `living_memory_get_messages` 记忆工具，供模型查询记忆并按记忆 id 查看来源消息
-- 通过以 `Dream` 命名的记忆整理流程来执行记忆库的合并、更新与归档
+- 通过手动全量 Dream 与自动增量 Dream 执行记忆库的合并、更新与归档
 - 根据记忆内容形成用户画像，并在对话中实时注入
 - 提供 Koishi Console WebUI，方便手动查看、创建、编辑、删除记忆和快照等数据
 
@@ -44,7 +44,7 @@ yarn build chatluna-livingmemory
 | --- | --- | --- |
 | `mainModel` | 提取长期记忆，并在 Dream 中整理记忆和生成用户画像 | 启用自动提取或 Dream 时必需 |
 | `subModel` | 改写 `embedding-rerank` 查询，或执行 `agentic-recall` | 查询改写或 `agentic-recall` 启用时必需 |
-| `embeddingModel` | 为记忆检索、模型工具和 Dream 聚类生成向量 | 两种召回策略均必需 |
+| `embeddingModel` | 为记忆检索、模型工具、手动 Dream 聚类和自动增量 Dream 检索生成向量 | 两种召回策略和 Dream 均必需 |
 | `rerankModel` | 对 `embedding-rerank` 的候选记忆重排序 | 可选；未配置或调用失败时使用 embedding 排序 |
 
 如果你不知道应该如何配置 Embedding 嵌入模型和 Reranker 重排序模型，请参考[此文档](https://github.com/Procyon-Nan/koishi-plugin-chatluna-livingmemory/blob/main/docs/embedding-reranker-guide.md)进行配置。
@@ -72,6 +72,14 @@ input: |
 ```
 
 6. 在 Koishi Console 侧边栏进入 livingmemory WebUI，进行记忆的查看和管理。
+
+## Dream 整理流程
+
+- WebUI 中的手动 Dream 会对当前预设的 active 与 archived 记忆分别执行分区聚类和整理，完成后按配置更新用户画像。
+- 自动 Dream 以尚未完成 consolidation 的记忆数量作为触发依据。阈值同时是单次任务的批次大小；每次只处理最早的一批，不会连续清空全部积压。
+- 自动 Dream 先整理本批新增记忆，再将仍需处理的记忆逐条与同状态的旧记忆进行 content 向量检索，每条最多读取 30 条候选。该流程不执行 HDBSCAN，也不生成用户画像。
+- 自动 Dream 同时依赖 `mainModel` 和 `embeddingModel`。模型调用、Embedding 或持久化失败会保留未完成记忆，供后续任务继续处理。
+- 预设导入不会触发自动 Dream。跨预设导入的记忆会作为未整理数据写入，WebUI 会在导入完成后提示手动执行一次全量 Dream。
 
 ## 记忆隔离机制
 

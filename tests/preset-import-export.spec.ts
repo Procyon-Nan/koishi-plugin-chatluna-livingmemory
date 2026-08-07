@@ -49,8 +49,10 @@ it('copies preset data without moving source records', async () => {
             speakerKey: 'speaker-key',
             speakerLabel: 'Speaker'
         })
+        await repository.setMemoryConsolidation([sourceMemory.id], true)
 
         const exported = await repository.exportPresetData(sourcePresetId)
+        assert.equal(exported.version, 2)
         const sourceProfile = exported.userProfiles[0]
 
         await repository.importPresetData(targetPresetId, exported)
@@ -66,6 +68,7 @@ it('copies preset data without moving source records', async () => {
         assert.equal(importedTargetMemories.length, 1)
         assert.notEqual(importedTargetMemories[0].id, sourceMemory.id)
         assert.equal(importedTargetMemories[0].content, sourceMemory.content)
+        assert.equal(importedTargetMemories[0].isConsolidated, false)
 
         const retainedSourceProfiles =
             await repository.listUserProfilesByPreset(sourcePresetId)
@@ -102,6 +105,49 @@ it('copies preset data without moving source records', async () => {
                 (profile) => profile.id
             ),
             [importedTargetProfiles[0].id]
+        )
+    })
+})
+
+it('preserves consolidation only for same-preset version 2 restores', async () => {
+    await withLivingMemoryRepository(async (_ctx, repository) => {
+        const presetId = 'preset-consolidation'
+        const memory = await repository.createMemory(
+            { conversationId: 'conversation-1', presetId },
+            { type: 'fact', content: 'consolidated memory' }
+        )
+        await repository.setMemoryConsolidation([memory.id], true)
+        const exported = await repository.exportPresetData(presetId)
+
+        assert.equal(exported.entries[0].isConsolidated, true)
+        await repository.setMemoryConsolidation([memory.id], false)
+        await repository.importPresetData(presetId, exported)
+
+        assert.equal(
+            (await repository.getEntryById(memory.id))?.isConsolidated,
+            true
+        )
+    })
+})
+
+it('normalizes missing version 1 consolidation state to pending', async () => {
+    await withLivingMemoryRepository(async (_ctx, repository) => {
+        const targetPresetId = 'version-1-target'
+        const data: LivingMemoryPresetExport = {
+            version: 1,
+            exportedAt: '2026-08-06T00:00:00.000Z',
+            sourcePresetId: targetPresetId,
+            entries: [createExportEntry('version-1-entry', 1)],
+            userProfiles: [],
+            presetSpeakers: []
+        }
+
+        await repository.importPresetData(targetPresetId, data)
+
+        assert.equal(
+            (await repository.listEntriesByPreset(targetPresetId))[0]
+                .isConsolidated,
+            false
         )
     })
 })

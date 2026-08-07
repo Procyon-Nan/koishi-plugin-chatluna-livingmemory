@@ -31,10 +31,7 @@ export const validateLivingMemoryConfig = (
         })
     }
 
-    if (
-        config.extractionInterval > 0 &&
-        !isModelConfigured(config.mainModel)
-    ) {
+    if (config.extractionInterval > 0 && !isModelConfigured(config.mainModel)) {
         warnings.push({
             code: 'extract-model-missing',
             field: 'mainModel',
@@ -51,8 +48,7 @@ export const validateLivingMemoryConfig = (
         warnings.push({
             code: 'recall-rewrite-model-missing',
             field: 'subModel',
-            message:
-                '召回查询改写已启用，但未配置 subModel；将回退到原始查询。'
+            message: '召回查询改写已启用，但未配置 subModel；将回退到原始查询。'
         })
     }
 
@@ -85,7 +81,15 @@ export const validateLivingMemoryConfig = (
             code: 'auto-dream-model-missing',
             field: 'mainModel',
             message:
-                '自动 Dream 已启用，但未配置 mainModel；自动 Dream 任务将不会创建。'
+                '自动 Dream 已启用，但未配置 mainModel；自动 Dream 任务将失败。'
+        })
+    }
+    if (config.enableAutoDream && !isModelConfigured(config.embeddingModel)) {
+        warnings.push({
+            code: 'auto-dream-embedding-model-missing',
+            field: 'embeddingModel',
+            message:
+                '自动 Dream 已启用，但未配置 embeddingModel；自动 Dream 任务将失败。'
         })
     }
 

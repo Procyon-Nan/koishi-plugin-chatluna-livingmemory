@@ -1,8 +1,6 @@
 import type { Logger } from 'koishi'
-import type { LivingMemoryDreamService } from './index'
-import { type DebugLogger } from '../../memory/helpers'
-import type { LivingMemoryJobTracker } from '../job_tracker'
-import type { LivingMemorySnapshotCache } from '../../memory/snapshot/snapshot_cache'
+import type { LivingMemoryDreamJobRunner } from './job_runner'
+import type { DebugLogger } from '../../memory/helpers'
 import type {
     DreamTriggerResult,
     JobRepository,
@@ -15,33 +13,29 @@ type LivingMemoryDreamCoordinatorConfig = Pick<
     'autoDreamMemoryGrowthThreshold' | 'enableAutoDream'
 >
 
-type DreamService = Pick<LivingMemoryDreamService, 'run'>
-type DreamSnapshotCache = Pick<LivingMemorySnapshotCache, 'clearByPreset'>
-type DreamJobTracker = Pick<
-    LivingMemoryJobTracker,
-    'markRunning' | 'markCompleted' | 'markFailed'
+type DreamJobRunner = Pick<
+    LivingMemoryDreamJobRunner,
+    'runManual' | 'runAutomatic'
 >
 type DreamLogger = Pick<Logger, 'warn'>
+type DreamTrigger = 'manual' | 'automatic'
+
+type DreamRunLock = { phase: 'starting' } | { phase: 'running'; jobId: string }
 
 export type DreamCoordinatorRepository = Pick<
     JobRepository,
-    'createJob' | 'getLatestJobByPresetAndKind' | 'markStaleRunningJobsAsFailed'
+    'createJob' | 'markStaleRunningJobsAsFailed'
 > & {
-    countEntriesCreatedAfter(
-        presetId: string,
-        createdAfter?: Date
-    ): Promise<number>
+    countPendingEntries(presetId: string): Promise<number>
 }
 
 export class LivingMemoryDreamCoordinator {
-    private readonly dreamLockByPreset = new Map<string, string>()
+    private readonly lockByPreset = new Map<string, DreamRunLock>()
 
     constructor(
         private readonly config: LivingMemoryDreamCoordinatorConfig,
-        private readonly dream: DreamService,
+        private readonly jobRunner: DreamJobRunner,
         private readonly repository: DreamCoordinatorRepository,
-        private readonly snapshotCache: DreamSnapshotCache,
-        private readonly jobTracker: DreamJobTracker,
         private readonly logger: DreamLogger,
         private readonly debug: DebugLogger
     ) {}
@@ -50,21 +44,19 @@ export class LivingMemoryDreamCoordinator {
         if (!this.config.enableAutoDream) {
             return
         }
+        if (this.lockByPreset.has(presetId)) {
+            return
+        }
 
-        const latestDreamJob =
-            await this.repository.getLatestJobByPresetAndKind(presetId, 'dream')
-        const newMemoryCount = await this.repository.countEntriesCreatedAfter(
-            presetId,
-            latestDreamJob?.createdAt
-        )
+        const pendingCount = await this.repository.countPendingEntries(presetId)
         const threshold = this.config.autoDreamMemoryGrowthThreshold
 
-        if (newMemoryCount < threshold) {
+        if (pendingCount < threshold) {
             this.debug(
                 [
                     'memory auto dream skipped:',
                     `presetId=${presetId}`,
-                    `newMemories=${newMemoryCount}`,
+                    `pending=${pendingCount}`,
                     `threshold=${threshold}`
                 ].join(' ')
             )
@@ -75,56 +67,67 @@ export class LivingMemoryDreamCoordinator {
             [
                 'memory auto dream threshold reached:',
                 `presetId=${presetId}`,
-                `newMemories=${newMemoryCount}`,
+                `pending=${pendingCount}`,
                 `threshold=${threshold}`
             ].join(' ')
         )
+        await this.startJob(presetId, 'automatic')
     }
 
     runManual(presetId: string): Promise<DreamTriggerResult> {
-        return this.run(presetId)
+        return this.startJob(presetId, 'manual')
     }
 
-    private async run(presetId: string): Promise<DreamTriggerResult> {
-        if (this.dreamLockByPreset.has(presetId)) {
-            const runningJobId = this.dreamLockByPreset.get(presetId)
+    private async startJob(
+        presetId: string,
+        trigger: DreamTrigger
+    ): Promise<DreamTriggerResult> {
+        const currentLock = this.lockByPreset.get(presetId)
+        if (currentLock !== undefined) {
+            if (currentLock.phase === 'running') {
+                return {
+                    success: true,
+                    started: false,
+                    reason: 'preset-locked',
+                    runningJobId: currentLock.jobId
+                }
+            }
             return {
                 success: true,
                 started: false,
-                reason: 'preset-locked',
-                runningJobId: runningJobId?.length ? runningJobId : undefined
+                reason: 'preset-locked'
             }
         }
 
-        this.dreamLockByPreset.set(presetId, '')
+        this.lockByPreset.set(presetId, { phase: 'starting' })
 
         try {
             await this.recoverStaleJobs(presetId)
 
             const scope: MemoryScope = {
-                conversationId: `dream:${presetId}`,
+                conversationId: `dream:${trigger}:${presetId}`,
                 presetId
+            }
+            let jobInput = `manual:${presetId}`
+            if (trigger === 'automatic') {
+                jobInput = `automatic-incremental:threshold=${this.config.autoDreamMemoryGrowthThreshold}`
             }
             const job = await this.repository.createJob(
                 scope,
                 'dream',
-                presetId
+                jobInput
             )
 
-            this.dreamLockByPreset.set(presetId, job.id)
-            this.runJob(scope, job.id)
+            this.lockByPreset.set(presetId, {
+                phase: 'running',
+                jobId: job.id
+            })
+            this.runJob(scope, job.id, trigger)
                 .catch((error) => {
                     this.logger.warn(error)
                 })
                 .finally(() => {
-                    if (this.dreamLockByPreset.get(presetId) === job.id) {
-                        this.dreamLockByPreset.delete(presetId)
-                        this.queueAutoIfThresholdReached(presetId).catch(
-                            (error) => {
-                                this.logger.warn(error)
-                            }
-                        )
-                    }
+                    this.lockByPreset.delete(presetId)
                 })
 
             return {
@@ -132,33 +135,20 @@ export class LivingMemoryDreamCoordinator {
                 started: true
             }
         } catch (error) {
-            if (this.dreamLockByPreset.get(presetId) === '') {
-                this.dreamLockByPreset.delete(presetId)
-            }
+            this.lockByPreset.delete(presetId)
             throw error
         }
     }
 
-    private async runJob(scope: MemoryScope, jobId: string) {
-        try {
-            await this.jobTracker.markRunning(jobId)
-            const result = await this.dream.run(scope.presetId)
-            this.debug(
-                [
-                    `memory dream completed: jobId=${jobId}`,
-                    `presetId=${scope.presetId}`,
-                    result.detail
-                ].join(' ')
-            )
-            await this.jobTracker.markCompleted(jobId, result.detail)
-            if (result.merged + result.updated + result.archived > 0) {
-                this.refreshSnapshotCache(scope.presetId, jobId)
-            }
-        } catch (error) {
-            this.refreshSnapshotCache(scope.presetId, jobId)
-            await this.jobTracker.markFailed(jobId, error)
-            throw error
+    private runJob(scope: MemoryScope, jobId: string, trigger: DreamTrigger) {
+        if (trigger === 'manual') {
+            return this.jobRunner.runManual(scope, jobId)
         }
+        return this.jobRunner.runAutomatic(
+            scope,
+            jobId,
+            this.config.autoDreamMemoryGrowthThreshold
+        )
     }
 
     private async recoverStaleJobs(presetId: string) {
@@ -171,15 +161,5 @@ export class LivingMemoryDreamCoordinator {
                 `memory dream stale jobs recovered: presetId=${presetId}, count=${recovered.length}`
             )
         }
-    }
-
-    private refreshSnapshotCache(presetId: string, jobId: string) {
-        this.snapshotCache.clearByPreset(presetId)
-        this.debug(
-            [
-                `memory dream cache cleared: jobId=${jobId}`,
-                `presetId=${presetId}`
-            ].join(' ')
-        )
     }
 }

@@ -16,14 +16,22 @@ export interface EmbeddingRepositoryLike {
     updateEntryEmbeddings(updates: EmbeddingEntryUpdate[]): Promise<void>
 }
 
-export interface EnsureEntryEmbeddingsOptions {
-    logger?: { warn: (message: unknown) => void }
+interface EnsureEntryEmbeddingsBaseOptions {
     debug?: (message: string) => void
     // 当前模型输出的向量维度。传入后，已缓存但维度不匹配的旧向量会被判为
     // 失效并重算，以规避模型在同一标识下变更维度时 cosine 静默返回 0 的问题。
-    // 为 0 或未提供时跳过维度校验，避免异常的空向量误判所有缓存失效。
+    // 未提供时只校验向量本身，不校验维度。
     expectedDimension?: number
 }
+
+export type EnsureEntryEmbeddingsOptions =
+    | (EnsureEntryEmbeddingsBaseOptions & {
+          persistenceFailure: 'warn'
+          logger: { warn: (message: unknown) => void }
+      })
+    | (EnsureEntryEmbeddingsBaseOptions & {
+          persistenceFailure: 'throw'
+      })
 
 export const toMemoryRetrievalText = (
     entry: Pick<MemoryEntryRecord, 'content'>
@@ -37,13 +45,26 @@ const isCachedVectorValid = (
     expectedDimension?: number
 ): entry is MemoryEntryRecord & { embedding: number[] } => {
     return (
-        Array.isArray(entry.embedding) &&
-        entry.embedding.length > 0 &&
         entry.embeddingModelId === modelId &&
-        (expectedDimension == null ||
-            expectedDimension <= 0 ||
-            entry.embedding.length === expectedDimension)
+        isEmbeddingVectorValid(entry.embedding, expectedDimension)
     )
+}
+
+const isEmbeddingVectorValid = (
+    vector: unknown,
+    expectedDimension?: number
+): vector is number[] => {
+    if (
+        !Array.isArray(vector) ||
+        vector.length === 0 ||
+        (expectedDimension !== undefined &&
+            vector.length !== expectedDimension) ||
+        vector.some((value) => !Number.isFinite(value))
+    ) {
+        return false
+    }
+
+    return vector.some((value) => value !== 0)
 }
 
 export async function ensureEntryEmbeddings(
@@ -51,7 +72,7 @@ export async function ensureEntryEmbeddings(
     repository: EmbeddingRepositoryLike,
     modelId: string,
     entries: MemoryEntryRecord[],
-    options: EnsureEntryEmbeddingsOptions = {}
+    options: EnsureEntryEmbeddingsOptions
 ): Promise<Map<string, number[]>> {
     const result = new Map<string, number[]>()
     const stale: MemoryEntryRecord[] = []
@@ -75,28 +96,35 @@ export async function ensureEntryEmbeddings(
     const vectors = await embeddings.embedDocuments(
         stale.map((entry) => toMemoryRetrievalText(entry))
     )
+    if (vectors.length !== stale.length) {
+        throw new Error(
+            `memory embedding count mismatch: expected=${stale.length}, actual=${vectors.length}`
+        )
+    }
 
     const updates: EmbeddingEntryUpdate[] = []
     stale.forEach((entry, index) => {
-        const vector = vectors[index] ?? []
-        result.set(entry.id, vector)
-        if (vector.length > 0) {
-            entry.embedding = vector
-            entry.embeddingModelId = modelId
-            updates.push({
-                id: entry.id,
-                embedding: vector,
-                embeddingModelId: modelId
-            })
+        const vector = vectors[index]!
+        if (!isEmbeddingVectorValid(vector, options.expectedDimension)) {
+            throw new Error(`memory embedding invalid: id=${entry.id}`)
         }
+        result.set(entry.id, vector)
+        entry.embedding = vector
+        entry.embeddingModelId = modelId
+        updates.push({
+            id: entry.id,
+            embedding: vector,
+            embeddingModelId: modelId
+        })
     })
 
-    if (updates.length > 0) {
-        try {
-            await repository.updateEntryEmbeddings(updates)
-        } catch (error) {
-            options.logger?.warn(error)
+    try {
+        await repository.updateEntryEmbeddings(updates)
+    } catch (error) {
+        if (options.persistenceFailure === 'throw') {
+            throw error
         }
+        options.logger.warn(error)
     }
 
     return result

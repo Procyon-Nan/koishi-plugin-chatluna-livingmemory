@@ -1,6 +1,7 @@
 import { Context } from 'koishi'
 import type {
     LivingMemoryPresetExport,
+    LivingMemoryPresetExportEntry,
     LivingMemoryPresetImportResult,
     MemoryEntryRecord,
     MemoryJobKind,
@@ -17,8 +18,8 @@ import type {
     UserProfileRecord
 } from '../../contracts/memory'
 import type {
+    DreamMemoryRepository,
     DreamMergeInput,
-    DreamMergeRepository,
     ExtractedMemoryItem,
     ExtractionRepository,
     JobRepository,
@@ -71,7 +72,7 @@ export class LivingMemoryRepository
         SnapshotRepository,
         JobRepository,
         ExtractionRepository,
-        DreamMergeRepository,
+        DreamMemoryRepository,
         UserProfileRepository
 {
     private readonly entries: LivingMemoryEntryRepository
@@ -98,11 +99,19 @@ export class LivingMemoryRepository
         return this.entries.listEntriesByPreset(presetId)
     }
 
-    countEntriesCreatedAfter(
+    countPendingEntries(presetId: string): Promise<number> {
+        return this.entries.countPendingEntries(presetId)
+    }
+
+    listPendingEntries(
         presetId: string,
-        createdAfter?: Date
-    ): Promise<number> {
-        return this.entries.countEntriesCreatedAfter(presetId, createdAfter)
+        limit: number
+    ): Promise<MemoryEntryRecord[]> {
+        return this.entries.listPendingEntries(presetId, limit)
+    }
+
+    listConsolidatedEntries(presetId: string): Promise<MemoryEntryRecord[]> {
+        return this.entries.listConsolidatedEntries(presetId)
     }
 
     getEntryById(id: string): Promise<MemoryEntryRecord | undefined> {
@@ -158,6 +167,21 @@ export class LivingMemoryRepository
         patch: Partial<MemoryMutationInput>
     ): Promise<void> {
         return this.entries.updateMemory(id, patch)
+    }
+
+    updateMemoryForDream(
+        id: string,
+        patch: Partial<MemoryMutationInput>,
+        isConsolidated: boolean
+    ): Promise<void> {
+        return this.entries.updateMemoryForDream(id, patch, isConsolidated)
+    }
+
+    setMemoryConsolidation(
+        ids: string[],
+        isConsolidated: boolean
+    ): Promise<void> {
+        return this.entries.setMemoryConsolidation(ids, isConsolidated)
     }
 
     applyDreamMerge(input: DreamMergeInput): Promise<void> {
@@ -244,13 +268,6 @@ export class LivingMemoryRepository
         return this.jobs.listJobsByPreset(presetId)
     }
 
-    getLatestJobByPresetAndKind(
-        presetId: string,
-        kind: MemoryJobKind
-    ): Promise<MemoryJobRecord | undefined> {
-        return this.jobs.getLatestJobByPresetAndKind(presetId, kind)
-    }
-
     markStaleRunningJobsAsFailed(
         options: { presetId?: string; kind?: MemoryJobKind } = {},
         reason = 'recovered: stale running job'
@@ -319,7 +336,7 @@ export class LivingMemoryRepository
         ])
 
         return {
-            version: 1,
+            version: 2,
             exportedAt: new Date().toISOString(),
             sourcePresetId: presetId,
             entries: entries.map((entry) => ({
@@ -333,6 +350,7 @@ export class LivingMemoryRepository
                 importance: entry.importance,
                 sourceConversationId: entry.sourceConversationId,
                 sourceOrigins: entry.sourceOrigins,
+                isConsolidated: entry.isConsolidated,
                 createdAt: entry.createdAt.toISOString(),
                 updatedAt: entry.updatedAt.toISOString()
             })),
@@ -373,19 +391,13 @@ export class LivingMemoryRepository
             }
             return sourceId
         }
-        const entryIdBySourceId = new Map(
-            data.entries.map((entry) => [
-                entry.id,
-                resolveImportId('entry', entry.id)
-            ])
-        )
         const resolveEntryImportId = (sourceId: string) => {
-            return (
-                entryIdBySourceId.get(sourceId) ??
-                resolveImportId('entry', sourceId)
-            )
+            return resolveImportId('entry', sourceId)
         }
-        const entryRows = data.entries.map((entry) => ({
+        const createEntryRow = (
+            entry: LivingMemoryPresetExportEntry,
+            isConsolidated: boolean
+        ) => ({
             id: resolveEntryImportId(entry.id),
             presetId: targetPresetId,
             type: entry.type,
@@ -399,9 +411,20 @@ export class LivingMemoryRepository
             sourceOrigins: entry.sourceOrigins,
             embedding: null,
             embeddingModelId: null,
+            isConsolidated,
             createdAt: new Date(entry.createdAt),
             updatedAt: new Date(entry.updatedAt)
-        }))
+        })
+        let entryRows: ReturnType<typeof createEntryRow>[]
+        if (data.version === 1 || isCrossPresetImport) {
+            entryRows = data.entries.map((entry) =>
+                createEntryRow(entry, false)
+            )
+        } else {
+            entryRows = data.entries.map((entry) =>
+                createEntryRow(entry, entry.isConsolidated)
+            )
+        }
         const speakerKeys = [
             ...new Set(data.userProfiles.map((profile) => profile.speakerKey))
         ]

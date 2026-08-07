@@ -13,16 +13,8 @@ import {
     resolvePresetPrompt
 } from '../../memory/helpers'
 import { DreamClusterer } from './clustering'
-import { DreamExecutor, type DreamExecutorRepository } from './executor'
+import type { DreamExecutorRepository } from './executor'
 import { LivingMemoryUserProfileService } from '../../user_profile'
-import {
-    buildDreamPrompt,
-    dreamActiveResultSchema,
-    dreamArchivedResultSchema,
-    dreamResultToolDescription,
-    dreamResultToolName
-} from '../../prompts'
-import { formatPromptMessagesTrace } from '../../prompts/prompt_format'
 import {
     addStats,
     createEmptyStageResult,
@@ -31,10 +23,7 @@ import {
     sumStats
 } from './stats'
 import type { DreamRunResult, DreamStage, DreamStageResult } from './types'
-import {
-    invokeStructuredOutput,
-    isStructuredOutputModelInvocationError
-} from '../structured_output'
+import { DreamUnitProcessor } from './unit_processor'
 
 export type { DreamRunResult } from './types'
 
@@ -54,7 +43,7 @@ export type DreamRepository = Pick<RecallRepository, 'listEntriesByPreset'> &
 
 export class LivingMemoryDreamService {
     private readonly clusterer: DreamClusterer
-    private readonly executor: DreamExecutor
+    private readonly unitProcessor: DreamUnitProcessor
     private readonly userProfiles: LivingMemoryUserProfileService
 
     constructor(
@@ -64,7 +53,11 @@ export class LivingMemoryDreamService {
         private readonly debug: (message: string) => void
     ) {
         this.clusterer = new DreamClusterer(ctx, config, repository, debug)
-        this.executor = new DreamExecutor(repository, debug)
+        this.unitProcessor = new DreamUnitProcessor(
+            repository,
+            debug,
+            config.debug
+        )
         this.userProfiles = new LivingMemoryUserProfileService(
             ctx,
             config,
@@ -76,6 +69,12 @@ export class LivingMemoryDreamService {
     async run(presetId: string): Promise<DreamRunResult> {
         const entries = await this.repository.listEntriesByPreset(presetId)
         if (entries.length < 2) {
+            if (entries.length === 1) {
+                await this.repository.setMemoryConsolidation(
+                    [entries[0].id],
+                    true
+                )
+            }
             return this.createResult(entries.length, 0, {
                 detail: `dream skipped: only ${entries.length} memories`
             })
@@ -95,7 +94,7 @@ export class LivingMemoryDreamService {
         const model = await this.ctx.chatluna.createChatModel(
             this.config.mainModel
         )
-        if (model.value == null) {
+        if (model.value === undefined) {
             return this.createResult(entries.length, 0, {
                 skippedReason: 'model-unavailable',
                 detail: 'dream skipped: model-unavailable'
@@ -104,17 +103,7 @@ export class LivingMemoryDreamService {
 
         const chatModel = model.value
         const assistantLabel = resolveAssistantLabel(presetId)
-        let presetPrompt = ''
-        try {
-            presetPrompt = await resolvePresetPrompt(this.ctx, presetId)
-        } catch (error) {
-            this.debug(
-                [
-                    `memory dream preset prompt unavailable: presetId=${presetId}`,
-                    `error=${summarizeError(error)}`
-                ].join(' ')
-            )
-        }
+        const presetPrompt = await resolvePresetPrompt(this.ctx, presetId)
         const activeResult = await this.runStage(
             presetId,
             assistantLabel,
@@ -204,6 +193,12 @@ export class LivingMemoryDreamService {
         model: ChatLunaChatModel
     ): Promise<DreamStageResult> {
         if (entries.length < 2) {
+            if (entries.length === 1) {
+                await this.repository.setMemoryConsolidation(
+                    [entries[0].id],
+                    true
+                )
+            }
             return createEmptyStageResult(stage, entries.length)
         }
 
@@ -223,110 +218,34 @@ export class LivingMemoryDreamService {
             ].join('\n')
         )
 
-        const touchedMemoryIds = new Set<string>()
         const stats = createEmptyStats()
+        const touchedMemoryIds = new Set<string>()
 
         for (const cluster of clusters) {
-            const prompt = buildDreamPrompt({
+            const result = await this.unitProcessor.process({
                 assistantLabel,
                 presetPrompt,
                 presetId,
                 cluster,
-                stage
-            })
-            this.trace(() =>
-                [
-                    `memory dream llm input: presetId=${presetId}`,
-                    `stage=${stage}`,
-                    `clusterId=${cluster.id}`,
-                    formatPromptMessagesTrace(prompt)
-                ].join('\n')
-            )
-
-            let structuredResult
-            try {
-                structuredResult = await invokeStructuredOutput({
-                    model,
-                    prompt,
-                    toolName: dreamResultToolName,
-                    toolDescription: dreamResultToolDescription,
-                    stringifiedArrayField: 'operations',
-                    schema:
-                        stage === 'active'
-                            ? dreamActiveResultSchema
-                            : dreamArchivedResultSchema,
-                    context: {
-                        presetId,
-                        conversationId: [
-                            'dream',
-                            presetId,
-                            stage,
-                            cluster.id
-                        ].join(':')
-                    }
-                })
-            } catch (error) {
-                if (!isStructuredOutputModelInvocationError(error)) {
-                    throw error
-                }
-
-                stats.skipped++
-                this.debug(
-                    [
-                        `memory dream cluster skipped: presetId=${presetId}`,
-                        `stage=${stage}`,
-                        `clusterId=${cluster.id}`,
-                        'reason=invoke-failed',
-                        `error=${summarizeError(error)}`
-                    ].join(' ')
-                )
-                continue
-            }
-
-            this.trace(() =>
-                [
-                    `memory dream llm output: presetId=${presetId}`,
-                    `stage=${stage}`,
-                    `clusterId=${cluster.id}`,
-                    structuredResult.output
-                ].join('\n')
-            )
-
-            if (structuredResult.parseError != null) {
-                stats.skipped++
-                this.debug(
-                    [
-                        `memory dream cluster skipped: presetId=${presetId}`,
-                        `stage=${stage}`,
-                        `clusterId=${cluster.id}`,
-                        'reason=structured-output-failed',
-                        `error=${structuredResult.parseError}`
-                    ].join(' ')
-                )
-                continue
-            }
-
-            const operations = structuredResult.value?.operations ?? []
-            if (operations.length === 0) {
-                stats.skipped++
-                this.debug(
-                    [
-                        `memory dream cluster skipped: presetId=${presetId}`,
-                        `stage=${stage}`,
-                        `clusterId=${cluster.id}`,
-                        'reason=no-valid-operations'
-                    ].join(' ')
-                )
-                continue
-            }
-
-            const result = await this.executor.executeOperations(
                 stage,
-                cluster,
-                operations,
-                touchedMemoryIds
-            )
+                model,
+                touchedMemoryIds,
+                consolidationMode: 'manual'
+            })
             addStats(stats, result)
+            if (result.success === false) {
+                if (result.skipped === 0) {
+                    stats.skipped++
+                }
+                this.debug(
+                    [
+                        `memory dream cluster skipped: presetId=${presetId}`,
+                        `stage=${stage}`,
+                        `clusterId=${cluster.id}`,
+                        `reason=${result.error}`
+                    ].join(' ')
+                )
+            }
         }
 
         return {

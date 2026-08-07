@@ -26,7 +26,8 @@ export const normalizeEntryRecord = (
         typeof record.embeddingModelId === 'string' &&
         record.embeddingModelId.length > 0
             ? record.embeddingModelId
-            : null
+            : null,
+    isConsolidated: record.isConsolidated === true
 })
 
 export const normalizeUserProfileRecord = (

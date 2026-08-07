@@ -19,7 +19,7 @@ it('tracks job lifecycle from pending through running and terminal states', asyn
 
     const failedJob = await jobStore.createJob(scope, 'dream', 'input')
     await tracker.markRunning(failedJob.id)
-    await tracker.markFailed(failedJob.id, new Error('failure detail'))
+    await tracker.markFailed(failedJob.id, new Error('failure detail'), null)
     assert.equal(failedJob.status, 'failed')
     assert.match(failedJob.error ?? '', /failure detail/u)
 })

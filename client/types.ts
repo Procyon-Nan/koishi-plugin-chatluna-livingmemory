@@ -63,6 +63,7 @@ export interface MemoryEntryRecord {
     importance: number | null
     sourceConversationId: string | null
     sourceOrigins: MemorySourceOrigin[]
+    isConsolidated: boolean
     createdAt: Date
     updatedAt: Date
 }
@@ -151,6 +152,7 @@ export type MemoryConfigWarningCode =
     | 'recall-rewrite-model-missing'
     | 'agentic-recall-model-missing'
     | 'auto-dream-model-missing'
+    | 'auto-dream-embedding-model-missing'
 
 export interface MemoryConfigWarning {
     code: MemoryConfigWarningCode
@@ -190,13 +192,61 @@ export interface MemoryListResult extends PageResult<MemoryEntryRecord> {
     facets: MemoryListFacets
 }
 
-export interface LivingMemoryPresetExport {
-    version: number
+interface LivingMemoryPresetExportBase {
     exportedAt: string
     sourcePresetId: string
-    entries: Record<string, unknown>[]
-    userProfiles: Record<string, unknown>[]
-    presetSpeakers: Record<string, unknown>[]
+    userProfiles: LivingMemoryPresetExportUserProfile[]
+    presetSpeakers: LivingMemoryPresetExportSpeaker[]
+}
+
+export interface LivingMemoryPresetExportEntry {
+    id: string
+    type: MemoryEntryType
+    status: MemoryEntryStatus
+    content: string
+    keywords: string[]
+    summary: string | null
+    sentiment: string | null
+    importance: number | null
+    sourceConversationId: string | null
+    sourceOrigins: MemorySourceOrigin[]
+    createdAt: string
+    updatedAt: string
+}
+
+export interface LivingMemoryPresetExportEntryV2 extends LivingMemoryPresetExportEntry {
+    isConsolidated: boolean
+}
+
+export interface LivingMemoryPresetExportV1 extends LivingMemoryPresetExportBase {
+    version: 1
+    entries: LivingMemoryPresetExportEntry[]
+}
+
+export interface LivingMemoryPresetExportV2 extends LivingMemoryPresetExportBase {
+    version: 2
+    entries: LivingMemoryPresetExportEntryV2[]
+}
+
+export type LivingMemoryPresetExport =
+    LivingMemoryPresetExportV1 | LivingMemoryPresetExportV2
+
+export interface LivingMemoryPresetExportUserProfile {
+    id: string
+    speakerKey: string
+    speakerLabel: string
+    content: string
+    sourceMemoryIds: string[]
+    createdAt: string
+    updatedAt: string
+}
+
+export interface LivingMemoryPresetExportSpeaker {
+    speakerKey: string
+    speakerLabel: string
+    speakerId: string | null
+    createdAt: string
+    updatedAt: string
 }
 
 export interface LivingMemoryPresetImportResult {

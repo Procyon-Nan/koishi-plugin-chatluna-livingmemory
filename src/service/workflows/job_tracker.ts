@@ -23,11 +23,12 @@ export class LivingMemoryJobTracker {
         })
     }
 
-    async markFailed(id: string, error: unknown) {
+    async markFailed(id: string, error: unknown, detail: string | null) {
         await this.repository.updateJob(id, {
             status: 'failed',
             finishedAt: new Date(),
             updatedAt: new Date(),
+            detail,
             error: summarizeError(error)
         })
     }

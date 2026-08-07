@@ -46,10 +46,24 @@ export interface DreamMergeInput {
     patch: DreamMergeMutation
     sourceOrigins: MemorySourceOrigin[]
     sourceDisposition: 'archive' | 'delete'
+    targetIsConsolidated: boolean
+    sourceIsConsolidated: boolean
 }
 
 export interface DreamMergeRepository {
     applyDreamMerge(input: DreamMergeInput): Promise<void>
+}
+
+export interface DreamMemoryRepository extends DreamMergeRepository {
+    updateMemoryForDream(
+        id: string,
+        patch: Partial<MemoryMutationInput>,
+        isConsolidated: boolean
+    ): Promise<void>
+    setMemoryConsolidation(
+        ids: string[],
+        isConsolidated: boolean
+    ): Promise<void>
 }
 
 export type MemoryConfigWarningCode =
@@ -59,6 +73,7 @@ export type MemoryConfigWarningCode =
     | 'recall-rewrite-model-missing'
     | 'agentic-recall-model-missing'
     | 'auto-dream-model-missing'
+    | 'auto-dream-embedding-model-missing'
 
 export interface MemoryConfigWarning {
     code: MemoryConfigWarningCode
@@ -160,10 +175,6 @@ export interface JobRepository {
     ): Promise<MemoryJobRecord>
     updateJob(id: string, patch: Partial<MemoryJobRecord>): Promise<void>
     listJobsByPreset(presetId: string): Promise<MemoryJobRecord[]>
-    getLatestJobByPresetAndKind(
-        presetId: string,
-        kind: MemoryJobKind
-    ): Promise<MemoryJobRecord | undefined>
     markStaleRunningJobsAsFailed(
         options?: { presetId?: string; kind?: MemoryJobKind },
         reason?: string

@@ -60,7 +60,7 @@ export const buildManualDreamClustersFromVectors = (
             appendCluster(`hdbscan:noise:${label}`, entries)
         }
     }
-    if (finalNoise != null) {
+    if (finalNoise !== undefined) {
         appendCluster('hdbscan:final-noise', finalNoise)
     }
     return clusters

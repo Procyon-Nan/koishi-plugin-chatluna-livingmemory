@@ -1,4 +1,5 @@
 import type { MemoryEntryRecord } from '../../../contracts/memory'
+import type { DreamOperation as SchemaDreamOperation } from '../../prompts/schema'
 
 export interface DreamCluster {
     id: string
@@ -15,6 +16,14 @@ export interface DreamOperationStats {
     skipped: number
 }
 
+export type DreamConsolidationMode =
+    'manual' | 'incremental-batch' | 'incremental-seed'
+
+export interface DreamExecutionResult extends DreamOperationStats {
+    consolidatedMemoryIds: Set<string>
+    mutatedMemoryIds: Set<string>
+}
+
 export interface DreamRunResult extends DreamOperationStats {
     entryCount: number
     clusterCount: number
@@ -24,9 +33,6 @@ export interface DreamRunResult extends DreamOperationStats {
 
 export type DreamStage = 'active' | 'archived'
 
-export type DreamAction =
-    'keep' | 'merge' | 'update' | 'archive' | 'deleteSource'
-
 export interface DreamStageResult extends DreamOperationStats {
     stage: DreamStage
     entryCount: number
@@ -34,12 +40,8 @@ export interface DreamStageResult extends DreamOperationStats {
     detail: string
 }
 
-export interface DreamOperation {
-    action: DreamAction
-    memoryId?: string
-    memoryIds?: string[]
-    targetMemoryId?: string
-    sourceMemoryIds?: string[]
-    memory?: Record<string, unknown>
-    reason?: string
-}
+export type DreamOperation = SchemaDreamOperation
+
+export type DreamUnitResult =
+    | (DreamExecutionResult & { success: true })
+    | (DreamExecutionResult & { success: false; error: string })

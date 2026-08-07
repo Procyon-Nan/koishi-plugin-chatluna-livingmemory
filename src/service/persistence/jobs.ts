@@ -83,18 +83,6 @@ export class LivingMemoryJobRepository implements JobRepository {
         return jobs.sort((left, right) => +right.createdAt - +left.createdAt)
     }
 
-    async getLatestJobByPresetAndKind(
-        presetId: string,
-        kind: MemoryJobKind
-    ): Promise<MemoryJobRecord | undefined> {
-        const jobs = await this.ctx.database.get('living_memory_job', {
-            presetId,
-            kind
-        })
-
-        return jobs.sort((left, right) => +right.createdAt - +left.createdAt)[0]
-    }
-
     async markStaleRunningJobsAsFailed(
         options: { presetId?: string; kind?: MemoryJobKind } = {},
         reason = 'recovered: stale running job'

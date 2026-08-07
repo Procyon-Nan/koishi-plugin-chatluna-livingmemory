@@ -117,9 +117,7 @@ it('repairs the legacy SQLite json default after applying current tables', async
             )
             assert.equal(storedLegacyEntry.sourceOrigins, undefined)
         } finally {
-            await (
-                legacyCtx.database.drivers[0] as SQLiteDriver
-            )._export()
+            await (legacyCtx.database.drivers[0] as SQLiteDriver)._export()
             await legacyCtx.stop()
         }
 
@@ -134,6 +132,11 @@ it('repairs the legacy SQLite json default after applying current tables', async
             assert.deepEqual(
                 (await repository.getEntryById('legacy-schema'))?.sourceOrigins,
                 []
+            )
+            assert.equal(
+                (await repository.getEntryById('legacy-schema'))
+                    ?.isConsolidated,
+                false
             )
 
             const currentEntry = createEntry('current-schema', undefined)

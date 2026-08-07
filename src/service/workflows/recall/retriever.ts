@@ -44,7 +44,7 @@ export class LivingMemoryRetriever {
         const embeddings = await this.ctx.chatluna.createEmbeddings(
             this.config.embeddingModel
         )
-        if (embeddings?.value == null) {
+        if (embeddings.value === undefined) {
             throw new Error(
                 `memory retrieve embedding unavailable: model=${this.config.embeddingModel}`
             )
@@ -70,7 +70,8 @@ export class LivingMemoryRetriever {
                 debug: (message) => this.debugLog(message),
                 // 查询向量由当前模型现算，其维度即当前模型的输出维度，
                 // 以此让维度不一致的旧缓存向量失效重算，避免 cosine 静默归零。
-                expectedDimension: queryVector.length
+                expectedDimension: queryVector.length,
+                persistenceFailure: 'warn'
             }
         )
 

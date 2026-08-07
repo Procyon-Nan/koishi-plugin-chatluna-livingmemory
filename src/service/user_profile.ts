@@ -208,7 +208,7 @@ export class LivingMemoryUserProfileService {
                 ].join('\n')
             )
 
-            if (structuredResult.parseError != null) {
+            if (structuredResult.parseError !== null) {
                 failed++
                 this.debug(
                     [
@@ -220,9 +220,9 @@ export class LivingMemoryUserProfileService {
                 continue
             }
 
-            const parsedProfiles = structuredResult.value?.profiles ?? []
+            const parsedProfiles = structuredResult.value.profiles
             const parsed = parsedProfiles[0]
-            if (parsed == null) {
+            if (parsed === undefined) {
                 empty++
                 this.debug(
                     [

@@ -29,6 +29,7 @@ const memory: MemoryEntryRecord = {
     sourceOrigins: [],
     embedding: null,
     embeddingModelId: null,
+    isConsolidated: false,
     createdAt: now,
     updatedAt: now
 }
@@ -125,12 +126,12 @@ const readPromptMessages = (
     const messages = model.invocations[0]?.messages ?? []
     return {
         systemPrompt: String(
-            messages.find((message) => message.getType() === 'system')?.content ??
-                ''
+            messages.find((message) => message.getType() === 'system')
+                ?.content ?? ''
         ),
         inputPrompt: String(
-            messages.find((message) => message.getType() === 'human')?.content ??
-                ''
+            messages.find((message) => message.getType() === 'human')
+                ?.content ?? ''
         )
     }
 }
@@ -198,10 +199,7 @@ it('passes user profile rules and memory data through tool-calling messages', as
         prompt.systemPrompt,
         /你是preset-1，你正在以本人关系视角维护一名用户的长期画像/u
     )
-    assert.match(
-        prompt.systemPrompt,
-        /“我”始终指preset-1/u
-    )
+    assert.match(prompt.systemPrompt, /“我”始终指preset-1/u)
     assert.match(prompt.systemPrompt, /有依据的主观印象/u)
     assert.doesNotMatch(prompt.systemPrompt, /张三正在准备考试/u)
     assert.match(prompt.inputPrompt, /<user_profile_input>/u)
@@ -258,10 +256,7 @@ it('keeps truncated user profile content within the declared maximum', async () 
 
     assert.equal(result.generated, 1)
     assert.equal(harness.savedProfiles.length, 1)
-    assert.equal(
-        harness.savedProfiles[0]?.content,
-        `${'甲'.repeat(217)}...`
-    )
+    assert.equal(harness.savedProfiles[0]?.content, `${'甲'.repeat(217)}...`)
     assert.equal(
         Array.from(harness.savedProfiles[0]?.content ?? '').length,
         220
@@ -286,9 +281,7 @@ it('accepts a stringified profiles array through bounded normalization', async (
     assert.equal(model.invocations.length, 1)
     assert.ok(
         harness.debugMessages.some((message) =>
-            message.includes(
-                'decoded stringified JSON array field: profiles'
-            )
+            message.includes('decoded stringified JSON array field: profiles')
         )
     )
 })
@@ -331,7 +324,9 @@ it('feeds invalid source memory ids back before accepting a correction', async (
     const retryMessages = model.invocations[1]?.messages ?? []
     assert.ok(
         retryMessages.some((message) =>
-            String(message.content).includes('来源记忆 id 不在当前画像允许的集合中')
+            String(message.content).includes(
+                '来源记忆 id 不在当前画像允许的集合中'
+            )
         )
     )
 })
@@ -345,11 +340,12 @@ it('rejects a profile for a different speaker after the correction attempt', asy
     }
     const { model, result } = await harness.run([
         createProfileCall(wrongSpeakerProfile),
-        createProfileCall(wrongSpeakerProfile, 'result-2')
+        createProfileCall(wrongSpeakerProfile, 'result-2'),
+        createProfileCall(wrongSpeakerProfile, 'result-3')
     ])
 
     assert.equal(result.generated, 0)
-    assert.equal(model.invocations.length, 2)
+    assert.equal(model.invocations.length, 3)
     assert.equal(harness.savedProfiles.length, 0)
     assert.match(result.detail, /failed=1/u)
     assert.ok(

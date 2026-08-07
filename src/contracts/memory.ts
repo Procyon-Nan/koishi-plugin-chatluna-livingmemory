@@ -166,6 +166,7 @@ export interface MemoryEntryRecord {
     sourceOrigins: MemorySourceOrigin[]
     embedding: number[] | null
     embeddingModelId: string | null
+    isConsolidated: boolean
     createdAt: Date
     updatedAt: Date
 }
@@ -270,6 +271,10 @@ export interface LivingMemoryPresetExportEntry {
     updatedAt: string
 }
 
+export interface LivingMemoryPresetExportEntryV2 extends LivingMemoryPresetExportEntry {
+    isConsolidated: boolean
+}
+
 export interface LivingMemoryPresetExportUserProfile {
     id: string
     speakerKey: string
@@ -288,14 +293,25 @@ export interface LivingMemoryPresetExportSpeaker {
     updatedAt: string
 }
 
-export interface LivingMemoryPresetExport {
-    version: 1
+interface LivingMemoryPresetExportBase {
     exportedAt: string
     sourcePresetId: string
-    entries: LivingMemoryPresetExportEntry[]
     userProfiles: LivingMemoryPresetExportUserProfile[]
     presetSpeakers: LivingMemoryPresetExportSpeaker[]
 }
+
+export interface LivingMemoryPresetExportV1 extends LivingMemoryPresetExportBase {
+    version: 1
+    entries: LivingMemoryPresetExportEntry[]
+}
+
+export interface LivingMemoryPresetExportV2 extends LivingMemoryPresetExportBase {
+    version: 2
+    entries: LivingMemoryPresetExportEntryV2[]
+}
+
+export type LivingMemoryPresetExport =
+    LivingMemoryPresetExportV1 | LivingMemoryPresetExportV2
 
 export interface LivingMemoryPresetImportResult {
     entries: number

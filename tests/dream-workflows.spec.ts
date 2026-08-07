@@ -13,6 +13,7 @@ import {
     DreamExecutor,
     type DreamExecutorRepository
 } from '../src/service/workflows/dream/executor'
+import { LivingMemoryDreamJobRunner } from '../src/service/workflows/dream/job_runner'
 import type {
     DreamOperation,
     DreamRunResult
@@ -30,31 +31,82 @@ import {
 
 const createDreamCoordinatorRepository = (
     jobStore: ReturnType<typeof createJobStore>,
-    countEntriesCreatedAfter: DreamCoordinatorRepository['countEntriesCreatedAfter'] = async () =>
+    countPendingEntries: DreamCoordinatorRepository['countPendingEntries'] = async () =>
         0
 ): DreamCoordinatorRepository => ({
     createJob: jobStore.createJob,
-    getLatestJobByPresetAndKind: jobStore.getLatestJobByPresetAndKind,
     markStaleRunningJobsAsFailed: jobStore.markStaleRunningJobsAsFailed,
-    countEntriesCreatedAfter
+    countPendingEntries
 })
+
+const createIncrementalDreamRunResult = () => ({
+    ...createDreamRunResult(),
+    selectedCount: 0,
+    seedCount: 0,
+    successfulSeedCount: 0,
+    failedSeedCount: 0,
+    remainingPendingCount: 0,
+    failed: false
+})
+
+const incrementalDream = {
+    run: async () => createIncrementalDreamRunResult()
+}
+
+type DreamCoordinatorArgs = ConstructorParameters<
+    typeof LivingMemoryDreamCoordinator
+>
+type DreamJobRunnerArgs = ConstructorParameters<
+    typeof LivingMemoryDreamJobRunner
+>
+
+const createDreamCoordinator = (
+    config: DreamCoordinatorArgs[0],
+    dream: DreamJobRunnerArgs[0],
+    incremental: DreamJobRunnerArgs[1],
+    repository: DreamCoordinatorArgs[2],
+    snapshotCache: DreamJobRunnerArgs[2],
+    jobTracker: DreamJobRunnerArgs[3],
+    targetLogger: DreamCoordinatorArgs[3],
+    targetDebug: DreamCoordinatorArgs[4]
+) =>
+    new LivingMemoryDreamCoordinator(
+        config,
+        new LivingMemoryDreamJobRunner(
+            dream,
+            incremental,
+            snapshotCache,
+            jobTracker,
+            targetDebug
+        ),
+        repository,
+        targetLogger,
+        targetDebug
+    )
 
 const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
     const events: string[] = []
     const debugMessages: string[] = []
+    const consolidatedIds: string[] = []
     const activeEntry = {
         ...createMemoryEntry('active-memory'),
         keywords: ['张三']
     }
     const archivedEntry = createMemoryEntry('archived-memory', 'archived')
     const entries = [activeEntry, archivedEntry]
+    let presetRenderCount = 0
     const repository: DreamRepository = {
         listEntriesByPreset: async () => {
             events.push('list-entries')
             return entries
         },
         updateEntryEmbeddings: async () => {},
-        updateMemory: async () => {},
+        updateMemoryForDream: async () => {},
+        setMemoryConsolidation: async (ids, isConsolidated) => {
+            if (isConsolidated) {
+                consolidatedIds.push(...ids)
+            }
+        },
         applyDreamMerge: async () => {},
         listPresetSpeakers: async () => {
             events.push('list-speakers')
@@ -97,6 +149,10 @@ const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
             },
             promptRenderer: {
                 renderPresetTemplate: async () => {
+                    presetRenderCount++
+                    if (presetRenderCount === 1) {
+                        return { messages: [] }
+                    }
                     throw new Error('preset prompt rendering failure')
                 }
             }
@@ -114,7 +170,7 @@ const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
         (message) => debugMessages.push(message)
     )
 
-    return { debugMessages, events, service }
+    return { consolidatedIds, debugMessages, events, service }
 }
 
 it('keeps Dream successful when post-Dream user profile generation fails', async () => {
@@ -141,6 +197,10 @@ it('keeps Dream successful when post-Dream user profile generation fails', async
             message.includes('user profile generation failed after dream')
         )
     )
+    assert.deepEqual(harness.consolidatedIds, [
+        'active-memory',
+        'archived-memory'
+    ])
 })
 
 it('does not start post-Dream user profile generation when disabled', async () => {
@@ -157,6 +217,33 @@ it('does not start post-Dream user profile generation when disabled', async () =
     ])
 })
 
+it('marks a single-memory manual Dream as consolidated', async () => {
+    const entry = createMemoryEntry('only-memory')
+    const consolidatedIds: string[] = []
+    const repository = {
+        listEntriesByPreset: async () => [entry],
+        setMemoryConsolidation: async (ids: string[]) => {
+            consolidatedIds.push(...ids)
+        }
+    } as unknown as DreamRepository
+    const service = new LivingMemoryDreamService(
+        {} as Context,
+        {
+            mainModel: 'dream-model',
+            embeddingModel: 'embedding-model',
+            enableUserProfileInjection: false,
+            userProfileMemoryLimit: 20
+        },
+        repository,
+        () => {}
+    )
+
+    const result = await service.run(scope.presetId)
+
+    assert.equal(result.entryCount, 1)
+    assert.deepEqual(consolidatedIds, [entry.id])
+})
+
 it('locks a Dream preset while its job is running', async () => {
     const jobStore = createJobStore()
     let dreamCalls = 0
@@ -164,7 +251,7 @@ it('locks a Dream preset while its job is running', async () => {
     const dreamResult = new Promise<DreamRunResult>((resolve) => {
         resolveDream = resolve
     })
-    const coordinator = new LivingMemoryDreamCoordinator(
+    const coordinator = createDreamCoordinator(
         {
             enableAutoDream: false,
             autoDreamMemoryGrowthThreshold: 1
@@ -175,6 +262,7 @@ it('locks a Dream preset while its job is running', async () => {
                 return await dreamResult
             }
         },
+        incrementalDream,
         createDreamCoordinatorRepository(jobStore),
         { clearByPreset: () => {} },
         new LivingMemoryJobTracker(jobStore),
@@ -198,10 +286,11 @@ it('locks a Dream preset while its job is running', async () => {
     assert.equal(dreamCalls, 1)
 })
 
-const completeDreamOperation = (
-    action: DreamOperation['action']
-): DreamOperation => ({
-    action,
+const completeDreamUpdateOperation = (): Extract<
+    DreamOperation,
+    { action: 'update' }
+> => ({
+    action: 'update',
     memoryId: 'memory-1',
     memory: {
         type: 'fact',
@@ -210,7 +299,8 @@ const completeDreamOperation = (
         keywords: ['updated'],
         sentiment: 'neutral',
         importance: 0.8
-    }
+    },
+    reason: 'test update'
 })
 
 const completeDreamMergeOperation = (
@@ -227,43 +317,32 @@ const completeDreamMergeOperation = (
         keywords: ['merged'],
         sentiment: 'neutral',
         importance: 0.9
-    }
+    },
+    reason: 'test merge'
 })
 
-it('enforces Dream stage actions and touched-memory guards', async () => {
+it('enforces Dream touched-memory guards', async () => {
     const updates: Partial<MemoryEntryRecord>[] = []
     const repository: DreamExecutorRepository = {
-        updateMemory: async (_id, patch) => {
+        updateMemoryForDream: async (_id, patch) => {
             updates.push(patch)
         },
+        setMemoryConsolidation: async () => {},
         applyDreamMerge: async () => {}
     }
     const executor = new DreamExecutor(repository, () => {})
     const entry = createMemoryEntry('memory-1')
     const cluster = { id: 'cluster-1', reason: 'test', entries: [entry] }
 
-    const activeDeleteSource = await executor.executeOperations(
-        'active',
-        cluster,
-        [{ action: 'deleteSource', sourceMemoryIds: [entry.id] }],
-        new Set()
-    )
-    const archivedArchive = await executor.executeOperations(
-        'archived',
-        { ...cluster, entries: [createMemoryEntry('memory-1', 'archived')] },
-        [{ action: 'archive', memoryId: entry.id }],
-        new Set()
-    )
     const touchedMemoryIds = new Set<string>()
     const repeatedUpdate = await executor.executeOperations(
         'active',
         cluster,
-        [completeDreamOperation('update'), completeDreamOperation('update')],
-        touchedMemoryIds
+        [completeDreamUpdateOperation(), completeDreamUpdateOperation()],
+        touchedMemoryIds,
+        'manual'
     )
 
-    assert.equal(activeDeleteSource.skipped, 1)
-    assert.equal(archivedArchive.skipped, 1)
     assert.equal(repeatedUpdate.updated, 1)
     assert.equal(repeatedUpdate.skipped, 1)
     assert.equal(updates.length, 1)
@@ -274,7 +353,8 @@ it('delegates each Dream merge to one atomic repository operation', async () => 
         DreamExecutorRepository['applyDreamMerge']
     >[0][] = []
     const repository: DreamExecutorRepository = {
-        updateMemory: async () => {},
+        updateMemoryForDream: async () => {},
+        setMemoryConsolidation: async () => {},
         applyDreamMerge: async (input) => {
             mergeInputs.push(input)
         }
@@ -295,7 +375,8 @@ it('delegates each Dream merge to one atomic repository operation', async () => 
                 'source-active-2'
             ])
         ],
-        activeTouched
+        activeTouched,
+        'manual'
     )
     const archivedEntries = [
         createMemoryEntry('target-archived', 'archived'),
@@ -316,7 +397,8 @@ it('delegates each Dream merge to one atomic repository operation', async () => 
                 'source-archived-2'
             ])
         ],
-        archivedTouched
+        archivedTouched,
+        'manual'
     )
 
     assert.equal(mergeInputs.length, 2)
@@ -328,7 +410,17 @@ it('delegates each Dream merge to one atomic repository operation', async () => 
     assert.equal(mergeInputs[0]?.patch.status, 'active')
     assert.equal(mergeInputs[1]?.sourceDisposition, 'delete')
     assert.equal(mergeInputs[1]?.patch.status, 'archived')
-    assert.deepEqual(activeResult, {
+    const {
+        consolidatedMemoryIds: _activeConsolidated,
+        mutatedMemoryIds: _activeMutated,
+        ...activeStats
+    } = activeResult
+    const {
+        consolidatedMemoryIds: _archivedConsolidated,
+        mutatedMemoryIds: _archivedMutated,
+        ...archivedStats
+    } = archivedResult
+    assert.deepEqual(activeStats, {
         kept: 0,
         merged: 1,
         updated: 0,
@@ -336,7 +428,7 @@ it('delegates each Dream merge to one atomic repository operation', async () => 
         deleted: 0,
         skipped: 0
     })
-    assert.deepEqual(archivedResult, {
+    assert.deepEqual(archivedStats, {
         kept: 0,
         merged: 1,
         updated: 0,
@@ -358,7 +450,8 @@ it('delegates each Dream merge to one atomic repository operation', async () => 
 
 it('does not touch merge state when the atomic repository write fails', async () => {
     const repository: DreamExecutorRepository = {
-        updateMemory: async () => {},
+        updateMemoryForDream: async () => {},
+        setMemoryConsolidation: async () => {},
         applyDreamMerge: async () => {
             throw new Error('merge write failed')
         }
@@ -378,17 +471,18 @@ it('does not touch merge state when the atomic repository write fails', async ()
                 ]
             },
             [completeDreamMergeOperation('target', ['source'])],
-            touchedMemoryIds
+            touchedMemoryIds,
+            'manual'
         ),
         /merge write failed/u
     )
     assert.deepEqual([...touchedMemoryIds], ['already-touched'])
 })
 
-it('skips auto Dream when memory growth is below the threshold', async () => {
+it('skips auto Dream when pending memories are below the threshold', async () => {
     const jobStore = createJobStore()
     let dreamCalls = 0
-    const coordinator = new LivingMemoryDreamCoordinator(
+    const coordinator = createDreamCoordinator(
         {
             enableAutoDream: true,
             autoDreamMemoryGrowthThreshold: 3
@@ -399,6 +493,7 @@ it('skips auto Dream when memory growth is below the threshold', async () => {
                 return createDreamRunResult()
             }
         },
+        incrementalDream,
         createDreamCoordinatorRepository(jobStore, async () => 2),
         { clearByPreset: () => {} },
         new LivingMemoryJobTracker(jobStore),
@@ -412,19 +507,24 @@ it('skips auto Dream when memory growth is below the threshold', async () => {
     assert.equal(jobStore.jobs.length, 0)
 })
 
-it('keeps the auto Dream threshold entry without running a workflow', async () => {
+it('runs one incremental Dream batch when pending memories reach the threshold', async () => {
     const jobStore = createJobStore()
-    let dreamCalls = 0
+    let incrementalCalls = 0
     const debugMessages: string[] = []
-    const coordinator = new LivingMemoryDreamCoordinator(
+    const coordinator = createDreamCoordinator(
         {
             enableAutoDream: true,
             autoDreamMemoryGrowthThreshold: 3
         },
         {
             run: async () => {
-                dreamCalls += 1
                 return createDreamRunResult()
+            }
+        },
+        {
+            run: async () => {
+                incrementalCalls += 1
+                return createIncrementalDreamRunResult()
             }
         },
         createDreamCoordinatorRepository(jobStore, async () => 3),
@@ -436,8 +536,12 @@ it('keeps the auto Dream threshold entry without running a workflow', async () =
 
     await coordinator.queueAutoIfThresholdReached(scope.presetId)
 
-    assert.equal(dreamCalls, 0)
-    assert.equal(jobStore.jobs.length, 0)
+    await waitFor(
+        () => jobStore.jobs[0]?.status === 'completed',
+        'automatic Dream completion'
+    )
+    assert.equal(incrementalCalls, 1)
+    assert.equal(jobStore.jobs.length, 1)
     assert.ok(
         debugMessages.some((message) =>
             message.includes('memory auto dream threshold reached')
@@ -445,16 +549,54 @@ it('keeps the auto Dream threshold entry without running a workflow', async () =
     )
 })
 
+it('records partial incremental Dream failures in the job detail', async () => {
+    const jobStore = createJobStore()
+    const coordinator = createDreamCoordinator(
+        {
+            enableAutoDream: true,
+            autoDreamMemoryGrowthThreshold: 3
+        },
+        { run: async () => createDreamRunResult() },
+        {
+            run: async () => ({
+                ...createIncrementalDreamRunResult(),
+                failed: true,
+                failedSeedCount: 1,
+                remainingPendingCount: 1,
+                detail: 'seed failed after structured-output retries'
+            })
+        },
+        createDreamCoordinatorRepository(jobStore, async () => 3),
+        { clearByPreset: () => {} },
+        new LivingMemoryJobTracker(jobStore),
+        logger,
+        debug
+    )
+
+    await coordinator.queueAutoIfThresholdReached(scope.presetId)
+    await waitFor(
+        () => jobStore.jobs[0]?.status === 'failed',
+        'automatic Dream failure'
+    )
+
+    assert.equal(
+        jobStore.jobs[0]?.detail,
+        'seed failed after structured-output retries'
+    )
+    assert.equal(jobStore.jobs[0]?.error, 'automatic incremental dream failed')
+})
+
 it('clears snapshot cache only when successful Dream changes memories', async () => {
     const runDream = async (result: DreamRunResult) => {
         const jobStore = createJobStore()
         const clearedPresets: string[] = []
-        const coordinator = new LivingMemoryDreamCoordinator(
+        const coordinator = createDreamCoordinator(
             {
                 enableAutoDream: false,
                 autoDreamMemoryGrowthThreshold: 3
             },
             { run: async () => result },
+            incrementalDream,
             createDreamCoordinatorRepository(jobStore),
             {
                 clearByPreset: (presetId) => {
@@ -487,7 +629,7 @@ it('clears snapshot cache only when successful Dream changes memories', async ()
 it('clears snapshot cache when Dream fails after possible writes', async () => {
     const jobStore = createJobStore()
     const clearedPresets: string[] = []
-    const coordinator = new LivingMemoryDreamCoordinator(
+    const coordinator = createDreamCoordinator(
         {
             enableAutoDream: false,
             autoDreamMemoryGrowthThreshold: 3
@@ -497,6 +639,7 @@ it('clears snapshot cache when Dream fails after possible writes', async () => {
                 throw new Error('dream failed')
             }
         },
+        incrementalDream,
         createDreamCoordinatorRepository(jobStore),
         {
             clearByPreset: (presetId) => {

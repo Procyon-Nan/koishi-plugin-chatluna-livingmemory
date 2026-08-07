@@ -26,6 +26,7 @@ const createMemory = (
         sourceOrigins: [],
         embedding: null,
         embeddingModelId: null,
+        isConsolidated: false,
         createdAt,
         updatedAt: createdAt
     }

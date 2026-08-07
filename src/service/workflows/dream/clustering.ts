@@ -77,7 +77,7 @@ export class DreamClusterer {
                 `dream embedding model creation failed: ${summarizeError(error)}`
             )
         }
-        if (embeddings?.value == null) {
+        if (embeddings.value === undefined) {
             throw new Error('dream embedding model is unavailable')
         }
 
@@ -92,7 +92,8 @@ export class DreamClusterer {
         if (
             !Array.isArray(probeVector) ||
             probeVector.length === 0 ||
-            probeVector.some((value) => !Number.isFinite(value))
+            probeVector.some((value) => !Number.isFinite(value)) ||
+            probeVector.every((value) => value === 0)
         ) {
             throw new Error(
                 'dream embedding dimension probe returned invalid vector'
@@ -117,9 +118,9 @@ export class DreamClusterer {
                 this.config.embeddingModel,
                 entries,
                 {
-                    logger: this.ctx.logger('chatluna-livingmemory'),
                     debug: (message) => this.debug(message),
-                    expectedDimension: context.expectedDimension
+                    expectedDimension: context.expectedDimension,
+                    persistenceFailure: 'throw'
                 }
             )
         } catch (error) {
@@ -128,25 +129,6 @@ export class DreamClusterer {
             )
         }
 
-        for (const entry of entries) {
-            const vector = vectors.get(entry.id)
-            if (
-                !Array.isArray(vector) ||
-                vector.length !== context.expectedDimension ||
-                vector.some((value) => !Number.isFinite(value))
-            ) {
-                throw new Error(`dream embedding invalid: id=${entry.id}`)
-            }
-            let normSq = 0
-            for (const value of vector) {
-                normSq += value * value
-            }
-            if (normSq === 0) {
-                throw new Error(
-                    `dream embedding is zero vector: id=${entry.id}`
-                )
-            }
-        }
         return vectors
     }
 }

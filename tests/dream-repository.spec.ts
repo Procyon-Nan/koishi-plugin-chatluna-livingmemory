@@ -83,7 +83,9 @@ it('atomically updates an active Dream merge and archives its sources', async ()
             sources: [source1, source2],
             patch: createMergePatch('active'),
             sourceOrigins,
-            sourceDisposition: 'archive'
+            sourceDisposition: 'archive',
+            targetIsConsolidated: false,
+            sourceIsConsolidated: true
         })
 
         const entries = await repository.getEntriesByIds([
@@ -100,6 +102,42 @@ it('atomically updates an active Dream merge and archives its sources', async ()
         assert.equal(storedTarget?.embeddingModelId, null)
         assert.equal(entryById.get(source1.id)?.status, 'archived')
         assert.equal(entryById.get(source2.id)?.status, 'archived')
+        assert.equal(storedTarget?.isConsolidated, false)
+        assert.equal(entryById.get(source1.id)?.isConsolidated, true)
+        assert.equal(entryById.get(source2.id)?.isConsolidated, true)
+    })
+})
+
+it('counts pending memories and selects the earliest stable batch', async () => {
+    await withRepository(async (ctx, repository) => {
+        const entries = await Promise.all([
+            createMemory(repository, 'memory-a', 'active'),
+            createMemory(repository, 'memory-b', 'active'),
+            createMemory(repository, 'memory-c', 'archived'),
+            createMemory(repository, 'memory-d', 'active')
+        ])
+        const firstTime = new Date('2026-08-01T00:00:00.000Z')
+        const secondTime = new Date('2026-08-02T00:00:00.000Z')
+        await ctx.database.set(
+            'living_memory_entry',
+            { id: { $in: [entries[0].id, entries[1].id] } },
+            { createdAt: firstTime }
+        )
+        await ctx.database.set(
+            'living_memory_entry',
+            { id: { $in: [entries[2].id, entries[3].id] } },
+            { createdAt: secondTime }
+        )
+        await repository.setMemoryConsolidation([entries[3].id], true)
+
+        assert.equal(await repository.countPendingEntries(scope.presetId), 3)
+        const selected = await repository.listPendingEntries(scope.presetId, 2)
+        assert.deepEqual(
+            selected.map((entry) => entry.id),
+            [entries[0].id, entries[1].id].sort((left, right) =>
+                left.localeCompare(right)
+            )
+        )
     })
 })
 
@@ -114,7 +152,9 @@ it('atomically updates an archived Dream merge and deletes its sources', async (
             sources: [source1, source2],
             patch: createMergePatch('archived'),
             sourceOrigins: [],
-            sourceDisposition: 'delete'
+            sourceDisposition: 'delete',
+            targetIsConsolidated: true,
+            sourceIsConsolidated: true
         })
 
         const storedTarget = await repository.getEntryById(target.id)
@@ -152,7 +192,9 @@ it('rolls back the target update when Dream source deletion fails', async () => 
                     sources: [source1, source2],
                     patch: createMergePatch('archived'),
                     sourceOrigins: [],
-                    sourceDisposition: 'delete'
+                    sourceDisposition: 'delete',
+                    targetIsConsolidated: true,
+                    sourceIsConsolidated: true
                 }),
                 /injected source delete failure/u
             )
@@ -181,7 +223,9 @@ it('rejects a Dream merge when a source no longer exists', async () => {
                 ],
                 patch: createMergePatch('active'),
                 sourceOrigins: [],
-                sourceDisposition: 'archive'
+                sourceDisposition: 'archive',
+                targetIsConsolidated: true,
+                sourceIsConsolidated: true
             }),
             /target or source memories changed/u
         )
@@ -210,7 +254,9 @@ it('rejects a Dream merge when a source changed after clustering', async () => {
                 sources: [source],
                 patch: createMergePatch('active'),
                 sourceOrigins: [],
-                sourceDisposition: 'archive'
+                sourceDisposition: 'archive',
+                targetIsConsolidated: true,
+                sourceIsConsolidated: true
             }),
             /target or source memories changed/u
         )

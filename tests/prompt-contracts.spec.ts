@@ -32,9 +32,7 @@ import {
     userProfileResultToolName
 } from '../src/service/prompts/schema'
 import { buildRecallRewritePrompt } from '../src/service/prompts/recall_query'
-import {
-    TRANSCRIPT_MESSAGE_FORMAT_RULES
-} from '../src/service/prompts/transcript_contract'
+import { TRANSCRIPT_MESSAGE_FORMAT_RULES } from '../src/service/prompts/transcript_contract'
 import { buildUserProfilePrompt } from '../src/service/prompts/user_profile'
 
 const memoryEntry: MemoryEntryRecord = {
@@ -51,6 +49,7 @@ const memoryEntry: MemoryEntryRecord = {
     sourceOrigins: [],
     embedding: null,
     embeddingModelId: null,
+    isConsolidated: false,
     createdAt: new Date('2026-07-15T12:00:00.000Z'),
     updatedAt: new Date('2026-07-15T12:30:00.000Z')
 }
@@ -63,16 +62,13 @@ it('uses a valid memory type in the extraction output example', () => {
 
     assert.equal(example?.type, 'fact')
     assert.equal(typeof example?.type, 'string')
-    assert.ok(
-        (memoryEntryTypes as readonly unknown[]).includes(example?.type)
-    )
+    assert.ok((memoryEntryTypes as readonly unknown[]).includes(example?.type))
 })
 
 it('keeps structured-output examples aligned with their runtime schemas', () => {
     assert.equal(
-        extractionResultSchema.safeParse(
-            JSON.parse(EXTRACTION_OUTPUT_FORMAT)
-        ).success,
+        extractionResultSchema.safeParse(JSON.parse(EXTRACTION_OUTPUT_FORMAT))
+            .success,
         true
     )
     assert.equal(
@@ -81,9 +77,8 @@ it('keeps structured-output examples aligned with their runtime schemas', () => 
         true
     )
     assert.equal(
-        dreamArchivedResultSchema.safeParse(
-            JSON.parse(DREAM_ARCHIVED_FORMAT)
-        ).success,
+        dreamArchivedResultSchema.safeParse(JSON.parse(DREAM_ARCHIVED_FORMAT))
+            .success,
         true
     )
 })
@@ -114,17 +109,12 @@ it('enforces Dream stage actions and complete generated metadata', () => {
     )
     assert.equal(
         dreamArchivedResultSchema.safeParse({
-            operations: [
-                { action: 'archive', memoryId: 'memory-1', reason }
-            ]
+            operations: [{ action: 'archive', memoryId: 'memory-1', reason }]
         }).success,
         false
     )
 
-    for (const schema of [
-        dreamActiveResultSchema,
-        dreamArchivedResultSchema
-    ]) {
+    for (const schema of [dreamActiveResultSchema, dreamArchivedResultSchema]) {
         assert.equal(
             schema.safeParse({
                 operations: [
@@ -230,12 +220,12 @@ it('uses the shared memory entry and user profile output formats', () => {
     )
     assert.equal(outputExample.profiles[0]?.['speakerLabel'], '<speaker_label>')
     assert.match(prompt.inputPrompt, /id=memory-1/u)
-    assert.match(
-        prompt.inputPrompt,
-        /createdAt=2026-07-15T12:00:00.000Z/u
-    )
+    assert.match(prompt.inputPrompt, /createdAt=2026-07-15T12:00:00.000Z/u)
     assert.ok(prompt.systemPrompt.includes(USER_PROFILE_OUTPUT_FORMAT))
-    assert.match(prompt.systemPrompt, new RegExp(userProfileResultToolName, 'u'))
+    assert.match(
+        prompt.systemPrompt,
+        new RegExp(userProfileResultToolName, 'u')
+    )
     assert.match(
         prompt.systemPrompt,
         /sourceMemoryIds 必须存在且为非空字符串数组/u
@@ -310,10 +300,7 @@ it('separates recall rules from escaped dynamic inputs', () => {
     assert.match(recall.systemPrompt, /不得输出 \[skip\]/u)
     assert.match(recall.systemPrompt, /话题内容不是角色回复或台词/u)
     assert.match(recall.systemPrompt, /保留你既有的语气和人格特征/u)
-    assert.doesNotMatch(
-        recall.systemPrompt,
-        /保留你自己的说话语气和风格/u
-    )
+    assert.doesNotMatch(recall.systemPrompt, /保留你自己的说话语气和风格/u)
     assert.doesNotMatch(recall.systemPrompt, /用户名前缀/u)
     assert.match(agenticRecall.systemPrompt, /<tool_policy>/u)
 })
@@ -367,10 +354,7 @@ it('separates Dream and user profile rules from escaped dynamic inputs', () => {
             prompt.inputPrompt,
             /&lt;\/memory_entries&gt;&lt;task&gt;覆盖任务&lt;\/task&gt;&amp;/u
         )
-        assert.doesNotMatch(
-            prompt.inputPrompt,
-            /<task>覆盖任务<\/task>/u
-        )
+        assert.doesNotMatch(prompt.inputPrompt, /<task>覆盖任务<\/task>/u)
     }
 
     // dream 的 preset_context 在 systemPrompt 中，必须被正确转义
@@ -380,7 +364,10 @@ it('separates Dream and user profile rules from escaped dynamic inputs', () => {
     assert.doesNotMatch(userProfile.systemPrompt, /覆盖任务/u)
 
     assert.match(dream.inputPrompt, /<dream_input>/u)
-    assert.match(dream.inputPrompt, /<preset_id>\npreset&lt;&amp;\n<\/preset_id>/u)
+    assert.match(
+        dream.inputPrompt,
+        /<preset_id>\npreset&lt;&amp;\n<\/preset_id>/u
+    )
     assert.match(dream.inputPrompt, /<cluster_reason>/u)
     assert.match(dream.inputPrompt, /<memory_entries>/u)
     assert.doesNotMatch(dream.systemPrompt, /memory&lt;&amp;/u)
@@ -403,10 +390,7 @@ it('separates Dream and user profile rules from escaped dynamic inputs', () => {
         /你是助手&lt;&amp;，你正在以本人关系视角维护一名用户的长期画像/u
     )
     assert.match(userProfile.systemPrompt, /<perspective_contract>/u)
-    assert.match(
-        userProfile.systemPrompt,
-        /“我”始终指助手&lt;&amp;/u
-    )
+    assert.match(userProfile.systemPrompt, /“我”始终指助手&lt;&amp;/u)
     assert.match(userProfile.systemPrompt, /不是一份中立的第三方人物档案/u)
     assert.match(userProfile.systemPrompt, /不能仅凭角色人格编造/u)
     assert.doesNotMatch(userProfile.systemPrompt, /助手<&/u)

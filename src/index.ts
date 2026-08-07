@@ -120,7 +120,7 @@ export const Config: Schema<Config> = Schema.intersect([
     Schema.object({
         enableAutoDream: Schema.boolean()
             .description(
-                '当某个预设自上次 Dream 后新增记忆达到阈值时，自动触发该预设的 Dream。'
+                '当某个预设尚未完成 consolidation 的记忆达到阈值时，自动执行增量 Dream。'
             )
             .default(false),
         autoDreamMemoryGrowthThreshold: Schema.number()
@@ -128,7 +128,7 @@ export const Config: Schema<Config> = Schema.intersect([
             .max(200)
             .step(1)
             .description(
-                '自动 Dream 的新增记忆阈值。预设从未执行过 Dream 时，从该预设全部记忆开始计数。'
+                '自动增量 Dream 的 pending 记忆阈值，同时也是单次任务选取的批次大小。'
             )
             .default(30),
         userProfileMemoryLimit: Schema.number()

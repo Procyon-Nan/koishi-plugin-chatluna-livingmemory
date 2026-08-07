@@ -38,6 +38,10 @@ export const defineLivingMemoryTables = (ctx: Context) => {
                 nullable: true,
                 initial: null
             },
+            isConsolidated: {
+                type: 'boolean',
+                initial: false
+            },
             createdAt: 'timestamp',
             updatedAt: 'timestamp'
         },

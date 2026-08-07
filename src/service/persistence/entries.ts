@@ -7,8 +7,8 @@ import type {
     MemorySourceMessage
 } from '../../contracts/memory'
 import type {
+    DreamMemoryRepository,
     DreamMergeInput,
-    DreamMergeRepository,
     ExtractedMemoryItem,
     ExtractionRepository,
     RecallRepository
@@ -30,7 +30,7 @@ const sourceOriginsArrayMigrationId = 'source-origins-array-v1'
 const keywordFingerprintSeparator = '\u0000'
 
 export class LivingMemoryEntryRepository
-    implements RecallRepository, ExtractionRepository, DreamMergeRepository
+    implements RecallRepository, ExtractionRepository, DreamMemoryRepository
 {
     constructor(private readonly ctx: Context) {}
 
@@ -73,21 +73,40 @@ export class LivingMemoryEntryRepository
         return entries.map(normalizeEntryRecord)
     }
 
-    async countEntriesCreatedAfter(
-        presetId: string,
-        createdAfter?: Date
-    ): Promise<number> {
-        const query: Record<string, unknown> = { presetId }
-        if (createdAfter != null) {
-            query.createdAt = { $gt: createdAfter }
-        }
-
+    async countPendingEntries(presetId: string): Promise<number> {
         const entries = await this.ctx.database.get(
             'living_memory_entry',
-            query,
+            { presetId, isConsolidated: false },
             ['id']
         )
         return entries.length
+    }
+
+    async listPendingEntries(
+        presetId: string,
+        limit: number
+    ): Promise<MemoryEntryRecord[]> {
+        const entries = await this.ctx.database
+            .select('living_memory_entry', {
+                presetId,
+                isConsolidated: false
+            })
+            .orderBy('createdAt', 'asc')
+            .orderBy('id', 'asc')
+            .limit(limit)
+            .execute()
+
+        return entries.map(normalizeEntryRecord)
+    }
+
+    async listConsolidatedEntries(
+        presetId: string
+    ): Promise<MemoryEntryRecord[]> {
+        const entries = await this.ctx.database.get('living_memory_entry', {
+            presetId,
+            isConsolidated: true
+        })
+        return entries.map(normalizeEntryRecord)
     }
 
     async getEntryById(id: string): Promise<MemoryEntryRecord | undefined> {
@@ -160,6 +179,7 @@ export class LivingMemoryEntryRepository
                 sourceOrigins,
                 embedding: null,
                 embeddingModelId: null,
+                isConsolidated: false,
                 createdAt: now,
                 updatedAt: now
             }))
@@ -182,6 +202,7 @@ export class LivingMemoryEntryRepository
             sourceOrigins: [],
             embedding: null,
             embeddingModelId: null,
+            isConsolidated: false,
             createdAt: now,
             updatedAt: now
         }
@@ -206,6 +227,35 @@ export class LivingMemoryEntryRepository
         )
     }
 
+    async updateMemoryForDream(
+        id: string,
+        patch: Partial<MemoryMutationInput>,
+        isConsolidated: boolean
+    ) {
+        const current = await this.getEntryById(id)
+        if (current == null) {
+            throw new Error(`dream update failed: memory not found: ${id}`)
+        }
+
+        await this.ctx.database.set(
+            'living_memory_entry',
+            { id },
+            {
+                ...this.buildMemoryUpdatePatch(current, patch),
+                isConsolidated,
+                updatedAt: new Date()
+            }
+        )
+    }
+
+    async setMemoryConsolidation(ids: string[], isConsolidated: boolean) {
+        await this.ctx.database.set(
+            'living_memory_entry',
+            { id: { $in: ids } },
+            { isConsolidated }
+        )
+    }
+
     async applyDreamMerge(input: DreamMergeInput) {
         const sourceIds = input.sources.map((source) => source.id)
         const uniqueSourceIds = [...new Set(sourceIds)]
@@ -217,8 +267,10 @@ export class LivingMemoryEntryRepository
             throw new Error('dream merge failed: invalid source ids')
         }
 
-        const expectedStatus: MemoryEntryRecord['status'] =
-            input.sourceDisposition === 'archive' ? 'active' : 'archived'
+        let expectedStatus: MemoryEntryRecord['status'] = 'active'
+        if (input.sourceDisposition === 'delete') {
+            expectedStatus = 'archived'
+        }
         if (input.patch.status !== expectedStatus) {
             throw new Error('dream merge failed: stage disposition mismatch')
         }
@@ -271,6 +323,7 @@ export class LivingMemoryEntryRepository
                     sourceOrigins: normalizeMemorySourceOrigins(
                         input.sourceOrigins
                     ),
+                    isConsolidated: input.targetIsConsolidated,
                     updatedAt
                 }
             )
@@ -289,6 +342,7 @@ export class LivingMemoryEntryRepository
                     sourceQuery,
                     {
                         status: 'archived',
+                        isConsolidated: input.sourceIsConsolidated,
                         updatedAt
                     }
                 )

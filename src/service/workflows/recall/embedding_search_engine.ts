@@ -136,7 +136,7 @@ export class LivingMemoryEmbeddingSearchEngine {
             const result = await this.ctx.chatluna.createEmbeddings(
                 this.config.embeddingModel
             )
-            if (result?.value == null) {
+            if (result.value === undefined) {
                 throw new Error(
                     `agentic recall embedding unavailable: model=${this.config.embeddingModel}`
                 )
@@ -167,7 +167,8 @@ export class LivingMemoryEmbeddingSearchEngine {
                     // 首条查询向量的维度即当前模型输出维度，
                     // 以此让维度不一致的旧缓存向量失效重算。
                     expectedDimension: queryVectors[0].length,
-                    debug: (msg: string) => this.debugLog(msg)
+                    debug: (msg: string) => this.debugLog(msg),
+                    persistenceFailure: 'warn'
                 }
             )
         }

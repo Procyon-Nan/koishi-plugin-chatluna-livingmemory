@@ -90,17 +90,6 @@ export const createJobStore = () => {
         Object.assign(job, patch)
     }
 
-    const getLatestJobByPresetAndKind: JobRepository['getLatestJobByPresetAndKind'] =
-        async (presetId, kind) => {
-            return (
-                jobs
-                    .filter(
-                        (job) => job.presetId === presetId && job.kind === kind
-                    )
-                    .at(-1) ?? undefined
-            )
-        }
-
     const markStaleRunningJobsAsFailed: JobRepository['markStaleRunningJobsAsFailed'] =
         async () => []
 
@@ -109,7 +98,6 @@ export const createJobStore = () => {
         createJob,
         createFailedJob,
         updateJob,
-        getLatestJobByPresetAndKind,
         markStaleRunningJobsAsFailed
     }
 }
@@ -149,6 +137,7 @@ export const createMemoryEntry = (
         sourceOrigins: [],
         embedding: null,
         embeddingModelId: null,
+        isConsolidated: false,
         createdAt: now,
         updatedAt: now
     }
@@ -176,7 +165,7 @@ export const createAgenticTrace = (
                           summary: 'matched summary',
                           importance: 0.5,
                           createdAt: new Date('2026-07-01T00:00:00.000Z'),
-                          updatedAt: new Date('2026-07-01T00:00:00.000Z'),
+                          updatedAt: new Date('2026-07-01T00:00:00.000Z')
                       }
                   ]
                 : []

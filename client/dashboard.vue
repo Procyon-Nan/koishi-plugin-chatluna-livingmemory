@@ -508,7 +508,7 @@ const onImportFileSelected = async (event: Event) => {
         return
     }
 
-    if (data.version !== 1) {
+    if (data.version !== 1 && data.version !== 2) {
         ElMessage.error(`不支持的导出版本：${data.version}`)
         return
     }
@@ -536,7 +536,20 @@ const onImportFileSelected = async (event: Event) => {
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         ElMessage.error(`导入失败：${message}`)
+        return
     }
+
+    await ElMessageBox.alert(
+        '导入已完成。请执行一次手动 Dream，使导入记忆完成全量整理。',
+        '需要执行 Dream',
+        {
+            type: 'info',
+            confirmButtonText: '知道了',
+            showClose: false,
+            closeOnClickModal: false,
+            closeOnPressEscape: false
+        }
+    )
 }
 
 const onPresetAction = async (command: string) => {

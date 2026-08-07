@@ -39,11 +39,9 @@ export interface StructuredOutputContext {
     conversationId: string
 }
 
-export interface StructuredOutputResult<T> {
-    value: T | null
-    output: string
-    parseError: string | null
-}
+export type StructuredOutputResult<T> =
+    | { value: T; output: string; parseError: null }
+    | { value: null; output: string; parseError: string }
 
 interface StructuredOutputOptions<Schema extends z.AnyZodObject> {
     model: ChatLunaChatModel

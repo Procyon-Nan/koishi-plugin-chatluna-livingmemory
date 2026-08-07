@@ -13,7 +13,10 @@ import {
 } from '../src/service/memory/entry_fields'
 import { LivingMemoryRepository } from '../src/service/persistence/repository'
 import { LivingMemoryExtractor } from '../src/service/workflows/extraction/extractor'
-import { extractionResultToolName } from '../src/service/prompts/schema'
+import {
+    dreamActiveResultSchema,
+    extractionResultToolName
+} from '../src/service/prompts/schema'
 import {
     DreamExecutor,
     type DreamExecutorRepository
@@ -28,8 +31,9 @@ const keywordInput = () => [
     'alpha',
     '',
     null,
-    ...Array.from({ length: MAX_MEMORY_KEYWORDS }, (_, index) =>
-        `keyword-${index}`
+    ...Array.from(
+        { length: MAX_MEMORY_KEYWORDS },
+        (_, index) => `keyword-${index}`
     )
 ]
 
@@ -44,11 +48,7 @@ it('normalizes and limits memory keywords consistently', () => {
     const keywords = normalizeMemoryKeywords(keywordInput())
 
     assert.equal(keywords.length, MAX_MEMORY_KEYWORDS)
-    assert.deepEqual(keywords.slice(0, 3), [
-        'alpha',
-        'keyword-0',
-        'keyword-1'
-    ])
+    assert.deepEqual(keywords.slice(0, 3), ['alpha', 'keyword-0', 'keyword-1'])
     assert.equal(keywords.at(-1), `keyword-${MAX_MEMORY_KEYWORDS - 2}`)
 })
 
@@ -112,9 +112,10 @@ it('applies shared field rules to extracted memories', async () => {
 it('applies shared field rules to Dream mutations', async () => {
     let capturedPatch: Partial<MemoryMutationInput> | undefined
     const repository: DreamExecutorRepository = {
-        updateMemory: async (_id, patch) => {
+        updateMemoryForDream: async (_id, patch) => {
             capturedPatch = patch
         },
+        setMemoryConsolidation: async () => {},
         applyDreamMerge: async () => {}
     }
     const executor = new DreamExecutor(repository, () => {})
@@ -133,14 +134,14 @@ it('applies shared field rules to Dream mutations', async () => {
         sourceOrigins: [],
         embedding: null,
         embeddingModelId: null,
+        isConsolidated: false,
         createdAt: now,
         updatedAt: now
     }
 
-    const stats = await executor.executeOperations(
-        'active',
-        { id: 'cluster-1', reason: 'test', entries: [entry] },
-        [
+    const dreamKeywords = ['  alpha  ', 'alpha', 'keyword-0']
+    const operations = dreamActiveResultSchema.parse({
+        operations: [
             {
                 action: 'update',
                 memoryId: entry.id,
@@ -149,12 +150,19 @@ it('applies shared field rules to Dream mutations', async () => {
                     content: '  dream content  ',
                     summary: '  dream summary  ',
                     sentiment: '  concerned  ',
-                    keywords: keywordInput(),
-                    importance: '-1'
-                }
+                    keywords: dreamKeywords,
+                    importance: 0
+                },
+                reason: 'test update'
             }
-        ],
-        new Set()
+        ]
+    }).operations
+    const stats = await executor.executeOperations(
+        'active',
+        { id: 'cluster-1', reason: 'test', entries: [entry] },
+        operations,
+        new Set(),
+        'manual'
     )
 
     assert.equal(stats.updated, 1)
@@ -163,7 +171,7 @@ it('applies shared field rules to Dream mutations', async () => {
         content: 'dream content',
         summary: 'dream summary',
         sentiment: 'concerned',
-        keywords: normalizeMemoryKeywords(keywordInput()),
+        keywords: normalizeMemoryKeywords(dreamKeywords),
         importance: 0,
         status: 'active'
     })

@@ -284,7 +284,8 @@ it('partitions manual Dream before running HDBSCAN', async () => {
     const entries = createEntries(351).map((entry, index) => ({
         ...entry,
         embedding: [index + 1, 1],
-        embeddingModelId: 'embedding-model'
+        embeddingModelId: 'embedding-model',
+        isConsolidated: false
     }))
 
     await clusterer.buildClusters(entries)
@@ -317,6 +318,6 @@ it('fails Dream when an entry embedding is invalid', async () => {
 
     await assert.rejects(
         clusterer.buildClusters(entries),
-        /dream embedding invalid/u
+        /memory embedding invalid/u
     )
 })

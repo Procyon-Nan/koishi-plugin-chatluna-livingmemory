@@ -29,7 +29,12 @@ const extractModelOutput = async (input: Record<string, unknown>) => {
         input,
         'result-2'
     )
-    const model = createToolCallingModel([first, second])
+    const third = createToolCallMessage(
+        extractionResultToolName,
+        input,
+        'result-3'
+    )
+    const model = createToolCallingModel([first, second, third])
     const ctx = {
         chatluna: {
             createChatModel: async () => ({
@@ -38,7 +43,7 @@ const extractModelOutput = async (input: Record<string, unknown>) => {
         }
     } as unknown as Context
 
-    return await new LivingMemoryExtractor(ctx, 'test-model').extractWithTrace(
+    return new LivingMemoryExtractor(ctx, 'test-model').extractWithTrace(
         'input',
         {
             conversationId: 'conversation-1',

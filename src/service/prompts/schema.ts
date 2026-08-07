@@ -134,6 +134,24 @@ export const dreamArchivedResultSchema = z.object({
     )
 })
 
+type RequiredSchemaOutput<Schema extends z.ZodTypeAny> = Required<
+    z.output<Schema>
+>
+type DreamGeneratedMemory = CompleteMemoryOutput<MemoryMutationInput>
+
+export type DreamOperation =
+    | RequiredSchemaOutput<typeof dreamKeepOperationSchema>
+    | (Omit<
+          RequiredSchemaOutput<typeof dreamUpdateOperationSchema>,
+          'memory'
+      > & { memory: DreamGeneratedMemory })
+    | (Omit<
+          RequiredSchemaOutput<typeof dreamMergeOperationSchema>,
+          'memory'
+      > & { memory: DreamGeneratedMemory })
+    | RequiredSchemaOutput<typeof dreamArchiveOperationSchema>
+    | RequiredSchemaOutput<typeof dreamDeleteSourceOperationSchema>
+
 const dreamActiveOperations = [
     { action: 'keep', memoryIds: ['...'], reason: '...' },
     {

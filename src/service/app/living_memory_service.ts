@@ -1,6 +1,8 @@
 import type { HumanMessage } from '@langchain/core/messages'
 import { Context, Logger, Service, Time } from 'koishi'
 import { LivingMemoryDreamService } from '../workflows/dream'
+import { LivingMemoryIncrementalDreamService } from '../workflows/dream/incremental'
+import { LivingMemoryDreamJobRunner } from '../workflows/dream/job_runner'
 import { LivingMemoryExtractor } from '../workflows/extraction/extractor'
 import { LivingMemoryMessageFormatter } from '../transcript/message_formatter'
 import { LivingMemoryRecallQueryBuilder } from '../workflows/recall/query_builder'
@@ -124,9 +126,22 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             this.repository,
             debug
         )
+        const incrementalDream = new LivingMemoryIncrementalDreamService(
+            ctx,
+            config,
+            this.repository,
+            debug
+        )
 
         const jobTracker = new LivingMemoryJobTracker(this.repository)
         this.snapshotCache = new LivingMemorySnapshotCache(this.repository)
+        const dreamJobRunner = new LivingMemoryDreamJobRunner(
+            dream,
+            incrementalDream,
+            this.snapshotCache,
+            jobTracker,
+            debug
+        )
         this.recallCoordinator = new LivingMemoryRecallCoordinator(
             config,
             this.repository,
@@ -139,10 +154,8 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         )
         this.dreamCoordinator = new LivingMemoryDreamCoordinator(
             config,
-            dream,
+            dreamJobRunner,
             this.repository,
-            this.snapshotCache,
-            jobTracker,
             this.serviceLogger,
             debug
         )
@@ -224,7 +237,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             const result = await this.ctx.chatluna.createEmbeddings(
                 this.config.embeddingModel
             )
-            if (result?.value == null) {
+            if (result.value === undefined) {
                 this.serviceLogger.warn(
                     'memory startup embedding rebuild skipped: ' +
                         'embedding provider not available, will lazy backfill on recall'
@@ -248,7 +261,8 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
                 stale,
                 {
                     logger: this.serviceLogger,
-                    debug: (msg: string) => this.debug(msg)
+                    debug: (msg: string) => this.debug(msg),
+                    persistenceFailure: 'warn'
                 }
             )
 
@@ -459,7 +473,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     }
 
     async runDream(presetId: string): Promise<DreamTriggerResult> {
-        return await this.dreamCoordinator.runManual(presetId)
+        return this.dreamCoordinator.runManual(presetId)
     }
 
     async clearPresetData(presetId: string) {
@@ -481,7 +495,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         const result = await this.ctx.chatluna.createEmbeddings(
             this.config.embeddingModel
         )
-        if (result?.value == null) {
+        if (result.value === undefined) {
             throw new Error(
                 `embedding unavailable: model=${this.config.embeddingModel}`
             )
@@ -498,7 +512,8 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             })),
             {
                 logger: this.serviceLogger,
-                debug: (msg: string) => this.debug(msg)
+                debug: (msg: string) => this.debug(msg),
+                persistenceFailure: 'warn'
             }
         )
 
