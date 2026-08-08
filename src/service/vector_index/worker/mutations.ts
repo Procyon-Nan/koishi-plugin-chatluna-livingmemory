@@ -67,8 +67,7 @@ const prepareMutationStatements = (database: Database.Database) => ({
     ),
     updateVector: database.prepare(
         `UPDATE lm_index_vectors
-         SET preset_id = ?,
-             status = ?,
+         SET status = ?,
              type = ?,
              is_consolidated = ?
          WHERE rowid = ?`
@@ -183,7 +182,6 @@ const updateVectorMetadata = (
 ) => {
     const document = upsert.document
     const result = statements.updateVector.run(
-        document.presetId,
         document.status,
         document.type,
         toSqliteBoolean(document.isConsolidated),
