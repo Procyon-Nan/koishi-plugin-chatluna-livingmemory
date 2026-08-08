@@ -1,11 +1,11 @@
 import type { Context } from 'koishi'
 import type { ChatLunaChatModel } from 'koishi-plugin-chatluna/llm-core/platform/model'
 import type { MemoryEntryRecord } from '../../../contracts/memory'
+import type { IncrementalDreamNeighborSearch } from '../../../contracts/vector_index'
 import type {
     DreamMemoryRepository,
     LivingMemoryConfig
 } from '../../../contracts/workflows'
-import type { EmbeddingRepositoryLike } from '../../shared/embeddings'
 import {
     resolveAssistantLabel,
     resolvePresetPrompt
@@ -13,26 +13,23 @@ import {
 import { isModelConfigured } from '../../shared/utils'
 import { addStats, createEmptyStats } from './stats'
 import type { DreamOperationStats, DreamRunResult, DreamStage } from './types'
-import { IncrementalDreamRetriever } from './incremental_retrieval'
 import { DreamUnitProcessor } from './unit_processor'
 
-type IncrementalDreamConfig = Pick<
-    LivingMemoryConfig,
-    'mainModel' | 'embeddingModel' | 'debug'
->
+type IncrementalDreamConfig = Pick<LivingMemoryConfig, 'mainModel' | 'debug'>
 
-export interface IncrementalDreamRepository extends EmbeddingRepositoryLike {
+export interface IncrementalDreamRepository {
     listPendingEntries(
         presetId: string,
         limit: number
     ): Promise<MemoryEntryRecord[]>
-    listConsolidatedEntries(presetId: string): Promise<MemoryEntryRecord[]>
     getEntriesByPresetAndIds(
         presetId: string,
         ids: string[]
     ): Promise<MemoryEntryRecord[]>
     countPendingEntries(presetId: string): Promise<number>
 }
+
+const INCREMENTAL_DREAM_TOP_K = 30
 
 export interface IncrementalDreamRunResult extends DreamRunResult {
     selectedCount: number
@@ -65,6 +62,7 @@ export class LivingMemoryIncrementalDreamService {
         private readonly config: IncrementalDreamConfig,
         private readonly repository: IncrementalDreamRepository,
         private readonly mutations: DreamMemoryRepository,
+        private readonly neighborSearch: IncrementalDreamNeighborSearch,
         private readonly debug: (message: string) => void
     ) {
         this.unitProcessor = new DreamUnitProcessor(
@@ -78,6 +76,7 @@ export class LivingMemoryIncrementalDreamService {
         presetId: string,
         batchSize: number
     ): Promise<IncrementalDreamRunResult> {
+        this.neighborSearch.assertPresetReady(presetId)
         const batch = await this.repository.listPendingEntries(
             presetId,
             batchSize
@@ -103,13 +102,6 @@ export class LivingMemoryIncrementalDreamService {
         }
 
         const model = await this.createChatModel()
-        const retriever = await IncrementalDreamRetriever.create(
-            this.ctx,
-            this.config,
-            this.repository,
-            batch[0].content,
-            this.debug
-        )
         const assistantLabel = resolveAssistantLabel(presetId)
         const presetPrompt = await resolvePresetPrompt(this.ctx, presetId)
 
@@ -141,17 +133,20 @@ export class LivingMemoryIncrementalDreamService {
             }
         }
 
-        const batchIds = new Set(batch.map((entry) => entry.id))
+        const batchIds = batch.map((entry) => entry.id)
         const seeds = await this.loadSeeds(presetId, batch)
         state.seedCount = seeds.length
-        const candidatePools = this.createCandidatePools(
-            await this.repository.listConsolidatedEntries(presetId),
-            batchIds
-        )
 
         for (const seed of seeds) {
-            const candidates = [...candidatePools[seed.status].values()]
-            const nearest = await retriever.retrieve(seed, candidates)
+            const nearestIds =
+                await this.neighborSearch.findConsolidatedNeighbors({
+                    presetId,
+                    seedMemoryId: seed.id,
+                    status: seed.status,
+                    excludedMemoryIds: batchIds,
+                    limit: INCREMENTAL_DREAM_TOP_K
+                })
+            const nearest = await this.loadNeighbors(presetId, nearestIds)
             if (nearest.length === 0) {
                 await this.mutations.setMemoryConsolidation(
                     presetId,
@@ -181,12 +176,6 @@ export class LivingMemoryIncrementalDreamService {
             })
             addStats(state.stats, result)
             addStats(state.secondRoundStats, result)
-            await this.refreshCandidatePools(
-                presetId,
-                candidatePools,
-                batchIds,
-                result.mutatedMemoryIds
-            )
             if (result.success === true) {
                 state.successfulSeedCount++
             } else {
@@ -234,45 +223,22 @@ export class LivingMemoryIncrementalDreamService {
             )
     }
 
-    private createCandidatePools(
-        entries: MemoryEntryRecord[],
-        batchIds: Set<string>
-    ) {
-        const pools: Record<DreamStage, Map<string, MemoryEntryRecord>> = {
-            active: new Map(),
-            archived: new Map()
-        }
-        for (const entry of entries) {
-            if (!batchIds.has(entry.id)) {
-                pools[entry.status].set(entry.id, entry)
-            }
-        }
-        return pools
-    }
-
-    private async refreshCandidatePools(
-        presetId: string,
-        pools: Record<DreamStage, Map<string, MemoryEntryRecord>>,
-        batchIds: Set<string>,
-        mutatedMemoryIds: Set<string>
-    ) {
-        if (mutatedMemoryIds.size === 0) {
-            return
-        }
-        const ids = [...mutatedMemoryIds]
-        for (const id of ids) {
-            pools.active.delete(id)
-            pools.archived.delete(id)
-        }
+    private async loadNeighbors(presetId: string, memoryIds: string[]) {
         const entries = await this.repository.getEntriesByPresetAndIds(
             presetId,
-            ids
+            memoryIds
         )
-        for (const entry of entries) {
-            if (entry.isConsolidated && !batchIds.has(entry.id)) {
-                pools[entry.status].set(entry.id, entry)
+        const entryById = new Map(entries.map((entry) => [entry.id, entry]))
+        return memoryIds.map((memoryId) => {
+            const entry = entryById.get(memoryId)
+            if (entry === undefined) {
+                throw new Error(
+                    `incremental dream neighbor is missing: ` +
+                        `preset=${presetId}, memory=${memoryId}`
+                )
             }
-        }
+            return entry
+        })
     }
 
     private async createResult(

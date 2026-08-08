@@ -2,6 +2,8 @@ import { resolve } from 'node:path'
 import type { Context, Logger } from 'koishi'
 import type {
     LegacyMemoryEmbeddingRecord,
+    IncrementalDreamNeighborInput,
+    IncrementalDreamNeighborSearch,
     ManualDreamVectorReader,
     MemoryIndexMutationBatch,
     MemoryIndexMutationSink,
@@ -53,7 +55,8 @@ export class LivingMemoryVectorIndexService
     implements
         ManualDreamVectorReader,
         MemoryIndexMutationSink,
-        MemoryVectorSearch
+        MemoryVectorSearch,
+        IncrementalDreamNeighborSearch
 {
     private readonly operationGate = new VectorIndexOperationGate()
     private readonly presetMutationQueue = new VectorIndexPresetMutationQueue(
@@ -235,20 +238,9 @@ export class LivingMemoryVectorIndexService
         memoryIds: string[]
     ): Promise<Map<string, Float32Array<ArrayBuffer>>> {
         await this.awaitPresetReadBarrier(presetId)
-        const result = await this.requireWorker().readVectors(
-            presetId,
-            memoryIds
-        )
-        if (result.missingMemoryIds.length > 0) {
-            throw new LivingMemoryVectorIndexError(
-                'vector-missing',
-                'dirty',
-                `vector index entries are missing: preset=${presetId}, ` +
-                    `memoryIds=${result.missingMemoryIds.join(',')}`
-            )
-        }
+        const items = await this.readRequiredVectors(presetId, memoryIds)
         const vectors = new Map<string, Float32Array<ArrayBuffer>>()
-        for (const item of result.vectors) {
+        for (const item of items) {
             vectors.set(item.memoryId, item.vector)
         }
         return vectors
@@ -338,6 +330,31 @@ export class LivingMemoryVectorIndexService
                 return left.memoryId.localeCompare(right.memoryId)
             })
             .slice(0, input.maxCandidates)
+    }
+
+    async findConsolidatedNeighbors(
+        input: IncrementalDreamNeighborInput
+    ): Promise<string[]> {
+        return await this.runPresetMutation(input.presetId, async () => {
+            this.assertPresetReady(input.presetId)
+            const [seed] = await this.readRequiredVectors(input.presetId, [
+                input.seedMemoryId
+            ])
+            const excludedMemoryIds = new Set(input.excludedMemoryIds)
+            excludedMemoryIds.add(input.seedMemoryId)
+            const hits = await this.requireWorker().queryKnn({
+                presetId: input.presetId,
+                status: input.status,
+                types: null,
+                isConsolidated: true,
+                limit: input.limit + excludedMemoryIds.size,
+                vector: seed.vector
+            })
+            return hits
+                .filter((hit) => !excludedMemoryIds.has(hit.memoryId))
+                .slice(0, input.limit)
+                .map((hit) => hit.memoryId)
+        })
     }
 
     runPresetMutation<T>(presetId: string, task: () => Promise<T>) {
@@ -506,6 +523,22 @@ export class LivingMemoryVectorIndexService
                 `searchTextIndex=${index}`
             )
         )
+    }
+
+    private async readRequiredVectors(presetId: string, memoryIds: string[]) {
+        const result = await this.requireWorker().readVectors(
+            presetId,
+            memoryIds
+        )
+        if (result.missingMemoryIds.length > 0) {
+            throw new LivingMemoryVectorIndexError(
+                'vector-missing',
+                'dirty',
+                `vector index entries are missing: preset=${presetId}, ` +
+                    `memoryIds=${result.missingMemoryIds.join(',')}`
+            )
+        }
+        return result.vectors
     }
 
     assertPresetReady(presetId: string) {

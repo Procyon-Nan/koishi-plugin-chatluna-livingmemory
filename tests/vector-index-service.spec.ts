@@ -236,7 +236,10 @@ it('builds the index once and reuses its manifest after restart', async () => {
     await withTemporaryDirectory(async (baseDir) => {
         const repository = new TestVectorIndexRepository([
             createSource('memory-a'),
-            createSource('memory-b', { type: 'preference' })
+            createSource('memory-b', {
+                type: 'preference',
+                isConsolidated: true
+            })
         ])
         const firstCalls: string[][] = []
         const first = createService({
@@ -282,6 +285,14 @@ it('builds the index once and reuses its manifest after restart', async () => {
         })
         assert.equal(hybridHits[0].memoryId, 'memory-b')
         assert.equal(hybridHits[0].keywordMatchCount, 1)
+        const neighbors = await first.findConsolidatedNeighbors({
+            presetId: 'preset-a',
+            seedMemoryId: 'memory-a',
+            status: 'active',
+            excludedMemoryIds: [],
+            limit: 30
+        })
+        assert.deepEqual(neighbors, ['memory-b'])
         const vectors = await first.readVectors('preset-a', ['memory-a'])
         assert.deepEqual([...vectors.keys()], ['memory-a'])
         assert.ok(vectors.get('memory-a') instanceof Float32Array)

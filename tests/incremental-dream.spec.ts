@@ -3,6 +3,10 @@ import { AIMessage, type BaseMessage } from '@langchain/core/messages'
 import type { Context } from 'koishi'
 import type { MemoryEntryRecord } from '../src/contracts/memory'
 import type {
+    IncrementalDreamNeighborInput,
+    IncrementalDreamNeighborSearch
+} from '../src/contracts/vector_index'
+import type {
     DreamMemoryRepository,
     DreamMergeInput
 } from '../src/contracts/workflows'
@@ -58,10 +62,6 @@ class IncrementalRepositoryStub implements IncrementalDreamRepository {
                     left.id.localeCompare(right.id)
             )
             .slice(0, limit)
-    }
-
-    async listConsolidatedEntries(targetPresetId: string) {
-        return this.list(targetPresetId).filter((entry) => entry.isConsolidated)
     }
 
     async getEntriesByPresetAndIds(targetPresetId: string, ids: string[]) {
@@ -146,23 +146,6 @@ class IncrementalRepositoryStub implements IncrementalDreamRepository {
         }
     }
 
-    async updateEntryEmbeddings(
-        updates: {
-            id: string
-            embedding: number[]
-            embeddingModelId: string
-        }[]
-    ) {
-        for (const update of updates) {
-            const entry = this.entries.get(update.id)
-            if (entry === undefined) {
-                throw new Error(`missing entry: ${update.id}`)
-            }
-            entry.embedding = update.embedding
-            entry.embeddingModelId = update.embeddingModelId
-        }
-    }
-
     private list(targetPresetId: string) {
         return [...this.entries.values()].filter(
             (entry) => entry.presetId === targetPresetId
@@ -204,21 +187,31 @@ const createHarness = (
 ) => {
     const model = createToolCallingModel(responses)
     const repository = new IncrementalRepositoryStub(entries)
-    const embeddedDocuments: string[][] = []
-    const vectorFor = (text: string) =>
-        text.includes('distant') ? [0, 1] : [1, 0]
+    const neighborCalls: IncrementalDreamNeighborInput[] = []
+    const neighborSearch: IncrementalDreamNeighborSearch = {
+        assertPresetReady: () => {},
+        findConsolidatedNeighbors: async (input) => {
+            neighborCalls.push({
+                ...input,
+                excludedMemoryIds: [...input.excludedMemoryIds]
+            })
+            const excludedMemoryIds = new Set(input.excludedMemoryIds)
+            return [...repository.entries.values()]
+                .filter(
+                    (entry) =>
+                        entry.presetId === input.presetId &&
+                        entry.status === input.status &&
+                        entry.isConsolidated &&
+                        !excludedMemoryIds.has(entry.id)
+                )
+                .sort((left, right) => left.id.localeCompare(right.id))
+                .slice(0, input.limit)
+                .map((entry) => entry.id)
+        }
+    }
     const ctx = {
         chatluna: {
             createChatModel: async () => ({ value: model.model }),
-            createEmbeddings: async () => ({
-                value: {
-                    embedQuery: async (text: string) => vectorFor(text),
-                    embedDocuments: async (texts: string[]) => {
-                        embeddedDocuments.push([...texts])
-                        return texts.map(vectorFor)
-                    }
-                }
-            }),
             preset: {
                 getPreset: () => ({ value: {} })
             },
@@ -231,14 +224,14 @@ const createHarness = (
         ctx,
         {
             mainModel: 'main-model',
-            embeddingModel: 'embedding-model',
             debug: true
         },
         repository,
         repository as DreamMemoryRepository,
+        neighborSearch,
         () => {}
     )
-    return { embeddedDocuments, model, repository, service }
+    return { model, neighborCalls, neighborSearch, repository, service }
 }
 
 it('runs one batch unit then consolidates every successful seed in order', async () => {
@@ -262,6 +255,19 @@ it('runs one batch unit then consolidates every successful seed in order', async
     assert.equal(harness.model.invocations.length, 3)
     assert.equal(harness.repository.entries.get('seed-1')?.isConsolidated, true)
     assert.equal(harness.repository.entries.get('seed-2')?.isConsolidated, true)
+})
+
+it('fails before model invocation when the vector index is not ready', async () => {
+    const harness = createHarness([], [createEntry('seed-1')])
+    harness.neighborSearch.assertPresetReady = () => {
+        throw new Error('vector index is not ready')
+    }
+
+    await assert.rejects(
+        harness.service.run(presetId, 1),
+        /vector index is not ready/u
+    )
+    assert.equal(harness.model.invocations.length, 0)
 })
 
 it('continues after a seed structured-output failure and leaves it pending', async () => {
@@ -356,13 +362,13 @@ it('refreshes a mutated old candidate before processing the next seed', async ()
     assert.equal(result.failed, false)
     const finalInput = harness.model.invocations[2]?.messages[1]
     assert.match(String(finalInput?.content), /candidate updated by seed one/u)
-    assert.deepEqual(harness.embeddedDocuments, [
-        ['content-seed-1', 'original candidate'],
-        ['content-seed-2', 'candidate updated by seed one']
-    ])
+    assert.deepEqual(
+        harness.neighborCalls.map((call) => call.seedMemoryId),
+        ['seed-1', 'seed-2']
+    )
 })
 
-it('reuses unchanged candidate embeddings across sequential seeds', async () => {
+it('queries the latest index state for every sequential seed', async () => {
     const harness = createHarness(
         [emptyResult(), emptyResult(), emptyResult()],
         [
@@ -375,9 +381,14 @@ it('reuses unchanged candidate embeddings across sequential seeds', async () => 
     const result = await harness.service.run(presetId, 2)
 
     assert.equal(result.failed, false)
-    assert.deepEqual(harness.embeddedDocuments, [
-        ['content-seed-1', 'content-candidate'],
-        ['content-seed-2']
+    assert.equal(harness.neighborCalls.length, 2)
+    assert.deepEqual(harness.neighborCalls[0].excludedMemoryIds, [
+        'seed-1',
+        'seed-2'
+    ])
+    assert.deepEqual(harness.neighborCalls[1].excludedMemoryIds, [
+        'seed-1',
+        'seed-2'
     ])
 })
 

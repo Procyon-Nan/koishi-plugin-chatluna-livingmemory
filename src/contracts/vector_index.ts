@@ -127,6 +127,7 @@ export interface MemoryVectorSearch {
 }
 
 export interface IncrementalDreamNeighborSearch {
+    assertPresetReady(presetId: string): void
     findConsolidatedNeighbors(
         input: IncrementalDreamNeighborInput
     ): Promise<string[]>
