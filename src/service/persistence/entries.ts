@@ -32,7 +32,7 @@ import { normalizeEntryRecord } from './normalizers'
 
 const sourceOriginsArrayMigrationId = 'source-origins-array-v1'
 const legacyEmbeddingMigrationId = 'legacy-embedding-vector-index-v1'
-const memoryEntryFields: Array<keyof MemoryEntryRecord> = [
+const memoryEntryFields: (keyof MemoryEntryRecord)[] = [
     'id',
     'presetId',
     'type',
@@ -473,7 +473,7 @@ export class LivingMemoryEntryRepository
             throw new Error('dream merge failed: stage disposition mismatch')
         }
 
-        return await this.ctx.database.withTransaction(async (database) => {
+        return await this.ctx.database.transact(async (database) => {
             const entries = (
                 await database.get(
                     'living_memory_entry',

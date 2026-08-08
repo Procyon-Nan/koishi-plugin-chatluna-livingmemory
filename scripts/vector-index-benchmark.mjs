@@ -12,6 +12,7 @@ const temporaryDirectory = await mkdtemp(
     resolve(tmpdir(), 'living-memory-vector-benchmark-')
 )
 const databasePath = resolve(temporaryDirectory, 'benchmark.sqlite')
+let database
 
 let randomState = 0x6d2b79f5
 const random = () => {
@@ -48,7 +49,7 @@ const createMetadata = (index) => {
 }
 
 try {
-    const database = new Database(databasePath)
+    database = new Database(databasePath)
     sqliteVec.load(database)
     database.pragma('journal_mode = DELETE')
     database.pragma('synchronous = NORMAL')
@@ -75,12 +76,12 @@ try {
         for (let index = 1; index <= memoryCount; index++) {
             const metadata = createMetadata(index)
             insert.run(
-                index,
+                BigInt(index),
                 createVector(),
                 'benchmark-preset',
                 metadata.status,
                 metadata.type,
-                index % 2
+                BigInt(index % 2)
             )
         }
     })
@@ -127,5 +128,8 @@ try {
         )
     )
 } finally {
+    if (database?.open) {
+        database.close()
+    }
     await rm(temporaryDirectory, { recursive: true, force: true })
 }

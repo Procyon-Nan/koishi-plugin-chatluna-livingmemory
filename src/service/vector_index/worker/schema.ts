@@ -1,4 +1,4 @@
-import type Database from 'better-sqlite3'
+import type BetterSqlite3 from 'better-sqlite3'
 import type { MemoryVectorIndexManifest } from '../../../contracts/vector_index'
 
 export const VECTOR_INDEX_SCHEMA_VERSION = 1
@@ -9,7 +9,7 @@ const assertDimension = (dimension: number) => {
     }
 }
 
-export const hasVectorIndexSchema = (database: Database.Database) => {
+export const hasVectorIndexSchema = (database: BetterSqlite3.Database) => {
     const row = database
         .prepare(
             `SELECT name
@@ -21,7 +21,7 @@ export const hasVectorIndexSchema = (database: Database.Database) => {
 }
 
 export const createVectorIndexSchema = (
-    database: Database.Database,
+    database: BetterSqlite3.Database,
     manifest: MemoryVectorIndexManifest
 ) => {
     assertDimension(manifest.dimension)

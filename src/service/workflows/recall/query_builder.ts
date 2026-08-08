@@ -19,9 +19,7 @@ const queryLineTerminatorPattern = /[。！？!?；;，,、：:]$/u
 
 type LivingMemoryRecallQueryConfig = Pick<
     LivingMemoryConfig,
-    | 'enableRecallQueryRewrite'
-    | 'recallHistoryWindowRounds'
-    | 'subModel'
+    'enableRecallQueryRewrite' | 'recallHistoryWindowRounds' | 'subModel'
 >
 
 const normalizeQueryLines = (lines: string[]) => {

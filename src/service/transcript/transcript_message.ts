@@ -11,9 +11,7 @@ export interface LivingMemoryTranscriptInput {
 }
 
 export type LivingMemoryTranscriptMessageInvalidReason =
-    | 'missing-created-at'
-    | 'missing-speaker'
-    | 'empty-content'
+    'missing-created-at' | 'missing-speaker' | 'empty-content'
 
 export interface LivingMemoryTranscriptMessageInvalidResult {
     message: null

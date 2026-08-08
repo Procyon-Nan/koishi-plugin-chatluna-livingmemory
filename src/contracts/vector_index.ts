@@ -12,8 +12,7 @@ export const memoryVectorIndexStates = [
     'unavailable'
 ] as const
 
-export type MemoryVectorIndexState =
-    (typeof memoryVectorIndexStates)[number]
+export type MemoryVectorIndexState = (typeof memoryVectorIndexStates)[number]
 
 export interface MemoryVectorIndexManifest {
     schemaVersion: number
@@ -104,8 +103,7 @@ export interface MemorySemanticSearchInput {
     maxCandidates: number
 }
 
-export interface MemoryHybridSearchInput
-    extends MemorySemanticSearchInput {
+export interface MemoryHybridSearchInput extends MemorySemanticSearchInput {
     keywords: string[]
     minSimilarity: number
 }

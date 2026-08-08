@@ -11,18 +11,12 @@ import type {
     VectorIndexUpsert
 } from './worker_protocol'
 import { createVectorIndexDocument } from './documents'
-import {
-    embedMemoryIndexSources,
-    type EmbeddingsLike
-} from './embedding'
+import { type EmbeddingsLike, embedMemoryIndexSources } from './embedding'
 import { LivingMemoryVectorIndexError } from './errors'
 
 const RECONCILE_PAGE_SIZE = 50
 const INVENTORY_PAGE_SIZE = 500
-const NO_LEGACY_EMBEDDINGS = new Map<
-    string,
-    LegacyMemoryEmbeddingRecord
->()
+const NO_LEGACY_EMBEDDINGS = new Map<string, LegacyMemoryEmbeddingRecord>()
 
 export interface VectorIndexReconcileRepository {
     listEntryIndexSourcePageByPreset(
@@ -35,10 +29,7 @@ export interface VectorIndexReconcileRepository {
 
 export type VectorIndexReconcileWorker = Pick<
     LivingMemoryVectorIndexWorkerClient,
-    | 'applyMutation'
-    | 'clearPreset'
-    | 'markPresetState'
-    | 'readInventoryPage'
+    'applyMutation' | 'clearPreset' | 'markPresetState' | 'readInventoryPage'
 >
 
 export interface VectorIndexReconcileProgress {
@@ -130,20 +121,19 @@ export const reconcileVectorIndexPreset = async (options: {
             if (shouldStop()) {
                 throw new Error('vector index service is stopping')
             }
-            const sources =
-                await repository.listEntryIndexSourcePageByPreset(
-                    presetId,
-                    cursor,
-                    RECONCILE_PAGE_SIZE
-                )
+            const sources = await repository.listEntryIndexSourcePageByPreset(
+                presetId,
+                cursor,
+                RECONCILE_PAGE_SIZE
+            )
             if (sources.length === 0) {
                 break
             }
 
-            const replacements: Array<{
+            const replacements: {
                 source: MemoryIndexSourceRecord
                 document: VectorIndexDocument
-            }> = []
+            }[] = []
             const upserts: VectorIndexUpsert[] = []
             for (const source of sources) {
                 const current = inventory.get(source.id)

@@ -1,9 +1,5 @@
 export const toSqliteVector = (vector: Float32Array) => {
-    return new Uint8Array(
-        vector.buffer,
-        vector.byteOffset,
-        vector.byteLength
-    )
+    return new Uint8Array(vector.buffer, vector.byteOffset, vector.byteLength)
 }
 
 export const decodeVector = (value: Uint8Array) => {
@@ -27,10 +23,7 @@ export const toSqliteBoolean = (value: boolean) => {
     return BigInt(value)
 }
 
-export const calculateCosine = (
-    left: Float32Array,
-    right: Float32Array
-) => {
+export const calculateCosine = (left: Float32Array, right: Float32Array) => {
     if (left.length !== right.length) {
         throw new Error(
             `vector dimension mismatch: left=${left.length}, right=${right.length}`

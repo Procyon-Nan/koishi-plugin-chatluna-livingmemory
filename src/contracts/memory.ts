@@ -12,12 +12,7 @@ export const memoryRecallStrategies = [
     'agentic-recall'
 ] as const
 
-export const memoryJobKinds = [
-    'recall',
-    'extract',
-    'dream',
-    'index'
-] as const
+export const memoryJobKinds = ['recall', 'extract', 'dream', 'index'] as const
 
 export const memoryJobStatuses = [
     'pending',
@@ -322,7 +317,6 @@ export interface LivingMemoryPresetImportSummary {
     presetSpeakers: number
 }
 
-export interface LivingMemoryPresetImportResult
-    extends LivingMemoryPresetImportSummary {
+export interface LivingMemoryPresetImportResult extends LivingMemoryPresetImportSummary {
     indexJobId: string
 }

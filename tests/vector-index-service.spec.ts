@@ -45,10 +45,13 @@ const createSource = (
 class TestVectorIndexRepository {
     readonly jobs: MemoryJobRecord[] = []
     readonly legacy = new Map<string, LegacyMemoryEmbeddingRecord>()
+    readonly sources: MemoryIndexSourceRecord[]
     legacyEmbeddingsMigrated = false
     legacyPageCalls = 0
 
-    constructor(readonly sources: MemoryIndexSourceRecord[]) {}
+    constructor(sources: MemoryIndexSourceRecord[]) {
+        this.sources = sources
+    }
 
     async listEntryIndexSourcePage(afterId: string | null, limit: number) {
         return this.page(this.sources, afterId, limit)

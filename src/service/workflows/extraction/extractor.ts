@@ -15,8 +15,7 @@ import {
 import { invokeStructuredOutput } from '../structured_output'
 
 export type LivingMemoryExtractionSkipReason =
-    | 'model-not-configured'
-    | 'model-unavailable'
+    'model-not-configured' | 'model-unavailable'
 
 export interface LivingMemoryExtractionTrace {
     extracted: ExtractedMemoryItem[]

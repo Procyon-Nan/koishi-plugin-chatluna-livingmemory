@@ -1,4 +1,4 @@
-import type Database from 'better-sqlite3'
+import type BetterSqlite3 from 'better-sqlite3'
 import type {
     VectorIndexHybridHit,
     VectorIndexHybridQuery,
@@ -55,10 +55,7 @@ const toInventoryItem = (row: InventoryRow): VectorIndexInventoryItem => ({
     updatedAt: row.updatedAt
 })
 
-const compareKnnHits = (
-    left: VectorIndexKnnHit,
-    right: VectorIndexKnnHit
-) => {
+const compareKnnHits = (left: VectorIndexKnnHit, right: VectorIndexKnnHit) => {
     const scoreDifference = right.cosineScore - left.cosineScore
     if (scoreDifference !== 0) {
         return scoreDifference
@@ -67,7 +64,7 @@ const compareKnnHits = (
 }
 
 const queryKnnForType = (
-    database: Database.Database,
+    database: BetterSqlite3.Database,
     query: VectorIndexKnnQuery,
     type: VectorIndexInventoryItem['type'] | null
 ) => {
@@ -106,7 +103,7 @@ const queryKnnForType = (
 }
 
 export const queryVectorIndexKnn = (
-    database: Database.Database,
+    database: BetterSqlite3.Database,
     query: VectorIndexKnnQuery
 ): VectorIndexKnnHit[] => {
     if (query.types !== null && query.types.length === 0) {
@@ -133,7 +130,7 @@ export const queryVectorIndexKnn = (
 }
 
 const queryKeywordCandidates = (
-    database: Database.Database,
+    database: BetterSqlite3.Database,
     query: VectorIndexHybridQuery
 ) => {
     const keywords = normalizeIndexKeywords(query.keywords)
@@ -150,11 +147,7 @@ const queryKeywordCandidates = (
         'm.status = ?',
         `k.keyword IN (${keywordPlaceholders})`
     ]
-    const parameters: unknown[] = [
-        query.presetId,
-        query.status,
-        ...keywords
-    ]
+    const parameters: unknown[] = [query.presetId, query.status, ...keywords]
     if (query.types !== null) {
         const typePlaceholders = query.types.map(() => '?').join(', ')
         conditions.push(`m.type IN (${typePlaceholders})`)
@@ -187,7 +180,7 @@ const queryKeywordCandidates = (
 }
 
 export const queryVectorIndexHybrid = (
-    database: Database.Database,
+    database: BetterSqlite3.Database,
     query: VectorIndexHybridQuery
 ): VectorIndexHybridHit[] => {
     const semanticHits = queryVectorIndexKnn(database, query)
@@ -219,8 +212,7 @@ export const queryVectorIndexHybrid = (
 
         const keywordMatchCount = keywordCandidate?.matchCount ?? 0
         const passesSimilarityThreshold =
-            query.minSimilarity === 0 ||
-            cosineScore >= query.minSimilarity
+            query.minSimilarity === 0 || cosineScore >= query.minSimilarity
         if (passesSimilarityThreshold) {
             hits.push({
                 memoryId,
@@ -244,8 +236,7 @@ export const queryVectorIndexHybrid = (
 
     return hits
         .sort((left, right) => {
-            const scoreDifference =
-                right.boostedScore - left.boostedScore
+            const scoreDifference = right.boostedScore - left.boostedScore
             if (scoreDifference !== 0) {
                 return scoreDifference
             }
@@ -255,7 +246,7 @@ export const queryVectorIndexHybrid = (
 }
 
 export const readVectorIndexVectors = (
-    database: Database.Database,
+    database: BetterSqlite3.Database,
     presetId: string,
     memoryIds: string[]
 ): VectorIndexReadVectorsResult => {
@@ -293,13 +284,13 @@ export const readVectorIndexVectors = (
 }
 
 export const readVectorIndexInventoryPage = (
-    database: Database.Database,
+    database: BetterSqlite3.Database,
     presetId: string | null,
     afterMemoryId: string | null,
     limit: number
 ): VectorIndexInventoryPage => {
     const conditions: string[] = []
-    const parameters: Array<string | number> = []
+    const parameters: (string | number)[] = []
     if (presetId !== null) {
         conditions.push('preset_id = ?')
         parameters.push(presetId)

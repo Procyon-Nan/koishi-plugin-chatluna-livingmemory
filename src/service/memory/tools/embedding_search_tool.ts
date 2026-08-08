@@ -1,7 +1,7 @@
 import { StructuredTool } from '@langchain/core/tools'
 import type { ToolRunnableConfig } from '@langchain/core/tools'
 import type { Context } from 'koishi'
-import type { z } from 'zod'
+import type { LivingMemorySearchInput } from '../../../contracts/memory'
 import type {
     LivingMemoryConfig,
     LivingMemorySearchProvider
@@ -38,8 +38,6 @@ export const livingMemorySearchToolDescription = [
     '- 本工具返回的记忆条目依照计算后的相关度得分排序。'
 ].join('\n')
 
-type LivingMemorySearchToolInput = z.infer<typeof livingMemorySearchInputSchema>
-
 export class LivingMemorySearchTool extends StructuredTool {
     name = livingMemorySearchToolName
     description = livingMemorySearchToolDescription
@@ -61,7 +59,7 @@ export class LivingMemorySearchTool extends StructuredTool {
     }
 
     async _call(
-        input: LivingMemorySearchToolInput,
+        input: LivingMemorySearchInput,
         _runManager: unknown,
         runConfig?: ToolRunnableConfig
     ) {

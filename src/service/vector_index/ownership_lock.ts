@@ -1,13 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { Stats } from 'node:fs'
-import {
-    mkdir,
-    open,
-    readFile,
-    stat,
-    unlink,
-    utimes
-} from 'node:fs/promises'
+import { mkdir, open, readFile, stat, unlink, utimes } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { LivingMemoryVectorIndexError } from './errors'
 
@@ -20,19 +13,11 @@ interface VectorIndexLockRecord {
 }
 
 const isFileExistsError = (error: unknown) => {
-    return (
-        error instanceof Error &&
-        'code' in error &&
-        error.code === 'EEXIST'
-    )
+    return error instanceof Error && 'code' in error && error.code === 'EEXIST'
 }
 
 const isFileMissingError = (error: unknown) => {
-    return (
-        error instanceof Error &&
-        'code' in error &&
-        error.code === 'ENOENT'
-    )
+    return error instanceof Error && 'code' in error && error.code === 'ENOENT'
 }
 
 const toError = (error: unknown) => {

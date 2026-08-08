@@ -5,8 +5,8 @@ import type { MemoryJobRecord } from '../../contracts/memory'
 import type { MemoryVectorIndexManifest } from '../../contracts/vector_index'
 import { isModelConfigured } from '../shared/utils'
 import {
-    probeVectorIndexDimension,
     type EmbeddingsLike,
+    probeVectorIndexDimension,
     type VectorIndexEmbeddingContext
 } from './embedding'
 import { LivingMemoryVectorIndexError } from './errors'
@@ -30,7 +30,8 @@ const SQLITE_VEC_VERSION = 'v0.1.9'
 const GLOBAL_INDEX_JOB_PRESET = '*'
 
 export interface LivingMemoryVectorIndexRepository
-    extends VectorIndexRebuildRepository,
+    extends
+        VectorIndexRebuildRepository,
         VectorIndexReconcileRepository,
         VectorIndexJobRepository {
     countEntries(): Promise<number>
@@ -312,11 +313,7 @@ export class LivingMemoryVectorIndexMaintenance {
             async (job) => {
                 this.options.onBuilding(job.id)
                 await this.options.operationGate.runExclusive(async () => {
-                    await this.reconcileAllPresets(
-                        embeddings,
-                        dimension,
-                        job
-                    )
+                    await this.reconcileAllPresets(embeddings, dimension, job)
                 })
                 const inspection = await this.options.worker().inspect()
                 this.options.onInspection(inspection)

@@ -1,7 +1,4 @@
-import type {
-    MemoryEntryStatus,
-    MemoryEntryType
-} from '../../contracts/memory'
+import type { MemoryEntryStatus, MemoryEntryType } from '../../contracts/memory'
 import type {
     MemoryVectorIndexManifest,
     MemoryVectorIndexPresetStatus
@@ -11,10 +8,10 @@ export interface VectorIndexInspection {
     sqliteVecVersion: string
     manifest: MemoryVectorIndexManifest | null
     indexedCount: number
-    inventory: Array<{
+    inventory: {
         presetId: string
         indexedCount: number
-    }>
+    }[]
     presets: MemoryVectorIndexPresetStatus[]
 }
 
@@ -45,8 +42,7 @@ export interface VectorIndexPreserveUpsert {
 }
 
 export type VectorIndexUpsert =
-    | VectorIndexReplaceUpsert
-    | VectorIndexPreserveUpsert
+    VectorIndexReplaceUpsert | VectorIndexPreserveUpsert
 
 export interface VectorIndexMutation {
     presetId: string
@@ -82,10 +78,10 @@ export interface VectorIndexHybridHit extends VectorIndexKnnHit {
 }
 
 export interface VectorIndexReadVectorsResult {
-    vectors: Array<{
+    vectors: {
         memoryId: string
         vector: Float32Array<ArrayBuffer>
-    }>
+    }[]
     missingMemoryIds: string[]
 }
 
@@ -166,8 +162,7 @@ export interface VectorIndexWorkerCommandMap {
     }
 }
 
-export type VectorIndexWorkerCommandName =
-    keyof VectorIndexWorkerCommandMap
+export type VectorIndexWorkerCommandName = keyof VectorIndexWorkerCommandMap
 
 export type VectorIndexWorkerCommand<
     Name extends VectorIndexWorkerCommandName = VectorIndexWorkerCommandName
@@ -175,9 +170,8 @@ export type VectorIndexWorkerCommand<
     ? { type: Name } & VectorIndexWorkerCommandMap[Name]['input']
     : never
 
-export type VectorIndexWorkerResult<
-    Name extends VectorIndexWorkerCommandName
-> = VectorIndexWorkerCommandMap[Name]['result']
+export type VectorIndexWorkerResult<Name extends VectorIndexWorkerCommandName> =
+    VectorIndexWorkerCommandMap[Name]['result']
 
 export interface VectorIndexWorkerRequest<
     Name extends VectorIndexWorkerCommandName = VectorIndexWorkerCommandName

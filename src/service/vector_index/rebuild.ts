@@ -6,10 +6,7 @@ import type {
 } from '../../contracts/vector_index'
 import { summarizeError } from '../shared/utils'
 import { createVectorIndexDocument } from './documents'
-import {
-    embedMemoryIndexSources,
-    type EmbeddingsLike
-} from './embedding'
+import { type EmbeddingsLike, embedMemoryIndexSources } from './embedding'
 import { LivingMemoryVectorIndexError } from './errors'
 import type { LivingMemoryVectorIndexWorkerClient } from './worker_client'
 import type {
@@ -47,9 +44,7 @@ export interface VectorIndexRebuildProgress {
     totalDuration: number
 }
 
-const groupUpsertsByPreset = (
-    upserts: VectorIndexReplaceUpsert[]
-) => {
+const groupUpsertsByPreset = (upserts: VectorIndexReplaceUpsert[]) => {
     const grouped = new Map<string, VectorIndexReplaceUpsert[]>()
     for (const upsert of upserts) {
         const presetId = upsert.document.presetId
@@ -178,10 +173,7 @@ export const rebuildVectorIndex = async (options: {
                         await repository.countEntriesByPreset(presetId)
                     expectedByPreset.set(presetId, expectedCount)
                 }
-                const result = await worker.appendRebuildBatch(
-                    presetId,
-                    group
-                )
+                const result = await worker.appendRebuildBatch(presetId, group)
                 await worker.markPresetState({
                     presetId,
                     state: 'building',

@@ -97,6 +97,8 @@ rules:
         - warn
 
         # group selectors
+        - selector: import
+          format: [camelCase, UPPER_CASE, PascalCase]
         - selector: default
           format: [camelCase, UPPER_CASE]
           leadingUnderscore: allow

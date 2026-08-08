@@ -1,20 +1,20 @@
 import { resolve } from 'node:path'
 import type { Context, Logger } from 'koishi'
 import type {
-    LegacyMemoryEmbeddingRecord,
     IncrementalDreamNeighborInput,
     IncrementalDreamNeighborSearch,
+    LegacyMemoryEmbeddingRecord,
     ManualDreamVectorReader,
-    MemoryIndexMutationBatch,
-    MemoryIndexMutationSink,
     MemoryHybridSearchHit,
     MemoryHybridSearchInput,
+    MemoryIndexMutationBatch,
+    MemoryIndexMutationSink,
     MemorySemanticSearchInput,
-    MemoryVectorSearch,
-    MemoryVectorSearchHit,
     MemoryVectorIndexPresetStatus,
+    MemoryVectorIndexState,
     MemoryVectorIndexStatus,
-    MemoryVectorIndexState
+    MemoryVectorSearch,
+    MemoryVectorSearchHit
 } from '../../contracts/vector_index'
 import { summarizeError } from '../shared/utils'
 import { LivingMemoryVectorIndexError } from './errors'
@@ -62,6 +62,7 @@ export class LivingMemoryVectorIndexService
     private readonly presetMutationQueue = new VectorIndexPresetMutationQueue(
         this.operationGate
     )
+
     private readonly databasePath: string
     private readonly previousDatabasePath: string
     private readonly ownershipLock: LivingMemoryVectorIndexOwnershipLock
@@ -429,7 +430,7 @@ export class LivingMemoryVectorIndexService
             reason
         )
         this.markPresetBuilding(presetId, job.id, expectedCount)
-        void this.queueMaintenance(async () => {
+        this.queueMaintenance(async () => {
             try {
                 this.markPresetBuilding(presetId, job.id, expectedCount)
                 await this.maintenance.runPresetReconcileJob(job, reason)
@@ -457,7 +458,7 @@ export class LivingMemoryVectorIndexService
             currentJobId: null,
             lastError: null
         }
-        void this.rebuild(reason)
+        this.rebuild(reason)
     }
 
     private async initialize(

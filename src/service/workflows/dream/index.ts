@@ -53,11 +53,7 @@ export class LivingMemoryDreamService {
         vectors: ManualDreamVectorReader,
         private readonly debug: (message: string) => void
     ) {
-        this.clusterer = new DreamClusterer(
-            vectors,
-            debug,
-            config.debug
-        )
+        this.clusterer = new DreamClusterer(vectors, debug, config.debug)
         this.unitProcessor = new DreamUnitProcessor(
             mutations,
             debug,

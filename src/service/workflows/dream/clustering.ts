@@ -1,9 +1,9 @@
 import type { ManualDreamVectorReader } from '../../../contracts/vector_index'
 import type { DreamMemoryEntryRecord } from '../../../contracts/workflows'
 import {
+    type DreamHdbscanRunner,
     groupEntriesByLabel,
     readNormalizedVectors,
-    type DreamHdbscanRunner,
     runDreamHdbscan
 } from './hdbscan'
 import { DREAM_PARTITION_MAX_SIZE, partitionDreamEntries } from './partitioning'

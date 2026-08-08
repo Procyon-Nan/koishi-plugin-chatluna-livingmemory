@@ -1,7 +1,7 @@
 import type {
-    LivingMemoryTranscriptMessage,
     LivingMemorySearchInput,
     LivingMemorySearchResult,
+    LivingMemoryTranscriptMessage,
     MemoryEntryRecord,
     MemoryEntryStatus,
     MemoryEntryType,

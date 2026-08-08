@@ -3,7 +3,7 @@ import { createRequire } from 'node:module'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, resolve } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
 import { Worker } from 'node:worker_threads'
 import Database from 'better-sqlite3'
 import * as sqliteVec from 'sqlite-vec'
@@ -111,32 +111,25 @@ try {
         2
     )
     const cjsEntry = resolve(projectRoot, 'lib', 'index.cjs')
-    const esmEntry = resolve(projectRoot, 'lib', 'index.mjs')
     const require = createRequire(import.meta.url)
     require(cjsEntry)
-    await import(pathToFileURL(esmEntry).href)
 
-    const workerPaths = [cjsEntry, esmEntry].map((entry) =>
-        resolve(dirname(entry), 'vector-index-worker.mjs')
-    )
-    assert.equal(workerPaths[0], workerPaths[1])
-
-    for (let index = 0; index < workerPaths.length; index++) {
-        const worker = new Worker(workerPaths[index])
-        const exitPromise = new Promise((resolveExit) => {
-            worker.once('exit', resolveExit)
-        })
-        const inspection = await waitForWorkerCall(worker, 1, {
-            type: 'open',
-            databasePath: resolve(
-                temporaryDirectory,
-                `worker-${index}.sqlite`
-            )
-        })
-        assert.equal(inspection.sqliteVecVersion, version.version)
-        await waitForWorkerCall(worker, 2, { type: 'dispose' })
-        assert.equal(await exitPromise, 0)
-    }
+    const workerPath = resolve(dirname(cjsEntry), 'vector-index-worker.mjs')
+    const worker = new Worker(workerPath)
+    const exitPromise = new Promise((resolveExit) => {
+        worker.once('exit', resolveExit)
+    })
+    const inspection = await waitForWorkerCall(worker, 1, {
+        type: 'open',
+        databasePath: resolve(temporaryDirectory, 'worker.sqlite'),
+        previousDatabasePath: resolve(
+            temporaryDirectory,
+            'worker.previous.sqlite'
+        )
+    })
+    assert.equal(inspection.sqliteVecVersion, version.version)
+    await waitForWorkerCall(worker, 2, { type: 'dispose' })
+    assert.equal(await exitPromise, 0)
 
     console.log(`sqlite-vec ${version.version} native smoke passed`)
 } finally {

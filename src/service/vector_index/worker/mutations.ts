@@ -1,9 +1,6 @@
-import type Database from 'better-sqlite3'
+import type BetterSqlite3 from 'better-sqlite3'
 import type { MemoryVectorIndexPresetStatus } from '../../../contracts/vector_index'
-import type {
-    VectorIndexMutation,
-    VectorIndexUpsert
-} from '../worker_protocol'
+import type { VectorIndexMutation, VectorIndexUpsert } from '../worker_protocol'
 import {
     normalizeIndexKeywords,
     toSqliteBoolean,
@@ -18,7 +15,7 @@ interface MemoryRowId {
     rowid: number
 }
 
-const prepareMutationStatements = (database: Database.Database) => ({
+const prepareMutationStatements = (database: BetterSqlite3.Database) => ({
     selectMemory: database.prepare(
         `SELECT rowid
          FROM lm_index_memory
@@ -91,7 +88,7 @@ const prepareMutationStatements = (database: Database.Database) => ({
 
 type MutationStatements = ReturnType<typeof prepareMutationStatements>
 
-export const countVectorIndexMemories = (database: Database.Database) => {
+export const countVectorIndexMemories = (database: BetterSqlite3.Database) => {
     const row = database
         .prepare('SELECT COUNT(*) AS count FROM lm_index_memory')
         .get() as CountRow
@@ -111,10 +108,8 @@ const deleteMemory = (
     presetId: string,
     memoryId: string
 ) => {
-    const row = statements.selectMemoryInPreset.get(
-        presetId,
-        memoryId
-    ) as MemoryRowId | undefined
+    const row = statements.selectMemoryInPreset.get(presetId, memoryId) as
+        MemoryRowId | undefined
     if (row === undefined) {
         return
     }
@@ -209,9 +204,8 @@ const upsertMemory = (
     statements: MutationStatements,
     upsert: VectorIndexUpsert
 ) => {
-    const existing = statements.selectMemory.get(
-        upsert.document.memoryId
-    ) as MemoryRowId | undefined
+    const existing = statements.selectMemory.get(upsert.document.memoryId) as
+        MemoryRowId | undefined
 
     let rowid: number
     if (existing === undefined) {
@@ -235,7 +229,7 @@ const upsertMemory = (
 }
 
 export const applyVectorIndexMutation = (
-    database: Database.Database,
+    database: BetterSqlite3.Database,
     mutation: VectorIndexMutation
 ) => {
     const statements = prepareMutationStatements(database)
@@ -252,17 +246,14 @@ export const applyVectorIndexMutation = (
             upsertMemory(statements, upsert)
         }
         return {
-            indexedCount: countPresetMemories(
-                statements,
-                mutation.presetId
-            )
+            indexedCount: countPresetMemories(statements, mutation.presetId)
         }
     })
     return transaction()
 }
 
 export const clearVectorIndexPreset = (
-    database: Database.Database,
+    database: BetterSqlite3.Database,
     presetId: string
 ) => {
     const transaction = database.transaction(() => {
@@ -283,9 +274,7 @@ export const clearVectorIndexPreset = (
             .prepare('DELETE FROM lm_index_memory WHERE preset_id = ?')
             .run(presetId)
         database
-            .prepare(
-                'DELETE FROM lm_index_preset_state WHERE preset_id = ?'
-            )
+            .prepare('DELETE FROM lm_index_preset_state WHERE preset_id = ?')
             .run(presetId)
         return { deletedCount: rows.length }
     })
@@ -293,7 +282,7 @@ export const clearVectorIndexPreset = (
 }
 
 export const markVectorIndexPresetState = (
-    database: Database.Database,
+    database: BetterSqlite3.Database,
     status: MemoryVectorIndexPresetStatus
 ): MemoryVectorIndexPresetStatus => {
     database

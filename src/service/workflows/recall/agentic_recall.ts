@@ -10,7 +10,6 @@ import {
 import { type RunnableConfig, RunnableLambda } from '@langchain/core/runnables'
 import { StructuredTool, type ToolRunnableConfig } from '@langchain/core/tools'
 import type { ChainValues } from '@langchain/core/utils/types'
-import type { z } from 'zod'
 import type { Context } from 'koishi'
 import {
     _formatIntermediateSteps,
@@ -61,8 +60,6 @@ type LivingMemoryAgenticRecallConfig = Pick<
     | 'memorySearchToolMaxResults'
     | 'recallHistoryWindowRounds'
 >
-
-type AgenticSearchToolInput = z.infer<typeof livingMemorySearchInputSchema>
 
 interface RecordedAgenticSearchCall {
     inputKey: string
@@ -276,7 +273,7 @@ class RecordingLivingMemorySearchTool extends StructuredTool {
     }
 
     async _call(
-        input: AgenticSearchToolInput,
+        input: LivingMemorySearchInput,
         runManager: unknown,
         runConfig?: ToolRunnableConfig
     ) {

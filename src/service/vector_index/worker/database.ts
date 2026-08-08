@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3'
+import BetterSqlite3 from 'better-sqlite3'
 import { existsSync, mkdirSync, renameSync, unlinkSync } from 'node:fs'
 import { dirname } from 'node:path'
 import * as sqliteVec from 'sqlite-vec'
@@ -52,7 +52,7 @@ interface PresetInventoryRow {
 }
 
 export class LivingMemoryVectorIndexDatabase {
-    private database: Database.Database | null = null
+    private database: BetterSqlite3.Database | null = null
     private sqliteVecVersion: string | null = null
     private formalDatabasePath: string | null = null
     private rebuildDatabasePath: string | null = null
@@ -177,17 +177,11 @@ export class LivingMemoryVectorIndexDatabase {
     }
 
     applyMutation(mutation: VectorIndexMutation) {
-        return applyVectorIndexMutation(
-            this.requireSchemaDatabase(),
-            mutation
-        )
+        return applyVectorIndexMutation(this.requireSchemaDatabase(), mutation)
     }
 
     clearPreset(presetId: string) {
-        return clearVectorIndexPreset(
-            this.requireSchemaDatabase(),
-            presetId
-        )
+        return clearVectorIndexPreset(this.requireSchemaDatabase(), presetId)
     }
 
     readInventoryPage(
@@ -204,10 +198,7 @@ export class LivingMemoryVectorIndexDatabase {
     }
 
     markPresetState(status: MemoryVectorIndexPresetStatus) {
-        return markVectorIndexPresetState(
-            this.requireSchemaDatabase(),
-            status
-        )
+        return markVectorIndexPresetState(this.requireSchemaDatabase(), status)
     }
 
     createRebuildFile(
@@ -242,10 +233,7 @@ export class LivingMemoryVectorIndexDatabase {
         }
     }
 
-    appendRebuildBatch(
-        presetId: string,
-        upserts: VectorIndexReplaceUpsert[]
-    ) {
+    appendRebuildBatch(presetId: string, upserts: VectorIndexReplaceUpsert[]) {
         return applyVectorIndexMutation(this.requireRebuildDatabase(), {
             presetId,
             upserts,
@@ -334,7 +322,7 @@ export class LivingMemoryVectorIndexDatabase {
 
     private openConnection(databasePath: string) {
         mkdirSync(dirname(databasePath), { recursive: true })
-        const database = new Database(databasePath)
+        const database = new BetterSqlite3(databasePath)
         try {
             database.pragma('foreign_keys = ON')
             database.pragma('journal_mode = DELETE')

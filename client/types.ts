@@ -166,10 +166,7 @@ export interface MemoryConfigWarning {
 }
 
 export type MemoryVectorIndexState =
-    | 'ready'
-    | 'building'
-    | 'dirty'
-    | 'unavailable'
+    'ready' | 'building' | 'dirty' | 'unavailable'
 
 export interface MemoryVectorIndexManifest {
     schemaVersion: number

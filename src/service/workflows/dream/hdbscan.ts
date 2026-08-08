@@ -31,8 +31,7 @@ const l2Normalize = (vector: Float32Array<ArrayBuffer>): number[] => {
 export const readNormalizedVectors = (
     entries: readonly DreamMemoryEntryRecord[],
     vectorById: ReadonlyMap<string, Float32Array<ArrayBuffer>>
-) =>
-    entries.map((entry) => l2Normalize(vectorById.get(entry.id)!))
+) => entries.map((entry) => l2Normalize(vectorById.get(entry.id)!))
 
 export const validateHdbscanLabels = (
     labels: readonly number[],

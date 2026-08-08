@@ -83,8 +83,8 @@ export class LivingMemoryVectorIndexWorkerClient {
         private readonly onFailure?: (error: Error) => void
     ) {
         this.worker = new Worker(workerPath)
-        this.exitPromise = new Promise((resolveExit) => {
-            this.resolveExit = resolveExit
+        this.exitPromise = new Promise((resolve) => {
+            this.resolveExit = resolve
         })
         this.worker.on('message', (response: VectorIndexWorkerResponse) => {
             this.handleResponse(response)
@@ -164,10 +164,7 @@ export class LivingMemoryVectorIndexWorkerClient {
         })
     }
 
-    appendRebuildBatch(
-        presetId: string,
-        upserts: VectorIndexReplaceUpsert[]
-    ) {
+    appendRebuildBatch(presetId: string, upserts: VectorIndexReplaceUpsert[]) {
         return this.request({
             type: 'appendRebuildBatch',
             presetId,
@@ -206,23 +203,21 @@ export class LivingMemoryVectorIndexWorkerClient {
         }
 
         const id = this.nextRequestId++
-        return new Promise<VectorIndexWorkerResult<Name>>(
-            (resolveRequest, rejectRequest) => {
-                this.pending.set(id, {
-                    resolve: resolveRequest as (result: unknown) => void,
-                    reject: rejectRequest
-                })
-                try {
-                    this.worker.postMessage(
-                        { id, command },
-                        commandTransferList(command)
-                    )
-                } catch (error) {
-                    this.pending.delete(id)
-                    rejectRequest(toError(error))
-                }
+        return new Promise<VectorIndexWorkerResult<Name>>((resolve, reject) => {
+            this.pending.set(id, {
+                resolve: resolve as (result: unknown) => void,
+                reject
+            })
+            try {
+                this.worker.postMessage(
+                    { id, command },
+                    commandTransferList(command)
+                )
+            } catch (error) {
+                this.pending.delete(id)
+                reject(toError(error))
             }
-        )
+        })
     }
 
     private handleResponse(response: VectorIndexWorkerResponse) {
