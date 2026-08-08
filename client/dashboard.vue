@@ -24,6 +24,51 @@
                 </ul>
             </el-alert>
 
+            <el-card shadow="never" class="vector-status-card">
+                <div class="vector-status-grid">
+                    <div class="vector-status-item">
+                        <span class="vector-status-label">全局索引</span>
+                        <el-tag
+                            :type="getVectorStateTagType(globalVectorState)"
+                            size="small"
+                            effect="light"
+                        >
+                            {{ getVectorStateLabel(globalVectorState) }}
+                        </el-tag>
+                    </div>
+                    <div class="vector-status-item">
+                        <span class="vector-status-label">当前预设</span>
+                        <el-tag
+                            :type="getVectorStateTagType(currentPresetVectorState)"
+                            size="small"
+                            effect="light"
+                        >
+                            {{ currentPresetVectorLabel }}
+                        </el-tag>
+                    </div>
+                    <div class="vector-status-item">
+                        <span class="vector-status-label">索引数量</span>
+                        <span class="vector-status-value">
+                            {{ currentPresetVectorCount }}
+                        </span>
+                    </div>
+                    <div class="vector-status-item">
+                        <span class="vector-status-label">当前任务</span>
+                        <span class="vector-status-value">
+                            {{ currentVectorJobId }}
+                        </span>
+                    </div>
+                </div>
+                <el-alert
+                    v-if="vectorIndexError !== null"
+                    class="vector-status-error"
+                    type="error"
+                    :closable="false"
+                    show-icon
+                    :title="vectorIndexError"
+                />
+            </el-card>
+
             <el-card shadow="never" class="toolbar-card">
                 <template #header>
                     <div class="toolbar-header">
@@ -73,18 +118,17 @@
                             注入记忆
                         </el-button>
                         <el-button
-                            :disabled="!presetId"
+                            :disabled="!presetId || !vectorWorkflowReady"
                             :loading="dreamPending"
                             @click="runDreamJob"
                         >
                             执行 Dream
                         </el-button>
                         <el-dropdown
-                            :disabled="!presetId"
+                            :disabled="actionPending"
                             @command="onPresetAction"
                         >
                             <el-button
-                                :disabled="!presetId"
                                 :loading="actionPending"
                             >
                                 操作
@@ -96,22 +140,40 @@
                                 <el-dropdown-menu>
                                     <el-dropdown-item
                                         command="export-preset"
+                                        :disabled="!presetId"
                                     >
                                         导出记忆
                                     </el-dropdown-item>
                                     <el-dropdown-item
                                         command="import-preset"
+                                        :disabled="!presetId"
                                     >
                                         导入记忆
                                     </el-dropdown-item>
                                     <el-dropdown-item
-                                        command="rebuild-embeddings"
+                                        command="reconcile-vector-index"
+                                        :disabled="
+                                            !presetId ||
+                                            currentPresetVectorState === 'building'
+                                        "
                                         divided
                                     >
-                                        重建向量
+                                        修复当前预设索引
+                                    </el-dropdown-item>
+                                    <el-dropdown-item
+                                        command="rebuild-vector-index"
+                                        :disabled="globalVectorState === 'building'"
+                                    >
+                                        全量重建索引
+                                    </el-dropdown-item>
+                                    <el-dropdown-item
+                                        command="restart-vector-index"
+                                    >
+                                        重启索引 Worker
                                     </el-dropdown-item>
                                     <el-dropdown-item
                                         command="clear-preset-data"
+                                        :disabled="!presetId"
                                         divided
                                     >
                                         清空预设数据
@@ -201,13 +263,19 @@
                             />
                         </el-tab-pane>
 
-                        <el-tab-pane name="search-test">
+                        <el-tab-pane
+                            name="search-test"
+                            :disabled="!vectorWorkflowReady"
+                        >
                             <template #label>
                                 <span class="tab-label-container">
                                     <span>召回测试</span>
                                 </span>
                             </template>
-                            <search-test-tab :preset-id="presetId" />
+                            <search-test-tab
+                                :preset-id="presetId"
+                                :disabled="!vectorWorkflowReady"
+                            />
                         </el-tab-pane>
                     </el-tabs>
                 </el-card>
@@ -233,7 +301,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import {
+    computed,
+    nextTick,
+    onBeforeUnmount,
+    onMounted,
+    ref,
+    watch
+} from 'vue'
 import { useColorMode } from '@koishijs/client'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
@@ -244,10 +319,14 @@ import MemoryEditorDialog from './components/memory-editor-dialog.vue'
 import ProfilesTab from './components/profiles-tab.vue'
 import SearchTestTab from './components/search-test-tab.vue'
 import SnapshotsTab from './components/snapshots-tab.vue'
+import { isVectorWorkflowReady } from './utils/vector-index'
 import type {
     LivingMemoryPresetExport,
+    LivingMemoryPresetImportResult,
     MemoryConfigWarning,
-    MemoryEntryRecord
+    MemoryEntryRecord,
+    MemoryVectorIndexState,
+    MemoryVectorIndexStatus
 } from './types'
 
 type DashboardTab = 'memories' | 'profiles' | 'snapshots' | 'jobs' | 'search-test'
@@ -266,6 +345,8 @@ const importFileInput = ref<HTMLInputElement | null>(null)
 const presetId = ref('')
 const presetIds = ref<string[]>([])
 const configWarnings = ref<MemoryConfigWarning[]>([])
+const vectorIndexStatus = ref<MemoryVectorIndexStatus | null>(null)
+const importedPresetAwaitingIndex = ref('')
 const activeTab = ref<DashboardTab>('memories')
 
 const memoryTotal = ref(0)
@@ -280,6 +361,93 @@ const jobsTab = ref<RefreshableTab | null>(null)
 
 const colorMode = useColorMode()
 const isDark = computed(() => colorMode.value === 'dark')
+
+const currentPresetVectorStatus = computed(() => {
+    const status = vectorIndexStatus.value
+    if (status === null) {
+        return undefined
+    }
+    return status.presets.find((item) => item.presetId === presetId.value)
+})
+
+const globalVectorState = computed<MemoryVectorIndexState>(() => {
+    if (vectorIndexStatus.value === null) {
+        return 'unavailable'
+    }
+    return vectorIndexStatus.value.state
+})
+
+const currentPresetVectorState = computed<MemoryVectorIndexState>(() => {
+    if (globalVectorState.value !== 'ready') {
+        return globalVectorState.value
+    }
+    const preset = currentPresetVectorStatus.value
+    if (preset !== undefined) {
+        return preset.state
+    }
+    return globalVectorState.value
+})
+
+const currentPresetVectorLabel = computed(() => {
+    if (presetId.value.length === 0) {
+        return '未选择'
+    }
+    return getVectorStateLabel(currentPresetVectorState.value)
+})
+
+const currentPresetVectorCount = computed(() => {
+    const preset = currentPresetVectorStatus.value
+    if (preset === undefined) {
+        return '0 / 0'
+    }
+    return `${preset.indexedCount} / ${preset.expectedCount}`
+})
+
+const currentVectorJobId = computed(() => {
+    const jobId = vectorIndexStatus.value?.currentJobId
+    if (jobId === null || jobId === undefined) {
+        return '无'
+    }
+    return jobId
+})
+
+const vectorIndexError = computed(() => {
+    const presetError = currentPresetVectorStatus.value?.lastError
+    if (presetError !== null && presetError !== undefined) {
+        return presetError
+    }
+    return vectorIndexStatus.value?.lastError ?? null
+})
+
+const vectorWorkflowReady = computed(() => {
+    return isVectorWorkflowReady(vectorIndexStatus.value, presetId.value)
+})
+
+const getVectorStateLabel = (state: MemoryVectorIndexState) => {
+    switch (state) {
+        case 'ready':
+            return '就绪'
+        case 'building':
+            return '同步中'
+        case 'dirty':
+            return '需要修复'
+        case 'unavailable':
+            return '不可用'
+    }
+}
+
+const getVectorStateTagType = (state: MemoryVectorIndexState) => {
+    switch (state) {
+        case 'ready':
+            return 'success'
+        case 'building':
+            return 'warning'
+        case 'dirty':
+            return 'danger'
+        case 'unavailable':
+            return 'info'
+    }
+}
 
 const normalizePreset = () => {
     presetId.value = presetId.value.trim()
@@ -297,9 +465,21 @@ const ensurePreset = () => {
 const fetchConfigStatus = async () => {
     try {
         const status = await api.getStatus()
-        configWarnings.value = status.warnings ?? []
+        configWarnings.value = status.warnings
+        vectorIndexStatus.value = status.vectorIndex
+        if (
+            importedPresetAwaitingIndex.value.length > 0 &&
+            isVectorWorkflowReady(
+                status.vectorIndex,
+                importedPresetAwaitingIndex.value
+            )
+        ) {
+            ElMessage.success('导入记忆的索引同步已完成，请执行手动 Dream')
+            importedPresetAwaitingIndex.value = ''
+        }
     } catch {
         configWarnings.value = []
+        vectorIndexStatus.value = null
     }
 }
 
@@ -322,15 +502,18 @@ const refreshAll = async (resetPage = false) => {
     normalizePreset()
     loading.value = true
     try {
-        await refreshTabs(
-            [
-                memoriesTab.value,
-                profilesTab.value,
-                snapshotsTab.value,
-                jobsTab.value
-            ],
-            resetPage
-        )
+        await Promise.all([
+            refreshTabs(
+                [
+                    memoriesTab.value,
+                    profilesTab.value,
+                    snapshotsTab.value,
+                    jobsTab.value
+                ],
+                resetPage
+            ),
+            fetchConfigStatus()
+        ])
     } finally {
         loading.value = false
     }
@@ -394,6 +577,7 @@ const runDreamJob = async () => {
             [memoriesTab.value, profilesTab.value, jobsTab.value],
             true
         )
+        await fetchConfigStatus()
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         ElMessage.error(`Dream 触发失败：${message}`)
@@ -402,11 +586,36 @@ const runDreamJob = async () => {
     }
 }
 
-const doRebuildEmbeddings = async () => {
+const doReconcileVectorIndex = async () => {
     try {
         await ElMessageBox.confirm(
-            '确认重建全部嵌入向量？此操作会消耗 embedding API 调用。',
-            '重建向量',
+            `确认重新同步预设 ${presetId.value} 的向量索引？`,
+            '修复当前预设索引',
+            {
+                type: 'warning',
+                confirmButtonText: '确认同步',
+                cancelButtonText: '取消'
+            }
+        )
+    } catch {
+        return
+    }
+
+    try {
+        const job = await api.reconcileVectorIndex(presetId.value)
+        ElMessage.success(`索引同步任务已创建：${job.id}`)
+        await Promise.all([fetchConfigStatus(), jobsTab.value?.refresh(true)])
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        ElMessage.error(`索引同步失败：${message}`)
+    }
+}
+
+const doRebuildVectorIndex = async () => {
+    try {
+        await ElMessageBox.confirm(
+            '确认全量重建向量索引？重建期间 Dream 与召回测试不可用。',
+            '全量重建索引',
             {
                 type: 'warning',
                 confirmButtonText: '确认重建',
@@ -418,11 +627,37 @@ const doRebuildEmbeddings = async () => {
     }
 
     try {
-        const result = await api.rebuildEmbeddings(presetId.value)
-        ElMessage.success(`已重建 ${result.rebuilt} 条记忆的嵌入向量`)
+        await api.rebuildVectorIndex()
+        ElMessage.success('全量索引重建任务已启动')
+        await fetchConfigStatus()
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
-        ElMessage.error(`重建向量失败：${message}`)
+        ElMessage.error(`启动索引重建失败：${message}`)
+    }
+}
+
+const doRestartVectorIndex = async () => {
+    try {
+        await ElMessageBox.confirm(
+            '确认重启向量索引 Worker？重启后会自动检查并同步索引。',
+            '重启索引 Worker',
+            {
+                type: 'warning',
+                confirmButtonText: '确认重启',
+                cancelButtonText: '取消'
+            }
+        )
+    } catch {
+        return
+    }
+
+    try {
+        await api.restartVectorIndex()
+        ElMessage.success('向量索引 Worker 已重启，正在检查索引')
+        await fetchConfigStatus()
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        ElMessage.error(`重启索引 Worker 失败：${message}`)
     }
 }
 
@@ -515,7 +750,7 @@ const onImportFileSelected = async (event: Event) => {
 
     try {
         await ElMessageBox.confirm(
-            `将导入 ${data.entries.length} 条记忆、${data.userProfiles.length} 个用户画像、${data.presetSpeakers.length} 个说话者到预设 ${presetId.value}。相同 ID 的记录将被覆盖，导入后需要重建向量。是否继续？`,
+            `将导入 ${data.entries.length} 条记忆、${data.userProfiles.length} 个用户画像、${data.presetSpeakers.length} 个说话者到预设 ${presetId.value}。相同 ID 的记录将被覆盖。是否继续？`,
             '导入记忆',
             {
                 type: 'warning',
@@ -527,8 +762,9 @@ const onImportFileSelected = async (event: Event) => {
         return
     }
 
+    let result: LivingMemoryPresetImportResult
     try {
-        const result = await api.importPreset(presetId.value, data)
+        result = await api.importPreset(presetId.value, data)
         ElMessage.success(
             `已导入 ${result.entries} 条记忆、${result.userProfiles} 个用户画像、${result.presetSpeakers} 个说话者`
         )
@@ -540,8 +776,8 @@ const onImportFileSelected = async (event: Event) => {
     }
 
     await ElMessageBox.alert(
-        '导入已完成。请执行一次手动 Dream，使导入记忆完成全量整理。',
-        '需要执行 Dream',
+        `关系数据已导入，索引同步任务 ${result.indexJobId} 已创建。索引状态变为“就绪”后，请执行一次手动 Dream。`,
+        '索引同步中',
         {
             type: 'info',
             confirmButtonText: '知道了',
@@ -550,19 +786,28 @@ const onImportFileSelected = async (event: Event) => {
             closeOnPressEscape: false
         }
     )
+    importedPresetAwaitingIndex.value = presetId.value
+    await fetchConfigStatus()
 }
 
 const onPresetAction = async (command: string) => {
-    if (!ensurePreset()) return
     actionPending.value = true
     try {
         if (command === 'export-preset') {
+            if (!ensurePreset()) return
             await doExportPreset()
         } else if (command === 'import-preset') {
+            if (!ensurePreset()) return
             triggerImportFile()
-        } else if (command === 'rebuild-embeddings') {
-            await doRebuildEmbeddings()
+        } else if (command === 'reconcile-vector-index') {
+            if (!ensurePreset()) return
+            await doReconcileVectorIndex()
+        } else if (command === 'rebuild-vector-index') {
+            await doRebuildVectorIndex()
+        } else if (command === 'restart-vector-index') {
+            await doRestartVectorIndex()
         } else if (command === 'clear-preset-data') {
+            if (!ensurePreset()) return
             await doClearPresetData()
         }
     } finally {
@@ -574,9 +819,16 @@ watch(activeTab, () => {
     void refreshActiveTab()
 })
 
+let statusRefreshTimer = 0
+
 onMounted(() => {
     fetchPresetIds()
     fetchConfigStatus()
+    statusRefreshTimer = window.setInterval(fetchConfigStatus, 5_000)
+})
+
+onBeforeUnmount(() => {
+    window.clearInterval(statusRefreshTimer)
 })
 </script>
 

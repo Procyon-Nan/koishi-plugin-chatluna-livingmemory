@@ -246,11 +246,16 @@ it('builds the index once and reuses its manifest after restart', async () => {
             dimension: 3,
             calls: firstCalls
         })
+        assert.throws(
+            () => first.assertPresetReady('preset-a'),
+            /vector index is not ready/u
+        )
         await first.start()
         await first.waitForInitialization()
         const firstStatus = first.getStatus()
         assert.equal(firstStatus.state, 'ready')
         assert.equal(firstStatus.presets[0].indexedCount, 2)
+        assert.doesNotThrow(() => first.assertPresetReady('preset-a'))
         assert.equal(repository.jobs[0].status, 'completed')
         assert.ok(firstCalls.some((texts) => texts.includes('content memory-a')))
         const vectors = await first.readVectors('preset-a', ['memory-a'])
@@ -281,6 +286,54 @@ it('builds the index once and reuses its manifest after restart', async () => {
         assert.equal(repository.jobs[1].status, 'completed')
         assert.equal(secondCalls.length, 1)
         await second.stop()
+    })
+})
+
+it('restarts the worker and reinitializes the existing index', async () => {
+    await withTemporaryDirectory(async (baseDir) => {
+        const repository = new TestVectorIndexRepository([
+            createSource('memory-a')
+        ])
+        const service = createService({
+            baseDir,
+            repository,
+            modelId: 'model-a',
+            dimension: 3
+        })
+        await service.start()
+        await service.waitForInitialization()
+
+        await service.restart()
+        assert.equal(service.getStatus().state, 'building')
+        await service.waitForInitialization()
+
+        assert.equal(service.getStatus().state, 'ready')
+        assert.equal(repository.jobs.length, 2)
+        await service.stop()
+    })
+})
+
+it('starts a full rebuild without blocking the caller', async () => {
+    await withTemporaryDirectory(async (baseDir) => {
+        const repository = new TestVectorIndexRepository([
+            createSource('memory-a')
+        ])
+        const service = createService({
+            baseDir,
+            repository,
+            modelId: 'model-a',
+            dimension: 3
+        })
+        await service.start()
+        await service.waitForInitialization()
+
+        service.startRebuild('manual rebuild')
+        assert.equal(service.getStatus().state, 'building')
+        await service.waitForMaintenance()
+
+        assert.equal(service.getStatus().state, 'ready')
+        assert.match(repository.jobs.at(-1)?.input ?? '', /manual rebuild/u)
+        await service.stop()
     })
 })
 

@@ -63,6 +63,16 @@
                     {{ formatTime(scope.row.updatedAt) }}
                 </template>
             </el-table-column>
+            <el-table-column
+                label="详情"
+                min-width="240"
+                show-overflow-tooltip
+                header-align="center"
+            >
+                <template #default="scope">
+                    {{ getJobDetail(scope.row) }}
+                </template>
+            </el-table-column>
         </el-table>
 
         <div class="pagination-container">
@@ -99,6 +109,16 @@ const props = defineProps<{
 const emit = defineEmits<{
     'total-change': [total: number]
 }>()
+
+const getJobDetail = (job: MemoryJobRecord) => {
+    if (job.error !== null) {
+        return job.error
+    }
+    if (job.detail !== null) {
+        return job.detail
+    }
+    return '-'
+}
 
 const {
     items,

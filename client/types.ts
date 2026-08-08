@@ -123,7 +123,12 @@ export interface MemoryJobRecord {
     kind: string
     recallStrategy: MemoryRecallStrategy | null
     status: string
+    input: string
+    detail: string | null
+    error: string | null
     createdAt: Date
+    startedAt: Date | null
+    finishedAt: Date | null
     updatedAt: Date
 }
 
@@ -286,6 +291,7 @@ export interface LivingMemoryPresetImportResult {
     entries: number
     userProfiles: number
     presetSpeakers: number
+    indexJobId: string
 }
 
 declare module '@koishijs/client' {
@@ -340,6 +346,11 @@ declare module '@koishijs/client' {
             success: true
         }
         'living-memory/runDream': (presetId: string) => DreamTriggerResult
+        'living-memory/reconcileVectorIndex': (
+            presetId: string
+        ) => MemoryJobRecord
+        'living-memory/rebuildVectorIndex': () => { success: true }
+        'living-memory/restartVectorIndex': () => { success: true }
         'living-memory/clearPresetData': (presetId: string) => { success: true }
         'living-memory/exportPreset': (
             presetId: string

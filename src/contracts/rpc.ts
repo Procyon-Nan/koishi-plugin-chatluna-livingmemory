@@ -102,6 +102,11 @@ export interface LivingMemoryConsoleEvents {
         profileId: string
     ) => Promise<{ success: true }>
     'living-memory/runDream': (presetId: string) => Promise<DreamTriggerResult>
+    'living-memory/reconcileVectorIndex': (
+        presetId: string
+    ) => Promise<MemoryJobRecord>
+    'living-memory/rebuildVectorIndex': () => Promise<{ success: true }>
+    'living-memory/restartVectorIndex': () => Promise<{ success: true }>
     'living-memory/clearPresetData': (
         presetId: string
     ) => Promise<{ success: true }>

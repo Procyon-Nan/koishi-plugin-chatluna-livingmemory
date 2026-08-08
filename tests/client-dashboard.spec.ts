@@ -1,11 +1,53 @@
 import assert from 'node:assert/strict'
 import { usePagedResource } from '../client/composables/use-paged-resource'
-import type { MemorySnapshotRecord } from '../client/types'
+import type {
+    MemorySnapshotRecord,
+    MemoryVectorIndexStatus
+} from '../client/types'
 import {
     formatImportancePercent,
     isAgenticSnapshot,
     snapshotHitCount
 } from '../client/utils/display'
+import { isVectorWorkflowReady } from '../client/utils/vector-index'
+
+const vectorStatus = (
+    state: MemoryVectorIndexStatus['state'],
+    presetState: MemoryVectorIndexStatus['state'] = state
+): MemoryVectorIndexStatus => ({
+    state,
+    manifest: null,
+    presets: [
+        {
+            presetId: 'preset-1',
+            state: presetState,
+            expectedCount: 10,
+            indexedCount: 10,
+            lastError: null,
+            updatedAt: Date.now()
+        }
+    ],
+    currentJobId: null,
+    lastError: null
+})
+
+it('enables vector workflows only when the global and preset indexes are ready', () => {
+    assert.equal(isVectorWorkflowReady(vectorStatus('ready'), 'preset-1'), true)
+    assert.equal(
+        isVectorWorkflowReady(vectorStatus('ready', 'building'), 'preset-1'),
+        false
+    )
+    assert.equal(isVectorWorkflowReady(vectorStatus('dirty'), 'preset-1'), false)
+    assert.equal(
+        isVectorWorkflowReady(vectorStatus('unavailable'), 'preset-1'),
+        false
+    )
+    assert.equal(isVectorWorkflowReady(vectorStatus('ready'), ''), false)
+    assert.equal(
+        isVectorWorkflowReady(vectorStatus('ready'), 'empty-preset'),
+        true
+    )
+})
 
 it('tracks paged client resources and resets the page when page size changes', async () => {
     const calls: Array<[number, number]> = []

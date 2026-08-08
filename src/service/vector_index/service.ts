@@ -186,6 +186,23 @@ export class LivingMemoryVectorIndexService
         await this.ownershipLock.release()
     }
 
+    async restart() {
+        await this.stop()
+        this.stopping = false
+        this.workerFailure = null
+        this.embeddingContext = null
+        this.initialization = null
+        this.maintenanceTail = Promise.resolve()
+        this.status = {
+            state: 'unavailable',
+            manifest: null,
+            presets: [],
+            currentJobId: null,
+            lastError: null
+        }
+        await this.start()
+    }
+
     getStatus(): MemoryVectorIndexStatus {
         let manifest = null
         if (this.status.manifest !== null) {
@@ -311,15 +328,24 @@ export class LivingMemoryVectorIndexService
         return job
     }
 
-    async rebuild(reason: string) {
+    private async rebuild(reason: string) {
         await this.queueMaintenance(async () => {
             try {
                 await this.maintenance.rebuild(reason)
             } catch (error) {
                 await this.handleMaintenanceFailure(error)
-                throw error
             }
         })
+    }
+
+    startRebuild(reason: string) {
+        this.status = {
+            ...this.status,
+            state: 'building',
+            currentJobId: null,
+            lastError: null
+        }
+        void this.rebuild(reason)
     }
 
     private async initialize(
@@ -371,7 +397,7 @@ export class LivingMemoryVectorIndexService
         }
     }
 
-    private assertPresetReady(presetId: string) {
+    assertPresetReady(presetId: string) {
         if (this.status.state !== 'ready') {
             throw new LivingMemoryVectorIndexError(
                 'not-ready',

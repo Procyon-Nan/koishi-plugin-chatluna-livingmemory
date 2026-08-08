@@ -125,6 +125,20 @@ export async function runDream(presetId: string): Promise<DreamTriggerResult> {
     return await send('living-memory/runDream', presetId)
 }
 
+export async function reconcileVectorIndex(
+    presetId: string
+): Promise<MemoryJobRecord> {
+    return await send('living-memory/reconcileVectorIndex', presetId)
+}
+
+export async function rebuildVectorIndex(): Promise<{ success: true }> {
+    return await send('living-memory/rebuildVectorIndex')
+}
+
+export async function restartVectorIndex(): Promise<{ success: true }> {
+    return await send('living-memory/restartVectorIndex')
+}
+
 export async function clearPresetData(
     presetId: string
 ): Promise<{ success: true }> {

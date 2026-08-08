@@ -2,7 +2,7 @@ import { Context } from 'koishi'
 import type {
     LivingMemoryPresetExport,
     LivingMemoryPresetExportEntry,
-    LivingMemoryPresetImportResult,
+    LivingMemoryPresetImportSummary,
     MemoryEntryRecord,
     MemoryJobKind,
     MemoryJobRecord,
@@ -425,7 +425,7 @@ export class LivingMemoryRepository
     async importPresetData(
         targetPresetId: string,
         data: LivingMemoryPresetExport
-    ): Promise<LivingMemoryPresetImportResult> {
+    ): Promise<LivingMemoryPresetImportSummary> {
         const isCrossPresetImport = targetPresetId !== data.sourcePresetId
         const resolveImportId = (
             recordType: 'entry' | 'user-profile',

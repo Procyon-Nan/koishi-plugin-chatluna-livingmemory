@@ -449,7 +449,23 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     }
 
     async runDream(presetId: string): Promise<DreamTriggerResult> {
+        this.vectorIndex.assertPresetReady(presetId)
         return this.dreamCoordinator.runManual(presetId)
+    }
+
+    async reconcileVectorIndex(presetId: string) {
+        return await this.vectorIndex.reconcilePreset(
+            presetId,
+            'manual reconcile'
+        )
+    }
+
+    rebuildVectorIndex() {
+        this.vectorIndex.startRebuild('manual rebuild')
+    }
+
+    async restartVectorIndex() {
+        await this.vectorIndex.restart()
     }
 
     async clearPresetData(presetId: string) {

@@ -223,14 +223,14 @@ export class LivingMemoryMutationService
                 data
             )
             try {
-                await this.vectorIndex.reconcilePreset(
+                const indexJob = await this.vectorIndex.reconcilePreset(
                     targetPresetId,
                     'preset import'
                 )
+                return { ...result, indexJobId: indexJob.id }
             } catch (error) {
                 throw this.factsCommittedError(targetPresetId, error)
             }
-            return result
         })
     }
 

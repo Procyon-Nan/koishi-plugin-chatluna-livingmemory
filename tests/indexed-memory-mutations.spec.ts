@@ -184,9 +184,10 @@ it('queues preset reconciliation after import without applying mutations', async
             presetSpeakers: []
         }
 
-        await mutations.importPreset(presetId, data)
+        const result = await mutations.importPreset(presetId, data)
 
         assert.deepEqual(sink.reconciledPresets, [`${presetId}:preset import`])
         assert.deepEqual(sink.mutations, [])
+        assert.equal(result.indexJobId, 'index-job')
     })
 })

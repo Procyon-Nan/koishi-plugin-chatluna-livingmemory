@@ -134,6 +134,26 @@ export function apply(ctx: Context, _config?: LivingMemoryConfig) {
     )
 
     ctx.console.addListener(
+        'living-memory/reconcileVectorIndex',
+        async (presetId: string) =>
+            await service(ctx).reconcileVectorIndex(presetId)
+    )
+
+    ctx.console.addListener(
+        'living-memory/rebuildVectorIndex',
+        ok(async () => {
+            service(ctx).rebuildVectorIndex()
+        })
+    )
+
+    ctx.console.addListener(
+        'living-memory/restartVectorIndex',
+        ok(async () => {
+            await service(ctx).restartVectorIndex()
+        })
+    )
+
+    ctx.console.addListener(
         'living-memory/clearPresetData',
         ok(async (presetId: string) => {
             await service(ctx).clearPresetData(presetId)

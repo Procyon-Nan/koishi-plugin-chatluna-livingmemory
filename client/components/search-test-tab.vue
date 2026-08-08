@@ -62,7 +62,7 @@
                 <div class="form-actions">
                     <el-button
                         :loading="searching"
-                        :disabled="!presetId"
+                        :disabled="!presetId || disabled"
                         @click="doSearch"
                     >
                         搜索
@@ -186,6 +186,7 @@ import {
 
 const props = defineProps<{
     presetId: string
+    disabled: boolean
 }>()
 
 const colorMode = useColorMode()
@@ -216,6 +217,9 @@ const toggleType = (type: MemoryEntryType) => {
 }
 
 const doSearch = async () => {
+    if (props.disabled) {
+        return
+    }
     const text = searchText.value.trim()
     if (!text) {
         ElMessage.warning('请输入搜索内容')

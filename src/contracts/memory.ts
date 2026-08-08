@@ -318,8 +318,13 @@ export interface LivingMemoryPresetExportV2 extends LivingMemoryPresetExportBase
 export type LivingMemoryPresetExport =
     LivingMemoryPresetExportV1 | LivingMemoryPresetExportV2
 
-export interface LivingMemoryPresetImportResult {
+export interface LivingMemoryPresetImportSummary {
     entries: number
     userProfiles: number
     presetSpeakers: number
+}
+
+export interface LivingMemoryPresetImportResult
+    extends LivingMemoryPresetImportSummary {
+    indexJobId: string
 }
