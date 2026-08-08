@@ -1,4 +1,5 @@
 import type {
+    MemoryEntryRecord,
     MemoryEntryStatus,
     MemoryEntryType
 } from './memory'
@@ -38,6 +39,23 @@ export interface MemoryVectorIndexStatus {
     currentJobId: string | null
     lastError: string | null
 }
+
+export type MemoryIndexSourceRecord = Pick<
+    MemoryEntryRecord,
+    | 'id'
+    | 'presetId'
+    | 'status'
+    | 'type'
+    | 'isConsolidated'
+    | 'content'
+    | 'keywords'
+    | 'updatedAt'
+>
+
+export type LegacyMemoryEmbeddingRecord = Pick<
+    MemoryEntryRecord,
+    'id' | 'embedding' | 'embeddingModelId'
+>
 
 export interface MemoryIndexDocument {
     id: string

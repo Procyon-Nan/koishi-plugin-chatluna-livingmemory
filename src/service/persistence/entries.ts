@@ -1,11 +1,15 @@
 import { randomUUID } from 'crypto'
-import { Context } from 'koishi'
+import { $, Context } from 'koishi'
 import type {
     MemoryEntryRecord,
     MemoryMutationInput,
     MemoryScope,
     MemorySourceMessage
 } from '../../contracts/memory'
+import type {
+    LegacyMemoryEmbeddingRecord,
+    MemoryIndexSourceRecord
+} from '../../contracts/vector_index'
 import type {
     DreamMemoryRepository,
     DreamMergeInput,
@@ -71,6 +75,91 @@ export class LivingMemoryEntryRepository
         })
 
         return entries.map(normalizeEntryRecord)
+    }
+
+    async listEntryIndexSourcePage(
+        afterId: string | null,
+        limit: number
+    ): Promise<MemoryIndexSourceRecord[]> {
+        const selection = this.ctx.database.select('living_memory_entry')
+        if (afterId !== null) {
+            selection.where({ id: { $gt: afterId } })
+        }
+        return await selection
+            .orderBy('id', 'asc')
+            .limit(limit)
+            .execute([
+                'id',
+                'presetId',
+                'status',
+                'type',
+                'isConsolidated',
+                'content',
+                'keywords',
+                'updatedAt'
+            ])
+    }
+
+    async listEntryIndexSourcePageByPreset(
+        presetId: string,
+        afterId: string | null,
+        limit: number
+    ): Promise<MemoryIndexSourceRecord[]> {
+        const selection = this.ctx.database.select('living_memory_entry', {
+            presetId
+        })
+        if (afterId !== null) {
+            selection.where({ id: { $gt: afterId } })
+        }
+        return await selection
+            .orderBy('id', 'asc')
+            .limit(limit)
+            .execute([
+                'id',
+                'presetId',
+                'status',
+                'type',
+                'isConsolidated',
+                'content',
+                'keywords',
+                'updatedAt'
+            ])
+    }
+
+    async listLegacyEmbeddingPage(
+        afterId: string | null,
+        limit: number
+    ): Promise<LegacyMemoryEmbeddingRecord[]> {
+        const selection = this.ctx.database.select('living_memory_entry')
+        if (afterId !== null) {
+            selection.where({ id: { $gt: afterId } })
+        }
+        return await selection
+            .orderBy('id', 'asc')
+            .limit(limit)
+            .execute(['id', 'embedding', 'embeddingModelId'])
+    }
+
+    countEntriesByPreset(presetId: string) {
+        return this.ctx.database.eval(
+            'living_memory_entry',
+            (entry) => $.count(entry.id),
+            { presetId }
+        )
+    }
+
+    countEntries() {
+        return this.ctx.database.eval('living_memory_entry', (entry) =>
+            $.count(entry.id)
+        )
+    }
+
+    async listEntryPresetIds() {
+        const entries = await this.ctx.database
+            .select('living_memory_entry')
+            .groupBy('presetId')
+            .execute(['presetId'])
+        return entries.map((entry) => entry.presetId).sort()
     }
 
     async countPendingEntries(presetId: string): Promise<number> {

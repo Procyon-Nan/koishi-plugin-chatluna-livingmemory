@@ -160,8 +160,41 @@ export interface MemoryConfigWarning {
     message: string
 }
 
+export type MemoryVectorIndexState =
+    | 'ready'
+    | 'building'
+    | 'dirty'
+    | 'unavailable'
+
+export interface MemoryVectorIndexManifest {
+    schemaVersion: number
+    embeddingModelId: string
+    dimension: number
+    sqliteVecVersion: string
+    generation: string
+    builtAt: number
+}
+
+export interface MemoryVectorIndexPresetStatus {
+    presetId: string
+    state: MemoryVectorIndexState
+    expectedCount: number
+    indexedCount: number
+    lastError: string | null
+    updatedAt: number
+}
+
+export interface MemoryVectorIndexStatus {
+    state: MemoryVectorIndexState
+    manifest: MemoryVectorIndexManifest | null
+    presets: MemoryVectorIndexPresetStatus[]
+    currentJobId: string | null
+    lastError: string | null
+}
+
 export interface MemoryServiceStatus {
     warnings: MemoryConfigWarning[]
+    vectorIndex: MemoryVectorIndexStatus
 }
 
 export interface MemoryMutationInput {

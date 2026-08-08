@@ -3,6 +3,7 @@ import type {
     MemoryConfigWarning,
     MemoryServiceStatus
 } from '../../contracts/workflows'
+import type { MemoryVectorIndexStatus } from '../../contracts/vector_index'
 import { isModelConfigured } from '../shared/utils'
 
 export const validateLivingMemoryConfig = (
@@ -97,9 +98,11 @@ export const validateLivingMemoryConfig = (
 }
 
 export const createLivingMemoryServiceStatus = (
-    config: LivingMemoryConfig
+    config: LivingMemoryConfig,
+    vectorIndex: MemoryVectorIndexStatus
 ): MemoryServiceStatus => {
     return {
-        warnings: validateLivingMemoryConfig(config)
+        warnings: validateLivingMemoryConfig(config),
+        vectorIndex
     }
 }

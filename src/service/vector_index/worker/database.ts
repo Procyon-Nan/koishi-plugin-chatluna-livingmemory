@@ -46,6 +46,11 @@ interface PresetStateRow {
     updatedAt: number
 }
 
+interface PresetInventoryRow {
+    presetId: string
+    indexedCount: number
+}
+
 export class LivingMemoryVectorIndexDatabase {
     private database: Database.Database | null = null
     private sqliteVecVersion: string | null = null
@@ -53,15 +58,43 @@ export class LivingMemoryVectorIndexDatabase {
     private rebuildDatabasePath: string | null = null
     private mode: 'active' | 'rebuild' | null = null
 
-    open(databasePath: string): VectorIndexInspection {
+    open(
+        databasePath: string,
+        previousDatabasePath: string
+    ): VectorIndexInspection {
         if (this.database !== null) {
             throw new Error('vector index database is already open')
         }
 
         this.formalDatabasePath = databasePath
-        this.database = this.openConnection(databasePath)
-        this.mode = 'active'
-        return this.inspect()
+        if (!existsSync(databasePath) && existsSync(previousDatabasePath)) {
+            renameSync(previousDatabasePath, databasePath)
+        }
+
+        try {
+            this.database = this.openConnection(databasePath)
+            this.mode = 'active'
+            const inspection = this.inspect()
+            if (existsSync(previousDatabasePath)) {
+                if (inspection.manifest === null) {
+                    return this.restorePreviousDatabase(
+                        databasePath,
+                        previousDatabasePath
+                    )
+                }
+                unlinkSync(previousDatabasePath)
+            }
+            return inspection
+        } catch (error) {
+            if (!existsSync(previousDatabasePath)) {
+                this.closeConnection()
+                throw error
+            }
+            return this.restorePreviousDatabase(
+                databasePath,
+                previousDatabasePath
+            )
+        }
     }
 
     inspect(): VectorIndexInspection {
@@ -72,11 +105,12 @@ export class LivingMemoryVectorIndexDatabase {
                 sqliteVecVersion,
                 manifest: null,
                 indexedCount: 0,
+                inventory: [],
                 presets: []
             }
         }
 
-        const manifest = database
+        const manifestRow = database
             .prepare(
                 `SELECT
                     schema_version AS schemaVersion,
@@ -88,7 +122,7 @@ export class LivingMemoryVectorIndexDatabase {
                  FROM lm_index_manifest
                  WHERE singleton = 1`
             )
-            .get() as ManifestRow
+            .get() as ManifestRow | undefined
         const presets = database
             .prepare(
                 `SELECT
@@ -102,11 +136,26 @@ export class LivingMemoryVectorIndexDatabase {
                  ORDER BY preset_id ASC`
             )
             .all() as PresetStateRow[]
+        const inventory = database
+            .prepare(
+                `SELECT
+                    preset_id AS presetId,
+                    COUNT(*) AS indexedCount
+                 FROM lm_index_memory
+                 GROUP BY preset_id
+                 ORDER BY preset_id ASC`
+            )
+            .all() as PresetInventoryRow[]
+        let manifest: MemoryVectorIndexManifest | null = null
+        if (manifestRow !== undefined) {
+            manifest = manifestRow
+        }
 
         return {
             sqliteVecVersion,
             manifest,
             indexedCount: countVectorIndexMemories(database),
+            inventory,
             presets
         }
     }
@@ -129,14 +178,14 @@ export class LivingMemoryVectorIndexDatabase {
 
     applyMutation(mutation: VectorIndexMutation) {
         return applyVectorIndexMutation(
-            this.requireActiveDatabase(),
+            this.requireSchemaDatabase(),
             mutation
         )
     }
 
     clearPreset(presetId: string) {
         return clearVectorIndexPreset(
-            this.requireActiveDatabase(),
+            this.requireSchemaDatabase(),
             presetId
         )
     }
@@ -147,7 +196,7 @@ export class LivingMemoryVectorIndexDatabase {
         limit: number
     ) {
         return readVectorIndexInventoryPage(
-            this.requireActiveDatabase(),
+            this.requireSchemaDatabase(),
             presetId,
             afterMemoryId,
             limit
@@ -166,7 +215,9 @@ export class LivingMemoryVectorIndexDatabase {
         manifest: MemoryVectorIndexManifest
     ): VectorIndexInspection {
         const formalDatabasePath = this.requireFormalDatabasePath()
-        this.requireActiveConnection()
+        if (this.database !== null && this.mode !== 'active') {
+            throw new Error('vector index database is rebuilding')
+        }
         if (existsSync(databasePath)) {
             throw new Error(
                 `vector index rebuild file already exists: ${databasePath}`
@@ -212,7 +263,8 @@ export class LivingMemoryVectorIndexDatabase {
         const indexedCount = countVectorIndexMemories(database)
         if (indexedCount !== expectedCount) {
             throw new Error(
-                `vector index rebuild count mismatch: expected=${expectedCount}, actual=${indexedCount}`
+                `vector index rebuild count mismatch: ` +
+                    `expected=${expectedCount}, actual=${indexedCount}`
             )
         }
         if (existsSync(previousDatabasePath)) {
@@ -222,11 +274,15 @@ export class LivingMemoryVectorIndexDatabase {
         }
 
         this.closeConnection()
+        let formalMoved = false
+        let rebuildMoved = false
         try {
             if (existsSync(formalDatabasePath)) {
                 renameSync(formalDatabasePath, previousDatabasePath)
+                formalMoved = true
             }
             renameSync(rebuildDatabasePath, formalDatabasePath)
+            rebuildMoved = true
             this.database = this.openConnection(formalDatabasePath)
             this.mode = 'active'
             this.rebuildDatabasePath = null
@@ -237,10 +293,10 @@ export class LivingMemoryVectorIndexDatabase {
             return inspection
         } catch (error) {
             this.closeConnection()
-            if (existsSync(formalDatabasePath)) {
+            if (rebuildMoved && existsSync(formalDatabasePath)) {
                 renameSync(formalDatabasePath, rebuildDatabasePath)
             }
-            if (existsSync(previousDatabasePath)) {
+            if (formalMoved && existsSync(previousDatabasePath)) {
                 renameSync(previousDatabasePath, formalDatabasePath)
             }
             if (existsSync(rebuildDatabasePath)) {
@@ -254,6 +310,9 @@ export class LivingMemoryVectorIndexDatabase {
     }
 
     abortRebuild(): VectorIndexInspection {
+        if (this.mode === 'active') {
+            return this.inspect()
+        }
         this.requireRebuildDatabase()
         const formalDatabasePath = this.requireFormalDatabasePath()
         const rebuildDatabasePath = this.requireRebuildDatabasePath()
@@ -292,6 +351,20 @@ export class LivingMemoryVectorIndexDatabase {
         }
     }
 
+    private restorePreviousDatabase(
+        databasePath: string,
+        previousDatabasePath: string
+    ) {
+        this.closeConnection()
+        if (existsSync(databasePath)) {
+            unlinkSync(databasePath)
+        }
+        renameSync(previousDatabasePath, databasePath)
+        this.database = this.openConnection(databasePath)
+        this.mode = 'active'
+        return this.inspect()
+    }
+
     private closeConnection() {
         if (this.database !== null) {
             this.database.close()
@@ -306,14 +379,6 @@ export class LivingMemoryVectorIndexDatabase {
         return this.database
     }
 
-    private requireActiveConnection() {
-        const database = this.requireDatabase()
-        if (this.mode !== 'active') {
-            throw new Error('vector index database is rebuilding')
-        }
-        return database
-    }
-
     private requireSchemaDatabase() {
         const database = this.requireDatabase()
         if (!hasVectorIndexSchema(database)) {
@@ -323,9 +388,9 @@ export class LivingMemoryVectorIndexDatabase {
     }
 
     private requireActiveDatabase() {
-        const database = this.requireActiveConnection()
-        if (!hasVectorIndexSchema(database)) {
-            throw new Error('vector index schema is not initialized')
+        const database = this.requireSchemaDatabase()
+        if (this.mode !== 'active') {
+            throw new Error('vector index database is rebuilding')
         }
         return database
     }

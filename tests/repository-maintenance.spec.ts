@@ -38,6 +38,11 @@ it('lists stored presets and clears only the selected preset', async () => {
     await withLivingMemoryRepository(async (ctx, repository) => {
         await createPresetData(repository, 'preset-clear')
         await createPresetData(repository, 'preset-keep')
+        await repository.createJob(
+            { conversationId: 'vector-index', presetId: '*' },
+            'index',
+            'rebuild'
+        )
 
         assert.deepEqual(
             (await repository.listDistinctPresetIds()).sort(),

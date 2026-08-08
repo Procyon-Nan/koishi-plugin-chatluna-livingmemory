@@ -11,6 +11,10 @@ export interface VectorIndexInspection {
     sqliteVecVersion: string
     manifest: MemoryVectorIndexManifest | null
     indexedCount: number
+    inventory: Array<{
+        presetId: string
+        indexedCount: number
+    }>
     presets: MemoryVectorIndexPresetStatus[]
 }
 
@@ -92,7 +96,7 @@ export interface VectorIndexInventoryPage {
 
 export interface VectorIndexWorkerCommandMap {
     open: {
-        input: { databasePath: string }
+        input: { databasePath: string; previousDatabasePath: string }
         result: VectorIndexInspection
     }
     inspect: {

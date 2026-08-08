@@ -78,7 +78,10 @@ export class LivingMemoryVectorIndexWorkerClient {
     private failure: Error | null = null
     private disposeRequested = false
 
-    constructor(workerPath = resolveDefaultWorkerPath()) {
+    constructor(
+        workerPath = resolveDefaultWorkerPath(),
+        private readonly onFailure?: (error: Error) => void
+    ) {
         this.worker = new Worker(workerPath)
         this.exitPromise = new Promise((resolveExit) => {
             this.resolveExit = resolveExit
@@ -101,8 +104,12 @@ export class LivingMemoryVectorIndexWorkerClient {
         })
     }
 
-    open(databasePath: string) {
-        return this.request({ type: 'open', databasePath })
+    open(databasePath: string, previousDatabasePath: string) {
+        return this.request({
+            type: 'open',
+            databasePath,
+            previousDatabasePath
+        })
     }
 
     inspect() {
@@ -234,6 +241,7 @@ export class LivingMemoryVectorIndexWorkerClient {
     private fail(error: Error) {
         if (this.failure === null) {
             this.failure = error
+            this.onFailure?.(error)
         }
         for (const pending of this.pending.values()) {
             pending.reject(this.failure)

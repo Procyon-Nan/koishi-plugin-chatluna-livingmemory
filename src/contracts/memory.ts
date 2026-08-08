@@ -12,7 +12,12 @@ export const memoryRecallStrategies = [
     'agentic-recall'
 ] as const
 
-export const memoryJobKinds = ['recall', 'extract', 'dream'] as const
+export const memoryJobKinds = [
+    'recall',
+    'extract',
+    'dream',
+    'index'
+] as const
 
 export const memoryJobStatuses = [
     'pending',

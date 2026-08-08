@@ -38,7 +38,10 @@ const execute = (
                     id,
                     type: command.type,
                     ok: true,
-                    result: database.open(command.databasePath)
+                    result: database.open(
+                        command.databasePath,
+                        command.previousDatabasePath
+                    )
                 }
             case 'inspect':
                 return {

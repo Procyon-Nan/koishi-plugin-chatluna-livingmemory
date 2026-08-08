@@ -46,6 +46,7 @@ import { LivingMemoryJobTracker } from '../workflows/job_tracker'
 import { LivingMemoryPresetCatalog } from '../memory/preset_catalog'
 import { LivingMemoryRecallCoordinator } from '../workflows/recall/coordinator'
 import { LivingMemorySnapshotCache } from '../memory/snapshot/snapshot_cache'
+import { LivingMemoryVectorIndexService } from '../vector_index/service'
 import { LivingMemoryAgenticRecallExecutor } from '../workflows/recall/agentic_recall'
 import {
     createEmbeddingSearchCache,
@@ -84,6 +85,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     private readonly presetCatalog: LivingMemoryPresetCatalog
     private readonly userProfiles: LivingMemoryUserProfileService
     private readonly searchEngine: LivingMemoryEmbeddingSearchEngine
+    private readonly vectorIndex: LivingMemoryVectorIndexService
 
     constructor(
         public readonly ctx: Context,
@@ -94,6 +96,12 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         const debug = (message: string) => this.debug(message)
 
         this.repository = new LivingMemoryRepository(ctx)
+        this.vectorIndex = new LivingMemoryVectorIndexService(
+            ctx,
+            config,
+            this.repository,
+            this.serviceLogger
+        )
         const retriever = new LivingMemoryRetriever(
             ctx,
             config,
@@ -211,11 +219,11 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             )
         }
 
-        if (isModelConfigured(this.config.embeddingModel)) {
-            this.rebuildStaleEmbeddingsBackground().catch((error) => {
-                this.serviceLogger.warn(error)
-            })
-        }
+        await this.vectorIndex.start()
+    }
+
+    protected async stop() {
+        await this.vectorIndex.stop()
     }
 
     validateConfig(): MemoryConfigWarning[] {
@@ -223,57 +231,15 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     }
 
     getStatus(): MemoryServiceStatus {
-        return createLivingMemoryServiceStatus(this.config)
+        return createLivingMemoryServiceStatus(
+            this.config,
+            this.vectorIndex.getStatus()
+        )
     }
 
     private debug(message: string) {
         if (this.config.debug) {
             this.serviceLogger.info(message)
-        }
-    }
-
-    private async rebuildStaleEmbeddingsBackground() {
-        try {
-            const result = await this.ctx.chatluna.createEmbeddings(
-                this.config.embeddingModel
-            )
-            if (result.value === undefined) {
-                this.serviceLogger.warn(
-                    'memory startup embedding rebuild skipped: ' +
-                        'embedding provider not available, will lazy backfill on recall'
-                )
-                return
-            }
-
-            const stale = await this.repository.getEntriesWithStaleEmbeddings(
-                this.config.embeddingModel
-            )
-            if (stale.length === 0) return
-
-            this.serviceLogger.info(
-                `memory startup embedding rebuild: detected ${stale.length} stale entries, rebuilding in background...`
-            )
-
-            await ensureEntryEmbeddings(
-                result.value,
-                this.repository,
-                this.config.embeddingModel,
-                stale,
-                {
-                    logger: this.serviceLogger,
-                    debug: (msg: string) => this.debug(msg),
-                    persistenceFailure: 'warn'
-                }
-            )
-
-            this.serviceLogger.info(
-                `memory startup embedding rebuild complete: ${stale.length} entries re-embedded`
-            )
-        } catch (error) {
-            this.serviceLogger.warn(
-                'memory startup embedding rebuild failed, will lazy backfill on recall'
-            )
-            this.serviceLogger.warn(error)
         }
     }
 

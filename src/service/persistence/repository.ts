@@ -18,6 +18,10 @@ import type {
     UserProfileRecord
 } from '../../contracts/memory'
 import type {
+    LegacyMemoryEmbeddingRecord,
+    MemoryIndexSourceRecord
+} from '../../contracts/vector_index'
+import type {
     DreamMemoryRepository,
     DreamMergeInput,
     ExtractedMemoryItem,
@@ -97,6 +101,44 @@ export class LivingMemoryRepository
 
     listEntriesByPreset(presetId: string): Promise<MemoryEntryRecord[]> {
         return this.entries.listEntriesByPreset(presetId)
+    }
+
+    listEntryIndexSourcePage(
+        afterId: string | null,
+        limit: number
+    ): Promise<MemoryIndexSourceRecord[]> {
+        return this.entries.listEntryIndexSourcePage(afterId, limit)
+    }
+
+    listEntryIndexSourcePageByPreset(
+        presetId: string,
+        afterId: string | null,
+        limit: number
+    ): Promise<MemoryIndexSourceRecord[]> {
+        return this.entries.listEntryIndexSourcePageByPreset(
+            presetId,
+            afterId,
+            limit
+        )
+    }
+
+    listLegacyEmbeddingPage(
+        afterId: string | null,
+        limit: number
+    ): Promise<LegacyMemoryEmbeddingRecord[]> {
+        return this.entries.listLegacyEmbeddingPage(afterId, limit)
+    }
+
+    countEntriesByPreset(presetId: string): Promise<number> {
+        return this.entries.countEntriesByPreset(presetId)
+    }
+
+    countEntries(): Promise<number> {
+        return this.entries.countEntries()
+    }
+
+    listEntryPresetIds(): Promise<string[]> {
+        return this.entries.listEntryPresetIds()
     }
 
     countPendingEntries(presetId: string): Promise<number> {
@@ -499,7 +541,10 @@ export class LivingMemoryRepository
                 this.ctx.database.get('living_memory_snapshot', {}, [
                     'presetId'
                 ]),
-                this.ctx.database.get('living_memory_job', {}, ['presetId']),
+                this.ctx.database.get('living_memory_job', {}, [
+                    'presetId',
+                    'kind'
+                ]),
                 this.ctx.database.get('living_memory_user_profile', {}, [
                     'presetId'
                 ]),
@@ -510,7 +555,13 @@ export class LivingMemoryRepository
 
         return [
             ...new Set(
-                [...entries, ...snapshots, ...jobs, ...profiles, ...speakers]
+                [
+                    ...entries,
+                    ...snapshots,
+                    ...jobs.filter((job) => job.kind !== 'index'),
+                    ...profiles,
+                    ...speakers
+                ]
                     .map((record) => record.presetId)
                     .filter((presetId) => presetId.length > 0)
             )

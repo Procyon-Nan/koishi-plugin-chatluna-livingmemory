@@ -17,6 +17,7 @@ import type {
     UserProfileInput,
     UserProfileRecord
 } from './memory'
+import type { MemoryVectorIndexStatus } from './vector_index'
 
 export interface DreamTriggerResult {
     success: true
@@ -83,6 +84,7 @@ export interface MemoryConfigWarning {
 
 export interface MemoryServiceStatus {
     warnings: MemoryConfigWarning[]
+    vectorIndex: MemoryVectorIndexStatus
 }
 
 export interface ExtractedMemoryItem {

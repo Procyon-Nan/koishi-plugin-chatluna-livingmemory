@@ -1,7 +1,5 @@
 import assert from 'node:assert/strict'
-import { execFile } from 'node:child_process'
-import { mkdtemp, rm } from 'node:fs/promises'
-import { promisify } from 'node:util'
+import { access, copyFile, mkdtemp, rename, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import type {
@@ -14,17 +12,17 @@ import type {
     VectorIndexDocument,
     VectorIndexReplaceUpsert
 } from '../src/service/vector_index/worker_protocol'
+import {
+    ensureVectorIndexWorkerBuilt,
+    vectorIndexWorkerPath
+} from './vector-index-test-utils'
 
-const executeFile = promisify(execFile)
-const projectRoot = resolve(__dirname, '..')
-const workerPath = resolve(projectRoot, 'lib', 'vector-index-worker.mjs')
+const workerPath = vectorIndexWorkerPath
 
 let temporaryDirectory: string
 
 before(async () => {
-    await executeFile(process.execPath, [
-        resolve(projectRoot, 'scripts', 'build-vector-index-worker.mjs')
-    ])
+    await ensureVectorIndexWorkerBuilt()
     temporaryDirectory = await mkdtemp(
         resolve(tmpdir(), 'living-memory-vector-worker-test-')
     )
@@ -104,7 +102,7 @@ it('runs typed vector index worker mutations and filtered searches', async () =>
         'vector-index.previous.sqlite'
     )
 
-    const initial = await client.open(formalPath)
+    const initial = await client.open(formalPath, previousPath)
     assert.equal(initial.manifest, null)
     assert.equal(initial.indexedCount, 0)
 
@@ -276,7 +274,7 @@ it('rolls back a complete mutation batch when one upsert fails', async () => {
     const formalPath = resolve(temporaryDirectory, 'atomic.sqlite')
     const rebuildPath = resolve(temporaryDirectory, 'atomic-rebuild.sqlite')
     const previousPath = resolve(temporaryDirectory, 'atomic-previous.sqlite')
-    await client.open(formalPath)
+    await client.open(formalPath, previousPath)
     await client.createRebuildFile(rebuildPath, createManifest())
     await client.appendRebuildBatch('preset-a', [
         replace(createDocument('stable-memory'), [1, 0, 0])
@@ -322,7 +320,7 @@ it('restores the formal index when a rebuild is aborted', async () => {
         'abort-second-rebuild.sqlite'
     )
     const previousPath = resolve(temporaryDirectory, 'abort-previous.sqlite')
-    await client.open(formalPath)
+    await client.open(formalPath, previousPath)
     await client.createRebuildFile(firstRebuildPath, createManifest())
     await client.appendRebuildBatch('preset-a', [
         replace(createDocument('retained-memory'), [1, 0, 0])
@@ -339,12 +337,48 @@ it('restores the formal index when a rebuild is aborted', async () => {
     await client.dispose()
 })
 
+it('recovers files left by an interrupted rebuild switch', async () => {
+    const formalPath = resolve(temporaryDirectory, 'recovery.sqlite')
+    const rebuildPath = resolve(
+        temporaryDirectory,
+        'recovery-rebuild.sqlite'
+    )
+    const previousPath = resolve(
+        temporaryDirectory,
+        'recovery-previous.sqlite'
+    )
+    const first = new LivingMemoryVectorIndexWorkerClient(workerPath)
+    await first.open(formalPath, previousPath)
+    await first.createRebuildFile(rebuildPath, createManifest())
+    await first.appendRebuildBatch('preset-a', [
+        replace(createDocument('retained-memory'), [1, 0, 0])
+    ])
+    await first.finalizeRebuild(previousPath, 1)
+    await first.dispose()
+
+    await rename(formalPath, previousPath)
+    const recovered = new LivingMemoryVectorIndexWorkerClient(workerPath)
+    const inspection = await recovered.open(formalPath, previousPath)
+    assert.equal(inspection.manifest?.generation, 'test-generation')
+    assert.equal(inspection.indexedCount, 1)
+    await recovered.dispose()
+
+    await copyFile(formalPath, previousPath)
+    const cleaned = new LivingMemoryVectorIndexWorkerClient(workerPath)
+    await cleaned.open(formalPath, previousPath)
+    await assert.rejects(access(previousPath), { code: 'ENOENT' })
+    await cleaned.dispose()
+})
+
 it('rejects pending requests when the worker cannot start', async () => {
     const client = new LivingMemoryVectorIndexWorkerClient(
         resolve(temporaryDirectory, 'missing-worker.mjs')
     )
     await assert.rejects(
-        client.open(resolve(temporaryDirectory, 'never-opened.sqlite')),
+        client.open(
+            resolve(temporaryDirectory, 'never-opened.sqlite'),
+            resolve(temporaryDirectory, 'never-opened.previous.sqlite')
+        ),
         /Cannot find module|cannot find module/
     )
 })
