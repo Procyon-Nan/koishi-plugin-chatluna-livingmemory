@@ -39,6 +39,7 @@ const createSource = (
 
 class TestRebuildRepository {
     readonly legacy = new Map<string, LegacyMemoryEmbeddingRecord>()
+    legacyPageCalls = 0
 
     constructor(readonly sources: MemoryIndexSourceRecord[]) {}
 
@@ -59,6 +60,7 @@ class TestRebuildRepository {
     }
 
     async listLegacyEmbeddingPage(afterId: string | null, limit: number) {
+        this.legacyPageCalls++
         const records = this.sources.map((source) => {
             const legacy = this.legacy.get(source.id)
             if (legacy !== undefined) {
@@ -165,8 +167,16 @@ const buildFormalIndex = async (options: {
     repository: TestRebuildRepository
     embeddings: ReturnType<typeof createEmbeddings>
     generation: string
+    reuseLegacyEmbeddings?: boolean
 }) => {
-    const { client, directory, repository, embeddings, generation } = options
+    const {
+        client,
+        directory,
+        repository,
+        embeddings,
+        generation,
+        reuseLegacyEmbeddings = false
+    } = options
     const manifest = createManifest(generation)
     return await rebuildVectorIndex({
         repository,
@@ -174,6 +184,7 @@ const buildFormalIndex = async (options: {
         embeddings,
         embeddingModelId: manifest.embeddingModelId,
         dimension: manifest.dimension,
+        reuseLegacyEmbeddings,
         manifest,
         rebuildDatabasePath: resolve(
             directory,
@@ -230,7 +241,8 @@ it('reuses only valid legacy vectors during a full rebuild', async () => {
             directory,
             repository,
             embeddings: createEmbeddings(3, calls),
-            generation: 'legacy'
+            generation: 'legacy',
+            reuseLegacyEmbeddings: true
         })
 
         assert.deepEqual(calls, [
@@ -243,6 +255,31 @@ it('reuses only valid legacy vectors during a full rebuild', async () => {
         ])
         const vectors = await client.readVectors('preset-a', ['memory-a'])
         assert.deepEqual([...vectors.vectors[0].vector], [1, 0, 0])
+    })
+})
+
+it('does not read legacy vectors after the migration is complete', async () => {
+    await withWorker(async (client, directory) => {
+        const repository = new TestRebuildRepository([
+            createSource('memory-a')
+        ])
+        repository.legacy.set('memory-a', {
+            id: 'memory-a',
+            embedding: [0, 1, 0],
+            embeddingModelId: 'model-a'
+        })
+        const calls: string[][] = []
+
+        await buildFormalIndex({
+            client,
+            directory,
+            repository,
+            embeddings: createEmbeddings(3, calls),
+            generation: 'without-legacy'
+        })
+
+        assert.equal(repository.legacyPageCalls, 0)
+        assert.deepEqual(calls, [['content memory-a']])
     })
 })
 

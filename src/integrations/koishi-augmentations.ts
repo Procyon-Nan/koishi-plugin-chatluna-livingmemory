@@ -2,7 +2,6 @@ import type {} from '@koishijs/plugin-console'
 import type {} from 'koishi-plugin-chatluna/services/chat'
 import type {
     LivingMemoryMigrationRecord,
-    MemoryEntryRecord,
     MemoryJobRecord,
     MemorySnapshotRecord,
     PresetSpeakerRecord,
@@ -10,6 +9,7 @@ import type {
 } from '../contracts/memory'
 import type { LivingMemoryConsoleEvents } from '../contracts/rpc'
 import type { ChatLunaLivingMemoryService } from '../service/app/living_memory_service'
+import type { LivingMemoryEntryTableRecord } from '../service/persistence/types'
 
 declare module 'koishi' {
     interface Context {
@@ -17,7 +17,7 @@ declare module 'koishi' {
     }
 
     interface Tables {
-        living_memory_entry: MemoryEntryRecord
+        living_memory_entry: LivingMemoryEntryTableRecord
         living_memory_migration: LivingMemoryMigrationRecord
         living_memory_snapshot: MemorySnapshotRecord
         living_memory_job: MemoryJobRecord

@@ -4,10 +4,12 @@ import type {
     MemoryIndexSourceRecord,
     MemoryVectorIndexManifest
 } from '../../contracts/vector_index'
-import type { EmbeddingsLike } from '../shared/embeddings'
 import { summarizeError } from '../shared/utils'
 import { createVectorIndexDocument } from './documents'
-import { embedMemoryIndexSources } from './embedding'
+import {
+    embedMemoryIndexSources,
+    type EmbeddingsLike
+} from './embedding'
 import { LivingMemoryVectorIndexError } from './errors'
 import type { LivingMemoryVectorIndexWorkerClient } from './worker_client'
 import type {
@@ -67,6 +69,7 @@ export const rebuildVectorIndex = async (options: {
     embeddings: EmbeddingsLike
     embeddingModelId: string
     dimension: number
+    reuseLegacyEmbeddings: boolean
     manifest: MemoryVectorIndexManifest
     rebuildDatabasePath: string
     finalize: () => Promise<VectorIndexInspection>
@@ -79,6 +82,7 @@ export const rebuildVectorIndex = async (options: {
         embeddings,
         embeddingModelId,
         dimension,
+        reuseLegacyEmbeddings,
         manifest,
         rebuildDatabasePath,
         finalize,
@@ -127,20 +131,21 @@ export const rebuildVectorIndex = async (options: {
                 throw new Error('vector index service is stopping')
             }
             const batchStartedAt = performance.now()
-            const [sources, legacy] = await Promise.all([
-                repository.listEntryIndexSourcePage(
-                    cursor,
-                    REBUILD_PAGE_SIZE
-                ),
-                repository.listLegacyEmbeddingPage(
-                    cursor,
-                    REBUILD_PAGE_SIZE
-                )
-            ])
+            const sources = await repository.listEntryIndexSourcePage(
+                cursor,
+                REBUILD_PAGE_SIZE
+            )
             if (sources.length === 0) {
                 break
             }
 
+            let legacy: LegacyMemoryEmbeddingRecord[] = []
+            if (reuseLegacyEmbeddings) {
+                legacy = await repository.listLegacyEmbeddingPage(
+                    cursor,
+                    REBUILD_PAGE_SIZE
+                )
+            }
             const legacyById = new Map(
                 legacy.map((record) => [record.id, record])
             )

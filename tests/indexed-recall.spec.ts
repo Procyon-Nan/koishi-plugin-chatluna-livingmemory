@@ -21,8 +21,6 @@ const createEntry = (id: string): MemoryEntryRecord => ({
     importance: 0.5,
     sourceConversationId: null,
     sourceOrigins: [],
-    embedding: null,
-    embeddingModelId: null,
     isConsolidated: false,
     createdAt: new Date('2026-08-08T00:00:00.000Z'),
     updatedAt: new Date('2026-08-08T00:00:00.000Z')

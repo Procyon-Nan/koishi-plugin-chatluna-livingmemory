@@ -27,6 +27,7 @@ export const defineLivingMemoryTables = (ctx: Context) => {
             },
             sourceConversationId: 'string(255)',
             sourceOrigins: 'array',
+            // 仅用于首次向量索引迁移，迁移完成后不再参与运行时读写。
             embedding: {
                 type: 'json',
                 nullable: true,

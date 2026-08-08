@@ -3,10 +3,10 @@ import { resolve } from 'node:path'
 import type { Context } from 'koishi'
 import type { MemoryJobRecord } from '../../contracts/memory'
 import type { MemoryVectorIndexManifest } from '../../contracts/vector_index'
-import type { EmbeddingsLike } from '../shared/embeddings'
 import { isModelConfigured } from '../shared/utils'
 import {
     probeVectorIndexDimension,
+    type EmbeddingsLike,
     type VectorIndexEmbeddingContext
 } from './embedding'
 import { LivingMemoryVectorIndexError } from './errors'
@@ -34,6 +34,8 @@ export interface LivingMemoryVectorIndexRepository
         VectorIndexReconcileRepository,
         VectorIndexJobRepository {
     countEntries(): Promise<number>
+    hasMigratedLegacyEmbeddings(): Promise<boolean>
+    completeLegacyEmbeddingMigration(): Promise<void>
 }
 
 interface VectorIndexMaintenanceOptions {
@@ -67,6 +69,8 @@ export class LivingMemoryVectorIndexMaintenance {
         inspection: VectorIndexInspection | null,
         openError: Error | null
     ) {
+        const reuseLegacyEmbeddings =
+            !(await this.options.repository.hasMigratedLegacyEmbeddings())
         const embeddings = await this.createEmbeddings()
         const dimension = await probeVectorIndexDimension(embeddings)
         this.publishEmbeddingContext(embeddings, dimension)
@@ -79,18 +83,21 @@ export class LivingMemoryVectorIndexMaintenance {
             await this.runRebuildJob(
                 embeddings,
                 dimension,
-                rebuildReason
+                rebuildReason,
+                reuseLegacyEmbeddings
             )
-            return
+        } else {
+            await this.runReconcileJob(embeddings, dimension)
         }
-        await this.runReconcileJob(embeddings, dimension)
+        await this.options.repository.completeLegacyEmbeddingMigration()
     }
 
     async rebuild(reason: string) {
         const embeddings = await this.createEmbeddings()
         const dimension = await probeVectorIndexDimension(embeddings)
         this.publishEmbeddingContext(embeddings, dimension)
-        await this.runRebuildJob(embeddings, dimension, reason)
+        await this.runRebuildJob(embeddings, dimension, reason, false)
+        await this.options.repository.completeLegacyEmbeddingMigration()
     }
 
     createPresetReconcileJob(presetId: string, reason: string) {
@@ -221,7 +228,8 @@ export class LivingMemoryVectorIndexMaintenance {
     private async runRebuildJob(
         embeddings: EmbeddingsLike,
         dimension: number,
-        reason: string
+        reason: string,
+        reuseLegacyEmbeddings: boolean
     ) {
         const {
             config,
@@ -254,6 +262,7 @@ export class LivingMemoryVectorIndexMaintenance {
                     embeddings,
                     embeddingModelId: config.embeddingModel,
                     dimension,
+                    reuseLegacyEmbeddings,
                     manifest,
                     rebuildDatabasePath,
                     shouldStop: this.options.shouldStop,

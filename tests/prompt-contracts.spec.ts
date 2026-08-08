@@ -47,8 +47,6 @@ const memoryEntry: MemoryEntryRecord = {
     importance: 0.7,
     sourceConversationId: 'conversation-1',
     sourceOrigins: [],
-    embedding: null,
-    embeddingModelId: null,
     isConsolidated: false,
     createdAt: new Date('2026-07-15T12:00:00.000Z'),
     updatedAt: new Date('2026-07-15T12:30:00.000Z')

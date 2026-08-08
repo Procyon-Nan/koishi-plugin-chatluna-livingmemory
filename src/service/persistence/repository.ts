@@ -98,6 +98,14 @@ export class LivingMemoryRepository
         return this.entries.migrateMemorySourceOriginsArray()
     }
 
+    hasMigratedLegacyEmbeddings(): Promise<boolean> {
+        return this.entries.hasMigratedLegacyEmbeddings()
+    }
+
+    completeLegacyEmbeddingMigration(): Promise<void> {
+        return this.entries.completeLegacyEmbeddingMigration()
+    }
+
     listEntriesByPreset(presetId: string): Promise<MemoryEntryRecord[]> {
         return this.entries.listEntriesByPreset(presetId)
     }
@@ -157,10 +165,6 @@ export class LivingMemoryRepository
         return this.entries.listPendingEntries(presetId, limit)
     }
 
-    listConsolidatedEntries(presetId: string): Promise<MemoryEntryRecord[]> {
-        return this.entries.listConsolidatedEntries(presetId)
-    }
-
     getEntryById(id: string): Promise<MemoryEntryRecord | undefined> {
         return this.entries.getEntryById(id)
     }
@@ -178,20 +182,6 @@ export class LivingMemoryRepository
 
     getRecallEntriesByPresetAndIds(presetId: string, ids: string[]) {
         return this.entries.getRecallEntriesByPresetAndIds(presetId, ids)
-    }
-
-    async getEntriesWithStaleEmbeddings(
-        currentModelId: string
-    ): Promise<MemoryEntryRecord[]> {
-        const all = await this.ctx.database.get('living_memory_entry', {
-            status: 'active'
-        })
-        return all.filter(
-            (entry) =>
-                entry.embeddingModelId !== currentModelId ||
-                !Array.isArray(entry.embedding) ||
-                entry.embedding.length === 0
-        )
     }
 
     appendMemories(
@@ -239,16 +229,6 @@ export class LivingMemoryRepository
 
     applyDreamMerge(input: DreamMergeInput) {
         return this.entries.applyDreamMerge(input)
-    }
-
-    updateEntryEmbeddings(
-        updates: {
-            id: string
-            embedding: number[]
-            embeddingModelId: string
-        }[]
-    ): Promise<void> {
-        return this.entries.updateEntryEmbeddings(updates)
     }
 
     deleteMemory(id: string) {
@@ -462,8 +442,6 @@ export class LivingMemoryRepository
             importance: entry.importance,
             sourceConversationId: entry.sourceConversationId,
             sourceOrigins: entry.sourceOrigins,
-            embedding: null,
-            embeddingModelId: null,
             isConsolidated,
             createdAt: new Date(entry.createdAt),
             updatedAt: new Date(entry.updatedAt)

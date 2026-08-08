@@ -60,13 +60,6 @@ it('atomically updates an active Dream merge and archives its sources', async ()
         const target = await createMemory(repository, 'target', 'active')
         const source1 = await createMemory(repository, 'source-1', 'active')
         const source2 = await createMemory(repository, 'source-2', 'active')
-        await repository.updateEntryEmbeddings([
-            {
-                id: target.id,
-                embedding: [0.1, 0.2],
-                embeddingModelId: 'embedding-model'
-            }
-        ])
         const sourceOrigins = [
             {
                 messages: [
@@ -103,8 +96,6 @@ it('atomically updates an active Dream merge and archives its sources', async ()
 
         assert.equal(storedTarget?.content, 'merged content')
         assert.deepEqual(storedTarget?.sourceOrigins, sourceOrigins)
-        assert.equal(storedTarget?.embedding, null)
-        assert.equal(storedTarget?.embeddingModelId, null)
         assert.equal(entryById.get(source1.id)?.status, 'archived')
         assert.equal(entryById.get(source2.id)?.status, 'archived')
         assert.equal(storedTarget?.isConsolidated, false)

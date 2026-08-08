@@ -135,8 +135,6 @@ export const createMemoryEntry = (
         importance: 0.5,
         sourceConversationId: scope.conversationId,
         sourceOrigins: [],
-        embedding: null,
-        embeddingModelId: null,
         isConsolidated: false,
         createdAt: now,
         updatedAt: now

@@ -18,8 +18,6 @@ const createEntry = (id: string, sourceOrigins: unknown) => ({
     importance: null,
     sourceConversationId: 'test-conversation',
     sourceOrigins,
-    embedding: null,
-    embeddingModelId: null,
     createdAt: new Date(),
     updatedAt: new Date()
 })

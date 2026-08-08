@@ -101,7 +101,6 @@ const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
             events.push('list-entries')
             return entries
         },
-        updateEntryEmbeddings: async () => {},
         updateMemoryForDream: async () => {},
         setMemoryConsolidation: async (
             _presetId: string,

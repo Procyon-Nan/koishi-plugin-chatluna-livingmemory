@@ -132,8 +132,6 @@ it('applies shared field rules to Dream mutations', async () => {
         importance: 0.5,
         sourceConversationId: 'conversation-1',
         sourceOrigins: [],
-        embedding: null,
-        embeddingModelId: null,
         isConsolidated: false,
         createdAt: now,
         updatedAt: now

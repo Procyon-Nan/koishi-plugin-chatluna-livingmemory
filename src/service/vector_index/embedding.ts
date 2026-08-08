@@ -2,7 +2,11 @@ import type {
     LegacyMemoryEmbeddingRecord,
     MemoryIndexSourceRecord
 } from '../../contracts/vector_index'
-import type { EmbeddingsLike } from '../shared/embeddings'
+
+export interface EmbeddingsLike {
+    embedDocuments(texts: string[]): Promise<number[][]>
+    embedQuery(text: string): Promise<number[]>
+}
 
 const VECTOR_INDEX_PROBE_TEXT = 'living memory vector index dimension probe'
 

@@ -21,12 +21,6 @@ export const normalizeEntryRecord = (
     sourceOrigins: normalizeMemorySourceOrigins(
         (record as { sourceOrigins?: unknown }).sourceOrigins
     ),
-    embedding: Array.isArray(record.embedding) ? record.embedding : null,
-    embeddingModelId:
-        typeof record.embeddingModelId === 'string' &&
-        record.embeddingModelId.length > 0
-            ? record.embeddingModelId
-            : null,
     isConsolidated: record.isConsolidated === true
 })
 

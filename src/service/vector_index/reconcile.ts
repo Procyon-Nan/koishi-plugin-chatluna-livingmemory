@@ -3,7 +3,6 @@ import type {
     MemoryIndexSourceRecord,
     MemoryVectorIndexPresetStatus
 } from '../../contracts/vector_index'
-import type { EmbeddingsLike } from '../shared/embeddings'
 import { summarizeError } from '../shared/utils'
 import type { LivingMemoryVectorIndexWorkerClient } from './worker_client'
 import type {
@@ -12,7 +11,10 @@ import type {
     VectorIndexUpsert
 } from './worker_protocol'
 import { createVectorIndexDocument } from './documents'
-import { embedMemoryIndexSources } from './embedding'
+import {
+    embedMemoryIndexSources,
+    type EmbeddingsLike
+} from './embedding'
 import { LivingMemoryVectorIndexError } from './errors'
 
 const RECONCILE_PAGE_SIZE = 50

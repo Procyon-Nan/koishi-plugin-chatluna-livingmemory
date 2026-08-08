@@ -6,7 +6,6 @@ import type {
 } from '../../../contracts/workflows'
 import type { MemoryVectorSearch } from '../../../contracts/vector_index'
 import { isModelConfigured } from '../../shared/utils'
-import { toMemoryRetrievalText } from '../../shared/embeddings'
 import { loadIndexedMemoryEntries } from './indexed_entries'
 
 type LivingMemoryRetrieverConfig = Pick<
@@ -50,7 +49,7 @@ export class LivingMemoryRetriever {
         const candidates = entries.map((entry, index) => ({
             id: entry.id,
             content: entry.content,
-            retrievalText: toMemoryRetrievalText(entry),
+            retrievalText: entry.content,
             score: hits[index].cosineScore
         }))
         if (candidates.length === 0) {

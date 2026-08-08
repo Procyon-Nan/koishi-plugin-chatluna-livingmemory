@@ -31,7 +31,23 @@ import {
 import { normalizeEntryRecord } from './normalizers'
 
 const sourceOriginsArrayMigrationId = 'source-origins-array-v1'
-const keywordFingerprintSeparator = '\u0000'
+const legacyEmbeddingMigrationId = 'legacy-embedding-vector-index-v1'
+const memoryEntryFields: Array<keyof MemoryEntryRecord> = [
+    'id',
+    'presetId',
+    'type',
+    'status',
+    'content',
+    'keywords',
+    'summary',
+    'sentiment',
+    'importance',
+    'sourceConversationId',
+    'sourceOrigins',
+    'isConsolidated',
+    'createdAt',
+    'updatedAt'
+]
 
 export class LivingMemoryEntryRepository
     implements RecallRepository, ExtractionRepository
@@ -69,10 +85,43 @@ export class LivingMemoryEntryRepository
         return invalidIds.length
     }
 
-    async listEntriesByPreset(presetId: string): Promise<MemoryEntryRecord[]> {
-        const entries = await this.ctx.database.get('living_memory_entry', {
-            presetId
+    async hasMigratedLegacyEmbeddings() {
+        const records = await this.ctx.database.get(
+            'living_memory_migration',
+            { id: legacyEmbeddingMigrationId },
+            ['id']
+        )
+        return records.length > 0
+    }
+
+    async completeLegacyEmbeddingMigration() {
+        await this.ctx.database.withTransaction(async (database) => {
+            const records = await database.get(
+                'living_memory_migration',
+                { id: legacyEmbeddingMigrationId },
+                ['id']
+            )
+            if (records.length > 0) {
+                return
+            }
+            await database.set(
+                'living_memory_entry',
+                {},
+                { embedding: null, embeddingModelId: null }
+            )
+            await database.create('living_memory_migration', {
+                id: legacyEmbeddingMigrationId,
+                appliedAt: new Date()
+            })
         })
+    }
+
+    async listEntriesByPreset(presetId: string): Promise<MemoryEntryRecord[]> {
+        const entries = await this.ctx.database.get(
+            'living_memory_entry',
+            { presetId },
+            memoryEntryFields
+        )
 
         return entries.map(normalizeEntryRecord)
     }
@@ -206,26 +255,18 @@ export class LivingMemoryEntryRepository
             .orderBy('createdAt', 'asc')
             .orderBy('id', 'asc')
             .limit(limit)
-            .execute()
+            .execute(memoryEntryFields)
 
-        return entries.map(normalizeEntryRecord)
-    }
-
-    async listConsolidatedEntries(
-        presetId: string
-    ): Promise<MemoryEntryRecord[]> {
-        const entries = await this.ctx.database.get('living_memory_entry', {
-            presetId,
-            isConsolidated: true
-        })
         return entries.map(normalizeEntryRecord)
     }
 
     async getEntryById(id: string): Promise<MemoryEntryRecord | undefined> {
         const record = (
-            await this.ctx.database.get('living_memory_entry', {
-                id
-            })
+            await this.ctx.database.get(
+                'living_memory_entry',
+                { id },
+                memoryEntryFields
+            )
         )[0]
 
         return record == null ? undefined : normalizeEntryRecord(record)
@@ -236,11 +277,15 @@ export class LivingMemoryEntryRepository
             return []
         }
 
-        const entries = await this.ctx.database.get('living_memory_entry', {
-            id: {
-                $in: ids
-            }
-        })
+        const entries = await this.ctx.database.get(
+            'living_memory_entry',
+            {
+                id: {
+                    $in: ids
+                }
+            },
+            memoryEntryFields
+        )
 
         return entries.map(normalizeEntryRecord)
     }
@@ -253,12 +298,16 @@ export class LivingMemoryEntryRepository
             return []
         }
 
-        const entries = await this.ctx.database.get('living_memory_entry', {
-            presetId,
-            id: {
-                $in: ids
-            }
-        })
+        const entries = await this.ctx.database.get(
+            'living_memory_entry',
+            {
+                presetId,
+                id: {
+                    $in: ids
+                }
+            },
+            memoryEntryFields
+        )
 
         return entries.map(normalizeEntryRecord)
     }
@@ -311,8 +360,6 @@ export class LivingMemoryEntryRepository
             importance: normalizeMemoryImportance(item.importance),
             sourceConversationId: scope.conversationId,
             sourceOrigins,
-            embedding: null,
-            embeddingModelId: null,
             isConsolidated: false,
             createdAt: now,
             updatedAt: now
@@ -335,8 +382,6 @@ export class LivingMemoryEntryRepository
             importance: normalizeMemoryImportance(input.importance),
             sourceConversationId: scope.conversationId,
             sourceOrigins: [],
-            embedding: null,
-            embeddingModelId: null,
             isConsolidated: false,
             createdAt: now,
             updatedAt: now
@@ -430,11 +475,15 @@ export class LivingMemoryEntryRepository
 
         return await this.ctx.database.withTransaction(async (database) => {
             const entries = (
-                await database.get('living_memory_entry', {
-                    id: {
-                        $in: [input.target.id, ...sourceIds]
-                    }
-                })
+                await database.get(
+                    'living_memory_entry',
+                    {
+                        id: {
+                            $in: [input.target.id, ...sourceIds]
+                        }
+                    },
+                    memoryEntryFields
+                )
             ).map(normalizeEntryRecord)
             const entryById = new Map(entries.map((entry) => [entry.id, entry]))
             const target = entryById.get(input.target.id)
@@ -508,9 +557,11 @@ export class LivingMemoryEntryRepository
                     'source archive'
                 )
                 const committedEntries = (
-                    await database.get('living_memory_entry', {
-                        id: { $in: [target.id, ...sourceIds] }
-                    })
+                    await database.get(
+                        'living_memory_entry',
+                        { id: { $in: [target.id, ...sourceIds] } },
+                        memoryEntryFields
+                    )
                 ).map(normalizeEntryRecord)
                 const committedById = new Map(
                     committedEntries.map((entry) => [entry.id, entry])
@@ -547,7 +598,11 @@ export class LivingMemoryEntryRepository
                 'source delete'
             )
             const committedTarget = (
-                await database.get('living_memory_entry', { id: target.id })
+                await database.get(
+                    'living_memory_entry',
+                    { id: target.id },
+                    memoryEntryFields
+                )
             )[0]
             if (committedTarget == null) {
                 throw new Error(
@@ -561,31 +616,6 @@ export class LivingMemoryEntryRepository
                 targetContentChanged
             }
         })
-    }
-
-    async updateEntryEmbeddings(
-        updates: {
-            id: string
-            embedding: number[]
-            embeddingModelId: string
-        }[]
-    ) {
-        if (updates.length === 0) {
-            return
-        }
-
-        await Promise.all(
-            updates.map((update) =>
-                this.ctx.database.set(
-                    'living_memory_entry',
-                    { id: update.id },
-                    {
-                        embedding: update.embedding,
-                        embeddingModelId: update.embeddingModelId
-                    }
-                )
-            )
-        )
     }
 
     async deleteMemory(id: string) {
@@ -633,13 +663,6 @@ export class LivingMemoryEntryRepository
             patch.importance === undefined
                 ? normalizeMemoryImportance(current.importance)
                 : normalizeMemoryImportance(patch.importance)
-        // 内容/摘要/关键词变化时需要让已缓存的向量失效，由召回时按需重算
-        const semanticChanged =
-            content !== current.content ||
-            summary !== (current.summary ?? null) ||
-            keywords.join(keywordFingerprintSeparator) !==
-                current.keywords.join(keywordFingerprintSeparator)
-
         return {
             type: patch.type ?? current.type,
             status,
@@ -647,10 +670,7 @@ export class LivingMemoryEntryRepository
             keywords,
             summary,
             sentiment,
-            importance,
-            ...(semanticChanged
-                ? { embedding: null, embeddingModelId: null }
-                : {})
+            importance
         }
     }
 

@@ -45,6 +45,8 @@ const createSource = (
 class TestVectorIndexRepository {
     readonly jobs: MemoryJobRecord[] = []
     readonly legacy = new Map<string, LegacyMemoryEmbeddingRecord>()
+    legacyEmbeddingsMigrated = false
+    legacyPageCalls = 0
 
     constructor(readonly sources: MemoryIndexSourceRecord[]) {}
 
@@ -65,6 +67,7 @@ class TestVectorIndexRepository {
     }
 
     async listLegacyEmbeddingPage(afterId: string | null, limit: number) {
+        this.legacyPageCalls++
         const rows = this.sources.map((source) => {
             const legacy = this.legacy.get(source.id)
             if (legacy !== undefined) {
@@ -92,6 +95,15 @@ class TestVectorIndexRepository {
 
     async countEntries() {
         return this.sources.length
+    }
+
+    async hasMigratedLegacyEmbeddings() {
+        return this.legacyEmbeddingsMigrated
+    }
+
+    async completeLegacyEmbeddingMigration() {
+        this.legacyEmbeddingsMigrated = true
+        this.legacy.clear()
     }
 
     async createJob(
@@ -260,6 +272,7 @@ it('builds the index once and reuses its manifest after restart', async () => {
         assert.equal(firstStatus.presets[0].indexedCount, 2)
         assert.doesNotThrow(() => first.assertPresetReady('preset-a'))
         assert.equal(repository.jobs[0].status, 'completed')
+        assert.equal(repository.legacyEmbeddingsMigrated, true)
         assert.ok(
             firstCalls.some((texts) => texts.includes('content memory-a'))
         )
@@ -361,12 +374,14 @@ it('starts a full rebuild without blocking the caller', async () => {
         })
         await service.start()
         await service.waitForInitialization()
+        const legacyPageCalls = repository.legacyPageCalls
 
         service.startRebuild('manual rebuild')
         assert.equal(service.getStatus().state, 'building')
         await service.waitForMaintenance()
 
         assert.equal(service.getStatus().state, 'ready')
+        assert.equal(repository.legacyPageCalls, legacyPageCalls)
         assert.match(repository.jobs.at(-1)?.input ?? '', /manual rebuild/u)
         await service.stop()
     })
@@ -522,6 +537,7 @@ it('keeps index jobs running until work completes and records failures', async (
         assert.equal(repository.jobs[0].status, 'failed')
         assert.match(repository.jobs[0].error ?? '', /embedding failure/u)
         assert.equal(service.getStatus().state, 'unavailable')
+        assert.equal(repository.legacyEmbeddingsMigrated, false)
         await service.stop()
     })
 })

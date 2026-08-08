@@ -169,8 +169,6 @@ export interface MemoryEntryRecord {
     importance: number | null
     sourceConversationId: string | null
     sourceOrigins: MemorySourceOrigin[]
-    embedding: number[] | null
-    embeddingModelId: string | null
     isConsolidated: boolean
     createdAt: Date
     updatedAt: Date

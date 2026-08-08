@@ -145,12 +145,6 @@ export async function clearPresetData(
     return await send('living-memory/clearPresetData', presetId)
 }
 
-export async function rebuildEmbeddings(
-    presetId: string
-): Promise<{ rebuilt: number }> {
-    return await send('living-memory/rebuildEmbeddings', presetId)
-}
-
 export async function exportPreset(
     presetId: string
 ): Promise<LivingMemoryPresetExport> {

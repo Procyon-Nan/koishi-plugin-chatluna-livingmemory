@@ -38,8 +38,6 @@ const createEntry = (
     importance: 0.5,
     sourceConversationId: 'conversation-1',
     sourceOrigins: [],
-    embedding: null,
-    embeddingModelId: null,
     isConsolidated: false,
     createdAt: now,
     updatedAt: now,
@@ -103,8 +101,6 @@ class IncrementalRepositoryStub implements IncrementalDreamRepository {
         const previousContent = entry.content
         Object.assign(entry, patch, {
             isConsolidated,
-            embedding: null,
-            embeddingModelId: null,
             updatedAt: new Date(+entry.updatedAt + 1)
         })
         return {
@@ -121,8 +117,6 @@ class IncrementalRepositoryStub implements IncrementalDreamRepository {
         const deletedSourceIds: string[] = []
         Object.assign(target, input.patch, {
             isConsolidated: input.targetIsConsolidated,
-            embedding: null,
-            embeddingModelId: null,
             updatedAt: new Date(+target.updatedAt + 1)
         })
         for (const sourceVersion of input.sources) {

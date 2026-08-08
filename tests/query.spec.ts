@@ -24,8 +24,6 @@ const createMemory = (
         importance: null,
         sourceConversationId: null,
         sourceOrigins: [],
-        embedding: null,
-        embeddingModelId: null,
         isConsolidated: false,
         createdAt,
         updatedAt: createdAt
