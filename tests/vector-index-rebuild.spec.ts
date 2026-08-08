@@ -107,7 +107,7 @@ const createManifest = (
     schemaVersion: 1,
     embeddingModelId: 'model-a',
     dimension,
-    sqliteVecVersion: '0.1.9',
+    sqliteVecVersion: 'v0.1.9',
     generation,
     builtAt: Date.now()
 })

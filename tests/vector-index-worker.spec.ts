@@ -36,7 +36,7 @@ const createManifest = (): MemoryVectorIndexManifest => ({
     schemaVersion: 1,
     embeddingModelId: 'test-embedding-model',
     dimension: 3,
-    sqliteVecVersion: '0.1.9',
+    sqliteVecVersion: 'v0.1.9',
     generation: 'test-generation',
     builtAt: Date.now()
 })

@@ -23,7 +23,7 @@ import {
 import type { LivingMemoryVectorIndexWorkerClient } from './worker_client'
 import type { VectorIndexInspection } from './worker_protocol'
 
-const SQLITE_VEC_VERSION = '0.1.9'
+const SQLITE_VEC_VERSION = 'v0.1.9'
 const GLOBAL_INDEX_JOB_PRESET = '*'
 
 export interface LivingMemoryVectorIndexRepository
