@@ -10,7 +10,7 @@ const VECTOR_INDEX_PROBE_TEXT =
 const convertValidVector = (
     vector: number[] | null,
     dimension: number
-): Float32Array | null => {
+): Float32Array<ArrayBuffer> | null => {
     if (
         vector === null ||
         vector.length !== dimension ||
@@ -62,11 +62,11 @@ export const embedMemoryIndexSources = async (
     sources: MemoryIndexSourceRecord[],
     legacyById: ReadonlyMap<string, LegacyMemoryEmbeddingRecord>
 ) => {
-    const vectors = new Map<string, Float32Array>()
+    const vectors = new Map<string, Float32Array<ArrayBuffer>>()
     const pending: MemoryIndexSourceRecord[] = []
     for (const source of sources) {
         const legacy = legacyById.get(source.id)
-        let legacyVector: Float32Array | null = null
+        let legacyVector: Float32Array<ArrayBuffer> | null = null
         if (legacy !== undefined) {
             legacyVector = convertValidVector(legacy.embedding, dimension)
         }

@@ -36,7 +36,7 @@ export interface VectorIndexDocument extends VectorIndexInventoryItem {
 export interface VectorIndexReplaceUpsert {
     vectorAction: 'replace'
     document: VectorIndexDocument
-    vector: Float32Array
+    vector: Float32Array<ArrayBuffer>
 }
 
 export interface VectorIndexPreserveUpsert {
@@ -62,7 +62,7 @@ export interface VectorIndexFilter {
 }
 
 export interface VectorIndexKnnQuery extends VectorIndexFilter {
-    vector: Float32Array
+    vector: Float32Array<ArrayBuffer>
     limit: number
 }
 
@@ -84,7 +84,7 @@ export interface VectorIndexHybridHit extends VectorIndexKnnHit {
 export interface VectorIndexReadVectorsResult {
     vectors: Array<{
         memoryId: string
-        vector: Float32Array
+        vector: Float32Array<ArrayBuffer>
     }>
     missingMemoryIds: string[]
 }
