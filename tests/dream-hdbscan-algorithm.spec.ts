@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { HDBSCAN } from 'hdbscan-ts'
 import {
     buildDreamMst,
     type DreamHdbscanMatrix,
@@ -113,9 +112,6 @@ const assertValidLabels = (labels: ArrayLike<number>, entryCount: number) => {
         Array.from({ length: clusters.size }, (_, index) => index)
     )
 }
-
-const runLegacyHdbscan = (rows: number[][]) =>
-    new HDBSCAN({ minClusterSize: 2, minSamples: 1 }).fit(normalizeRows(rows))
 
 it('builds the same MST as the dense reference', () => {
     let state = 0x12345678
@@ -272,30 +268,42 @@ it('reports bounded progress for every algorithm phase', () => {
     assert.ok(progress.length < 40)
 })
 
-it('matches the legacy implementation on representative fixtures', () => {
+it('preserves representative cluster membership', () => {
     const fixtures = [
-        [
-            [1, 0],
-            [1, 0],
-            [0, 1],
-            [0, 1]
-        ],
-        [
-            [1, 0],
-            [1, 0.001],
-            [1, 0.002],
-            [1, 0.003],
-            [0, 1],
-            [0.001, 1],
-            [0.002, 1],
-            [0.003, 1]
-        ]
+        {
+            rows: [
+                [1, 0],
+                [1, 0],
+                [0, 1],
+                [0, 1]
+            ],
+            clusters: [
+                [0, 1],
+                [2, 3]
+            ]
+        },
+        {
+            rows: [
+                [1, 0],
+                [1, 0.001],
+                [1, 0.002],
+                [1, 0.003],
+                [0, 1],
+                [0.001, 1],
+                [0.002, 1],
+                [0.003, 1]
+            ],
+            clusters: [
+                [0, 1, 2, 3],
+                [4, 5, 6, 7]
+            ]
+        }
     ]
 
-    for (const rows of fixtures) {
+    for (const fixture of fixtures) {
         assert.deepEqual(
-            canonicalizeLabels(runDreamHdbscan(createMatrix(rows))),
-            canonicalizeLabels(runLegacyHdbscan(rows))
+            canonicalizeLabels(runDreamHdbscan(createMatrix(fixture.rows))),
+            { clusters: fixture.clusters, noise: [] }
         )
     }
 })
