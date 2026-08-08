@@ -250,9 +250,6 @@ export class LivingMemoryVectorIndexService
     async searchSemantic(
         input: MemorySemanticSearchInput
     ): Promise<MemoryVectorSearchHit[]> {
-        if (input.searchTexts.length === 0) {
-            return []
-        }
         this.assertPresetReady(input.presetId)
         const vectors = await this.embedSearchTexts(input.searchTexts)
         await this.awaitPresetReadBarrier(input.presetId)
@@ -290,9 +287,6 @@ export class LivingMemoryVectorIndexService
     async searchHybrid(
         input: MemoryHybridSearchInput
     ): Promise<MemoryHybridSearchHit[]> {
-        if (input.searchTexts.length === 0) {
-            return []
-        }
         this.assertPresetReady(input.presetId)
         const vectors = await this.embedSearchTexts(input.searchTexts)
         await this.awaitPresetReadBarrier(input.presetId)
@@ -478,31 +472,31 @@ export class LivingMemoryVectorIndexService
 
     private async createWorkerMutation(batch: MemoryIndexMutationBatch) {
         const context = this.requireEmbeddingContext()
-        const replacements = batch.upserts.filter(
-            (upsert) => upsert.vectorAction === 'replace'
-        )
-        const vectors = await embedMemoryIndexSources(
+        const replacementSources = batch.upserts
+            .filter((upsert) => upsert.vectorAction === 'replace')
+            .map((upsert) => upsert.document)
+        const replacements = await embedMemoryIndexSources(
             context.embeddings,
             context.embeddingModelId,
             context.dimension,
-            replacements.map((upsert) => upsert.document),
+            replacementSources,
             NO_LEGACY_EMBEDDINGS
         )
-        const upserts: VectorIndexUpsert[] = []
-        for (const upsert of batch.upserts) {
-            const document = createVectorIndexDocument(upsert.document)
+        let replacementIndex = 0
+        const upserts: VectorIndexUpsert[] = batch.upserts.map((upsert) => {
             if (upsert.vectorAction === 'preserve') {
-                upserts.push({ vectorAction: 'preserve', document })
-                continue
+                return {
+                    vectorAction: 'preserve',
+                    document: createVectorIndexDocument(upsert.document)
+                }
             }
-            const vector = vectors.get(upsert.document.id)
-            if (vector === undefined) {
-                throw new Error(
-                    `vector index embedding missing: memory=${upsert.document.id}`
-                )
+            const replacement = replacements[replacementIndex++]
+            return {
+                vectorAction: 'replace',
+                document: createVectorIndexDocument(replacement.source),
+                vector: replacement.vector
             }
-            upserts.push({ vectorAction: 'replace', document, vector })
-        }
+        })
         return {
             presetId: batch.presetId,
             upserts,

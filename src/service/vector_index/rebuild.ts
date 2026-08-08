@@ -144,35 +144,23 @@ export const rebuildVectorIndex = async (options: {
             const legacyById = new Map(
                 legacy.map((record) => [record.id, record])
             )
-            const vectors = await embedMemoryIndexSources(
+            const replacements = await embedMemoryIndexSources(
                 embeddings,
                 embeddingModelId,
                 dimension,
                 sources,
                 legacyById
             )
-            const upserts: VectorIndexReplaceUpsert[] = []
-            for (const source of sources) {
-                const vector = vectors.get(source.id)
-                if (vector === undefined) {
-                    throw new Error(
-                        `vector index embedding missing: memory=${source.id}`
-                    )
-                }
-                upserts.push({
+            const upserts: VectorIndexReplaceUpsert[] = replacements.map(
+                (replacement) => ({
                     vectorAction: 'replace',
-                    document: createVectorIndexDocument(source),
-                    vector
+                    document: createVectorIndexDocument(replacement.source),
+                    vector: replacement.vector
                 })
-            }
+            )
 
             for (const [presetId, group] of groupUpsertsByPreset(upserts)) {
-                let expectedCount = expectedByPreset.get(presetId)
-                if (expectedCount === undefined) {
-                    expectedCount =
-                        await repository.countEntriesByPreset(presetId)
-                    expectedByPreset.set(presetId, expectedCount)
-                }
+                const expectedCount = expectedByPreset.get(presetId)!
                 const result = await worker.appendRebuildBatch(presetId, group)
                 await worker.markPresetState({
                     presetId,

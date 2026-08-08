@@ -111,36 +111,30 @@ export class LivingMemoryVectorIndexMaintenance {
             const embeddings = await this.createEmbeddings()
             const dimension = await probeVectorIndexDimension(embeddings)
             this.publishEmbeddingContext(embeddings, dimension)
-            await this.options.operationGate.runExclusive(async () => {
-                await reconcileVectorIndexPreset({
-                    presetId: job.presetId,
-                    repository: this.options.repository,
-                    worker: this.options.worker(),
-                    embeddings,
-                    embeddingModelId: this.options.config.embeddingModel,
-                    dimension,
-                    shouldStop: this.options.shouldStop,
-                    onProgress: async (progress) => {
-                        const detail =
-                            `vector index reconcile: preset=${job.presetId}, ` +
-                            `${progress.completed}/${progress.total}`
-                        await this.options.repository.updateJob(job.id, {
-                            detail,
-                            updatedAt: new Date()
-                        })
-                        this.options.debug(detail)
-                    }
-                })
-            })
+            const indexedCount = await this.options.operationGate.runExclusive(
+                () =>
+                    reconcileVectorIndexPreset({
+                        presetId: job.presetId,
+                        repository: this.options.repository,
+                        worker: this.options.worker(),
+                        embeddings,
+                        embeddingModelId: this.options.config.embeddingModel,
+                        dimension,
+                        shouldStop: this.options.shouldStop,
+                        onProgress: async (progress) => {
+                            const detail =
+                                `vector index reconcile: preset=${job.presetId}, ` +
+                                `${progress.completed}/${progress.total}`
+                            await this.options.repository.updateJob(job.id, {
+                                detail,
+                                updatedAt: new Date()
+                            })
+                            this.options.debug(detail)
+                        }
+                    })
+            )
             const inspection = await this.options.worker().inspect()
             this.options.onInspection(inspection)
-            const preset = inspection.presets.find(
-                (item) => item.presetId === job.presetId
-            )
-            let indexedCount = 0
-            if (preset !== undefined) {
-                indexedCount = preset.indexedCount
-            }
             return `vector index reconcile completed: ${indexedCount} entries`
         })
     }

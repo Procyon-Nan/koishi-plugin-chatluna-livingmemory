@@ -99,7 +99,7 @@ export const reconcileVectorIndexPreset = async (options: {
     const total = await repository.countEntriesByPreset(presetId)
     if (total === 0) {
         await worker.clearPreset(presetId)
-        return
+        return 0
     }
 
     await markPresetState(worker, {
@@ -130,10 +130,7 @@ export const reconcileVectorIndexPreset = async (options: {
                 break
             }
 
-            const replacements: {
-                source: MemoryIndexSourceRecord
-                document: VectorIndexDocument
-            }[] = []
+            const replacementSources: MemoryIndexSourceRecord[] = []
             const upserts: VectorIndexUpsert[] = []
             for (const source of sources) {
                 const current = inventory.get(source.id)
@@ -143,7 +140,7 @@ export const reconcileVectorIndexPreset = async (options: {
                     current === undefined ||
                     current.contentHash !== document.contentHash
                 ) {
-                    replacements.push({ source, document })
+                    replacementSources.push(source)
                     continue
                 }
                 if (requiresMetadataUpdate(document, current)) {
@@ -154,24 +151,18 @@ export const reconcileVectorIndexPreset = async (options: {
                 }
             }
 
-            const vectors = await embedMemoryIndexSources(
+            const replacements = await embedMemoryIndexSources(
                 embeddings,
                 embeddingModelId,
                 dimension,
-                replacements.map(({ source }) => source),
+                replacementSources,
                 NO_LEGACY_EMBEDDINGS
             )
             for (const replacement of replacements) {
-                const vector = vectors.get(replacement.source.id)
-                if (vector === undefined) {
-                    throw new Error(
-                        `vector index embedding missing: memory=${replacement.source.id}`
-                    )
-                }
                 upserts.push({
                     vectorAction: 'replace',
-                    document: replacement.document,
-                    vector
+                    document: createVectorIndexDocument(replacement.source),
+                    vector: replacement.vector
                 })
             }
             const mutation = await worker.applyMutation({
@@ -193,26 +184,22 @@ export const reconcileVectorIndexPreset = async (options: {
             })
             indexedCount = mutation.indexedCount
         }
-        const result = await worker.applyMutation({
-            presetId,
-            upserts: [],
-            deletes: []
-        })
-        if (result.indexedCount !== total) {
+        if (indexedCount !== total) {
             throw new Error(
                 `vector index reconcile count mismatch: ` +
                     `preset=${presetId}, expected=${total}, ` +
-                    `actual=${result.indexedCount}`
+                    `actual=${indexedCount}`
             )
         }
         await markPresetState(worker, {
             presetId,
             state: 'ready',
             expectedCount: total,
-            indexedCount: result.indexedCount,
+            indexedCount,
             lastError: null,
             updatedAt: Date.now()
         })
+        return indexedCount
     } catch (error) {
         const message = summarizeError(error)
         await markPresetState(worker, {
