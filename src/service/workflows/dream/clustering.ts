@@ -1,11 +1,7 @@
 import type { ManualDreamVectorReader } from '../../../contracts/vector_index'
 import type { DreamMemoryEntryRecord } from '../../../contracts/workflows'
-import {
-    type DreamHdbscanRunner,
-    groupEntriesByLabel,
-    readNormalizedVectors,
-    runDreamHdbscan
-} from './hdbscan'
+import { groupEntriesByLabel } from './hdbscan/labels'
+import type { DreamHdbscanRunner } from './hdbscan/protocol'
 import { DREAM_PARTITION_MAX_SIZE, partitionDreamEntries } from './partitioning'
 import type { DreamCluster } from './types'
 
@@ -14,7 +10,7 @@ export class DreamClusterer {
         private readonly vectorReader: ManualDreamVectorReader,
         private readonly debug: (message: string) => void,
         private readonly enableTrace: boolean,
-        private readonly runHdbscan: DreamHdbscanRunner = runDreamHdbscan
+        private readonly hdbscan: DreamHdbscanRunner
     ) {}
 
     async buildClusters(
@@ -92,19 +88,7 @@ export class DreamClusterer {
             `memory dream global noise clustering started: ` +
                 `presetId=${presetId} entries=${entries.length}`
         )
-        const vectors: number[][] = []
-        for (
-            let offset = 0;
-            offset < entries.length;
-            offset += DREAM_PARTITION_MAX_SIZE
-        ) {
-            const batch = entries.slice(
-                offset,
-                offset + DREAM_PARTITION_MAX_SIZE
-            )
-            vectors.push(...(await this.readNormalized(presetId, batch)))
-        }
-        const labels = this.runHdbscan(vectors)
+        const labels = await this.clusterEntries(presetId, entries)
         const groups = groupEntriesByLabel(entries, labels)
         for (const [label, groupedEntries] of groups) {
             if (label === -1) {
@@ -130,19 +114,84 @@ export class DreamClusterer {
         presetId: string,
         entries: DreamMemoryEntryRecord[]
     ) {
-        const vectors = await this.readNormalized(presetId, entries)
-        return this.runHdbscan(vectors)
+        const startedAt = Date.now()
+        const firstBatch = entries.slice(0, DREAM_PARTITION_MAX_SIZE)
+        const firstVectors = await this.vectorReader.readVectors(
+            presetId,
+            firstBatch.map((entry) => entry.id)
+        )
+        const dimension = firstVectors.get(firstBatch[0].id)!.length
+        const vectors = new Float32Array(entries.length * dimension)
+        this.writeVectors(vectors, dimension, 0, firstBatch, firstVectors)
+
+        for (
+            let offset = DREAM_PARTITION_MAX_SIZE;
+            offset < entries.length;
+            offset += DREAM_PARTITION_MAX_SIZE
+        ) {
+            const batch = entries.slice(
+                offset,
+                offset + DREAM_PARTITION_MAX_SIZE
+            )
+            const vectorById = await this.vectorReader.readVectors(
+                presetId,
+                batch.map((entry) => entry.id)
+            )
+            this.writeVectors(vectors, dimension, offset, batch, vectorById)
+        }
+
+        const labels = await this.hdbscan.run(
+            { entryCount: entries.length, dimension, vectors },
+            this.enableTrace
+        )
+        this.traceHdbscanResult(
+            presetId,
+            entries.length,
+            dimension,
+            labels,
+            startedAt
+        )
+        return labels
     }
 
-    private async readNormalized(
+    private traceHdbscanResult(
         presetId: string,
-        entries: DreamMemoryEntryRecord[]
+        entryCount: number,
+        dimension: number,
+        labels: Int32Array<ArrayBuffer>,
+        startedAt: number
     ) {
-        const vectorById = await this.vectorReader.readVectors(
-            presetId,
-            entries.map((entry) => entry.id)
+        if (!this.enableTrace) {
+            return
+        }
+        const clusterLabels = new Set<number>()
+        let noiseCount = 0
+        for (const label of labels) {
+            if (label === -1) {
+                noiseCount++
+            } else {
+                clusterLabels.add(label)
+            }
+        }
+        this.debug(
+            `memory dream hdbscan completed: presetId=${presetId} ` +
+                `entries=${entryCount} dimension=${dimension} ` +
+                `mstEdges=${entryCount - 1} ` +
+                `clusters=${clusterLabels.size} noise=${noiseCount} ` +
+                `elapsedMs=${Date.now() - startedAt}`
         )
-        return readNormalizedVectors(entries, vectorById)
+    }
+
+    private writeVectors(
+        matrix: Float32Array<ArrayBuffer>,
+        dimension: number,
+        offset: number,
+        entries: DreamMemoryEntryRecord[],
+        vectorById: ReadonlyMap<string, Float32Array<ArrayBuffer>>
+    ) {
+        entries.forEach((entry, index) => {
+            matrix.set(vectorById.get(entry.id)!, (offset + index) * dimension)
+        })
     }
 
     private appendCluster(

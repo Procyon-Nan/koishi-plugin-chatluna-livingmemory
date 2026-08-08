@@ -35,20 +35,27 @@ const deserializeError = (serialized: DreamHdbscanWorkerError) => {
     return error
 }
 
+export interface DreamHdbscanWorkerClientOptions {
+    workerPath?: string
+    onProgress?: (progress: DreamHdbscanWorkerProgress) => void
+    onFailure?: (error: Error) => void
+}
+
 export class LivingMemoryDreamHdbscanWorkerClient implements DreamHdbscanRunner {
+    private readonly workerPath: string
+    private readonly onProgress?: (progress: DreamHdbscanWorkerProgress) => void
+    private readonly onFailure?: (error: Error) => void
     private worker: Worker | null = null
     private readonly pending = new Map<number, PendingRequest>()
     private nextRequestId = 1
     private failure: Error | null = null
     private closed = false
 
-    constructor(
-        private readonly workerPath = resolveDefaultWorkerPath(),
-        private readonly onProgress?: (
-            progress: DreamHdbscanWorkerProgress
-        ) => void,
-        private readonly onFailure?: (error: Error) => void
-    ) {}
+    constructor(options: DreamHdbscanWorkerClientOptions = {}) {
+        this.workerPath = options.workerPath ?? resolveDefaultWorkerPath()
+        this.onProgress = options.onProgress
+        this.onFailure = options.onFailure
+    }
 
     async start() {
         if (this.closed) {

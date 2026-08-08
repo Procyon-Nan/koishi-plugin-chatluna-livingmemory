@@ -13,6 +13,7 @@ import {
     resolvePresetPrompt
 } from '../../memory/helpers'
 import { DreamClusterer } from './clustering'
+import type { DreamHdbscanRunner } from './hdbscan/protocol'
 import { LivingMemoryUserProfileService } from '../../user_profile'
 import {
     addStats,
@@ -51,9 +52,15 @@ export class LivingMemoryDreamService {
         private readonly repository: DreamRepository,
         private readonly mutations: DreamMemoryRepository,
         vectors: ManualDreamVectorReader,
+        hdbscan: DreamHdbscanRunner,
         private readonly debug: (message: string) => void
     ) {
-        this.clusterer = new DreamClusterer(vectors, debug, config.debug)
+        this.clusterer = new DreamClusterer(
+            vectors,
+            debug,
+            config.debug,
+            hdbscan
+        )
         this.unitProcessor = new DreamUnitProcessor(
             mutations,
             debug,

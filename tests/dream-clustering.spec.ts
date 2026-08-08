@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import type { ManualDreamVectorReader } from '../src/contracts/vector_index'
 import { DreamClusterer } from '../src/service/workflows/dream/clustering'
-import type { DreamHdbscanRunner } from '../src/service/workflows/dream/hdbscan'
+import type { DreamHdbscanRunner } from '../src/service/workflows/dream/hdbscan/protocol'
 import {
     buildDreamPartitionTargetSizes,
     partitionDreamEntries,
@@ -200,18 +200,29 @@ it('runs one global HDBSCAN pass over all first-pass noise', async () => {
     const partitions = partitionDreamEntries(entries)
     const vectors = createVectorReader(entries)
     const callSizes: number[] = []
-    const runHdbscan: DreamHdbscanRunner = (input) => {
-        callSizes.push(input.length)
-        if (callSizes.length <= partitions.length) {
-            return input.map((_, index) => (index === 0 ? 0 : -1))
+    const hdbscan: DreamHdbscanRunner = {
+        run: async (input, reportProgress) => {
+            assert.equal(input.dimension, 2)
+            assert.equal(input.vectors.length, input.entryCount * 2)
+            assert.equal(reportProgress, false)
+            callSizes.push(input.entryCount)
+            if (callSizes.length <= partitions.length) {
+                return Int32Array.from(
+                    { length: input.entryCount },
+                    (_, index) => (index === 0 ? 0 : -1)
+                )
+            }
+            return Int32Array.from(
+                { length: input.entryCount },
+                (_, index) => (index < 3 ? 4 : -1)
+            )
         }
-        return input.map((_, index) => (index < 3 ? 4 : -1))
     }
     const clusterer = new DreamClusterer(
         vectors.reader,
         () => {},
         false,
-        runHdbscan
+        hdbscan
     )
 
     const clusters = await clusterer.buildClusters('preset-1', entries)
@@ -243,15 +254,17 @@ it('reads first-pass partitions and global noise in bounded batches', async () =
     const partitions = partitionDreamEntries(entries)
     const vectors = createVectorReader(entries)
     const callSizes: number[] = []
-    const runHdbscan: DreamHdbscanRunner = (input) => {
-        callSizes.push(input.length)
-        return input.map(() => -1)
+    const hdbscan: DreamHdbscanRunner = {
+        run: async (input) => {
+            callSizes.push(input.entryCount)
+            return new Int32Array(input.entryCount).fill(-1)
+        }
     }
     const clusterer = new DreamClusterer(
         vectors.reader,
         () => {},
         false,
-        runHdbscan
+        hdbscan
     )
 
     const clusters = await clusterer.buildClusters('preset-1', entries)
@@ -272,15 +285,17 @@ it('skips the global noise pass when the first pass has no noise', async () => {
     const entries = createEntries(351)
     const vectors = createVectorReader(entries)
     const callSizes: number[] = []
-    const runHdbscan: DreamHdbscanRunner = (input) => {
-        callSizes.push(input.length)
-        return input.map(() => 0)
+    const hdbscan: DreamHdbscanRunner = {
+        run: async (input) => {
+            callSizes.push(input.entryCount)
+            return new Int32Array(input.entryCount)
+        }
     }
     const clusterer = new DreamClusterer(
         vectors.reader,
         () => {},
         false,
-        runHdbscan
+        hdbscan
     )
 
     const clusters = await clusterer.buildClusters('preset-1', entries)
@@ -296,4 +311,53 @@ it('skips the global noise pass when the first pass has no noise', async () => {
         [175, 176]
     )
     assert.equal(clusters.length, 2)
+})
+
+it('propagates asynchronous HDBSCAN failures', async () => {
+    const entries = createEntries(10)
+    const vectors = createVectorReader(entries)
+    const clusterer = new DreamClusterer(
+        vectors.reader,
+        () => {},
+        false,
+        {
+            run: async () => {
+                throw new Error('Dream worker failed')
+            }
+        }
+    )
+
+    await assert.rejects(
+        clusterer.buildClusters('preset-1', entries),
+        /Dream worker failed/u
+    )
+})
+
+it('enables worker progress and completion logs only for debug tracing', async () => {
+    const entries = createEntries(4)
+    const vectors = createVectorReader(entries)
+    const debugMessages: string[] = []
+    const progressFlags: boolean[] = []
+    const clusterer = new DreamClusterer(
+        vectors.reader,
+        (message) => debugMessages.push(message),
+        true,
+        {
+            run: async ({ entryCount }, reportProgress) => {
+                progressFlags.push(reportProgress)
+                return new Int32Array(entryCount)
+            }
+        }
+    )
+
+    await clusterer.buildClusters('preset-1', entries)
+
+    assert.deepEqual(progressFlags, [true])
+    assert.ok(
+        debugMessages.some((message) =>
+            message.includes(
+                'entries=4 dimension=2 mstEdges=3 clusters=1 noise=0'
+            )
+        )
+    )
 })

@@ -8,6 +8,7 @@ import type {
 import { dreamResultToolName } from '../src/service/prompts/schema'
 import type { DreamRepository } from '../src/service/workflows/dream'
 import { LivingMemoryDreamService } from '../src/service/workflows/dream'
+import type { DreamHdbscanRunner } from '../src/service/workflows/dream/hdbscan/protocol'
 import {
     createToolCallingModel,
     createToolCallMessage
@@ -69,6 +70,9 @@ const createDreamHarness = (
                 memoryIds.map((id) => [id, new Float32Array(testEmbedding)])
             )
     }
+    const hdbscan: DreamHdbscanRunner = {
+        run: async ({ entryCount }) => new Int32Array(entryCount)
+    }
     const service = new LivingMemoryDreamService(
         ctx,
         {
@@ -80,6 +84,7 @@ const createDreamHarness = (
         repository,
         repository as unknown as DreamMemoryRepository,
         vectors,
+        hdbscan,
         (message) => debugMessages.push(message)
     )
 

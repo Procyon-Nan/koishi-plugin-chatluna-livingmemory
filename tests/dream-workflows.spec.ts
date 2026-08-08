@@ -15,6 +15,7 @@ import {
     type DreamExecutorRepository
 } from '../src/service/workflows/dream/executor'
 import { LivingMemoryDreamJobRunner } from '../src/service/workflows/dream/job_runner'
+import type { DreamHdbscanRunner } from '../src/service/workflows/dream/hdbscan/protocol'
 import type {
     DreamOperation,
     DreamRunResult
@@ -52,6 +53,10 @@ const createIncrementalDreamRunResult = () => ({
 
 const incrementalDream = {
     run: async () => createIncrementalDreamRunResult()
+}
+
+const hdbscan: DreamHdbscanRunner = {
+    run: async ({ entryCount }) => new Int32Array(entryCount)
 }
 
 type DreamCoordinatorArgs = ConstructorParameters<
@@ -175,6 +180,7 @@ const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
         {
             readVectors: async () => new Map()
         },
+        hdbscan,
         (message) => debugMessages.push(message)
     )
 
@@ -247,6 +253,7 @@ it('marks a single-memory manual Dream as consolidated', async () => {
         {
             readVectors: async () => new Map()
         },
+        hdbscan,
         () => {}
     )
 

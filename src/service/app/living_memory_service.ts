@@ -1,6 +1,8 @@
 import type { HumanMessage } from '@langchain/core/messages'
 import { Context, Logger, Service, Time } from 'koishi'
 import { LivingMemoryDreamService } from '../workflows/dream'
+import type { DreamHdbscanWorkerProgress } from '../workflows/dream/hdbscan/protocol'
+import { LivingMemoryDreamHdbscanWorkerClient } from '../workflows/dream/hdbscan/worker_client'
 import { LivingMemoryIncrementalDreamService } from '../workflows/dream/incremental'
 import { LivingMemoryDreamJobRunner } from '../workflows/dream/job_runner'
 import { LivingMemoryExtractor } from '../workflows/extraction/extractor'
@@ -82,6 +84,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     private readonly userProfiles: LivingMemoryUserProfileService
     private readonly searchEngine: LivingMemoryEmbeddingSearchEngine
     private readonly vectorIndex: LivingMemoryVectorIndexService
+    private readonly dreamHdbscan: LivingMemoryDreamHdbscanWorkerClient
     private readonly mutations: LivingMemoryMutationService
 
     constructor(
@@ -99,6 +102,10 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             this.repository,
             this.serviceLogger
         )
+        this.dreamHdbscan = new LivingMemoryDreamHdbscanWorkerClient({
+            onProgress: (progress) => this.logDreamHdbscanProgress(progress),
+            onFailure: (error) => this.serviceLogger.warn(error)
+        })
         this.mutations = new LivingMemoryMutationService(
             this.repository,
             this.vectorIndex
@@ -135,6 +142,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             this.repository,
             this.mutations,
             this.vectorIndex,
+            this.dreamHdbscan,
             debug
         )
         const incrementalDream = new LivingMemoryIncrementalDreamService(
@@ -226,10 +234,24 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         }
 
         await this.vectorIndex.start()
+        try {
+            await this.dreamHdbscan.start()
+        } catch (error) {
+            try {
+                await this.dreamHdbscan.stop()
+            } finally {
+                await this.vectorIndex.stop()
+            }
+            throw error
+        }
     }
 
     protected async stop() {
-        await this.vectorIndex.stop()
+        try {
+            await this.dreamHdbscan.stop()
+        } finally {
+            await this.vectorIndex.stop()
+        }
     }
 
     validateConfig(): MemoryConfigWarning[] {
@@ -247,6 +269,16 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         if (this.config.debug) {
             this.serviceLogger.info(message)
         }
+    }
+
+    private logDreamHdbscanProgress(progress: DreamHdbscanWorkerProgress) {
+        const percent = Math.round((progress.completed / progress.total) * 100)
+        this.debug(
+            `memory dream hdbscan progress: requestId=${progress.requestId} ` +
+                `phase=${progress.phase} completed=${progress.completed} ` +
+                `total=${progress.total} percent=${percent} ` +
+                `elapsedMs=${Math.round(progress.elapsedMs)}`
+        )
     }
 
     private queueAutoDreamIfThresholdReached(presetId: string) {
