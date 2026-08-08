@@ -7,6 +7,12 @@ import type { EmbeddingsLike } from '../shared/embeddings'
 const VECTOR_INDEX_PROBE_TEXT =
     'living memory vector index dimension probe'
 
+export interface VectorIndexEmbeddingContext {
+    embeddings: EmbeddingsLike
+    embeddingModelId: string
+    dimension: number
+}
+
 const convertValidVector = (
     vector: number[] | null,
     dimension: number

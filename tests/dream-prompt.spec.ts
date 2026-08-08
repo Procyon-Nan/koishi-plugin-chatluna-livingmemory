@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { AIMessage, type BaseMessage } from '@langchain/core/messages'
 import type { Context } from 'koishi'
 import type { MemoryEntryRecord } from '../src/contracts/memory'
+import type { DreamMemoryRepository } from '../src/contracts/workflows'
 import { dreamResultToolName } from '../src/service/prompts/schema'
 import type { DreamRepository } from '../src/service/workflows/dream'
 import { LivingMemoryDreamService } from '../src/service/workflows/dream'
@@ -78,6 +79,7 @@ const createDreamHarness = (
             userProfileMemoryLimit: 20
         },
         repository,
+        repository as unknown as DreamMemoryRepository,
         (message) => debugMessages.push(message)
     )
 

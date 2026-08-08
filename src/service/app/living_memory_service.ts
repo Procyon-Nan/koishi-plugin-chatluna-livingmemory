@@ -47,6 +47,7 @@ import { LivingMemoryPresetCatalog } from '../memory/preset_catalog'
 import { LivingMemoryRecallCoordinator } from '../workflows/recall/coordinator'
 import { LivingMemorySnapshotCache } from '../memory/snapshot/snapshot_cache'
 import { LivingMemoryVectorIndexService } from '../vector_index/service'
+import { LivingMemoryMutationService } from './memory_mutation_service'
 import { LivingMemoryAgenticRecallExecutor } from '../workflows/recall/agentic_recall'
 import {
     createEmbeddingSearchCache,
@@ -86,6 +87,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     private readonly userProfiles: LivingMemoryUserProfileService
     private readonly searchEngine: LivingMemoryEmbeddingSearchEngine
     private readonly vectorIndex: LivingMemoryVectorIndexService
+    private readonly mutations: LivingMemoryMutationService
 
     constructor(
         public readonly ctx: Context,
@@ -101,6 +103,10 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             config,
             this.repository,
             this.serviceLogger
+        )
+        this.mutations = new LivingMemoryMutationService(
+            this.repository,
+            this.vectorIndex
         )
         const retriever = new LivingMemoryRetriever(
             ctx,
@@ -132,12 +138,14 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             ctx,
             config,
             this.repository,
+            this.mutations,
             debug
         )
         const incrementalDream = new LivingMemoryIncrementalDreamService(
             ctx,
             config,
             this.repository,
+            this.mutations,
             debug
         )
 
@@ -170,6 +178,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         this.extractionCoordinator = new LivingMemoryExtractionCoordinator(
             config,
             this.repository,
+            this.mutations,
             formatter,
             extractor,
             (presetId) => this.queueAutoDreamIfThresholdReached(presetId),
@@ -398,17 +407,17 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     }
 
     async createMemory(scope: MemoryScope, input: MemoryMutationInput) {
-        const memory = await this.repository.createMemory(scope, input)
+        const memory = await this.mutations.createMemory(scope, input)
         this.queueAutoDreamIfThresholdReached(scope.presetId)
         return memory
     }
 
     async updateMemory(memoryId: string, patch: Partial<MemoryMutationInput>) {
-        await this.repository.updateMemory(memoryId, patch)
+        await this.mutations.updateMemory(memoryId, patch)
     }
 
     async deleteMemory(memoryId: string) {
-        await this.repository.deleteMemory(memoryId)
+        await this.mutations.deleteMemory(memoryId)
     }
 
     async deleteSnapshot(snapshotId: string) {
@@ -443,8 +452,11 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     }
 
     async clearPresetData(presetId: string) {
-        await this.repository.clearAllByPreset(presetId)
-        this.snapshotCache.clearByPreset(presetId)
+        try {
+            await this.mutations.clearPresetData(presetId)
+        } finally {
+            this.snapshotCache.clearByPreset(presetId)
+        }
     }
 
     async rebuildEmbeddings(presetId: string): Promise<{ rebuilt: number }> {
@@ -494,12 +506,11 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         targetPresetId: string,
         data: LivingMemoryPresetExport
     ): Promise<LivingMemoryPresetImportResult> {
-        const result = await this.repository.importPresetData(
-            targetPresetId,
-            data
-        )
-        this.snapshotCache.clearByPreset(targetPresetId)
-        return result
+        try {
+            return await this.mutations.importPreset(targetPresetId, data)
+        } finally {
+            this.snapshotCache.clearByPreset(targetPresetId)
+        }
     }
 
     async cleanupStaleJobs(maxAge: number = Time.week) {

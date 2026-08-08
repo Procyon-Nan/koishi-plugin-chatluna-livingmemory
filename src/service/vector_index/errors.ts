@@ -3,6 +3,7 @@ import type { MemoryVectorIndexState } from '../../contracts/vector_index'
 export type LivingMemoryVectorIndexErrorCode =
     | 'embedding-unavailable'
     | 'lock-conflict'
+    | 'mutation-failed'
     | 'not-ready'
     | 'rebuild-failed'
     | 'reconcile-failed'
@@ -17,5 +18,14 @@ export class LivingMemoryVectorIndexError extends Error {
     ) {
         super(message, options)
         this.name = 'LivingMemoryVectorIndexError'
+    }
+}
+
+export class LivingMemoryFactsCommittedError extends Error {
+    readonly factsCommitted = true
+
+    constructor(message: string, options: ErrorOptions) {
+        super(message, options)
+        this.name = 'LivingMemoryFactsCommittedError'
     }
 }

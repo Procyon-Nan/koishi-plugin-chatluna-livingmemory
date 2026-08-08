@@ -22,7 +22,6 @@ import type {
     MemoryIndexSourceRecord
 } from '../../contracts/vector_index'
 import type {
-    DreamMemoryRepository,
     DreamMergeInput,
     ExtractedMemoryItem,
     ExtractionRepository,
@@ -76,7 +75,6 @@ export class LivingMemoryRepository
         SnapshotRepository,
         JobRepository,
         ExtractionRepository,
-        DreamMemoryRepository,
         UserProfileRepository
 {
     private readonly entries: LivingMemoryEntryRepository
@@ -189,7 +187,7 @@ export class LivingMemoryRepository
         scope: MemoryScope,
         sourceOriginMessages: MemorySourceMessage[],
         extracted: ExtractedMemoryItem[]
-    ): Promise<void> {
+    ): Promise<MemoryEntryRecord[]> {
         return this.entries.appendMemories(
             scope,
             sourceOriginMessages,
@@ -204,10 +202,7 @@ export class LivingMemoryRepository
         return this.entries.createMemory(scope, input)
     }
 
-    updateMemory(
-        id: string,
-        patch: Partial<MemoryMutationInput>
-    ): Promise<void> {
+    updateMemory(id: string, patch: Partial<MemoryMutationInput>) {
         return this.entries.updateMemory(id, patch)
     }
 
@@ -215,18 +210,23 @@ export class LivingMemoryRepository
         id: string,
         patch: Partial<MemoryMutationInput>,
         isConsolidated: boolean
-    ): Promise<void> {
+    ) {
         return this.entries.updateMemoryForDream(id, patch, isConsolidated)
     }
 
     setMemoryConsolidation(
+        presetId: string,
         ids: string[],
         isConsolidated: boolean
-    ): Promise<void> {
-        return this.entries.setMemoryConsolidation(ids, isConsolidated)
+    ) {
+        return this.entries.setMemoryConsolidation(
+            presetId,
+            ids,
+            isConsolidated
+        )
     }
 
-    applyDreamMerge(input: DreamMergeInput): Promise<void> {
+    applyDreamMerge(input: DreamMergeInput) {
         return this.entries.applyDreamMerge(input)
     }
 
@@ -240,7 +240,7 @@ export class LivingMemoryRepository
         return this.entries.updateEntryEmbeddings(updates)
     }
 
-    deleteMemory(id: string): Promise<void> {
+    deleteMemory(id: string) {
         return this.entries.deleteMemory(id)
     }
 

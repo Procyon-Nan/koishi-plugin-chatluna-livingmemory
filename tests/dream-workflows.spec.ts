@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import type { Context } from 'koishi'
 import type { MemoryEntryRecord } from '../src/contracts/memory'
+import type { DreamMemoryRepository } from '../src/contracts/workflows'
 import {
     type DreamRepository,
     LivingMemoryDreamService
@@ -95,14 +96,18 @@ const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
     const archivedEntry = createMemoryEntry('archived-memory', 'archived')
     const entries = [activeEntry, archivedEntry]
     let presetRenderCount = 0
-    const repository: DreamRepository = {
+    const repository = {
         listEntriesByPreset: async () => {
             events.push('list-entries')
             return entries
         },
         updateEntryEmbeddings: async () => {},
         updateMemoryForDream: async () => {},
-        setMemoryConsolidation: async (ids, isConsolidated) => {
+        setMemoryConsolidation: async (
+            _presetId: string,
+            ids: string[],
+            isConsolidated: boolean
+        ) => {
             if (isConsolidated) {
                 consolidatedIds.push(...ids)
             }
@@ -166,7 +171,8 @@ const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
             enableUserProfileInjection,
             userProfileMemoryLimit: 20
         },
-        repository,
+        repository as unknown as DreamRepository,
+        repository as unknown as DreamMemoryRepository,
         (message) => debugMessages.push(message)
     )
 
@@ -222,7 +228,7 @@ it('marks a single-memory manual Dream as consolidated', async () => {
     const consolidatedIds: string[] = []
     const repository = {
         listEntriesByPreset: async () => [entry],
-        setMemoryConsolidation: async (ids: string[]) => {
+        setMemoryConsolidation: async (_presetId: string, ids: string[]) => {
             consolidatedIds.push(...ids)
         }
     } as unknown as DreamRepository
@@ -234,7 +240,8 @@ it('marks a single-memory manual Dream as consolidated', async () => {
             enableUserProfileInjection: false,
             userProfileMemoryLimit: 20
         },
-        repository,
+        repository as unknown as DreamRepository,
+        repository as unknown as DreamMemoryRepository,
         () => {}
     )
 
@@ -323,13 +330,13 @@ const completeDreamMergeOperation = (
 
 it('enforces Dream touched-memory guards', async () => {
     const updates: Partial<MemoryEntryRecord>[] = []
-    const repository: DreamExecutorRepository = {
-        updateMemoryForDream: async (_id, patch) => {
+    const repository = {
+        updateMemoryForDream: async (_presetId, _id, patch) => {
             updates.push(patch)
         },
         setMemoryConsolidation: async () => {},
         applyDreamMerge: async () => {}
-    }
+    } as unknown as DreamExecutorRepository
     const executor = new DreamExecutor(repository, () => {})
     const entry = createMemoryEntry('memory-1')
     const cluster = { id: 'cluster-1', reason: 'test', entries: [entry] }
@@ -352,13 +359,13 @@ it('delegates each Dream merge to one atomic repository operation', async () => 
     const mergeInputs: Parameters<
         DreamExecutorRepository['applyDreamMerge']
     >[0][] = []
-    const repository: DreamExecutorRepository = {
+    const repository = {
         updateMemoryForDream: async () => {},
         setMemoryConsolidation: async () => {},
         applyDreamMerge: async (input) => {
             mergeInputs.push(input)
         }
-    }
+    } as unknown as DreamExecutorRepository
     const executor = new DreamExecutor(repository, () => {})
     const activeEntries = [
         createMemoryEntry('target-active'),
@@ -449,13 +456,13 @@ it('delegates each Dream merge to one atomic repository operation', async () => 
 })
 
 it('does not touch merge state when the atomic repository write fails', async () => {
-    const repository: DreamExecutorRepository = {
+    const repository = {
         updateMemoryForDream: async () => {},
         setMemoryConsolidation: async () => {},
         applyDreamMerge: async () => {
             throw new Error('merge write failed')
         }
-    }
+    } as unknown as DreamExecutorRepository
     const executor = new DreamExecutor(repository, () => {})
     const touchedMemoryIds = new Set(['already-touched'])
 

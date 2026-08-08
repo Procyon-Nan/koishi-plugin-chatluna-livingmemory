@@ -5,7 +5,10 @@ import type { MemoryJobRecord } from '../../contracts/memory'
 import type { MemoryVectorIndexManifest } from '../../contracts/vector_index'
 import type { EmbeddingsLike } from '../shared/embeddings'
 import { isModelConfigured } from '../shared/utils'
-import { probeVectorIndexDimension } from './embedding'
+import {
+    probeVectorIndexDimension,
+    type VectorIndexEmbeddingContext
+} from './embedding'
 import { LivingMemoryVectorIndexError } from './errors'
 import {
     LivingMemoryVectorIndexJobRunner,
@@ -46,6 +49,7 @@ interface VectorIndexMaintenanceOptions {
     onBuilding: (jobId: string) => void
     onCurrentJobChanged: (jobId: string | null) => void
     onInspection: (inspection: VectorIndexInspection) => void
+    onEmbeddingContext: (context: VectorIndexEmbeddingContext) => void
     debug: (message: string) => void
 }
 
@@ -65,6 +69,7 @@ export class LivingMemoryVectorIndexMaintenance {
     ) {
         const embeddings = await this.createEmbeddings()
         const dimension = await probeVectorIndexDimension(embeddings)
+        this.publishEmbeddingContext(embeddings, dimension)
         const rebuildReason = this.resolveRebuildReason(
             inspection,
             dimension,
@@ -84,7 +89,52 @@ export class LivingMemoryVectorIndexMaintenance {
     async rebuild(reason: string) {
         const embeddings = await this.createEmbeddings()
         const dimension = await probeVectorIndexDimension(embeddings)
+        this.publishEmbeddingContext(embeddings, dimension)
         await this.runRebuildJob(embeddings, dimension, reason)
+    }
+
+    createPresetReconcileJob(presetId: string, reason: string) {
+        return this.jobRunner.create(presetId, `reconcile: ${reason}`)
+    }
+
+    async runPresetReconcileJob(job: MemoryJobRecord, reason: string) {
+        const input = `reconcile: ${reason}`
+        await this.jobRunner.runCreated(job, input, async () => {
+            const embeddings = await this.createEmbeddings()
+            const dimension = await probeVectorIndexDimension(embeddings)
+            this.publishEmbeddingContext(embeddings, dimension)
+            await this.options.operationGate.runExclusive(async () => {
+                await reconcileVectorIndexPreset({
+                    presetId: job.presetId,
+                    repository: this.options.repository,
+                    worker: this.options.worker(),
+                    embeddings,
+                    embeddingModelId: this.options.config.embeddingModel,
+                    dimension,
+                    shouldStop: this.options.shouldStop,
+                    onProgress: async (progress) => {
+                        const detail =
+                            `vector index reconcile: preset=${job.presetId}, ` +
+                            `${progress.completed}/${progress.total}`
+                        await this.options.repository.updateJob(job.id, {
+                            detail,
+                            updatedAt: new Date()
+                        })
+                        this.options.debug(detail)
+                    }
+                })
+            })
+            const inspection = await this.options.worker().inspect()
+            this.options.onInspection(inspection)
+            const preset = inspection.presets.find(
+                (item) => item.presetId === job.presetId
+            )
+            let indexedCount = 0
+            if (preset !== undefined) {
+                indexedCount = preset.indexedCount
+            }
+            return `vector index reconcile completed: ${indexedCount} entries`
+        })
     }
 
     private async createEmbeddings(): Promise<EmbeddingsLike> {
@@ -107,6 +157,17 @@ export class LivingMemoryVectorIndexMaintenance {
             )
         }
         return result.value
+    }
+
+    private publishEmbeddingContext(
+        embeddings: EmbeddingsLike,
+        dimension: number
+    ) {
+        this.options.onEmbeddingContext({
+            embeddings,
+            embeddingModelId: this.options.config.embeddingModel,
+            dimension
+        })
     }
 
     private resolveRebuildReason(

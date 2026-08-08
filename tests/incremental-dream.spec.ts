@@ -2,7 +2,10 @@ import assert from 'node:assert/strict'
 import { AIMessage, type BaseMessage } from '@langchain/core/messages'
 import type { Context } from 'koishi'
 import type { MemoryEntryRecord } from '../src/contracts/memory'
-import type { DreamMergeInput } from '../src/contracts/workflows'
+import type {
+    DreamMemoryRepository,
+    DreamMergeInput
+} from '../src/contracts/workflows'
 import { dreamResultToolName } from '../src/service/prompts/schema'
 import {
     type IncrementalDreamRepository,
@@ -72,36 +75,51 @@ class IncrementalRepositoryStub implements IncrementalDreamRepository {
         ).length
     }
 
-    async setMemoryConsolidation(ids: string[], isConsolidated: boolean) {
+    async setMemoryConsolidation(
+        targetPresetId: string,
+        ids: string[],
+        isConsolidated: boolean
+    ) {
+        const updated: MemoryEntryRecord[] = []
         for (const id of ids) {
             const entry = this.entries.get(id)
-            if (entry === undefined) {
+            if (entry === undefined || entry.presetId !== targetPresetId) {
                 throw new Error(`missing entry: ${id}`)
             }
             entry.isConsolidated = isConsolidated
+            updated.push(entry)
         }
+        return updated
     }
 
     async updateMemoryForDream(
+        _targetPresetId: string,
         id: string,
         patch: Partial<MemoryEntryRecord>,
         isConsolidated: boolean
     ) {
         const entry = this.entries.get(id)
         if (entry === undefined) throw new Error(`missing entry: ${id}`)
+        const previousContent = entry.content
         Object.assign(entry, patch, {
             isConsolidated,
             embedding: null,
             embeddingModelId: null,
             updatedAt: new Date(+entry.updatedAt + 1)
         })
+        return {
+            record: entry,
+            contentChanged: entry.content !== previousContent
+        }
     }
 
     async applyDreamMerge(input: DreamMergeInput) {
         const target = this.entries.get(input.target.id)
         if (target === undefined) throw new Error('missing target')
+        const previousContent = target.content
+        const archivedSources: MemoryEntryRecord[] = []
+        const deletedSourceIds: string[] = []
         Object.assign(target, input.patch, {
-            sourceOrigins: input.sourceOrigins,
             isConsolidated: input.targetIsConsolidated,
             embedding: null,
             embeddingModelId: null,
@@ -112,11 +130,19 @@ class IncrementalRepositoryStub implements IncrementalDreamRepository {
             if (source === undefined) throw new Error('missing source')
             if (input.sourceDisposition === 'delete') {
                 this.entries.delete(source.id)
+                deletedSourceIds.push(source.id)
             } else {
                 source.status = 'archived'
                 source.isConsolidated = input.sourceIsConsolidated
                 source.updatedAt = new Date(+source.updatedAt + 1)
+                archivedSources.push(source)
             }
+        }
+        return {
+            target,
+            archivedSources,
+            deletedSourceIds,
+            targetContentChanged: target.content !== previousContent
         }
     }
 
@@ -209,6 +235,7 @@ const createHarness = (
             debug: true
         },
         repository,
+        repository as DreamMemoryRepository,
         () => {}
     )
     return { embeddedDocuments, model, repository, service }

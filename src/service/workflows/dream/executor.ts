@@ -4,7 +4,6 @@ import type {
     DreamMergeMutation
 } from '../../../contracts/workflows'
 import { normalizeMemoryKeywords } from '../../memory/entry_fields'
-import { mergeMemorySourceOrigins } from '../../memory/origins/source_origins'
 import { createEmptyStats } from './stats'
 import type {
     DreamCluster,
@@ -171,6 +170,7 @@ export class DreamExecutor {
 
         const isConsolidated = state.consolidationMode !== 'incremental-batch'
         await this.repository.updateMemoryForDream(
+            entry.presetId,
             entry.id,
             this.prepareStagePatch(state.stage, patch),
             isConsolidated
@@ -223,10 +223,10 @@ export class DreamExecutor {
         }
 
         const patch = this.prepareMemoryPatch(operation.memory)
-        const sourceOrigins = mergeMemorySourceOrigins([target, ...sources])
         const sourceMemoryIds = sources.map((source) => source.id)
 
         await this.repository.applyDreamMerge({
+            presetId: target.presetId,
             target: {
                 id: target.id,
                 updatedAt: target.updatedAt
@@ -236,7 +236,6 @@ export class DreamExecutor {
                 updatedAt: source.updatedAt
             })),
             patch: this.prepareStagePatch(state.stage, patch),
-            sourceOrigins,
             sourceDisposition: this.getSourceDisposition(state.stage),
             targetIsConsolidated:
                 state.consolidationMode !== 'incremental-batch',
@@ -266,6 +265,7 @@ export class DreamExecutor {
         touchedMemoryIds: Set<string>
     ) {
         await this.repository.updateMemoryForDream(
+            entry.presetId,
             entry.id,
             { status: 'archived' },
             true

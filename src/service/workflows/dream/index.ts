@@ -2,6 +2,7 @@ import { Context } from 'koishi'
 import type { ChatLunaChatModel } from 'koishi-plugin-chatluna/llm-core/platform/model'
 import type { MemoryEntryRecord } from '../../../contracts/memory'
 import type {
+    DreamMemoryRepository,
     LivingMemoryConfig,
     RecallRepository,
     UserProfileRepository
@@ -13,7 +14,6 @@ import {
     resolvePresetPrompt
 } from '../../memory/helpers'
 import { DreamClusterer } from './clustering'
-import type { DreamExecutorRepository } from './executor'
 import { LivingMemoryUserProfileService } from '../../user_profile'
 import {
     addStats,
@@ -38,7 +38,6 @@ type LivingMemoryDreamConfig = Pick<
 
 export type DreamRepository = Pick<RecallRepository, 'listEntriesByPreset'> &
     EmbeddingRepositoryLike &
-    DreamExecutorRepository &
     UserProfileRepository
 
 export class LivingMemoryDreamService {
@@ -50,11 +49,12 @@ export class LivingMemoryDreamService {
         private readonly ctx: Context,
         private readonly config: LivingMemoryDreamConfig,
         private readonly repository: DreamRepository,
+        private readonly mutations: DreamMemoryRepository,
         private readonly debug: (message: string) => void
     ) {
         this.clusterer = new DreamClusterer(ctx, config, repository, debug)
         this.unitProcessor = new DreamUnitProcessor(
-            repository,
+            mutations,
             debug,
             config.debug
         )
@@ -70,7 +70,8 @@ export class LivingMemoryDreamService {
         const entries = await this.repository.listEntriesByPreset(presetId)
         if (entries.length < 2) {
             if (entries.length === 1) {
-                await this.repository.setMemoryConsolidation(
+                await this.mutations.setMemoryConsolidation(
+                    presetId,
                     [entries[0].id],
                     true
                 )
@@ -194,7 +195,8 @@ export class LivingMemoryDreamService {
     ): Promise<DreamStageResult> {
         if (entries.length < 2) {
             if (entries.length === 1) {
-                await this.repository.setMemoryConsolidation(
+                await this.mutations.setMemoryConsolidation(
+                    presetId,
                     [entries[0].id],
                     true
                 )

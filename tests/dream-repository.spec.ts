@@ -56,7 +56,7 @@ const withRepository = async (
 }
 
 it('atomically updates an active Dream merge and archives its sources', async () => {
-    await withRepository(async (_ctx, repository) => {
+    await withRepository(async (ctx, repository) => {
         const target = await createMemory(repository, 'target', 'active')
         const source1 = await createMemory(repository, 'source-1', 'active')
         const source2 = await createMemory(repository, 'source-2', 'active')
@@ -77,12 +77,17 @@ it('atomically updates an active Dream merge and archives its sources', async ()
                 ]
             }
         ]
+        await ctx.database.set(
+            'living_memory_entry',
+            { id: source1.id },
+            { sourceOrigins }
+        )
 
         await repository.applyDreamMerge({
+            presetId: scope.presetId,
             target,
             sources: [source1, source2],
             patch: createMergePatch('active'),
-            sourceOrigins,
             sourceDisposition: 'archive',
             targetIsConsolidated: false,
             sourceIsConsolidated: true
@@ -128,7 +133,11 @@ it('counts pending memories and selects the earliest stable batch', async () => 
             { id: { $in: [entries[2].id, entries[3].id] } },
             { createdAt: secondTime }
         )
-        await repository.setMemoryConsolidation([entries[3].id], true)
+        await repository.setMemoryConsolidation(
+            scope.presetId,
+            [entries[3].id],
+            true
+        )
 
         assert.equal(await repository.countPendingEntries(scope.presetId), 3)
         const selected = await repository.listPendingEntries(scope.presetId, 2)
@@ -148,10 +157,10 @@ it('atomically updates an archived Dream merge and deletes its sources', async (
         const source2 = await createMemory(repository, 'source-2', 'archived')
 
         await repository.applyDreamMerge({
+            presetId: scope.presetId,
             target,
             sources: [source1, source2],
             patch: createMergePatch('archived'),
-            sourceOrigins: [],
             sourceDisposition: 'delete',
             targetIsConsolidated: true,
             sourceIsConsolidated: true
@@ -188,10 +197,10 @@ it('rolls back the target update when Dream source deletion fails', async () => 
         try {
             await assert.rejects(
                 repository.applyDreamMerge({
+                    presetId: scope.presetId,
                     target,
                     sources: [source1, source2],
                     patch: createMergePatch('archived'),
-                    sourceOrigins: [],
                     sourceDisposition: 'delete',
                     targetIsConsolidated: true,
                     sourceIsConsolidated: true
@@ -214,6 +223,7 @@ it('rejects a Dream merge when a source no longer exists', async () => {
 
         await assert.rejects(
             repository.applyDreamMerge({
+                presetId: scope.presetId,
                 target,
                 sources: [
                     {
@@ -222,7 +232,6 @@ it('rejects a Dream merge when a source no longer exists', async () => {
                     }
                 ],
                 patch: createMergePatch('active'),
-                sourceOrigins: [],
                 sourceDisposition: 'archive',
                 targetIsConsolidated: true,
                 sourceIsConsolidated: true
@@ -250,10 +259,10 @@ it('rejects a Dream merge when a source changed after clustering', async () => {
 
         await assert.rejects(
             repository.applyDreamMerge({
+                presetId: scope.presetId,
                 target,
                 sources: [source],
                 patch: createMergePatch('active'),
-                sourceOrigins: [],
                 sourceDisposition: 'archive',
                 targetIsConsolidated: true,
                 sourceIsConsolidated: true

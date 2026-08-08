@@ -49,7 +49,11 @@ it('copies preset data without moving source records', async () => {
             speakerKey: 'speaker-key',
             speakerLabel: 'Speaker'
         })
-        await repository.setMemoryConsolidation([sourceMemory.id], true)
+        await repository.setMemoryConsolidation(
+            sourcePresetId,
+            [sourceMemory.id],
+            true
+        )
 
         const exported = await repository.exportPresetData(sourcePresetId)
         assert.equal(exported.version, 2)
@@ -116,11 +120,11 @@ it('preserves consolidation only for same-preset version 2 restores', async () =
             { conversationId: 'conversation-1', presetId },
             { type: 'fact', content: 'consolidated memory' }
         )
-        await repository.setMemoryConsolidation([memory.id], true)
+        await repository.setMemoryConsolidation(presetId, [memory.id], true)
         const exported = await repository.exportPresetData(presetId)
 
         assert.equal(exported.entries[0].isConsolidated, true)
-        await repository.setMemoryConsolidation([memory.id], false)
+        await repository.setMemoryConsolidation(presetId, [memory.id], false)
         await repository.importPresetData(presetId, exported)
 
         assert.equal(

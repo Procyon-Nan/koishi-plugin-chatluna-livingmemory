@@ -9,7 +9,8 @@ import type {
     MemorySourceMessage
 } from '../src/contracts/memory'
 import {
-    type ExtractionWorkflowRepository,
+    type ExtractionJobRepository,
+    type ExtractionMemoryWriter,
     LivingMemoryExtractionCoordinator
 } from '../src/service/workflows/extraction/coordinator'
 import type { LivingMemoryExtractionTrace } from '../src/service/workflows/extraction/extractor'
@@ -63,7 +64,7 @@ interface ExtractionCoordinatorOptions {
     toExtractionPayload?: (
         messages: LivingMemoryTranscriptMessage[]
     ) => ExtractionPayload
-    appendMemories?: ExtractionWorkflowRepository['appendMemories']
+    appendMemories?: ExtractionMemoryWriter['appendMemories']
 }
 
 const createExtractionCoordinator = (
@@ -99,7 +100,7 @@ const createExtractionCoordinator = (
             return await (options.extractWithTrace?.() ?? Promise.resolve(trace))
         }
     }
-    const repository: ExtractionWorkflowRepository = {
+    const repository: ExtractionJobRepository & ExtractionMemoryWriter = {
         createFailedJob: jobStore.createFailedJob,
         appendMemories:
             options.appendMemories ??
@@ -109,6 +110,7 @@ const createExtractionCoordinator = (
                     sourceOriginMessages,
                     extracted
                 })
+                return []
             })
     }
     const coordinator = new LivingMemoryExtractionCoordinator(
@@ -116,6 +118,7 @@ const createExtractionCoordinator = (
             extractionInterval: options.extractionInterval ?? 1,
             extractionRounds: options.extractionRounds ?? 1
         },
+        repository,
         repository,
         formatter,
         extractor,

@@ -11,7 +11,6 @@ import type {
     MemorySnapshotItem,
     MemorySnapshotRecord,
     MemorySourceMessage,
-    MemorySourceOrigin,
     PresetSpeakerInput,
     PresetSpeakerRecord,
     UserProfileInput,
@@ -42,29 +41,43 @@ export interface DreamMergeMemoryVersion {
 }
 
 export interface DreamMergeInput {
+    presetId: string
     target: DreamMergeMemoryVersion
     sources: DreamMergeMemoryVersion[]
     patch: DreamMergeMutation
-    sourceOrigins: MemorySourceOrigin[]
     sourceDisposition: 'archive' | 'delete'
     targetIsConsolidated: boolean
     sourceIsConsolidated: boolean
 }
 
+export interface MemoryUpdateResult {
+    record: MemoryEntryRecord
+    contentChanged: boolean
+}
+
+export interface DreamMergeResult {
+    target: MemoryEntryRecord
+    archivedSources: MemoryEntryRecord[]
+    deletedSourceIds: string[]
+    targetContentChanged: boolean
+}
+
 export interface DreamMergeRepository {
-    applyDreamMerge(input: DreamMergeInput): Promise<void>
+    applyDreamMerge(input: DreamMergeInput): Promise<DreamMergeResult>
 }
 
 export interface DreamMemoryRepository extends DreamMergeRepository {
     updateMemoryForDream(
+        presetId: string,
         id: string,
         patch: Partial<MemoryMutationInput>,
         isConsolidated: boolean
-    ): Promise<void>
+    ): Promise<MemoryUpdateResult>
     setMemoryConsolidation(
+        presetId: string,
         ids: string[],
         isConsolidated: boolean
-    ): Promise<void>
+    ): Promise<MemoryEntryRecord[]>
 }
 
 export type MemoryConfigWarningCode =
@@ -188,13 +201,16 @@ export interface ExtractionRepository {
         scope: MemoryScope,
         sourceOriginMessages: MemorySourceMessage[],
         extracted: ExtractedMemoryItem[]
-    ): Promise<void>
+    ): Promise<MemoryEntryRecord[]>
     createMemory(
         scope: MemoryScope,
         input: MemoryMutationInput
     ): Promise<MemoryEntryRecord>
-    updateMemory(id: string, patch: Partial<MemoryMutationInput>): Promise<void>
-    deleteMemory(id: string): Promise<void>
+    updateMemory(
+        id: string,
+        patch: Partial<MemoryMutationInput>
+    ): Promise<MemoryUpdateResult | null>
+    deleteMemory(id: string): Promise<MemoryEntryRecord | null>
 }
 
 export interface UserProfileRepository {

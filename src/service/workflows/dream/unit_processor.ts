@@ -163,7 +163,11 @@ export class DreamUnitProcessor {
         }
         const pendingIds = ids.filter((id) => !alreadyConsolidated.has(id))
         if (pendingIds.length > 0) {
-            await this.repository.setMemoryConsolidation(pendingIds, true)
+            await this.repository.setMemoryConsolidation(
+                input.presetId,
+                pendingIds,
+                true
+            )
         }
     }
 

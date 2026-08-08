@@ -21,8 +21,7 @@ type IncrementalDreamConfig = Pick<
     'mainModel' | 'embeddingModel' | 'debug'
 >
 
-export interface IncrementalDreamRepository
-    extends DreamMemoryRepository, EmbeddingRepositoryLike {
+export interface IncrementalDreamRepository extends EmbeddingRepositoryLike {
     listPendingEntries(
         presetId: string,
         limit: number
@@ -65,10 +64,11 @@ export class LivingMemoryIncrementalDreamService {
         private readonly ctx: Context,
         private readonly config: IncrementalDreamConfig,
         private readonly repository: IncrementalDreamRepository,
+        private readonly mutations: DreamMemoryRepository,
         private readonly debug: (message: string) => void
     ) {
         this.unitProcessor = new DreamUnitProcessor(
-            repository,
+            mutations,
             debug,
             config.debug
         )
@@ -153,7 +153,11 @@ export class LivingMemoryIncrementalDreamService {
             const candidates = [...candidatePools[seed.status].values()]
             const nearest = await retriever.retrieve(seed, candidates)
             if (nearest.length === 0) {
-                await this.repository.setMemoryConsolidation([seed.id], true)
+                await this.mutations.setMemoryConsolidation(
+                    presetId,
+                    [seed.id],
+                    true
+                )
                 state.successfulSeedCount++
                 state.noCandidateSeedCount++
                 continue

@@ -24,7 +24,12 @@ export class LivingMemoryVectorIndexJobRunner {
         input: string,
         operation: (job: MemoryJobRecord) => Promise<string>
     ) {
-        const job = await this.repository.createJob(
+        const job = await this.create(presetId, input)
+        await this.runCreated(job, input, operation)
+    }
+
+    create(presetId: string, input: string) {
+        return this.repository.createJob(
             {
                 presetId,
                 conversationId: INDEX_JOB_CONVERSATION
@@ -32,6 +37,13 @@ export class LivingMemoryVectorIndexJobRunner {
             'index',
             input
         )
+    }
+
+    async runCreated(
+        job: MemoryJobRecord,
+        input: string,
+        operation: (job: MemoryJobRecord) => Promise<string>
+    ) {
         this.onCurrentJobChanged(job.id)
         let running = false
         try {

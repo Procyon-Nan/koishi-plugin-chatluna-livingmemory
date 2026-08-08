@@ -1,7 +1,11 @@
 import { resolve } from 'node:path'
 import type { Context, Logger } from 'koishi'
 import type {
+    LegacyMemoryEmbeddingRecord,
     ManualDreamVectorReader,
+    MemoryIndexMutationBatch,
+    MemoryIndexMutationSink,
+    MemoryVectorIndexPresetStatus,
     MemoryVectorIndexStatus,
     MemoryVectorIndexState
 } from '../../contracts/vector_index'
@@ -11,6 +15,11 @@ import {
     LivingMemoryVectorIndexMaintenance,
     type LivingMemoryVectorIndexRepository
 } from './maintenance'
+import { createVectorIndexDocument } from './documents'
+import {
+    embedMemoryIndexSources,
+    type VectorIndexEmbeddingContext
+} from './embedding'
 import {
     VectorIndexOperationGate,
     VectorIndexPresetMutationQueue
@@ -18,7 +27,12 @@ import {
 import { LivingMemoryVectorIndexOwnershipLock } from './ownership_lock'
 import { VECTOR_INDEX_SCHEMA_VERSION } from './worker/schema'
 import { LivingMemoryVectorIndexWorkerClient } from './worker_client'
-import type { VectorIndexInspection } from './worker_protocol'
+import type {
+    VectorIndexInspection,
+    VectorIndexUpsert
+} from './worker_protocol'
+
+const NO_LEGACY_EMBEDDINGS = new Map<string, LegacyMemoryEmbeddingRecord>()
 
 export type VectorIndexWorkerFactory = (
     onFailure: (error: Error) => void
@@ -29,10 +43,13 @@ interface VectorIndexServiceOptions {
     workerFactory?: VectorIndexWorkerFactory
 }
 
-export class LivingMemoryVectorIndexService implements ManualDreamVectorReader {
+export class LivingMemoryVectorIndexService
+    implements ManualDreamVectorReader, MemoryIndexMutationSink
+{
     private readonly operationGate = new VectorIndexOperationGate()
-    private readonly presetMutationQueue =
-        new VectorIndexPresetMutationQueue(this.operationGate)
+    private readonly presetMutationQueue = new VectorIndexPresetMutationQueue(
+        this.operationGate
+    )
     private readonly databasePath: string
     private readonly previousDatabasePath: string
     private readonly ownershipLock: LivingMemoryVectorIndexOwnershipLock
@@ -42,6 +59,7 @@ export class LivingMemoryVectorIndexService implements ManualDreamVectorReader {
     private initialization: Promise<void> | null = null
     private maintenanceTail: Promise<void> = Promise.resolve()
     private workerFailure: Error | null = null
+    private embeddingContext: VectorIndexEmbeddingContext | null = null
     private stopping = false
     private status: MemoryVectorIndexStatus = {
         state: 'unavailable',
@@ -54,7 +72,7 @@ export class LivingMemoryVectorIndexService implements ManualDreamVectorReader {
     constructor(
         ctx: Context,
         private readonly config: { embeddingModel: string; debug: boolean },
-        repository: LivingMemoryVectorIndexRepository,
+        private readonly repository: LivingMemoryVectorIndexRepository,
         private readonly logger: Logger,
         options: VectorIndexServiceOptions = {}
     ) {
@@ -94,6 +112,9 @@ export class LivingMemoryVectorIndexService implements ManualDreamVectorReader {
                 this.status = { ...this.status, currentJobId: jobId }
             },
             onInspection: (inspection) => this.applyInspection(inspection),
+            onEmbeddingContext: (context) => {
+                this.embeddingContext = context
+            },
             debug: (message) => this.debug(message)
         })
     }
@@ -203,6 +224,85 @@ export class LivingMemoryVectorIndexService implements ManualDreamVectorReader {
         return this.presetMutationQueue.run(presetId, task)
     }
 
+    async waitForMaintenance() {
+        await this.maintenanceTail
+    }
+
+    async applyMutation(batch: MemoryIndexMutationBatch): Promise<void> {
+        await this.waitForMaintenance()
+        await this.runPresetMutation(batch.presetId, async () => {
+            this.assertPresetReady(batch.presetId)
+            let indexedCount = this.getPresetIndexedCount(batch.presetId)
+            try {
+                const mutation = await this.createWorkerMutation(batch)
+                const result =
+                    await this.requireWorker().applyMutation(mutation)
+                indexedCount = result.indexedCount
+                const expectedCount =
+                    await this.repository.countEntriesByPreset(batch.presetId)
+                if (result.indexedCount !== expectedCount) {
+                    throw new Error(
+                        `vector index mutation count mismatch: ` +
+                            `preset=${batch.presetId}, expected=${expectedCount}, ` +
+                            `actual=${result.indexedCount}`
+                    )
+                }
+                await this.requireWorker().markPresetState({
+                    presetId: batch.presetId,
+                    state: 'ready',
+                    expectedCount,
+                    indexedCount: result.indexedCount,
+                    lastError: null,
+                    updatedAt: Date.now()
+                })
+                await this.refreshInspection()
+            } catch (error) {
+                throw await this.markMutationFailed(
+                    batch.presetId,
+                    indexedCount,
+                    error
+                )
+            }
+        })
+    }
+
+    async clearPreset(presetId: string): Promise<void> {
+        await this.waitForMaintenance()
+        await this.runPresetMutation(presetId, async () => {
+            let indexedCount = this.getPresetIndexedCount(presetId)
+            try {
+                await this.requireWorker().clearPreset(presetId)
+                indexedCount = 0
+                await this.refreshInspection()
+            } catch (error) {
+                throw await this.markMutationFailed(
+                    presetId,
+                    indexedCount,
+                    error
+                )
+            }
+        })
+    }
+
+    async reconcilePreset(presetId: string, reason: string) {
+        const expectedCount =
+            await this.repository.countEntriesByPreset(presetId)
+        const job = await this.maintenance.createPresetReconcileJob(
+            presetId,
+            reason
+        )
+        this.markPresetBuilding(presetId, job.id, expectedCount)
+        void this.queueMaintenance(async () => {
+            try {
+                this.markPresetBuilding(presetId, job.id, expectedCount)
+                await this.maintenance.runPresetReconcileJob(job, reason)
+            } catch (error) {
+                await this.handleMaintenanceFailure(error)
+            }
+        })
+        return job
+    }
+
     async rebuild(reason: string) {
         await this.queueMaintenance(async () => {
             try {
@@ -229,6 +329,125 @@ export class LivingMemoryVectorIndexService implements ManualDreamVectorReader {
         await this.maintenance.initialize(inspection, openError)
     }
 
+    private async createWorkerMutation(batch: MemoryIndexMutationBatch) {
+        const context = this.requireEmbeddingContext()
+        const replacements = batch.upserts.filter(
+            (upsert) => upsert.vectorAction === 'replace'
+        )
+        const vectors = await embedMemoryIndexSources(
+            context.embeddings,
+            context.embeddingModelId,
+            context.dimension,
+            replacements.map((upsert) => upsert.document),
+            NO_LEGACY_EMBEDDINGS
+        )
+        const upserts: VectorIndexUpsert[] = []
+        for (const upsert of batch.upserts) {
+            const document = createVectorIndexDocument(upsert.document)
+            if (upsert.vectorAction === 'preserve') {
+                upserts.push({ vectorAction: 'preserve', document })
+                continue
+            }
+            const vector = vectors.get(upsert.document.id)
+            if (vector === undefined) {
+                throw new Error(
+                    `vector index embedding missing: memory=${upsert.document.id}`
+                )
+            }
+            upserts.push({ vectorAction: 'replace', document, vector })
+        }
+        return {
+            presetId: batch.presetId,
+            upserts,
+            deletes: batch.deletes.map((item) => item.id)
+        }
+    }
+
+    private assertPresetReady(presetId: string) {
+        if (this.status.state !== 'ready') {
+            throw new LivingMemoryVectorIndexError(
+                'not-ready',
+                this.status.state,
+                `vector index is not ready: state=${this.status.state}`
+            )
+        }
+        const preset = this.status.presets.find(
+            (item) => item.presetId === presetId
+        )
+        if (preset !== undefined && preset.state !== 'ready') {
+            throw new LivingMemoryVectorIndexError(
+                'not-ready',
+                preset.state,
+                `vector index preset is not ready: preset=${presetId}, state=${preset.state}`
+            )
+        }
+    }
+
+    private requireEmbeddingContext() {
+        if (this.embeddingContext === null) {
+            throw new LivingMemoryVectorIndexError(
+                'embedding-unavailable',
+                'unavailable',
+                'vector index embedding context is not initialized'
+            )
+        }
+        return this.embeddingContext
+    }
+
+    private async markMutationFailed(
+        presetId: string,
+        indexedCount: number,
+        error: unknown
+    ) {
+        const failure = this.toError(error)
+        let state: MemoryVectorIndexState = 'dirty'
+        if (error instanceof LivingMemoryVectorIndexError) {
+            state = error.state
+        } else if (this.workerFailure !== null || this.worker === null) {
+            state = 'unavailable'
+        }
+        const expectedCount =
+            await this.repository.countEntriesByPreset(presetId)
+        if (this.worker !== null && this.workerFailure === null) {
+            await this.worker.markPresetState({
+                presetId,
+                state,
+                expectedCount,
+                indexedCount,
+                lastError: failure.message,
+                updatedAt: Date.now()
+            })
+            await this.refreshInspection()
+        } else {
+            this.status = {
+                ...this.status,
+                state,
+                lastError: failure.message
+            }
+        }
+        return new LivingMemoryVectorIndexError(
+            'mutation-failed',
+            state,
+            `vector index mutation failed: preset=${presetId}: ${failure.message}`,
+            { cause: error }
+        )
+    }
+
+    private getPresetIndexedCount(presetId: string) {
+        const preset = this.status.presets.find(
+            (item) => item.presetId === presetId
+        )
+        if (preset === undefined) {
+            return 0
+        }
+        return preset.indexedCount
+    }
+
+    private async refreshInspection() {
+        const inspection = await this.requireWorker().inspect()
+        this.applyInspection(inspection)
+    }
+
     private createWorkerFactory(factory?: VectorIndexWorkerFactory) {
         if (factory !== undefined) {
             return factory
@@ -248,6 +467,44 @@ export class LivingMemoryVectorIndexService implements ManualDreamVectorReader {
                 lastError: null,
                 updatedAt
             })),
+            currentJobId: jobId,
+            lastError: null
+        }
+    }
+
+    private markPresetBuilding(
+        presetId: string,
+        jobId: string,
+        expectedCount: number
+    ) {
+        const updatedAt = Date.now()
+        const presets: MemoryVectorIndexPresetStatus[] =
+            this.status.presets.map((preset) => {
+                if (preset.presetId !== presetId) {
+                    return preset
+                }
+                return {
+                    ...preset,
+                    state: 'building',
+                    expectedCount,
+                    lastError: null,
+                    updatedAt
+                }
+            })
+        if (!presets.some((preset) => preset.presetId === presetId)) {
+            presets.push({
+                presetId,
+                state: 'building',
+                expectedCount,
+                indexedCount: 0,
+                lastError: null,
+                updatedAt
+            })
+        }
+        this.status = {
+            ...this.status,
+            state: 'building',
+            presets,
             currentJobId: jobId,
             lastError: null
         }
@@ -297,23 +554,7 @@ export class LivingMemoryVectorIndexService implements ManualDreamVectorReader {
 
     private async awaitPresetReadBarrier(presetId: string) {
         await this.presetMutationQueue.wait(presetId)
-        if (this.status.state !== 'ready') {
-            throw new LivingMemoryVectorIndexError(
-                'not-ready',
-                this.status.state,
-                `vector index is not ready: state=${this.status.state}`
-            )
-        }
-        const preset = this.status.presets.find(
-            (item) => item.presetId === presetId
-        )
-        if (preset !== undefined && preset.state !== 'ready') {
-            throw new LivingMemoryVectorIndexError(
-                'not-ready',
-                preset.state,
-                `vector index preset is not ready: preset=${presetId}, state=${preset.state}`
-            )
-        }
+        this.assertPresetReady(presetId)
     }
 
     private async handleMaintenanceFailure(error: unknown) {

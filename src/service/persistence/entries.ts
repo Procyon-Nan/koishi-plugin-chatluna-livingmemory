@@ -11,7 +11,6 @@ import type {
     MemoryIndexSourceRecord
 } from '../../contracts/vector_index'
 import type {
-    DreamMemoryRepository,
     DreamMergeInput,
     ExtractedMemoryItem,
     ExtractionRepository,
@@ -26,7 +25,7 @@ import {
 } from '../memory/entry_fields'
 import {
     createSourceOriginsFromMessages,
-    normalizeMemorySourceOrigins
+    mergeMemorySourceOrigins
 } from '../memory/origins/source_origins'
 import { normalizeEntryRecord } from './normalizers'
 
@@ -34,7 +33,7 @@ const sourceOriginsArrayMigrationId = 'source-origins-array-v1'
 const keywordFingerprintSeparator = '\u0000'
 
 export class LivingMemoryEntryRepository
-    implements RecallRepository, ExtractionRepository, DreamMemoryRepository
+    implements RecallRepository, ExtractionRepository
 {
     constructor(private readonly ctx: Context) {}
 
@@ -246,33 +245,32 @@ export class LivingMemoryEntryRepository
         extracted: ExtractedMemoryItem[]
     ) {
         if (extracted.length === 0) {
-            return
+            return []
         }
 
         const now = new Date()
         const sourceOrigins =
             createSourceOriginsFromMessages(sourceOriginMessages)
-        await this.ctx.database.upsert(
-            'living_memory_entry',
-            extracted.map((item) => ({
-                id: randomUUID(),
-                presetId: scope.presetId,
-                type: item.type,
-                status: normalizeMemoryStatus(item.status),
-                content: normalizeMemoryText(item.content),
-                keywords: normalizeMemoryKeywords(item.keywords),
-                summary: normalizeOptionalMemoryText(item.summary),
-                sentiment: normalizeOptionalMemoryText(item.sentiment),
-                importance: normalizeMemoryImportance(item.importance),
-                sourceConversationId: scope.conversationId,
-                sourceOrigins,
-                embedding: null,
-                embeddingModelId: null,
-                isConsolidated: false,
-                createdAt: now,
-                updatedAt: now
-            }))
-        )
+        const records = extracted.map((item): MemoryEntryRecord => ({
+            id: randomUUID(),
+            presetId: scope.presetId,
+            type: item.type,
+            status: normalizeMemoryStatus(item.status),
+            content: normalizeMemoryText(item.content),
+            keywords: normalizeMemoryKeywords(item.keywords),
+            summary: normalizeOptionalMemoryText(item.summary),
+            sentiment: normalizeOptionalMemoryText(item.sentiment),
+            importance: normalizeMemoryImportance(item.importance),
+            sourceConversationId: scope.conversationId,
+            sourceOrigins,
+            embedding: null,
+            embeddingModelId: null,
+            isConsolidated: false,
+            createdAt: now,
+            updatedAt: now
+        }))
+        await this.ctx.database.upsert('living_memory_entry', records)
+        return records
     }
 
     async createMemory(scope: MemoryScope, input: MemoryMutationInput) {
@@ -303,7 +301,7 @@ export class LivingMemoryEntryRepository
     async updateMemory(id: string, patch: Partial<MemoryMutationInput>) {
         const current = await this.getEntryById(id)
         if (current == null) {
-            return
+            return null
         }
 
         await this.ctx.database.set(
@@ -314,6 +312,11 @@ export class LivingMemoryEntryRepository
                 updatedAt: new Date()
             }
         )
+        const record = await this.requireEntryById(id, 'memory update')
+        return {
+            record,
+            contentChanged: record.content !== current.content
+        }
     }
 
     async updateMemoryForDream(
@@ -335,14 +338,27 @@ export class LivingMemoryEntryRepository
                 updatedAt: new Date()
             }
         )
+        const record = await this.requireEntryById(id, 'dream update')
+        return {
+            record,
+            contentChanged: record.content !== current.content
+        }
     }
 
-    async setMemoryConsolidation(ids: string[], isConsolidated: boolean) {
+    async setMemoryConsolidation(
+        presetId: string,
+        ids: string[],
+        isConsolidated: boolean
+    ) {
+        if (ids.length === 0) {
+            return []
+        }
         await this.ctx.database.set(
             'living_memory_entry',
-            { id: { $in: ids } },
+            { presetId, id: { $in: ids } },
             { isConsolidated }
         )
+        return await this.getEntriesByPresetAndIds(presetId, ids)
     }
 
     async applyDreamMerge(input: DreamMergeInput) {
@@ -364,7 +380,7 @@ export class LivingMemoryEntryRepository
             throw new Error('dream merge failed: stage disposition mismatch')
         }
 
-        await this.ctx.database.withTransaction(async (database) => {
+        return await this.ctx.database.withTransaction(async (database) => {
             const entries = (
                 await database.get('living_memory_entry', {
                     id: {
@@ -383,6 +399,7 @@ export class LivingMemoryEntryRepository
 
             if (
                 target == null ||
+                target.presetId !== input.presetId ||
                 target.status !== expectedStatus ||
                 +target.updatedAt !== +input.target.updatedAt ||
                 sources.length !== sourceIds.length ||
@@ -400,6 +417,7 @@ export class LivingMemoryEntryRepository
             }
 
             const updatedAt = new Date()
+            const targetContentChanged = input.patch.content !== target.content
             const targetResult = await database.set(
                 'living_memory_entry',
                 {
@@ -409,9 +427,10 @@ export class LivingMemoryEntryRepository
                 },
                 {
                     ...this.buildMemoryUpdatePatch(target, input.patch),
-                    sourceOrigins: normalizeMemorySourceOrigins(
-                        input.sourceOrigins
-                    ),
+                    sourceOrigins: mergeMemorySourceOrigins([
+                        target,
+                        ...sources
+                    ]),
                     isConsolidated: input.targetIsConsolidated,
                     updatedAt
                 }
@@ -440,7 +459,34 @@ export class LivingMemoryEntryRepository
                     sourceIds.length,
                     'source archive'
                 )
-                return
+                const committedEntries = (
+                    await database.get('living_memory_entry', {
+                        id: { $in: [target.id, ...sourceIds] }
+                    })
+                ).map(normalizeEntryRecord)
+                const committedById = new Map(
+                    committedEntries.map((entry) => [entry.id, entry])
+                )
+                const committedTarget = committedById.get(target.id)
+                if (committedTarget == null) {
+                    throw new Error(
+                        'dream merge failed: committed target not found'
+                    )
+                }
+                return {
+                    target: committedTarget,
+                    archivedSources: sourceIds.map((id) => {
+                        const source = committedById.get(id)
+                        if (source == null) {
+                            throw new Error(
+                                `dream merge failed: committed source not found: ${id}`
+                            )
+                        }
+                        return source
+                    }),
+                    deletedSourceIds: [],
+                    targetContentChanged
+                }
             }
 
             const sourceResult = await database.remove(
@@ -452,6 +498,20 @@ export class LivingMemoryEntryRepository
                 sourceIds.length,
                 'source delete'
             )
+            const committedTarget = (
+                await database.get('living_memory_entry', { id: target.id })
+            )[0]
+            if (committedTarget == null) {
+                throw new Error(
+                    'dream merge failed: committed target not found'
+                )
+            }
+            return {
+                target: normalizeEntryRecord(committedTarget),
+                archivedSources: [],
+                deletedSourceIds: sourceIds,
+                targetContentChanged
+            }
         })
     }
 
@@ -481,7 +541,20 @@ export class LivingMemoryEntryRepository
     }
 
     async deleteMemory(id: string) {
+        const current = await this.getEntryById(id)
+        if (current == null) {
+            return null
+        }
         await this.ctx.database.remove('living_memory_entry', { id })
+        return current
+    }
+
+    private async requireEntryById(id: string, operation: string) {
+        const record = await this.getEntryById(id)
+        if (record == null) {
+            throw new Error(`${operation} failed: memory not found: ${id}`)
+        }
+        return record
     }
 
     private buildMemoryUpdatePatch(

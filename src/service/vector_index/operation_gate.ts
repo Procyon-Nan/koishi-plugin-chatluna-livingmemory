@@ -1,3 +1,5 @@
+import { PresetTaskQueue } from '../shared/preset_task_queue'
+
 const createDeferred = () => {
     let resolvePromise = () => {}
     const promise = new Promise<void>((resolve) => {
@@ -48,33 +50,15 @@ export class VectorIndexOperationGate {
 }
 
 export class VectorIndexPresetMutationQueue {
-    private readonly tails = new Map<string, Promise<void>>()
+    private readonly queue = new PresetTaskQueue()
 
     constructor(private readonly gate: VectorIndexOperationGate) {}
 
     run<T>(presetId: string, task: () => Promise<T>) {
-        let previous = this.tails.get(presetId)
-        if (previous === undefined) {
-            previous = Promise.resolve()
-        }
-        const operation = previous.then(() => this.gate.runMutation(task))
-        const settled = operation.then(
-            () => undefined,
-            () => undefined
-        )
-        this.tails.set(presetId, settled)
-        settled.then(() => {
-            if (this.tails.get(presetId) === settled) {
-                this.tails.delete(presetId)
-            }
-        })
-        return operation
+        return this.queue.run(presetId, () => this.gate.runMutation(task))
     }
 
     async wait(presetId: string) {
-        const tail = this.tails.get(presetId)
-        if (tail !== undefined) {
-            await tail
-        }
+        await this.queue.wait(presetId)
     }
 }

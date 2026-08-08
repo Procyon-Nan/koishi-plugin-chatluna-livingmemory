@@ -52,11 +52,12 @@ interface ExtractionScopeState {
     triggerRequests: Map<number, ExtractionRoundRequest>
 }
 
-export type ExtractionWorkflowRepository = Pick<
-    JobRepository,
-    'createFailedJob'
-> &
-    Pick<ExtractionRepository, 'appendMemories'>
+export type ExtractionJobRepository = Pick<JobRepository, 'createFailedJob'>
+
+export type ExtractionMemoryWriter = Pick<
+    ExtractionRepository,
+    'appendMemories'
+>
 
 export class LivingMemoryExtractionCoordinator {
     private readonly stateByScope = new Map<string, ExtractionScopeState>()
@@ -64,7 +65,8 @@ export class LivingMemoryExtractionCoordinator {
 
     constructor(
         private readonly config: LivingMemoryExtractionConfig,
-        private readonly repository: ExtractionWorkflowRepository,
+        private readonly jobRepository: ExtractionJobRepository,
+        private readonly memoryWriter: ExtractionMemoryWriter,
         private readonly formatter: ExtractionFormatter,
         private readonly extractor: ExtractionModel,
         private readonly queueAutoDream: (presetId: string) => void,
@@ -311,7 +313,7 @@ export class LivingMemoryExtractionCoordinator {
                 )
             }
         } catch (error) {
-            await this.repository.createFailedJob(
+            await this.jobRepository.createFailedJob(
                 scope,
                 'extract',
                 input,
@@ -332,7 +334,7 @@ export class LivingMemoryExtractionCoordinator {
                     `parseError=${trace.parseError}`
                 ].join(' ')
             )
-            await this.repository.createFailedJob(
+            await this.jobRepository.createFailedJob(
                 scope,
                 'extract',
                 input,
@@ -354,14 +356,14 @@ export class LivingMemoryExtractionCoordinator {
 
         try {
             if (extracted.length > 0) {
-                await this.repository.appendMemories(
+                await this.memoryWriter.appendMemories(
                     scope,
                     payload.sourceOriginMessages,
                     extracted
                 )
             }
         } catch (error) {
-            await this.repository.createFailedJob(
+            await this.jobRepository.createFailedJob(
                 scope,
                 'extract',
                 input,

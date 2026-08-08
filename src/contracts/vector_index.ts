@@ -1,7 +1,8 @@
 import type {
     MemoryEntryRecord,
     MemoryEntryStatus,
-    MemoryEntryType
+    MemoryEntryType,
+    MemoryJobRecord
 } from './memory'
 
 export const memoryVectorIndexStates = [
@@ -139,6 +140,8 @@ export interface ManualDreamVectorReader {
 }
 
 export interface MemoryIndexMutationSink {
+    waitForMaintenance(): Promise<void>
     applyMutation(batch: MemoryIndexMutationBatch): Promise<void>
     clearPreset(presetId: string): Promise<void>
+    reconcilePreset(presetId: string, reason: string): Promise<MemoryJobRecord>
 }
