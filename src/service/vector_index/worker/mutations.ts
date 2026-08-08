@@ -167,7 +167,7 @@ const replaceVector = (
     const document = upsert.document
     statements.deleteVector.run(rowid)
     statements.insertVector.run(
-        rowid,
+        BigInt(rowid),
         toSqliteVector(upsert.vector),
         document.presetId,
         document.status,

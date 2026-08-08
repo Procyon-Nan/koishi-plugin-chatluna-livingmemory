@@ -12,6 +12,7 @@ const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const temporaryDirectory = await mkdtemp(
     resolve(tmpdir(), 'living-memory-vector-smoke-')
 )
+const database = new Database(resolve(temporaryDirectory, 'native.sqlite'))
 
 const toBlob = (values) => {
     const vector = new Float32Array(values)
@@ -39,7 +40,6 @@ const waitForWorkerCall = (worker, id, command) => {
 }
 
 try {
-    const database = new Database(resolve(temporaryDirectory, 'native.sqlite'))
     sqliteVec.load(database)
     const version = database.prepare('SELECT vec_version() AS version').get()
     assert.equal(typeof version.version, 'string')
@@ -63,9 +63,9 @@ try {
             is_consolidated
         ) VALUES (?, ?, ?, ?, ?, ?)`
     )
-    insert.run(1, toBlob([1, 0, 0]), 'preset-a', 'active', 'fact', 1)
-    insert.run(2, toBlob([0, 1, 0]), 'preset-a', 'active', 'fact', 0)
-    insert.run(3, toBlob([1, 0, 0]), 'preset-b', 'active', 'fact', 1)
+    insert.run(1n, toBlob([1, 0, 0]), 'preset-a', 'active', 'fact', 1n)
+    insert.run(2n, toBlob([0, 1, 0]), 'preset-a', 'active', 'fact', 0n)
+    insert.run(3n, toBlob([1, 0, 0]), 'preset-b', 'active', 'fact', 1n)
 
     const nearest = database
         .prepare(
@@ -79,7 +79,7 @@ try {
                AND is_consolidated = ?
              ORDER BY distance ASC`
         )
-        .all(toBlob([1, 0, 0]), 10, 'preset-a', 'active', 'fact', 1)
+        .all(toBlob([1, 0, 0]), 10, 'preset-a', 'active', 'fact', 1n)
     assert.deepEqual(nearest.map((row) => row.rowid), [1])
     assert.ok(nearest[0].distance < 0.000_001)
 
@@ -89,7 +89,7 @@ try {
              SET status = ?, is_consolidated = ?
              WHERE rowid = ?`
         )
-        .run('archived', 0, 1)
+        .run('archived', 0n, 1)
     const updated = database
         .prepare(
             `SELECT rowid
@@ -100,7 +100,7 @@ try {
                AND status = ?
                AND is_consolidated = ?`
         )
-        .all(toBlob([1, 0, 0]), 10, 'preset-a', 'archived', 0)
+        .all(toBlob([1, 0, 0]), 10, 'preset-a', 'archived', 0n)
     assert.deepEqual(updated.map((row) => row.rowid), [1])
 
     database.prepare('DELETE FROM smoke_vectors WHERE rowid = ?').run(1)
@@ -110,8 +110,6 @@ try {
             .get().count,
         2
     )
-    database.close()
-
     const cjsEntry = resolve(projectRoot, 'lib', 'index.cjs')
     const esmEntry = resolve(projectRoot, 'lib', 'index.mjs')
     const require = createRequire(import.meta.url)
@@ -142,5 +140,6 @@ try {
 
     console.log(`sqlite-vec ${version.version} native smoke passed`)
 } finally {
+    database.close()
     await rm(temporaryDirectory, { recursive: true, force: true })
 }

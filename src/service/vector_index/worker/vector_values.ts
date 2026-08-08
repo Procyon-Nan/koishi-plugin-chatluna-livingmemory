@@ -24,7 +24,7 @@ export const normalizeIndexKeywords = (keywords: string[]) => {
 }
 
 export const toSqliteBoolean = (value: boolean) => {
-    return Number(value)
+    return BigInt(value)
 }
 
 export const calculateCosine = (
