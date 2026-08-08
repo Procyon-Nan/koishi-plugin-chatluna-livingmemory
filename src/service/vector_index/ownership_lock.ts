@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type { Stats } from 'node:fs'
 import { mkdir, open, readFile, stat, unlink, utimes } from 'node:fs/promises'
 import { dirname } from 'node:path'
+import { toError } from '../shared/utils'
 import { LivingMemoryVectorIndexError } from './errors'
 
 const LOCK_REFRESH_INTERVAL = 10_000
@@ -18,13 +19,6 @@ const isFileExistsError = (error: unknown) => {
 
 const isFileMissingError = (error: unknown) => {
     return error instanceof Error && 'code' in error && error.code === 'ENOENT'
-}
-
-const toError = (error: unknown) => {
-    if (error instanceof Error) {
-        return error
-    }
-    return new Error(String(error))
 }
 
 const createLockConflictError = (lockPath: string, cause: unknown) => {
@@ -88,34 +82,9 @@ export class LivingMemoryVectorIndexOwnershipLock {
 
     async acquire() {
         await mkdir(dirname(this.lockPath), { recursive: true })
-        try {
-            await this.createLockFile()
-        } catch (error) {
-            if (!isFileExistsError(error)) {
-                throw error
-            }
-            if (!(await this.removeStaleLock())) {
-                throw createLockConflictError(this.lockPath, error)
-            }
-            try {
-                await this.createLockFile()
-            } catch (retryError) {
-                if (isFileExistsError(retryError)) {
-                    throw createLockConflictError(this.lockPath, retryError)
-                }
-                throw retryError
-            }
-        }
-
+        await this.claimLock()
         this.acquired = true
-        this.refreshTimer = setInterval(() => {
-            const now = new Date()
-            utimes(this.lockPath, now, now).catch((error) => {
-                this.stopRefresh()
-                this.onFailure(toError(error))
-            })
-        }, LOCK_REFRESH_INTERVAL)
-        this.refreshTimer.unref()
+        this.startRefresh()
     }
 
     async release() {
@@ -129,6 +98,40 @@ export class LivingMemoryVectorIndexOwnershipLock {
             await unlink(this.lockPath)
         }
         this.acquired = false
+    }
+
+    private async claimLock() {
+        try {
+            await this.createLockFile()
+            return
+        } catch (error) {
+            if (!isFileExistsError(error)) {
+                throw error
+            }
+            if (!(await this.removeStaleLock())) {
+                throw createLockConflictError(this.lockPath, error)
+            }
+        }
+
+        try {
+            await this.createLockFile()
+        } catch (error) {
+            if (isFileExistsError(error)) {
+                throw createLockConflictError(this.lockPath, error)
+            }
+            throw error
+        }
+    }
+
+    private startRefresh() {
+        this.refreshTimer = setInterval(() => {
+            const now = new Date()
+            utimes(this.lockPath, now, now).catch((error) => {
+                this.stopRefresh()
+                this.onFailure(toError(error))
+            })
+        }, LOCK_REFRESH_INTERVAL)
+        this.refreshTimer.unref()
     }
 
     private async createLockFile() {

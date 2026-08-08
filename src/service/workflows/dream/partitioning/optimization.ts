@@ -235,6 +235,11 @@ const collectSwapCandidates = (
     )
 }
 
+const replaceBatchEntry = (batch: number[], current: number, next: number) => {
+    const index = batch.indexOf(current)
+    batch[index] = next
+}
+
 const applySwap = (
     similarities: Uint8Array,
     entryCount: number,
@@ -242,12 +247,16 @@ const applySwap = (
     candidate: SwapCandidate
 ) => {
     const batchCount = state.batches.length
-    state.batches[candidate.leftBatch] = state.batches[candidate.leftBatch].map(
-        (index) => (index === candidate.left ? candidate.right : index)
+    replaceBatchEntry(
+        state.batches[candidate.leftBatch],
+        candidate.left,
+        candidate.right
     )
-    state.batches[candidate.rightBatch] = state.batches[
-        candidate.rightBatch
-    ].map((index) => (index === candidate.right ? candidate.left : index))
+    replaceBatchEntry(
+        state.batches[candidate.rightBatch],
+        candidate.right,
+        candidate.left
+    )
     state.batchOf[candidate.left] = candidate.rightBatch
     state.batchOf[candidate.right] = candidate.leftBatch
 

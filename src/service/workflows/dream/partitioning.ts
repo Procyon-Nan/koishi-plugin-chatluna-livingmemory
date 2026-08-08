@@ -45,10 +45,12 @@ export const buildDreamPartitionTargetSizes = (
 ) => {
     const baseSize = Math.floor(entryCount / batchCount)
     const largerBatchCount = entryCount % batchCount
-    return Array.from(
-        { length: batchCount },
-        (_, index) => baseSize + (index < largerBatchCount ? 1 : 0)
-    )
+    return Array.from({ length: batchCount }, (_, index) => {
+        if (index < largerBatchCount) {
+            return baseSize + 1
+        }
+        return baseSize
+    })
 }
 
 export const partitionDreamEntries = (

@@ -18,6 +18,13 @@ export const summarizeError = (error: unknown) => {
     return JSON.stringify(error)
 }
 
+export const toError = (error: unknown) => {
+    if (error instanceof Error) {
+        return error
+    }
+    return new Error(String(error))
+}
+
 export const stringifyModelContent = (content: unknown) => {
     if (typeof content === 'string') {
         return content

@@ -1,6 +1,7 @@
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Worker } from 'node:worker_threads'
+import { toError } from '../shared/utils'
 import type {
     VectorIndexHybridQuery,
     VectorIndexKnnQuery,
@@ -39,13 +40,6 @@ const deserializeError = (serialized: VectorIndexWorkerError) => {
         error.stack = serialized.stack
     }
     return error
-}
-
-const toError = (error: unknown) => {
-    if (error instanceof Error) {
-        return error
-    }
-    return new Error(String(error))
 }
 
 const commandTransferList = (

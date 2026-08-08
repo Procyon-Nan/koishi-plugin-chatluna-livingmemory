@@ -1,8 +1,15 @@
 import type { DreamMemoryEntryRecord } from '../../../../contracts/workflows'
 import { normalizeMemoryKeywords } from '../../../memory/entry_fields'
 
-export const compareEntryIds = (left: string, right: string) =>
-    left < right ? -1 : left > right ? 1 : 0
+export const compareEntryIds = (left: string, right: string) => {
+    if (left < right) {
+        return -1
+    }
+    if (left > right) {
+        return 1
+    }
+    return 0
+}
 
 export const buildSimilarityData = (
     entries: readonly DreamMemoryEntryRecord[]

@@ -138,10 +138,14 @@ const selectPreferredChoices = (
                 }
             }
             const margin = gain - alternativeGain
-            const bestGain =
-                best === -1 ? -1 : state.gains[best * batchCount + batchIndex]
+            if (best === -1) {
+                best = entryIndex
+                bestMargin = margin
+                continue
+            }
+
+            const bestGain = state.gains[best * batchCount + batchIndex]
             if (
-                best === -1 ||
                 gain > bestGain ||
                 (gain === bestGain &&
                     (margin > bestMargin ||

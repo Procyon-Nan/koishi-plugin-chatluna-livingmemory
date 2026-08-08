@@ -17,6 +17,7 @@ import {
 import type { VectorIndexOperationGate } from './operation_gate'
 import {
     reconcileVectorIndexPreset,
+    type VectorIndexReconcileProgress,
     type VectorIndexReconcileRepository
 } from './reconcile'
 import {
@@ -72,9 +73,7 @@ export class LivingMemoryVectorIndexMaintenance {
     ) {
         const reuseLegacyEmbeddings =
             !(await this.options.repository.hasMigratedLegacyEmbeddings())
-        const embeddings = await this.createEmbeddings()
-        const dimension = await probeVectorIndexDimension(embeddings)
-        this.publishEmbeddingContext(embeddings, dimension)
+        const { embeddings, dimension } = await this.createEmbeddingContext()
         const rebuildReason = this.resolveRebuildReason(
             inspection,
             dimension,
@@ -94,9 +93,7 @@ export class LivingMemoryVectorIndexMaintenance {
     }
 
     async rebuild(reason: string) {
-        const embeddings = await this.createEmbeddings()
-        const dimension = await probeVectorIndexDimension(embeddings)
-        this.publishEmbeddingContext(embeddings, dimension)
+        const { embeddings, dimension } = await this.createEmbeddingContext()
         await this.runRebuildJob(embeddings, dimension, reason, false)
         await this.options.repository.completeLegacyEmbeddingMigration()
     }
@@ -108,9 +105,8 @@ export class LivingMemoryVectorIndexMaintenance {
     async runPresetReconcileJob(job: MemoryJobRecord, reason: string) {
         const input = `reconcile: ${reason}`
         await this.jobRunner.runCreated(job, input, async () => {
-            const embeddings = await this.createEmbeddings()
-            const dimension = await probeVectorIndexDimension(embeddings)
-            this.publishEmbeddingContext(embeddings, dimension)
+            const { embeddings, dimension } =
+                await this.createEmbeddingContext()
             const indexedCount = await this.options.operationGate.runExclusive(
                 () =>
                     reconcileVectorIndexPreset({
@@ -121,16 +117,8 @@ export class LivingMemoryVectorIndexMaintenance {
                         embeddingModelId: this.options.config.embeddingModel,
                         dimension,
                         shouldStop: this.options.shouldStop,
-                        onProgress: async (progress) => {
-                            const detail =
-                                `vector index reconcile: preset=${job.presetId}, ` +
-                                `${progress.completed}/${progress.total}`
-                            await this.options.repository.updateJob(job.id, {
-                                detail,
-                                updatedAt: new Date()
-                            })
-                            this.options.debug(detail)
-                        }
+                        onProgress: (progress) =>
+                            this.reportReconcileProgress(job, progress)
                     })
             )
             const inspection = await this.options.worker().inspect()
@@ -161,15 +149,16 @@ export class LivingMemoryVectorIndexMaintenance {
         return result.value
     }
 
-    private publishEmbeddingContext(
-        embeddings: EmbeddingsLike,
-        dimension: number
-    ) {
-        this.options.onEmbeddingContext({
+    private async createEmbeddingContext() {
+        const embeddings = await this.createEmbeddings()
+        const dimension = await probeVectorIndexDimension(embeddings)
+        const context: VectorIndexEmbeddingContext = {
             embeddings,
             embeddingModelId: this.options.config.embeddingModel,
             dimension
-        })
+        }
+        this.options.onEmbeddingContext(context)
+        return context
     }
 
     private resolveRebuildReason(
@@ -283,7 +272,7 @@ export class LivingMemoryVectorIndexMaintenance {
                             )
                             const expectedCount =
                                 await repository.countEntries()
-                            return await this.options
+                            return this.options
                                 .worker()
                                 .finalizeRebuild(
                                     previousDatabasePath,
@@ -306,9 +295,9 @@ export class LivingMemoryVectorIndexMaintenance {
             'reconcile: startup',
             async (job) => {
                 this.options.onBuilding(job.id)
-                await this.options.operationGate.runExclusive(async () => {
-                    await this.reconcileAllPresets(embeddings, dimension, job)
-                })
+                await this.options.operationGate.runExclusive(() =>
+                    this.reconcileAllPresets(embeddings, dimension, job)
+                )
                 const inspection = await this.options.worker().inspect()
                 this.options.onInspection(inspection)
                 return `vector index reconcile completed: ${inspection.indexedCount} entries`
@@ -338,17 +327,23 @@ export class LivingMemoryVectorIndexMaintenance {
                 embeddingModelId: config.embeddingModel,
                 dimension,
                 shouldStop: this.options.shouldStop,
-                onProgress: async (progress) => {
-                    const detail =
-                        `vector index reconcile: preset=${presetId}, ` +
-                        `${progress.completed}/${progress.total}`
-                    await repository.updateJob(job.id, {
-                        detail,
-                        updatedAt: new Date()
-                    })
-                    this.options.debug(detail)
-                }
+                onProgress: (progress) =>
+                    this.reportReconcileProgress(job, progress)
             })
         }
+    }
+
+    private async reportReconcileProgress(
+        job: MemoryJobRecord,
+        progress: VectorIndexReconcileProgress
+    ) {
+        const detail =
+            `vector index reconcile: preset=${progress.presetId}, ` +
+            `${progress.completed}/${progress.total}`
+        await this.options.repository.updateJob(job.id, {
+            detail,
+            updatedAt: new Date()
+        })
+        this.options.debug(detail)
     }
 }

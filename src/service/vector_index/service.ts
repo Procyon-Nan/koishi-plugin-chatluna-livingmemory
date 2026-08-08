@@ -3,44 +3,37 @@ import type { Context, Logger } from 'koishi'
 import type {
     IncrementalDreamNeighborInput,
     IncrementalDreamNeighborSearch,
-    LegacyMemoryEmbeddingRecord,
     ManualDreamVectorReader,
     MemoryHybridSearchHit,
     MemoryHybridSearchInput,
     MemoryIndexMutationBatch,
     MemoryIndexMutationSink,
     MemorySemanticSearchInput,
-    MemoryVectorIndexPresetStatus,
     MemoryVectorIndexState,
     MemoryVectorIndexStatus,
     MemoryVectorSearch,
     MemoryVectorSearchHit
 } from '../../contracts/vector_index'
-import { summarizeError } from '../shared/utils'
+import { summarizeError, toError } from '../shared/utils'
 import { LivingMemoryVectorIndexError } from './errors'
 import {
     LivingMemoryVectorIndexMaintenance,
     type LivingMemoryVectorIndexRepository
 } from './maintenance'
-import { createVectorIndexDocument } from './documents'
 import {
     createVectorIndexVector,
-    embedMemoryIndexSources,
     type VectorIndexEmbeddingContext
 } from './embedding'
+import { buildVectorIndexWorkerMutation } from './mutation_builder'
 import {
     VectorIndexOperationGate,
     VectorIndexPresetMutationQueue
 } from './operation_gate'
 import { LivingMemoryVectorIndexOwnershipLock } from './ownership_lock'
+import { VectorIndexStatusStore } from './status_store'
 import { VECTOR_INDEX_SCHEMA_VERSION } from './worker/schema'
 import { LivingMemoryVectorIndexWorkerClient } from './worker_client'
-import type {
-    VectorIndexInspection,
-    VectorIndexUpsert
-} from './worker_protocol'
-
-const NO_LEGACY_EMBEDDINGS = new Map<string, LegacyMemoryEmbeddingRecord>()
+import type { VectorIndexInspection } from './worker_protocol'
 
 export type VectorIndexWorkerFactory = (
     onFailure: (error: Error) => void
@@ -50,6 +43,9 @@ interface VectorIndexServiceOptions {
     schemaVersion?: number
     workerFactory?: VectorIndexWorkerFactory
 }
+
+const createDefaultWorker: VectorIndexWorkerFactory = (onFailure) =>
+    new LivingMemoryVectorIndexWorkerClient(undefined, onFailure)
 
 export class LivingMemoryVectorIndexService
     implements
@@ -63,6 +59,8 @@ export class LivingMemoryVectorIndexService
         this.operationGate
     )
 
+    private readonly status = new VectorIndexStatusStore()
+
     private readonly databasePath: string
     private readonly previousDatabasePath: string
     private readonly ownershipLock: LivingMemoryVectorIndexOwnershipLock
@@ -74,13 +72,6 @@ export class LivingMemoryVectorIndexService
     private workerFailure: Error | null = null
     private embeddingContext: VectorIndexEmbeddingContext | null = null
     private stopping = false
-    private status: MemoryVectorIndexStatus = {
-        state: 'unavailable',
-        manifest: null,
-        presets: [],
-        currentJobId: null,
-        lastError: null
-    }
 
     constructor(
         ctx: Context,
@@ -89,11 +80,9 @@ export class LivingMemoryVectorIndexService
         private readonly logger: Logger,
         options: VectorIndexServiceOptions = {}
     ) {
-        let schemaVersion = VECTOR_INDEX_SCHEMA_VERSION
-        if (options.schemaVersion !== undefined) {
-            schemaVersion = options.schemaVersion
-        }
-        this.workerFactory = this.createWorkerFactory(options.workerFactory)
+        const schemaVersion =
+            options.schemaVersion ?? VECTOR_INDEX_SCHEMA_VERSION
+        this.workerFactory = options.workerFactory ?? createDefaultWorker
 
         const indexDirectory = resolve(
             ctx.baseDir,
@@ -121,10 +110,9 @@ export class LivingMemoryVectorIndexService
             worker: () => this.requireWorker(),
             shouldStop: () => this.stopping,
             onBuilding: (jobId) => this.markBuilding(jobId),
-            onCurrentJobChanged: (jobId) => {
-                this.status = { ...this.status, currentJobId: jobId }
-            },
-            onInspection: (inspection) => this.applyInspection(inspection),
+            onCurrentJobChanged: (jobId) => this.status.setCurrentJob(jobId),
+            onInspection: (inspection) =>
+                this.status.applyInspection(inspection),
             onEmbeddingContext: (context) => {
                 this.embeddingContext = context
             },
@@ -136,12 +124,8 @@ export class LivingMemoryVectorIndexService
         try {
             await this.ownershipLock.acquire()
         } catch (error) {
-            const failure = this.toError(error)
-            this.status = {
-                ...this.status,
-                state: 'unavailable',
-                lastError: failure.message
-            }
+            const failure = toError(error)
+            this.status.markFailure('unavailable', failure.message)
             this.logger.warn(failure)
             throw error
         }
@@ -162,18 +146,10 @@ export class LivingMemoryVectorIndexService
                 this.previousDatabasePath
             )
         } catch (error) {
-            openError = this.toError(error)
+            openError = toError(error)
         }
 
-        let lastError: string | null = null
-        if (openError !== null) {
-            lastError = openError.message
-        }
-        this.status = {
-            ...this.status,
-            state: 'building',
-            lastError
-        }
+        this.status.markStarting(openError?.message ?? null)
         this.initialization = this.queueMaintenance(async () => {
             try {
                 await this.initialize(inspection, openError)
@@ -206,26 +182,12 @@ export class LivingMemoryVectorIndexService
         this.embeddingContext = null
         this.initialization = null
         this.maintenanceTail = Promise.resolve()
-        this.status = {
-            state: 'unavailable',
-            manifest: null,
-            presets: [],
-            currentJobId: null,
-            lastError: null
-        }
+        this.status.reset()
         await this.start()
     }
 
     getStatus(): MemoryVectorIndexStatus {
-        let manifest = null
-        if (this.status.manifest !== null) {
-            manifest = { ...this.status.manifest }
-        }
-        return {
-            ...this.status,
-            manifest,
-            presets: this.status.presets.map((preset) => ({ ...preset }))
-        }
+        return this.status.snapshot()
     }
 
     async waitForInitialization() {
@@ -330,7 +292,7 @@ export class LivingMemoryVectorIndexService
     async findConsolidatedNeighbors(
         input: IncrementalDreamNeighborInput
     ): Promise<string[]> {
-        return await this.runPresetMutation(input.presetId, async () => {
+        return this.runPresetMutation(input.presetId, async () => {
             this.assertPresetReady(input.presetId)
             const [seed] = await this.readRequiredVectors(input.presetId, [
                 input.seedMemoryId
@@ -364,9 +326,12 @@ export class LivingMemoryVectorIndexService
         await this.waitForMaintenance()
         await this.runPresetMutation(batch.presetId, async () => {
             this.assertPresetReady(batch.presetId)
-            let indexedCount = this.getPresetIndexedCount(batch.presetId)
+            let indexedCount = this.status.getPresetIndexedCount(batch.presetId)
             try {
-                const mutation = await this.createWorkerMutation(batch)
+                const mutation = await buildVectorIndexWorkerMutation(
+                    batch,
+                    this.requireEmbeddingContext()
+                )
                 const result =
                     await this.requireWorker().applyMutation(mutation)
                 indexedCount = result.indexedCount
@@ -401,7 +366,7 @@ export class LivingMemoryVectorIndexService
     async clearPreset(presetId: string): Promise<void> {
         await this.waitForMaintenance()
         await this.runPresetMutation(presetId, async () => {
-            let indexedCount = this.getPresetIndexedCount(presetId)
+            let indexedCount = this.status.getPresetIndexedCount(presetId)
             try {
                 await this.requireWorker().clearPreset(presetId)
                 indexedCount = 0
@@ -435,8 +400,8 @@ export class LivingMemoryVectorIndexService
         return job
     }
 
-    private async rebuild(reason: string) {
-        await this.queueMaintenance(async () => {
+    private rebuild(reason: string) {
+        return this.queueMaintenance(async () => {
             try {
                 await this.maintenance.rebuild(reason)
             } catch (error) {
@@ -446,12 +411,8 @@ export class LivingMemoryVectorIndexService
     }
 
     startRebuild(reason: string) {
-        this.status = {
-            ...this.status,
-            state: 'building',
-            currentJobId: null,
-            lastError: null
-        }
+        this.status.setCurrentJob(null)
+        this.status.markStarting(null)
         this.rebuild(reason)
     }
 
@@ -468,40 +429,6 @@ export class LivingMemoryVectorIndexService
             )
         }
         await this.maintenance.initialize(inspection, openError)
-    }
-
-    private async createWorkerMutation(batch: MemoryIndexMutationBatch) {
-        const context = this.requireEmbeddingContext()
-        const replacementSources = batch.upserts
-            .filter((upsert) => upsert.vectorAction === 'replace')
-            .map((upsert) => upsert.document)
-        const replacements = await embedMemoryIndexSources(
-            context.embeddings,
-            context.embeddingModelId,
-            context.dimension,
-            replacementSources,
-            NO_LEGACY_EMBEDDINGS
-        )
-        let replacementIndex = 0
-        const upserts: VectorIndexUpsert[] = batch.upserts.map((upsert) => {
-            if (upsert.vectorAction === 'preserve') {
-                return {
-                    vectorAction: 'preserve',
-                    document: createVectorIndexDocument(upsert.document)
-                }
-            }
-            const replacement = replacements[replacementIndex++]
-            return {
-                vectorAction: 'replace',
-                document: createVectorIndexDocument(replacement.source),
-                vector: replacement.vector
-            }
-        })
-        return {
-            presetId: batch.presetId,
-            upserts,
-            deletes: batch.deletes.map((item) => item.id)
-        }
     }
 
     private async embedSearchTexts(searchTexts: string[]) {
@@ -537,23 +464,7 @@ export class LivingMemoryVectorIndexService
     }
 
     assertPresetReady(presetId: string) {
-        if (this.status.state !== 'ready') {
-            throw new LivingMemoryVectorIndexError(
-                'not-ready',
-                this.status.state,
-                `vector index is not ready: state=${this.status.state}`
-            )
-        }
-        const preset = this.status.presets.find(
-            (item) => item.presetId === presetId
-        )
-        if (preset !== undefined && preset.state !== 'ready') {
-            throw new LivingMemoryVectorIndexError(
-                'not-ready',
-                preset.state,
-                `vector index preset is not ready: preset=${presetId}, state=${preset.state}`
-            )
-        }
+        this.status.assertPresetReady(presetId)
     }
 
     private requireEmbeddingContext() {
@@ -572,7 +483,7 @@ export class LivingMemoryVectorIndexService
         indexedCount: number,
         error: unknown
     ) {
-        const failure = this.toError(error)
+        const failure = toError(error)
         let state: MemoryVectorIndexState = 'dirty'
         if (error instanceof LivingMemoryVectorIndexError) {
             state = error.state
@@ -592,11 +503,7 @@ export class LivingMemoryVectorIndexService
             })
             await this.refreshInspection()
         } else {
-            this.status = {
-                ...this.status,
-                state,
-                lastError: failure.message
-            }
+            this.status.markFailure(state, failure.message)
         }
         return new LivingMemoryVectorIndexError(
             'mutation-failed',
@@ -606,43 +513,13 @@ export class LivingMemoryVectorIndexService
         )
     }
 
-    private getPresetIndexedCount(presetId: string) {
-        const preset = this.status.presets.find(
-            (item) => item.presetId === presetId
-        )
-        if (preset === undefined) {
-            return 0
-        }
-        return preset.indexedCount
-    }
-
     private async refreshInspection() {
         const inspection = await this.requireWorker().inspect()
-        this.applyInspection(inspection)
-    }
-
-    private createWorkerFactory(factory?: VectorIndexWorkerFactory) {
-        if (factory !== undefined) {
-            return factory
-        }
-        return (onFailure: (error: Error) => void) =>
-            new LivingMemoryVectorIndexWorkerClient(undefined, onFailure)
+        this.status.applyInspection(inspection)
     }
 
     private markBuilding(jobId: string) {
-        const updatedAt = Date.now()
-        this.status = {
-            ...this.status,
-            state: 'building',
-            presets: this.status.presets.map((preset) => ({
-                ...preset,
-                state: 'building',
-                lastError: null,
-                updatedAt
-            })),
-            currentJobId: jobId,
-            lastError: null
-        }
+        this.status.markBuilding(jobId)
     }
 
     private markPresetBuilding(
@@ -650,75 +527,7 @@ export class LivingMemoryVectorIndexService
         jobId: string,
         expectedCount: number
     ) {
-        const updatedAt = Date.now()
-        const presets: MemoryVectorIndexPresetStatus[] =
-            this.status.presets.map((preset) => {
-                if (preset.presetId !== presetId) {
-                    return preset
-                }
-                return {
-                    ...preset,
-                    state: 'building',
-                    expectedCount,
-                    lastError: null,
-                    updatedAt
-                }
-            })
-        if (!presets.some((preset) => preset.presetId === presetId)) {
-            presets.push({
-                presetId,
-                state: 'building',
-                expectedCount,
-                indexedCount: 0,
-                lastError: null,
-                updatedAt
-            })
-        }
-        this.status = {
-            ...this.status,
-            state: 'building',
-            presets,
-            currentJobId: jobId,
-            lastError: null
-        }
-    }
-
-    private applyInspection(inspection: VectorIndexInspection) {
-        const state = this.resolveInspectionState(inspection)
-        const failedPreset = inspection.presets.find(
-            (preset) => preset.lastError !== null
-        )
-        let lastError: string | null = null
-        if (failedPreset !== undefined) {
-            lastError = failedPreset.lastError
-        }
-        this.status = {
-            state,
-            manifest: inspection.manifest,
-            presets: inspection.presets,
-            currentJobId: this.status.currentJobId,
-            lastError
-        }
-    }
-
-    private resolveInspectionState(
-        inspection: VectorIndexInspection
-    ): MemoryVectorIndexState {
-        if (inspection.manifest === null) {
-            return 'building'
-        }
-        if (inspection.presets.some((preset) => preset.state === 'dirty')) {
-            return 'dirty'
-        }
-        if (inspection.presets.some((preset) => preset.state === 'building')) {
-            return 'building'
-        }
-        if (
-            inspection.presets.some((preset) => preset.state === 'unavailable')
-        ) {
-            return 'unavailable'
-        }
-        return 'ready'
+        this.status.markPresetBuilding(presetId, jobId, expectedCount)
     }
 
     private async awaitPresetReadBarrier(presetId: string) {
@@ -727,7 +536,7 @@ export class LivingMemoryVectorIndexService
     }
 
     private async handleMaintenanceFailure(error: unknown) {
-        const failure = this.toError(error)
+        const failure = toError(error)
         let state: MemoryVectorIndexState = 'unavailable'
         if (
             this.workerFailure === null &&
@@ -736,12 +545,7 @@ export class LivingMemoryVectorIndexService
             state = error.state
         }
         await this.inspectAfterFailure()
-        this.status = {
-            ...this.status,
-            state,
-            currentJobId: null,
-            lastError: failure.message
-        }
+        this.status.markMaintenanceFailure(state, failure.message)
         this.logger.warn(failure)
     }
 
@@ -751,7 +555,7 @@ export class LivingMemoryVectorIndexService
         }
         try {
             const inspection = await this.worker.inspect()
-            this.applyInspection(inspection)
+            this.status.applyInspection(inspection)
         } catch (error) {
             this.debug(
                 `vector index failure inspection: ${summarizeError(error)}`
@@ -762,17 +566,7 @@ export class LivingMemoryVectorIndexService
     private recordWorkerFailure(error: Error) {
         this.stopping = true
         this.workerFailure = error
-        this.status = {
-            ...this.status,
-            state: 'unavailable',
-            presets: this.status.presets.map((preset) => ({
-                ...preset,
-                state: 'unavailable',
-                lastError: error.message,
-                updatedAt: Date.now()
-            })),
-            lastError: error.message
-        }
+        this.status.markWorkerFailure(error)
         this.logger.warn(error)
     }
 
@@ -809,13 +603,6 @@ export class LivingMemoryVectorIndexService
             () => undefined
         )
         return operation
-    }
-
-    private toError(error: unknown) {
-        if (error instanceof Error) {
-            return error
-        }
-        return new Error(String(error))
     }
 
     private debug(message: string) {
