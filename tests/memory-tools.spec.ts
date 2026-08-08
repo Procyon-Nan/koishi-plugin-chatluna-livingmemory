@@ -13,25 +13,19 @@ import {
     livingMemorySearchToolDescription,
     LivingMemorySearchTool
 } from '../src/service/memory/tools/embedding_search_tool'
-import {
-    createEmbeddingSearchCache,
-    type LivingMemoryEmbeddingSearchEngine
-} from '../src/service/workflows/recall/embedding_search_engine'
+import type { LivingMemoryEmbeddingSearchEngine } from '../src/service/workflows/recall/embedding_search_engine'
 
 const context = {
     logger: () => ({ info: () => {}, warn: () => {} })
 } as unknown as Context
 
 const mockEngine = {
-    search: async () => []
+    searchMemories: async () => []
 } as unknown as LivingMemoryEmbeddingSearchEngine
 
-const searchTool = new LivingMemorySearchTool(
-    mockEngine,
-    createEmbeddingSearchCache(),
-    context,
-    { debug: false, memorySearchToolMaxResults: 30 }
-)
+const searchTool = new LivingMemorySearchTool(mockEngine, context, {
+    debug: false
+})
 const getMessagesTool = new LivingMemoryGetMessagesTool(context, {
     debug: false
 })
@@ -46,10 +40,7 @@ const rejectsStringifiedArray = async (promise: Promise<unknown>) => {
 
 it('exposes the strict search schema directly to the model-facing tool', async () => {
     assert.equal(searchTool.schema, livingMemorySearchInputSchema)
-    assert.match(
-        livingMemorySearchToolDescription,
-        /必填 JSON 数组/u
-    )
+    assert.match(livingMemorySearchToolDescription, /必填 JSON 数组/u)
     assert.match(
         livingMemorySearchToolDescription,
         /禁止把数组编码成 JSON 字符串/u
@@ -66,7 +57,10 @@ it('exposes the strict search schema directly to the model-facing tool', async (
 it('exposes the strict source-message schema and rejects stringified ids', async () => {
     assert.equal(getMessagesTool.schema, livingMemoryGetMessagesInputSchema)
     assert.match(livingMemoryGetMessagesToolDescription, /必填 JSON 数组/u)
-    assert.match(livingMemoryGetMessagesToolDescription, /禁止把数组编码成 JSON 字符串/u)
+    assert.match(
+        livingMemoryGetMessagesToolDescription,
+        /禁止把数组编码成 JSON 字符串/u
+    )
 
     await rejectsStringifiedArray(
         getMessagesTool.invoke({ memoryIds: '["memory-1"]' } as never)

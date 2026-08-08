@@ -263,6 +263,30 @@ export class LivingMemoryEntryRepository
         return entries.map(normalizeEntryRecord)
     }
 
+    async getRecallEntriesByPresetAndIds(presetId: string, ids: string[]) {
+        if (ids.length === 0) {
+            return []
+        }
+
+        return await this.ctx.database.get(
+            'living_memory_entry',
+            {
+                presetId,
+                id: { $in: ids }
+            },
+            [
+                'id',
+                'type',
+                'content',
+                'keywords',
+                'summary',
+                'importance',
+                'createdAt',
+                'updatedAt'
+            ]
+        )
+    }
+
     async appendMemories(
         scope: MemoryScope,
         sourceOriginMessages: MemorySourceMessage[],

@@ -1,5 +1,7 @@
 import type {
     LivingMemoryTranscriptMessage,
+    LivingMemorySearchInput,
+    LivingMemorySearchResult,
     MemoryEntryRecord,
     MemoryEntryStatus,
     MemoryEntryType,
@@ -158,15 +160,17 @@ export interface LivingMemoryConfig {
 }
 
 export interface RecallRepository {
-    listEntriesByPreset(presetId: string): Promise<MemoryEntryRecord[]>
-    getEntryById(id: string): Promise<MemoryEntryRecord | undefined>
-    updateEntryEmbeddings(
-        updates: {
-            id: string
-            embedding: number[]
-            embeddingModelId: string
-        }[]
-    ): Promise<void>
+    getRecallEntriesByPresetAndIds(
+        presetId: string,
+        ids: string[]
+    ): Promise<LivingMemorySearchResult[]>
+}
+
+export interface LivingMemorySearchProvider {
+    searchMemories(
+        presetId: string,
+        input: LivingMemorySearchInput
+    ): Promise<LivingMemorySearchResult[]>
 }
 
 export interface SnapshotRepository {

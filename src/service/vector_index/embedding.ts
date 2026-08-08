@@ -4,8 +4,7 @@ import type {
 } from '../../contracts/vector_index'
 import type { EmbeddingsLike } from '../shared/embeddings'
 
-const VECTOR_INDEX_PROBE_TEXT =
-    'living memory vector index dimension probe'
+const VECTOR_INDEX_PROBE_TEXT = 'living memory vector index dimension probe'
 
 export interface VectorIndexEmbeddingContext {
     embeddings: EmbeddingsLike
@@ -34,30 +33,30 @@ const convertValidVector = (
     return converted
 }
 
-const requireValidVector = (
+export const createVectorIndexVector = (
     vector: number[],
     dimension: number,
-    memoryId: string
+    subject: string
 ) => {
     const converted = convertValidVector(vector, dimension)
     if (converted === null) {
         throw new Error(
-            `vector index embedding invalid: memory=${memoryId}, dimension=${dimension}`
+            `vector index embedding invalid: ${subject}, dimension=${dimension}`
         )
     }
     return converted
 }
 
-export const probeVectorIndexDimension = async (
-    embeddings: EmbeddingsLike
-) => {
-    const vectors = await embeddings.embedDocuments([
-        VECTOR_INDEX_PROBE_TEXT
-    ])
+export const probeVectorIndexDimension = async (embeddings: EmbeddingsLike) => {
+    const vectors = await embeddings.embedDocuments([VECTOR_INDEX_PROBE_TEXT])
     if (vectors.length !== 1 || vectors[0].length === 0) {
         throw new Error('vector index embedding probe returned no vector')
     }
-    requireValidVector(vectors[0], vectors[0].length, 'dimension-probe')
+    createVectorIndexVector(
+        vectors[0],
+        vectors[0].length,
+        'subject=dimension-probe'
+    )
     return vectors[0].length
 }
 
@@ -103,7 +102,11 @@ export const embedMemoryIndexSources = async (
         const source = pending[index]
         vectors.set(
             source.id,
-            requireValidVector(generated[index], dimension, source.id)
+            createVectorIndexVector(
+                generated[index],
+                dimension,
+                `memory=${source.id}`
+            )
         )
     }
     return vectors

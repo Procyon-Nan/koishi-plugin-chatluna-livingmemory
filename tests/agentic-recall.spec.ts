@@ -84,9 +84,7 @@ const createMultipleSearchCalls = (
     })
 }
 
-const createSearchResult = (
-    id: string
-): LivingMemorySearchResult => ({
+const createSearchResult = (id: string): LivingMemorySearchResult => ({
     id,
     type: 'fact',
     content: `content-${id}`,
@@ -137,18 +135,24 @@ const createHarness = (options: AgenticRecallHarnessOptions) => {
     )
     const model = {
         withConfig: () => boundModel,
-        invoke: async (
-            messages: BaseMessage[],
-            runConfig?: RunnableConfig
-        ) => {
+        invoke: async (messages: BaseMessage[], runConfig?: RunnableConfig) => {
             directInvocations.push({ messages, config: runConfig })
             return takeResponse(options.finalResponse)
         }
     } as unknown as ChatLunaChatModel
     const mockEngine = {
-        search: async (searchOptions: SearchInvocation) => {
-            searchInvocations.push(searchOptions)
-            return await (options.search?.(searchOptions) ?? [])
+        searchMemories: async (
+            presetId: string,
+            input: LivingMemorySearchInput
+        ) => {
+            const invocation: SearchInvocation = {
+                presetId,
+                query: { texts: input.searchTexts },
+                memoryTypes: input.memoryTypes,
+                maxCandidates: config.memorySearchToolMaxResults
+            }
+            searchInvocations.push(invocation)
+            return await (options.search?.(invocation) ?? [])
         }
     } as unknown as LivingMemoryEmbeddingSearchEngine
     const context = {
@@ -174,8 +178,9 @@ const createHarness = (options: AgenticRecallHarnessOptions) => {
 
 const toolMessages = (invocation: ModelInvocation | undefined) => {
     return (
-        invocation?.messages.filter((message) => message.getType() === 'tool') ??
-        []
+        invocation?.messages.filter(
+            (message) => message.getType() === 'tool'
+        ) ?? []
     )
 }
 
@@ -221,7 +226,10 @@ it('runs one search through AgentRunner and preserves preset-scoped trace data',
     )
     assert.match(trace.prompt, /^\[system\]/u)
     assert.match(trace.prompt, /\n\[human\]\n/u)
-    assert.match(String(toolMessages(harness.boundInvocations[1])[0]?.content), /memory-1/u)
+    assert.match(
+        String(toolMessages(harness.boundInvocations[1])[0]?.content),
+        /memory-1/u
+    )
 })
 
 it('rejects stringified arrays and allows corrected search input', async () => {
@@ -510,9 +518,7 @@ it('allows a second successful search with different arguments', async () => {
         ],
         search: async (invocation) => [
             createSearchResult(
-                invocation.query.texts[0] === '记忆'
-                    ? 'memory-1'
-                    : 'memory-2'
+                invocation.query.texts[0] === '记忆' ? 'memory-1' : 'memory-2'
             )
         ]
     })
@@ -521,10 +527,7 @@ it('allows a second successful search with different arguments', async () => {
 
     assert.equal(harness.searchInvocations.length, 2)
     assert.equal(trace.item.matchedMemories.length, 2)
-    assert.deepEqual(trace.item.toolCallSummary.searchTexts, [
-        '记忆',
-        '计划'
-    ])
+    assert.deepEqual(trace.item.toolCallSummary.searchTexts, ['记忆', '计划'])
 })
 
 it('builds trace data from raw search output before AgentRunner guidance', async () => {

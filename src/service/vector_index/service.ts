@@ -5,6 +5,11 @@ import type {
     ManualDreamVectorReader,
     MemoryIndexMutationBatch,
     MemoryIndexMutationSink,
+    MemoryHybridSearchHit,
+    MemoryHybridSearchInput,
+    MemorySemanticSearchInput,
+    MemoryVectorSearch,
+    MemoryVectorSearchHit,
     MemoryVectorIndexPresetStatus,
     MemoryVectorIndexStatus,
     MemoryVectorIndexState
@@ -17,6 +22,7 @@ import {
 } from './maintenance'
 import { createVectorIndexDocument } from './documents'
 import {
+    createVectorIndexVector,
     embedMemoryIndexSources,
     type VectorIndexEmbeddingContext
 } from './embedding'
@@ -44,7 +50,10 @@ interface VectorIndexServiceOptions {
 }
 
 export class LivingMemoryVectorIndexService
-    implements ManualDreamVectorReader, MemoryIndexMutationSink
+    implements
+        ManualDreamVectorReader,
+        MemoryIndexMutationSink,
+        MemoryVectorSearch
 {
     private readonly operationGate = new VectorIndexOperationGate()
     private readonly presetMutationQueue = new VectorIndexPresetMutationQueue(
@@ -245,6 +254,92 @@ export class LivingMemoryVectorIndexService
         return vectors
     }
 
+    async searchSemantic(
+        input: MemorySemanticSearchInput
+    ): Promise<MemoryVectorSearchHit[]> {
+        if (input.searchTexts.length === 0) {
+            return []
+        }
+        this.assertPresetReady(input.presetId)
+        const vectors = await this.embedSearchTexts(input.searchTexts)
+        await this.awaitPresetReadBarrier(input.presetId)
+
+        const bestScores = new Map<string, number>()
+        for (const vector of vectors) {
+            const hits = await this.requireWorker().queryKnn({
+                presetId: input.presetId,
+                status: input.status,
+                types: input.memoryTypes,
+                isConsolidated: null,
+                limit: input.maxCandidates,
+                vector
+            })
+            for (const hit of hits) {
+                const current = bestScores.get(hit.memoryId)
+                if (current === undefined || hit.cosineScore > current) {
+                    bestScores.set(hit.memoryId, hit.cosineScore)
+                }
+            }
+        }
+
+        return [...bestScores]
+            .map(([memoryId, cosineScore]) => ({ memoryId, cosineScore }))
+            .sort((left, right) => {
+                const scoreDifference = right.cosineScore - left.cosineScore
+                if (scoreDifference !== 0) {
+                    return scoreDifference
+                }
+                return left.memoryId.localeCompare(right.memoryId)
+            })
+            .slice(0, input.maxCandidates)
+    }
+
+    async searchHybrid(
+        input: MemoryHybridSearchInput
+    ): Promise<MemoryHybridSearchHit[]> {
+        if (input.searchTexts.length === 0) {
+            return []
+        }
+        this.assertPresetReady(input.presetId)
+        const vectors = await this.embedSearchTexts(input.searchTexts)
+        await this.awaitPresetReadBarrier(input.presetId)
+
+        const bestHits = new Map<string, MemoryHybridSearchHit>()
+        for (const vector of vectors) {
+            const hits = await this.requireWorker().queryHybrid({
+                presetId: input.presetId,
+                status: input.status,
+                types: input.memoryTypes,
+                isConsolidated: null,
+                limit: input.maxCandidates,
+                vector,
+                keywords: input.keywords,
+                minSimilarity: input.minSimilarity
+            })
+            for (const hit of hits) {
+                const current = bestHits.get(hit.memoryId)
+                if (
+                    current === undefined ||
+                    hit.boostedScore > current.boostedScore ||
+                    (hit.boostedScore === current.boostedScore &&
+                        hit.cosineScore > current.cosineScore)
+                ) {
+                    bestHits.set(hit.memoryId, hit)
+                }
+            }
+        }
+
+        return [...bestHits.values()]
+            .sort((left, right) => {
+                const scoreDifference = right.boostedScore - left.boostedScore
+                if (scoreDifference !== 0) {
+                    return scoreDifference
+                }
+                return left.memoryId.localeCompare(right.memoryId)
+            })
+            .slice(0, input.maxCandidates)
+    }
+
     runPresetMutation<T>(presetId: string, task: () => Promise<T>) {
         return this.presetMutationQueue.run(presetId, task)
     }
@@ -395,6 +490,22 @@ export class LivingMemoryVectorIndexService
             upserts,
             deletes: batch.deletes.map((item) => item.id)
         }
+    }
+
+    private async embedSearchTexts(searchTexts: string[]) {
+        const context = this.requireEmbeddingContext()
+        const generated = await Promise.all(
+            searchTexts.map((searchText) =>
+                context.embeddings.embedQuery(searchText)
+            )
+        )
+        return generated.map((vector, index) =>
+            createVectorIndexVector(
+                vector,
+                context.dimension,
+                `searchTextIndex=${index}`
+            )
+        )
     }
 
     assertPresetReady(presetId: string) {
@@ -571,15 +682,11 @@ export class LivingMemoryVectorIndexService
         if (inspection.presets.some((preset) => preset.state === 'dirty')) {
             return 'dirty'
         }
-        if (
-            inspection.presets.some((preset) => preset.state === 'building')
-        ) {
+        if (inspection.presets.some((preset) => preset.state === 'building')) {
             return 'building'
         }
         if (
-            inspection.presets.some(
-                (preset) => preset.state === 'unavailable'
-            )
+            inspection.presets.some((preset) => preset.state === 'unavailable')
         ) {
             return 'unavailable'
         }

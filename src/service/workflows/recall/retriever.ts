@@ -4,16 +4,14 @@ import type {
     RecallRepository,
     RetrievedMemoryItem
 } from '../../../contracts/workflows'
+import type { MemoryVectorSearch } from '../../../contracts/vector_index'
 import { isModelConfigured } from '../../shared/utils'
-import {
-    ensureEntryEmbeddings,
-    rankEntriesByQueryVector,
-    toMemoryRetrievalText
-} from '../../shared/embeddings'
+import { toMemoryRetrievalText } from '../../shared/embeddings'
+import { loadIndexedMemoryEntries } from './indexed_entries'
 
 type LivingMemoryRetrieverConfig = Pick<
     LivingMemoryConfig,
-    'debug' | 'embeddingModel' | 'rerankModel'
+    'debug' | 'rerankModel'
 >
 
 export class LivingMemoryRetriever {
@@ -22,85 +20,51 @@ export class LivingMemoryRetriever {
     constructor(
         private readonly ctx: Context,
         private readonly config: LivingMemoryRetrieverConfig,
-        private readonly recallRepository: RecallRepository
+        private readonly repository: RecallRepository,
+        private readonly vectorSearch: MemoryVectorSearch
     ) {
         this.logger = ctx.logger('chatluna-livingmemory')
     }
 
-    async retrieve(presetId: string, input: string, limit: number) {
-        return await this.retrieveByEmbedding(presetId, input, limit)
-    }
-
-    private async retrieveByEmbedding(
+    async retrieve(
         presetId: string,
         input: string,
         limit: number
     ): Promise<RetrievedMemoryItem[]> {
-        if (!isModelConfigured(this.config.embeddingModel)) {
-            throw new Error('memory retrieve embedding model is not configured')
+        let candidateCount = limit
+        if (isModelConfigured(this.config.rerankModel)) {
+            candidateCount = limit * 3
         }
-
-        // embedding 是向量检索的硬依赖，无法降级；创建失败应直接中断本轮召回。
-        const embeddings = await this.ctx.chatluna.createEmbeddings(
-            this.config.embeddingModel
+        const hits = await this.vectorSearch.searchSemantic({
+            presetId,
+            searchTexts: [input],
+            status: 'active',
+            memoryTypes: null,
+            maxCandidates: candidateCount
+        })
+        const entries = await loadIndexedMemoryEntries(
+            this.repository,
+            presetId,
+            hits.map((hit) => hit.memoryId)
         )
-        if (embeddings.value === undefined) {
-            throw new Error(
-                `memory retrieve embedding unavailable: model=${this.config.embeddingModel}`
-            )
-        }
-
-        const entries = await this.listActiveEntries(presetId)
-        if (entries.length === 0) {
-            return []
-        }
-
-        const queryVector = await embeddings.value.embedQuery(input)
-        if (queryVector.length === 0) {
-            throw new Error('memory retrieve embedding query vector is empty')
-        }
-
-        const vectorById = await ensureEntryEmbeddings(
-            embeddings.value,
-            this.recallRepository,
-            this.config.embeddingModel,
-            entries,
-            {
-                logger: this.logger,
-                debug: (message) => this.debugLog(message),
-                // 查询向量由当前模型现算，其维度即当前模型的输出维度，
-                // 以此让维度不一致的旧缓存向量失效重算，避免 cosine 静默归零。
-                expectedDimension: queryVector.length,
-                persistenceFailure: 'warn'
-            }
-        )
-
-        const embeddingResults = rankEntriesByQueryVector(
-            entries,
-            vectorById,
-            queryVector
-        ).map(({ entry, score }) => ({
+        const candidates = entries.map((entry, index) => ({
             id: entry.id,
             content: entry.content,
             retrievalText: toMemoryRetrievalText(entry),
-            score
+            score: hits[index].cosineScore
         }))
+        if (candidates.length === 0) {
+            return []
+        }
 
-        // 未配置 reranker 模型时，降级为仅按 embedding 余弦相似度取 top-K，
-        // 避免召回因缺少 reranker 而整轮失败。
         if (!isModelConfigured(this.config.rerankModel)) {
             this.debugLog(
                 'memory recall rerank model not configured, fallback to embedding-only top-K'
             )
-            return this.embeddingOnlyTopK(embeddingResults, limit)
+            return this.embeddingOnlyTopK(candidates, limit)
         }
 
-        // reranker 已配置但创建或调用失败时，同样降级为 embedding-only top-K，
-        // 避免单次模型故障导致整轮召回失败。
         try {
-            const candidateCount = Math.min(embeddingResults.length, limit * 3)
-            const candidates = embeddingResults.slice(0, candidateCount)
-
             const reranker = await this.ctx.chatluna.createReranker(
                 this.config.rerankModel
             )
@@ -111,7 +75,7 @@ export class LivingMemoryRetriever {
             }
 
             const rerankResults = await reranker.value.rerank(
-                candidates.map((c) => c.retrievalText),
+                candidates.map((candidate) => candidate.retrievalText),
                 input,
                 { topN: limit }
             )
@@ -135,7 +99,7 @@ export class LivingMemoryRetriever {
             })
         } catch (error) {
             this.logger.warn(error)
-            return this.embeddingOnlyTopK(embeddingResults, limit)
+            return this.embeddingOnlyTopK(candidates, limit)
         }
     }
 
@@ -152,11 +116,5 @@ export class LivingMemoryRetriever {
         return results
             .slice(0, limit)
             .map(({ id, content, score }) => ({ id, content, score }))
-    }
-
-    private async listActiveEntries(presetId: string) {
-        const entries =
-            await this.recallRepository.listEntriesByPreset(presetId)
-        return entries.filter((entry) => entry.status === 'active')
     }
 }

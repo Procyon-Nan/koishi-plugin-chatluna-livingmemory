@@ -13,11 +13,6 @@ import {
     livingMemoryGetMessagesToolName,
     livingMemorySearchToolName
 } from '../service/memory/tools/search_contract'
-import { LivingMemoryRepository } from '../service/persistence/repository'
-import {
-    createEmbeddingSearchCache,
-    LivingMemoryEmbeddingSearchEngine
-} from '../service/workflows/recall/embedding_search_engine'
 
 const toChatLunaStructuredTool = (
     tool: LivingMemorySearchTool | LivingMemoryGetMessagesTool
@@ -40,13 +35,6 @@ const livingMemoryToolMeta = {
 
 export function apply(ctx: Context, config: LivingMemoryConfig) {
     ctx.on('ready', () => {
-        const searchEngine = new LivingMemoryEmbeddingSearchEngine(
-            ctx,
-            config,
-            new LivingMemoryRepository(ctx),
-            ctx.logger('chatluna-livingmemory')
-        )
-
         const disposeSearch = ctx.chatluna.platform.registerTool(
             livingMemorySearchToolName,
             {
@@ -61,8 +49,7 @@ export function apply(ctx: Context, config: LivingMemoryConfig) {
                 createTool() {
                     return toChatLunaStructuredTool(
                         new LivingMemorySearchTool(
-                            searchEngine,
-                            createEmbeddingSearchCache(),
+                            ctx.chatluna_living_memory,
                             ctx,
                             config
                         )

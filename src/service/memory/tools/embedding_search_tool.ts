@@ -2,7 +2,10 @@ import { StructuredTool } from '@langchain/core/tools'
 import type { ToolRunnableConfig } from '@langchain/core/tools'
 import type { Context } from 'koishi'
 import type { z } from 'zod'
-import type { LivingMemoryConfig } from '../../../contracts/workflows'
+import type {
+    LivingMemoryConfig,
+    LivingMemorySearchProvider
+} from '../../../contracts/workflows'
 import {
     formatSearchTextLengthRange,
     livingMemorySearchInputSchema,
@@ -16,15 +19,7 @@ import {
     getLivingMemoryToolConfigurable,
     LivingMemoryToolRuntime
 } from './tool_runtime'
-import type {
-    EmbeddingSearchCache,
-    LivingMemoryEmbeddingSearchEngine
-} from '../../workflows/recall/embedding_search_engine'
-
-type LivingMemorySearchToolConfig = Pick<
-    LivingMemoryConfig,
-    'debug' | 'memorySearchToolMaxResults'
->
+type LivingMemorySearchToolConfig = Pick<LivingMemoryConfig, 'debug'>
 
 export const livingMemorySearchToolDescription = [
     '在你的记忆库中搜索记忆。',
@@ -53,8 +48,7 @@ export class LivingMemorySearchTool extends StructuredTool {
     private readonly runtime: LivingMemoryToolRuntime
 
     constructor(
-        private readonly engine: LivingMemoryEmbeddingSearchEngine,
-        private readonly cache: EmbeddingSearchCache,
+        private readonly searchProvider: LivingMemorySearchProvider,
         ctx: Context,
         private readonly config: LivingMemorySearchToolConfig
     ) {
@@ -80,17 +74,9 @@ export class LivingMemorySearchTool extends StructuredTool {
             throw new Error('Missing preset in the current tool call.')
         }
 
-        const results = await this.engine.search(
-            {
-                presetId,
-                query: {
-                    texts: input.searchTexts,
-                    keywords: input.searchKeywords ?? []
-                },
-                memoryTypes: input.memoryTypes,
-                maxCandidates: this.config.memorySearchToolMaxResults
-            },
-            this.cache
+        const results = await this.searchProvider.searchMemories(
+            presetId,
+            input
         )
 
         const output = JSON.stringify(results, null, 2)

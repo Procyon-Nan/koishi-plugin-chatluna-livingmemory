@@ -49,10 +49,7 @@ import { LivingMemorySnapshotCache } from '../memory/snapshot/snapshot_cache'
 import { LivingMemoryVectorIndexService } from '../vector_index/service'
 import { LivingMemoryMutationService } from './memory_mutation_service'
 import { LivingMemoryAgenticRecallExecutor } from '../workflows/recall/agentic_recall'
-import {
-    createEmbeddingSearchCache,
-    LivingMemoryEmbeddingSearchEngine
-} from '../workflows/recall/embedding_search_engine'
+import { LivingMemoryEmbeddingSearchEngine } from '../workflows/recall/embedding_search_engine'
 import type { QueueExtractionOptions } from '../memory/helpers'
 import {
     createLivingMemoryServiceStatus,
@@ -111,16 +108,16 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         const retriever = new LivingMemoryRetriever(
             ctx,
             config,
-            this.repository
+            this.repository,
+            this.vectorIndex
         )
         const extractor = new LivingMemoryExtractor(ctx, config.mainModel)
         const formatter = new LivingMemoryMessageFormatter()
         const recallQuery = new LivingMemoryRecallQueryBuilder(ctx, config)
         this.searchEngine = new LivingMemoryEmbeddingSearchEngine(
-            ctx,
             config,
             this.repository,
-            ctx.logger('chatluna-livingmemory')
+            this.vectorIndex
         )
         const agenticRecall = new LivingMemoryAgenticRecallExecutor(
             ctx,
@@ -385,18 +382,11 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         presetId: string,
         input: LivingMemorySearchInput
     ): Promise<LivingMemorySearchDetailedResult[]> {
-        return await this.searchEngine.searchDetailed(
-            {
-                presetId,
-                query: {
-                    texts: input.searchTexts,
-                    keywords: input.searchKeywords ?? []
-                },
-                memoryTypes: input.memoryTypes,
-                maxCandidates: this.config.memorySearchToolMaxResults
-            },
-            createEmbeddingSearchCache()
-        )
+        return await this.searchEngine.searchMemoriesDetailed(presetId, input)
+    }
+
+    async searchMemories(presetId: string, input: LivingMemorySearchInput) {
+        return await this.searchEngine.searchMemories(presetId, input)
     }
 
     async getMemorySourceMessages(presetId: string, memoryIds: string[]) {

@@ -52,10 +52,7 @@ import {
     LivingMemorySearchTool,
     livingMemorySearchToolDescription
 } from '../../memory/tools/embedding_search_tool'
-import {
-    createEmbeddingSearchCache,
-    type LivingMemoryEmbeddingSearchEngine
-} from './embedding_search_engine'
+import type { LivingMemoryEmbeddingSearchEngine } from './embedding_search_engine'
 
 type LivingMemoryAgenticRecallConfig = Pick<
     LivingMemoryConfig,
@@ -63,7 +60,6 @@ type LivingMemoryAgenticRecallConfig = Pick<
     | 'debug'
     | 'memorySearchToolMaxResults'
     | 'recallHistoryWindowRounds'
-    | 'embeddingModel'
 >
 
 type AgenticSearchToolInput = z.infer<typeof livingMemorySearchInputSchema>
@@ -358,11 +354,9 @@ export class LivingMemoryAgenticRecallExecutor {
             ].join(':')
         }
         const recordedSearchCalls: RecordedAgenticSearchCall[] = []
-        const searchCache = createEmbeddingSearchCache()
         const searchTool = new RecordingLivingMemorySearchTool(
             new LivingMemorySearchTool(
                 this.embeddingSearchEngine,
-                searchCache,
                 this.ctx,
                 this.config
             ),

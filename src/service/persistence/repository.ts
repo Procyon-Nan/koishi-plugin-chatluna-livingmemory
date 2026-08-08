@@ -176,6 +176,10 @@ export class LivingMemoryRepository
         return this.entries.getEntriesByPresetAndIds(presetId, ids)
     }
 
+    getRecallEntriesByPresetAndIds(presetId: string, ids: string[]) {
+        return this.entries.getRecallEntriesByPresetAndIds(presetId, ids)
+    }
+
     async getEntriesWithStaleEmbeddings(
         currentModelId: string
     ): Promise<MemoryEntryRecord[]> {

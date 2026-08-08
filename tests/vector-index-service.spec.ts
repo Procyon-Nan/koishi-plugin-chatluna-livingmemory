@@ -236,7 +236,7 @@ it('builds the index once and reuses its manifest after restart', async () => {
     await withTemporaryDirectory(async (baseDir) => {
         const repository = new TestVectorIndexRepository([
             createSource('memory-a'),
-            createSource('memory-b')
+            createSource('memory-b', { type: 'preference' })
         ])
         const firstCalls: string[][] = []
         const first = createService({
@@ -257,7 +257,31 @@ it('builds the index once and reuses its manifest after restart', async () => {
         assert.equal(firstStatus.presets[0].indexedCount, 2)
         assert.doesNotThrow(() => first.assertPresetReady('preset-a'))
         assert.equal(repository.jobs[0].status, 'completed')
-        assert.ok(firstCalls.some((texts) => texts.includes('content memory-a')))
+        assert.ok(
+            firstCalls.some((texts) => texts.includes('content memory-a'))
+        )
+        const semanticHits = await first.searchSemantic({
+            presetId: 'preset-a',
+            searchTexts: ['content memory-a'],
+            status: 'active',
+            memoryTypes: ['fact'],
+            maxCandidates: 2
+        })
+        assert.deepEqual(
+            semanticHits.map((hit) => hit.memoryId),
+            ['memory-a']
+        )
+        const hybridHits = await first.searchHybrid({
+            presetId: 'preset-a',
+            searchTexts: ['content memory-a'],
+            keywords: ['memory-b'],
+            status: 'active',
+            memoryTypes: null,
+            maxCandidates: 2,
+            minSimilarity: 0
+        })
+        assert.equal(hybridHits[0].memoryId, 'memory-b')
+        assert.equal(hybridHits[0].keywordMatchCount, 1)
         const vectors = await first.readVectors('preset-a', ['memory-a'])
         assert.deepEqual([...vectors.keys()], ['memory-a'])
         assert.ok(vectors.get('memory-a') instanceof Float32Array)
