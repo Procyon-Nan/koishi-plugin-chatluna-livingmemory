@@ -63,7 +63,7 @@ export class LivingMemoryIncrementalDreamService {
         private readonly repository: IncrementalDreamRepository,
         private readonly mutations: DreamMemoryRepository,
         private readonly neighborSearch: IncrementalDreamNeighborSearch,
-        private readonly debug: (message: string) => void
+        debug: (message: string) => void
     ) {
         this.unitProcessor = new DreamUnitProcessor(
             mutations,

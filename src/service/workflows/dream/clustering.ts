@@ -104,8 +104,8 @@ export class DreamClusterer {
             )
             vectors.push(...(await this.readNormalized(presetId, batch)))
         }
-        const result = this.runHdbscan(vectors)
-        const groups = groupEntriesByLabel(entries, result.labels)
+        const labels = this.runHdbscan(vectors)
+        const groups = groupEntriesByLabel(entries, labels)
         for (const [label, groupedEntries] of groups) {
             if (label === -1) {
                 continue
@@ -131,7 +131,7 @@ export class DreamClusterer {
         entries: DreamMemoryEntryRecord[]
     ) {
         const vectors = await this.readNormalized(presetId, entries)
-        return this.runHdbscan(vectors).labels
+        return this.runHdbscan(vectors)
     }
 
     private async readNormalized(

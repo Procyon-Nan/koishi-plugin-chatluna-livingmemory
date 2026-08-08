@@ -203,15 +203,9 @@ it('runs one global HDBSCAN pass over all first-pass noise', async () => {
     const runHdbscan: DreamHdbscanRunner = (input) => {
         callSizes.push(input.length)
         if (callSizes.length <= partitions.length) {
-            return {
-                labels: input.map((_, index) => (index === 0 ? 0 : -1)),
-                probabilities: input.map(() => 1)
-            }
+            return input.map((_, index) => (index === 0 ? 0 : -1))
         }
-        return {
-            labels: input.map((_, index) => (index < 3 ? 4 : -1)),
-            probabilities: input.map(() => 1)
-        }
+        return input.map((_, index) => (index < 3 ? 4 : -1))
     }
     const clusterer = new DreamClusterer(
         vectors.reader,
@@ -251,10 +245,7 @@ it('reads first-pass partitions and global noise in bounded batches', async () =
     const callSizes: number[] = []
     const runHdbscan: DreamHdbscanRunner = (input) => {
         callSizes.push(input.length)
-        return {
-            labels: input.map(() => -1),
-            probabilities: input.map(() => 1)
-        }
+        return input.map(() => -1)
     }
     const clusterer = new DreamClusterer(
         vectors.reader,
@@ -283,10 +274,7 @@ it('skips the global noise pass when the first pass has no noise', async () => {
     const callSizes: number[] = []
     const runHdbscan: DreamHdbscanRunner = (input) => {
         callSizes.push(input.length)
-        return {
-            labels: input.map(() => 0),
-            probabilities: input.map(() => 1)
-        }
+        return input.map(() => 0)
     }
     const clusterer = new DreamClusterer(
         vectors.reader,

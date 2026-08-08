@@ -1,21 +1,17 @@
 import type { DreamMemoryEntryRecord } from '../../../contracts/workflows'
 import { HDBSCAN } from 'hdbscan-ts'
-import { HDBSCAN_MIN_CLUSTER_SIZE, HDBSCAN_MIN_SAMPLES } from './util'
 
-export interface DreamHdbscanResult {
-    labels: number[]
-    probabilities: number[]
-}
+const HDBSCAN_MIN_CLUSTER_SIZE = 2
+const HDBSCAN_MIN_SAMPLES = 1
 
-export type DreamHdbscanRunner = (vectors: number[][]) => DreamHdbscanResult
+export type DreamHdbscanRunner = (vectors: number[][]) => number[]
 
 export const runDreamHdbscan: DreamHdbscanRunner = (vectors) => {
     const hdbscan = new HDBSCAN({
         minClusterSize: HDBSCAN_MIN_CLUSTER_SIZE,
         minSamples: HDBSCAN_MIN_SAMPLES
     })
-    const labels = hdbscan.fit(vectors)
-    return { labels, probabilities: hdbscan.probabilities_ }
+    return hdbscan.fit(vectors)
 }
 
 // 单位向量的欧氏距离与余弦距离单调等价，可直接复用库内置的欧氏距离。
