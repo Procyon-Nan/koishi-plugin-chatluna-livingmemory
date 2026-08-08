@@ -1,4 +1,4 @@
-import type { MemoryEntryRecord } from '../../../contracts/memory'
+import type { DreamMemoryEntryRecord } from '../../../contracts/workflows'
 import { HDBSCAN } from 'hdbscan-ts'
 import { HDBSCAN_MIN_CLUSTER_SIZE, HDBSCAN_MIN_SAMPLES } from './util'
 
@@ -19,26 +19,20 @@ export const runDreamHdbscan: DreamHdbscanRunner = (vectors) => {
 }
 
 // 单位向量的欧氏距离与余弦距离单调等价，可直接复用库内置的欧氏距离。
-const l2Normalize = (vector: number[]) => {
+const l2Normalize = (vector: Float32Array<ArrayBuffer>): number[] => {
     let normSq = 0
     for (const value of vector) {
         normSq += value * value
     }
     const norm = Math.sqrt(normSq)
-    return vector.map((value) => value / norm)
+    return Array.from(vector, (value) => value / norm)
 }
 
 export const readNormalizedVectors = (
-    entries: readonly MemoryEntryRecord[],
-    vectorById: ReadonlyMap<string, number[]>
+    entries: readonly DreamMemoryEntryRecord[],
+    vectorById: ReadonlyMap<string, Float32Array<ArrayBuffer>>
 ) =>
-    entries.map((entry) => {
-        const vector = vectorById.get(entry.id)
-        if (vector == null) {
-            throw new Error(`dream embedding missing: id=${entry.id}`)
-        }
-        return l2Normalize(vector)
-    })
+    entries.map((entry) => l2Normalize(vectorById.get(entry.id)!))
 
 export const validateHdbscanLabels = (
     labels: readonly number[],
@@ -57,11 +51,11 @@ export const validateHdbscanLabels = (
 }
 
 export const groupEntriesByLabel = (
-    entries: readonly MemoryEntryRecord[],
+    entries: readonly DreamMemoryEntryRecord[],
     labels: readonly number[]
 ) => {
     validateHdbscanLabels(labels, entries.length)
-    const groups = new Map<number, MemoryEntryRecord[]>()
+    const groups = new Map<number, DreamMemoryEntryRecord[]>()
     entries.forEach((entry, index) => {
         const label = labels[index]
         const group = groups.get(label)

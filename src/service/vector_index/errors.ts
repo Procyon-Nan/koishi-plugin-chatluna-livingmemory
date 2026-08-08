@@ -7,6 +7,7 @@ export type LivingMemoryVectorIndexErrorCode =
     | 'not-ready'
     | 'rebuild-failed'
     | 'reconcile-failed'
+    | 'vector-missing'
     | 'worker-unavailable'
 
 export class LivingMemoryVectorIndexError extends Error {

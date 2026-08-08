@@ -253,11 +253,13 @@ it('builds the index once and reuses its manifest after restart', async () => {
         assert.equal(firstStatus.presets[0].indexedCount, 2)
         assert.equal(repository.jobs[0].status, 'completed')
         assert.ok(firstCalls.some((texts) => texts.includes('content memory-a')))
-        const vectors = await first.readVectors('preset-a', [
-            'memory-a',
-            'missing-memory'
-        ])
+        const vectors = await first.readVectors('preset-a', ['memory-a'])
         assert.deepEqual([...vectors.keys()], ['memory-a'])
+        assert.ok(vectors.get('memory-a') instanceof Float32Array)
+        await assert.rejects(
+            first.readVectors('preset-a', ['missing-memory']),
+            /vector index entries are missing/u
+        )
         await first.stop()
 
         const secondCalls: string[][] = []

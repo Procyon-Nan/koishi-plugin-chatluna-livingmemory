@@ -1,4 +1,4 @@
-import type { MemoryEntryRecord } from '../../../../contracts/memory'
+import type { DreamMemoryEntryRecord } from '../../../../contracts/workflows'
 import {
     calculatePartitionQuality,
     compareEntryIds,
@@ -37,7 +37,7 @@ const assignEntry = (
 }
 
 const selectDispersedSeed = (
-    entries: readonly MemoryEntryRecord[],
+    entries: readonly DreamMemoryEntryRecord[],
     similarities: Uint8Array,
     degrees: Uint32Array,
     seeds: readonly number[],
@@ -85,7 +85,7 @@ const selectDispersedSeed = (
 }
 
 const selectPreferredChoices = (
-    entries: readonly MemoryEntryRecord[],
+    entries: readonly DreamMemoryEntryRecord[],
     degrees: Uint32Array,
     state: PartitionState,
     openBatches: readonly number[]
@@ -205,7 +205,7 @@ const selectPreferredChoices = (
 }
 
 export const createInitialPartition = (
-    entries: readonly MemoryEntryRecord[],
+    entries: readonly DreamMemoryEntryRecord[],
     similarities: Uint8Array,
     degrees: Uint32Array,
     targetSizes: readonly number[],
@@ -278,7 +278,7 @@ export const createInitialPartition = (
 }
 
 export const selectBestInitialPartition = (
-    entries: readonly MemoryEntryRecord[],
+    entries: readonly DreamMemoryEntryRecord[],
     similarities: Uint8Array,
     degrees: Uint32Array,
     targetSizes: readonly number[],

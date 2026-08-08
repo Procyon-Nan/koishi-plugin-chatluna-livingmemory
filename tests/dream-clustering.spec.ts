@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict'
-import type { Context } from 'koishi'
+import type { ManualDreamVectorReader } from '../src/contracts/vector_index'
 import { DreamClusterer } from '../src/service/workflows/dream/clustering'
 import type { DreamHdbscanRunner } from '../src/service/workflows/dream/hdbscan'
-import { buildManualDreamClustersFromVectors } from '../src/service/workflows/dream/manual_clustering'
 import {
     buildDreamPartitionTargetSizes,
     partitionDreamEntries,
@@ -179,35 +178,56 @@ it('keeps disconnected keyword islands in separate balanced partitions', () => {
     )
 })
 
-it('runs one global HDBSCAN pass over all first-pass noise', () => {
+const createVectorReader = (entries: ReturnType<typeof createEntries>) => {
+    const calls: string[][] = []
+    const vectorById = new Map(
+        entries.map((entry, index) => [
+            entry.id,
+            new Float32Array([index + 1, 1])
+        ])
+    )
+    const reader: ManualDreamVectorReader = {
+        readVectors: async (_presetId, memoryIds) => {
+            calls.push(memoryIds)
+            return new Map(memoryIds.map((id) => [id, vectorById.get(id)!]))
+        }
+    }
+    return { calls, reader }
+}
+
+it('runs one global HDBSCAN pass over all first-pass noise', async () => {
     const entries = createEntries(351)
     const partitions = partitionDreamEntries(entries)
-    const vectorById = new Map(
-        entries.map((entry, index) => [entry.id, [index + 1, 1]])
-    )
+    const vectors = createVectorReader(entries)
     const callSizes: number[] = []
-    const runHdbscan: DreamHdbscanRunner = (vectors) => {
-        callSizes.push(vectors.length)
+    const runHdbscan: DreamHdbscanRunner = (input) => {
+        callSizes.push(input.length)
         if (callSizes.length <= partitions.length) {
             return {
-                labels: vectors.map((_, index) => (index === 0 ? 0 : -1)),
-                probabilities: vectors.map(() => 1)
+                labels: input.map((_, index) => (index === 0 ? 0 : -1)),
+                probabilities: input.map(() => 1)
             }
         }
         return {
-            labels: vectors.map((_, index) => (index < 3 ? 4 : -1)),
-            probabilities: vectors.map(() => 1)
+            labels: input.map((_, index) => (index < 3 ? 4 : -1)),
+            probabilities: input.map(() => 1)
         }
     }
-
-    const clusters = buildManualDreamClustersFromVectors(
-        partitions,
-        vectorById,
+    const clusterer = new DreamClusterer(
+        vectors.reader,
+        () => {},
+        false,
         runHdbscan
     )
 
+    const clusters = await clusterer.buildClusters('preset-1', entries)
+
     assert.deepEqual([...callSizes.slice(0, 2)].sort(), [175, 176])
     assert.equal(callSizes[2], 349)
+    assert.deepEqual(
+        vectors.calls.map((ids) => ids.length),
+        [175, 176, 349]
+    )
     assert.deepEqual(
         clusters.map((cluster) => cluster.reason),
         [
@@ -224,100 +244,68 @@ it('runs one global HDBSCAN pass over all first-pass noise', () => {
     assert.equal(new Set(clusteredIds).size, entries.length)
 })
 
-it('skips the global noise pass when the first pass has no noise', () => {
-    const entries = createEntries(351)
+it('reads first-pass partitions and global noise in bounded batches', async () => {
+    const entries = createEntries(701)
     const partitions = partitionDreamEntries(entries)
-    const vectorById = new Map(
-        entries.map((entry, index) => [entry.id, [index + 1, 1]])
-    )
+    const vectors = createVectorReader(entries)
     const callSizes: number[] = []
-    const runHdbscan: DreamHdbscanRunner = (vectors) => {
-        callSizes.push(vectors.length)
+    const runHdbscan: DreamHdbscanRunner = (input) => {
+        callSizes.push(input.length)
         return {
-            labels: vectors.map(() => 0),
-            probabilities: vectors.map(() => 1)
+            labels: input.map(() => -1),
+            probabilities: input.map(() => 1)
         }
     }
-
-    const clusters = buildManualDreamClustersFromVectors(
-        partitions,
-        vectorById,
+    const clusterer = new DreamClusterer(
+        vectors.reader,
+        () => {},
+        false,
         runHdbscan
     )
 
+    const clusters = await clusterer.buildClusters('preset-1', entries)
+
+    assert.deepEqual(
+        vectors.calls.map((ids) => ids.length),
+        [...partitions.map((partition) => partition.length), 350, 350, 1]
+    )
+    assert.deepEqual(callSizes, [
+        ...partitions.map((partition) => partition.length),
+        701
+    ])
+    assert.equal(clusters.length, 1)
+    assert.equal(clusters[0].entries.length, entries.length)
+})
+
+it('skips the global noise pass when the first pass has no noise', async () => {
+    const entries = createEntries(351)
+    const vectors = createVectorReader(entries)
+    const callSizes: number[] = []
+    const runHdbscan: DreamHdbscanRunner = (input) => {
+        callSizes.push(input.length)
+        return {
+            labels: input.map(() => 0),
+            probabilities: input.map(() => 1)
+        }
+    }
+    const clusterer = new DreamClusterer(
+        vectors.reader,
+        () => {},
+        false,
+        runHdbscan
+    )
+
+    const clusters = await clusterer.buildClusters('preset-1', entries)
+
     assert.deepEqual(
         [...callSizes].sort((left, right) => left - right),
+        [175, 176]
+    )
+    assert.deepEqual(
+        vectors.calls
+            .map((ids) => ids.length)
+            .sort((left, right) => left - right),
         [175, 176]
     )
     assert.equal(clusters.length, 2)
-})
-
-it('partitions manual Dream before running HDBSCAN', async () => {
-    const callSizes: number[] = []
-    const ctx = {
-        chatluna: {
-            createEmbeddings: async () => ({
-                value: {
-                    embedQuery: async () => [1, 1],
-                    embedDocuments: async () => {
-                        throw new Error('cached vectors should be reused')
-                    }
-                }
-            })
-        },
-        logger: () => ({ warn: () => {} })
-    } as unknown as Context
-    const runHdbscan: DreamHdbscanRunner = (vectors) => {
-        callSizes.push(vectors.length)
-        return {
-            labels: vectors.map(() => 0),
-            probabilities: vectors.map(() => 1)
-        }
-    }
-    const clusterer = new DreamClusterer(
-        ctx,
-        { embeddingModel: 'embedding-model' },
-        { updateEntryEmbeddings: async () => {} },
-        () => {},
-        runHdbscan
-    )
-    const entries = createEntries(351).map((entry, index) => ({
-        ...entry,
-        embedding: [index + 1, 1],
-        embeddingModelId: 'embedding-model',
-        isConsolidated: false
-    }))
-
-    await clusterer.buildClusters(entries)
-
-    assert.deepEqual(
-        [...callSizes].sort((left, right) => left - right),
-        [175, 176]
-    )
-})
-
-it('fails Dream when an entry embedding is invalid', async () => {
-    const entries = createEntries(2)
-    const ctx = {
-        chatluna: {
-            createEmbeddings: async () => ({
-                value: {
-                    embedQuery: async () => [1, 0],
-                    embedDocuments: async () => [[1, 0], []]
-                }
-            })
-        },
-        logger: () => ({ warn: () => {} })
-    } as unknown as Context
-    const clusterer = new DreamClusterer(
-        ctx,
-        { embeddingModel: 'embedding-model' },
-        { updateEntryEmbeddings: async () => {} },
-        () => {}
-    )
-
-    await assert.rejects(
-        clusterer.buildClusters(entries),
-        /memory embedding invalid/u
-    )
 })

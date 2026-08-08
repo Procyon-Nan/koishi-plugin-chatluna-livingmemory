@@ -1,5 +1,5 @@
-import type { MemoryEntryRecord } from '../../../contracts/memory'
 import type {
+    DreamMemoryEntryRecord,
     DreamMemoryRepository,
     DreamMergeMutation
 } from '../../../contracts/workflows'
@@ -27,7 +27,7 @@ type DreamDeleteSourceOperation = Extract<
 
 interface DreamExecutionState {
     stage: DreamStage
-    entryById: Map<string, MemoryEntryRecord>
+    entryById: Map<string, DreamMemoryEntryRecord>
     touchedMemoryIds: Set<string>
     stats: DreamOperationStats
     consolidationMode: DreamConsolidationMode
@@ -132,7 +132,7 @@ export class DreamExecutor {
 
     private operationIdsWithinCluster(
         operation: DreamOperation,
-        entryById: Map<string, MemoryEntryRecord>
+        entryById: Map<string, DreamMemoryEntryRecord>
     ) {
         return getDreamOperationMemoryIds(operation).every((id) =>
             entryById.has(id)
@@ -261,7 +261,7 @@ export class DreamExecutor {
     }
 
     private async archiveMemory(
-        entry: MemoryEntryRecord,
+        entry: DreamMemoryEntryRecord,
         touchedMemoryIds: Set<string>
     ) {
         await this.repository.updateMemoryForDream(

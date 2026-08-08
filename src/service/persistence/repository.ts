@@ -22,6 +22,7 @@ import type {
     MemoryIndexSourceRecord
 } from '../../contracts/vector_index'
 import type {
+    DreamMemoryEntryRecord,
     DreamMergeInput,
     ExtractedMemoryItem,
     ExtractionRepository,
@@ -99,6 +100,12 @@ export class LivingMemoryRepository
 
     listEntriesByPreset(presetId: string): Promise<MemoryEntryRecord[]> {
         return this.entries.listEntriesByPreset(presetId)
+    }
+
+    listDreamEntriesByPreset(
+        presetId: string
+    ): Promise<DreamMemoryEntryRecord[]> {
+        return this.entries.listDreamEntriesByPreset(presetId)
     }
 
     listEntryIndexSourcePage(

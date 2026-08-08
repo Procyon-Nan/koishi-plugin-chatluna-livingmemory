@@ -1,134 +1,165 @@
-import { Context } from 'koishi'
-import type { MemoryEntryRecord } from '../../../contracts/memory'
-import type { LivingMemoryConfig } from '../../../contracts/workflows'
+import type { ManualDreamVectorReader } from '../../../contracts/vector_index'
+import type { DreamMemoryEntryRecord } from '../../../contracts/workflows'
 import {
-    type EmbeddingRepositoryLike,
-    type EmbeddingsLike,
-    ensureEntryEmbeddings
-} from '../../shared/embeddings'
-import { isModelConfigured, summarizeError } from '../../shared/utils'
-import { type DreamHdbscanRunner, runDreamHdbscan } from './hdbscan'
-import { buildManualDreamClustersFromVectors } from './manual_clustering'
-import { partitionDreamEntries } from './partitioning'
-
-type DreamClustererConfig = Pick<LivingMemoryConfig, 'embeddingModel'>
-
-interface EmbeddingContext {
-    embeddings: EmbeddingsLike
-    expectedDimension: number
-}
+    groupEntriesByLabel,
+    readNormalizedVectors,
+    type DreamHdbscanRunner,
+    runDreamHdbscan
+} from './hdbscan'
+import { DREAM_PARTITION_MAX_SIZE, partitionDreamEntries } from './partitioning'
+import type { DreamCluster } from './types'
 
 export class DreamClusterer {
     constructor(
-        private readonly ctx: Context,
-        private readonly config: DreamClustererConfig,
-        private readonly repository: EmbeddingRepositoryLike,
+        private readonly vectorReader: ManualDreamVectorReader,
         private readonly debug: (message: string) => void,
+        private readonly enableTrace: boolean,
         private readonly runHdbscan: DreamHdbscanRunner = runDreamHdbscan
     ) {}
 
-    async buildClusters(entries: MemoryEntryRecord[]) {
+    async buildClusters(
+        presetId: string,
+        entries: DreamMemoryEntryRecord[]
+    ): Promise<DreamCluster[]> {
         if (entries.length < 2) {
             return []
         }
-        const embeddingContext = await this.createEmbeddingContext(entries)
-        const partitions = partitionDreamEntries(entries)
-        const vectorById = new Map<string, number[]>()
 
-        for (const partition of partitions) {
-            const partitionVectors = await this.ensureVectors(
-                partition,
-                embeddingContext
-            )
-            for (const [id, vector] of partitionVectors) {
-                vectorById.set(id, vector)
+        const startedAt = Date.now()
+        const partitions = partitionDreamEntries(entries)
+        const clusters: DreamCluster[] = []
+        const firstPassNoise: DreamMemoryEntryRecord[] = []
+        this.trace(
+            `memory dream partitioning completed: presetId=${presetId} ` +
+                `entries=${entries.length} partitions=${partitions.length}`
+        )
+
+        for (let index = 0; index < partitions.length; index++) {
+            const partition = partitions[index]
+            const labels = await this.clusterEntries(presetId, partition)
+            const groups = groupEntriesByLabel(partition, labels)
+            const noise = groups.get(-1) ?? []
+            firstPassNoise.push(...noise)
+
+            let clusterCount = 0
+            for (const [label, groupedEntries] of groups) {
+                if (label === -1) {
+                    continue
+                }
+                this.appendCluster(
+                    clusters,
+                    `hdbscan:primary:${index + 1}:${label}`,
+                    groupedEntries
+                )
+                clusterCount++
             }
+
+            this.trace(
+                `memory dream partition clustered: presetId=${presetId} ` +
+                    `partition=${index + 1}/${partitions.length} ` +
+                    `entries=${partition.length} clusters=${clusterCount} ` +
+                    `noise=${noise.length}`
+            )
         }
 
-        const clusters = buildManualDreamClustersFromVectors(
-            partitions,
-            vectorById,
-            this.runHdbscan
-        )
-        this.debug(
-            [
-                `memory dream manual clustering: entries=${entries.length}`,
-                `partitions=${partitions.length}`,
-                `clusters=${clusters.length}`
-            ].join(' ')
+        await this.appendNoiseClusters(presetId, firstPassNoise, clusters)
+        this.trace(
+            `memory dream clustering completed: presetId=${presetId} ` +
+                `entries=${entries.length} clusters=${clusters.length} ` +
+                `elapsedMs=${Date.now() - startedAt}`
         )
         return clusters
     }
 
-    private async createEmbeddingContext(
-        entries: readonly MemoryEntryRecord[]
-    ): Promise<EmbeddingContext> {
-        if (!isModelConfigured(this.config.embeddingModel)) {
-            throw new Error('dream embedding model is not configured')
+    private async appendNoiseClusters(
+        presetId: string,
+        entries: DreamMemoryEntryRecord[],
+        clusters: DreamCluster[]
+    ) {
+        this.trace(
+            `memory dream global noise collected: presetId=${presetId} ` +
+                `entries=${entries.length}`
+        )
+        if (entries.length === 0) {
+            return
+        }
+        if (entries.length === 1) {
+            this.appendCluster(clusters, 'hdbscan:final-noise', entries)
+            return
         }
 
-        let embeddings
-        try {
-            embeddings = await this.ctx.chatluna.createEmbeddings(
-                this.config.embeddingModel
-            )
-        } catch (error) {
-            throw new Error(
-                `dream embedding model creation failed: ${summarizeError(error)}`
-            )
-        }
-        if (embeddings.value === undefined) {
-            throw new Error('dream embedding model is unavailable')
-        }
-
-        let probeVector: number[]
-        try {
-            probeVector = await embeddings.value.embedQuery(entries[0].content)
-        } catch (error) {
-            throw new Error(
-                `dream embedding dimension probe failed: ${summarizeError(error)}`
-            )
-        }
-        if (
-            !Array.isArray(probeVector) ||
-            probeVector.length === 0 ||
-            probeVector.some((value) => !Number.isFinite(value)) ||
-            probeVector.every((value) => value === 0)
+        this.trace(
+            `memory dream global noise clustering started: ` +
+                `presetId=${presetId} entries=${entries.length}`
+        )
+        const vectors: number[][] = []
+        for (
+            let offset = 0;
+            offset < entries.length;
+            offset += DREAM_PARTITION_MAX_SIZE
         ) {
-            throw new Error(
-                'dream embedding dimension probe returned invalid vector'
+            const batch = entries.slice(
+                offset,
+                offset + DREAM_PARTITION_MAX_SIZE
+            )
+            vectors.push(...(await this.readNormalized(presetId, batch)))
+        }
+        const result = this.runHdbscan(vectors)
+        const groups = groupEntriesByLabel(entries, result.labels)
+        for (const [label, groupedEntries] of groups) {
+            if (label === -1) {
+                continue
+            }
+            this.appendCluster(
+                clusters,
+                `hdbscan:noise:${label}`,
+                groupedEntries
             )
         }
-
-        return {
-            embeddings: embeddings.value,
-            expectedDimension: probeVector.length
+        const finalNoise = groups.get(-1)
+        if (finalNoise !== undefined) {
+            this.appendCluster(clusters, 'hdbscan:final-noise', finalNoise)
         }
+        this.trace(
+            `memory dream global noise clustering completed: ` +
+                `presetId=${presetId} entries=${entries.length}`
+        )
     }
 
-    private async ensureVectors(
-        entries: MemoryEntryRecord[],
-        context: EmbeddingContext
+    private async clusterEntries(
+        presetId: string,
+        entries: DreamMemoryEntryRecord[]
     ) {
-        let vectors: Map<string, number[]>
-        try {
-            vectors = await ensureEntryEmbeddings(
-                context.embeddings,
-                this.repository,
-                this.config.embeddingModel,
-                entries,
-                {
-                    debug: (message) => this.debug(message),
-                    expectedDimension: context.expectedDimension,
-                    persistenceFailure: 'throw'
-                }
-            )
-        } catch (error) {
-            throw new Error(
-                `dream embedding generation failed: ${summarizeError(error)}`
-            )
-        }
+        const vectors = await this.readNormalized(presetId, entries)
+        return this.runHdbscan(vectors).labels
+    }
 
-        return vectors
+    private async readNormalized(
+        presetId: string,
+        entries: DreamMemoryEntryRecord[]
+    ) {
+        const vectorById = await this.vectorReader.readVectors(
+            presetId,
+            entries.map((entry) => entry.id)
+        )
+        return readNormalizedVectors(entries, vectorById)
+    }
+
+    private appendCluster(
+        clusters: DreamCluster[],
+        reason: string,
+        entries: DreamMemoryEntryRecord[]
+    ) {
+        clusters.push({
+            id: `cluster-${clusters.length + 1}`,
+            reason,
+            entries
+        })
+    }
+
+    private trace(message: string) {
+        if (this.enableTrace) {
+            this.debug(message)
+        }
     }
 }

@@ -11,6 +11,7 @@ import type {
     MemoryIndexSourceRecord
 } from '../../contracts/vector_index'
 import type {
+    DreamMemoryEntryRecord,
     DreamMergeInput,
     ExtractedMemoryItem,
     ExtractionRepository,
@@ -74,6 +75,29 @@ export class LivingMemoryEntryRepository
         })
 
         return entries.map(normalizeEntryRecord)
+    }
+
+    async listDreamEntriesByPreset(
+        presetId: string
+    ): Promise<DreamMemoryEntryRecord[]> {
+        return await this.ctx.database.get(
+            'living_memory_entry',
+            { presetId },
+            [
+                'id',
+                'presetId',
+                'type',
+                'status',
+                'content',
+                'keywords',
+                'summary',
+                'sentiment',
+                'importance',
+                'isConsolidated',
+                'createdAt',
+                'updatedAt'
+            ]
+        )
     }
 
     async listEntryIndexSourcePage(

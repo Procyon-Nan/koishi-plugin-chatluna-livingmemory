@@ -1,4 +1,4 @@
-import type { MemoryEntryRecord } from '../../../../contracts/memory'
+import type { DreamMemoryEntryRecord } from '../../../../contracts/workflows'
 import type { PartitionState } from './initial'
 import { compareEntryIds, similarityAt } from './similarity'
 
@@ -41,7 +41,7 @@ const updateGainsAfterMove = (
 }
 
 const collectMoveCandidates = (
-    entries: readonly MemoryEntryRecord[],
+    entries: readonly DreamMemoryEntryRecord[],
     state: PartitionState,
     targetSizes: readonly number[],
     smallerSize: number,
@@ -88,7 +88,7 @@ const collectMoveCandidates = (
 }
 
 const applyMoves = (
-    entries: readonly MemoryEntryRecord[],
+    entries: readonly DreamMemoryEntryRecord[],
     similarities: Uint8Array,
     state: PartitionState,
     targetSizes: readonly number[],
@@ -144,7 +144,7 @@ const applyMoves = (
 }
 
 const selectSwapCandidates = (
-    entries: readonly MemoryEntryRecord[],
+    entries: readonly DreamMemoryEntryRecord[],
     degrees: Uint32Array,
     state: PartitionState,
     sourceBatch: number,
@@ -170,7 +170,7 @@ const selectSwapCandidates = (
 }
 
 const collectSwapCandidates = (
-    entries: readonly MemoryEntryRecord[],
+    entries: readonly DreamMemoryEntryRecord[],
     similarities: Uint8Array,
     degrees: Uint32Array,
     state: PartitionState
@@ -262,7 +262,7 @@ const applySwap = (
 }
 
 const applySwaps = (
-    entries: readonly MemoryEntryRecord[],
+    entries: readonly DreamMemoryEntryRecord[],
     similarities: Uint8Array,
     degrees: Uint32Array,
     state: PartitionState,
@@ -309,7 +309,7 @@ const applySwaps = (
 }
 
 export const optimizePartition = (
-    entries: readonly MemoryEntryRecord[],
+    entries: readonly DreamMemoryEntryRecord[],
     similarities: Uint8Array,
     degrees: Uint32Array,
     targetSizes: readonly number[],

@@ -1,10 +1,10 @@
-import type { MemoryEntryRecord } from '../../../contracts/memory'
+import type { DreamMemoryEntryRecord } from '../../../contracts/workflows'
 import type { DreamOperation as SchemaDreamOperation } from '../../prompts/schema'
 
 export interface DreamCluster {
     id: string
     reason: string
-    entries: MemoryEntryRecord[]
+    entries: DreamMemoryEntryRecord[]
 }
 
 export interface DreamOperationStats {

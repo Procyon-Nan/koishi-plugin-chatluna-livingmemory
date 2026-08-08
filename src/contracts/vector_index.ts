@@ -136,7 +136,7 @@ export interface ManualDreamVectorReader {
     readVectors(
         presetId: string,
         memoryIds: string[]
-    ): Promise<Map<string, number[]>>
+    ): Promise<Map<string, Float32Array<ArrayBuffer>>>
 }
 
 export interface MemoryIndexMutationSink {

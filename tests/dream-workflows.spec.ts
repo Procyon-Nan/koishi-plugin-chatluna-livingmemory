@@ -97,7 +97,7 @@ const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
     const entries = [activeEntry, archivedEntry]
     let presetRenderCount = 0
     const repository = {
-        listEntriesByPreset: async () => {
+        listDreamEntriesByPreset: async () => {
             events.push('list-entries')
             return entries
         },
@@ -167,12 +167,15 @@ const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
         ctx,
         {
             mainModel: 'dream-model',
-            embeddingModel: 'embedding-model',
+            debug: false,
             enableUserProfileInjection,
             userProfileMemoryLimit: 20
         },
         repository as unknown as DreamRepository,
         repository as unknown as DreamMemoryRepository,
+        {
+            readVectors: async () => new Map()
+        },
         (message) => debugMessages.push(message)
     )
 
@@ -227,7 +230,7 @@ it('marks a single-memory manual Dream as consolidated', async () => {
     const entry = createMemoryEntry('only-memory')
     const consolidatedIds: string[] = []
     const repository = {
-        listEntriesByPreset: async () => [entry],
+        listDreamEntriesByPreset: async () => [entry],
         setMemoryConsolidation: async (_presetId: string, ids: string[]) => {
             consolidatedIds.push(...ids)
         }
@@ -236,12 +239,15 @@ it('marks a single-memory manual Dream as consolidated', async () => {
         {} as Context,
         {
             mainModel: 'dream-model',
-            embeddingModel: 'embedding-model',
+            debug: false,
             enableUserProfileInjection: false,
             userProfileMemoryLimit: 20
         },
         repository as unknown as DreamRepository,
         repository as unknown as DreamMemoryRepository,
+        {
+            readVectors: async () => new Map()
+        },
         () => {}
     )
 

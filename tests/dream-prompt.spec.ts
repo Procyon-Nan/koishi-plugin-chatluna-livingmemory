@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict'
 import { AIMessage, type BaseMessage } from '@langchain/core/messages'
 import type { Context } from 'koishi'
-import type { MemoryEntryRecord } from '../src/contracts/memory'
-import type { DreamMemoryRepository } from '../src/contracts/workflows'
+import type {
+    DreamMemoryEntryRecord,
+    DreamMemoryRepository
+} from '../src/contracts/workflows'
 import { dreamResultToolName } from '../src/service/prompts/schema'
 import type { DreamRepository } from '../src/service/workflows/dream'
 import { LivingMemoryDreamService } from '../src/service/workflows/dream'
@@ -18,7 +20,10 @@ interface CapturedMessage {
 
 const now = new Date('2026-07-18T12:00:00.000Z')
 const testEmbedding = [1, 0, 0]
-const createMemory = (id: string, content: string): MemoryEntryRecord => ({
+const createMemory = (
+    id: string,
+    content: string
+): DreamMemoryEntryRecord => ({
     id,
     presetId: 'preset-1',
     type: 'fact',
@@ -28,10 +33,6 @@ const createMemory = (id: string, content: string): MemoryEntryRecord => ({
     summary: `张三准备考试 ${id}`,
     sentiment: '关心',
     importance: 0.7,
-    sourceConversationId: 'conversation-1',
-    sourceOrigins: [],
-    embedding: testEmbedding,
-    embeddingModelId: 'test-embedding',
     isConsolidated: false,
     createdAt: now,
     updatedAt: now
@@ -49,13 +50,6 @@ const createDreamHarness = (
     const ctx = {
         chatluna: {
             createChatModel: async () => ({ value: model.model }),
-            createEmbeddings: async () => ({
-                value: {
-                    embedQuery: async () => testEmbedding,
-                    embedDocuments: async (texts: string[]) =>
-                        texts.map(() => testEmbedding)
-                }
-            }),
             preset: {
                 getPreset: () => ({ value: {} })
             },
@@ -66,20 +60,26 @@ const createDreamHarness = (
         logger: () => ({ warn: () => {} })
     } as unknown as Context
     const repository = {
-        listEntriesByPreset: async () => memories,
+        listDreamEntriesByPreset: async () => memories,
         setMemoryConsolidation: async () => {}
     } as unknown as DreamRepository
+    const vectors = {
+        readVectors: async (_presetId: string, memoryIds: string[]) =>
+            new Map(
+                memoryIds.map((id) => [id, new Float32Array(testEmbedding)])
+            )
+    }
     const service = new LivingMemoryDreamService(
         ctx,
         {
             mainModel: 'test-model',
-            embeddingModel: 'test-embedding',
             debug: true,
             enableUserProfileInjection: false,
             userProfileMemoryLimit: 20
         },
         repository,
         repository as unknown as DreamMemoryRepository,
+        vectors,
         (message) => debugMessages.push(message)
     )
 

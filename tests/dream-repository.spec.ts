@@ -150,6 +150,23 @@ it('counts pending memories and selects the earliest stable batch', async () => 
     })
 })
 
+it('reads Dream entries without legacy vectors or source payloads', async () => {
+    await withRepository(async (_ctx, repository) => {
+        const entry = await createMemory(repository, 'memory-a', 'active')
+
+        const records = await repository.listDreamEntriesByPreset(
+            scope.presetId
+        )
+
+        assert.equal(records.length, 1)
+        assert.equal(records[0].id, entry.id)
+        assert.equal(Object.hasOwn(records[0], 'embedding'), false)
+        assert.equal(Object.hasOwn(records[0], 'embeddingModelId'), false)
+        assert.equal(Object.hasOwn(records[0], 'sourceOrigins'), false)
+        assert.equal(Object.hasOwn(records[0], 'sourceConversationId'), false)
+    })
+})
+
 it('atomically updates an archived Dream merge and deletes its sources', async () => {
     await withRepository(async (_ctx, repository) => {
         const target = await createMemory(repository, 'target', 'archived')

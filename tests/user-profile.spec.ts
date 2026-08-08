@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict'
 import { AIMessage } from '@langchain/core/messages'
 import type { Context } from 'koishi'
+import type { UserProfileInput } from '../src/contracts/memory'
 import type {
-    MemoryEntryRecord,
-    UserProfileInput
-} from '../src/contracts/memory'
-import type { UserProfileRepository } from '../src/contracts/workflows'
+    DreamMemoryEntryRecord,
+    UserProfileRepository
+} from '../src/contracts/workflows'
 import { characterPresetSuffix } from '../src/service/memory/helpers'
 import { userProfileResultToolName } from '../src/service/prompts/schema'
 import { LivingMemoryUserProfileService } from '../src/service/user_profile'
@@ -15,7 +15,7 @@ import {
 } from './tool-calling-test-utils'
 
 const now = new Date('2026-07-16T00:00:00.000Z')
-const memory: MemoryEntryRecord = {
+const memory: DreamMemoryEntryRecord = {
     id: 'memory-1',
     presetId: 'preset-1',
     type: 'fact',
@@ -25,10 +25,6 @@ const memory: MemoryEntryRecord = {
     summary: '张三正在准备考试',
     sentiment: '关心',
     importance: 0.7,
-    sourceConversationId: 'conversation-1',
-    sourceOrigins: [],
-    embedding: null,
-    embeddingModelId: null,
     isConsolidated: false,
     createdAt: now,
     updatedAt: now

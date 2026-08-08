@@ -1,7 +1,5 @@
-import type {
-    MemoryEntryRecord,
-    UserProfileRecord
-} from '../../contracts/memory'
+import type { UserProfileRecord } from '../../contracts/memory'
+import type { DreamMemoryEntryRecord } from '../../contracts/workflows'
 import { formatMemoryEntryForPrompt } from './memory_entries'
 import {
     escapeXmlText,
@@ -12,7 +10,7 @@ import { USER_PROFILE_OUTPUT_FORMAT, userProfileResultToolName } from './schema'
 
 export interface UserProfilePromptGroup {
     speakerLabel: string
-    entries: MemoryEntryRecord[]
+    entries: DreamMemoryEntryRecord[]
     existingProfile?: UserProfileRecord
 }
 

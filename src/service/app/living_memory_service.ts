@@ -139,6 +139,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             config,
             this.repository,
             this.mutations,
+            this.vectorIndex,
             debug
         )
         const incrementalDream = new LivingMemoryIncrementalDreamService(

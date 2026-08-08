@@ -207,15 +207,23 @@ export class LivingMemoryVectorIndexService
     async readVectors(
         presetId: string,
         memoryIds: string[]
-    ): Promise<Map<string, number[]>> {
+    ): Promise<Map<string, Float32Array<ArrayBuffer>>> {
         await this.awaitPresetReadBarrier(presetId)
         const result = await this.requireWorker().readVectors(
             presetId,
             memoryIds
         )
-        const vectors = new Map<string, number[]>()
+        if (result.missingMemoryIds.length > 0) {
+            throw new LivingMemoryVectorIndexError(
+                'vector-missing',
+                'dirty',
+                `vector index entries are missing: preset=${presetId}, ` +
+                    `memoryIds=${result.missingMemoryIds.join(',')}`
+            )
+        }
+        const vectors = new Map<string, Float32Array<ArrayBuffer>>()
         for (const item of result.vectors) {
-            vectors.set(item.memoryId, [...item.vector])
+            vectors.set(item.memoryId, item.vector)
         }
         return vectors
     }

@@ -2,10 +2,10 @@ import { Context } from 'koishi'
 import type { ChatLunaChatModel } from 'koishi-plugin-chatluna/llm-core/platform/model'
 import type {
     LivingMemoryTranscriptMessage,
-    MemoryEntryRecord,
     UserProfileRecord
 } from '../contracts/memory'
 import type {
+    DreamMemoryEntryRecord,
     LivingMemoryConfig,
     UserProfileRepository
 } from '../contracts/workflows'
@@ -36,7 +36,7 @@ export interface UserProfileGenerationResult {
 interface UserProfileGroup {
     speakerKey: string
     speakerLabel: string
-    entries: MemoryEntryRecord[]
+    entries: DreamMemoryEntryRecord[]
     matchedEntryCount: number
     existingProfile?: UserProfileRecord
 }
@@ -98,7 +98,7 @@ export class LivingMemoryUserProfileService {
 
     async regenerate(
         presetId: string,
-        activeEntries: MemoryEntryRecord[],
+        activeEntries: DreamMemoryEntryRecord[],
         model: ChatLunaChatModel
     ): Promise<UserProfileGenerationResult> {
         if (!this.config.enableUserProfileInjection) {
@@ -306,7 +306,7 @@ export class LivingMemoryUserProfileService {
     }
 
     private buildGroups(
-        activeEntries: MemoryEntryRecord[],
+        activeEntries: DreamMemoryEntryRecord[],
         speakers: { speakerKey: string; speakerLabel: string }[]
     ): UserProfileGroup[] {
         return speakers
@@ -337,7 +337,7 @@ export class LivingMemoryUserProfileService {
     }
 
     private selectEntriesForSpeaker(
-        entries: MemoryEntryRecord[],
+        entries: DreamMemoryEntryRecord[],
         speakerLabel: string
     ) {
         return entries
@@ -365,7 +365,7 @@ export class LivingMemoryUserProfileService {
     }
 
     private entryMatchesSpeakerKeyword(
-        entry: MemoryEntryRecord,
+        entry: DreamMemoryEntryRecord,
         speakerLabel: string
     ) {
         const needle = normalizeSearchText(speakerLabel)
@@ -384,7 +384,7 @@ export class LivingMemoryUserProfileService {
         return searchable.includes(needle)
     }
 
-    private latestTimestamp(entries: MemoryEntryRecord[]) {
+    private latestTimestamp(entries: DreamMemoryEntryRecord[]) {
         return Math.max(...entries.map((entry) => +entry.updatedAt))
     }
 

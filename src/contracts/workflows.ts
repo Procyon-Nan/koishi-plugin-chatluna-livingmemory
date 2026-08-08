@@ -25,6 +25,21 @@ export interface DreamTriggerResult {
     runningJobId?: string
 }
 
+export interface DreamMemoryEntryRecord {
+    id: string
+    presetId: string
+    type: MemoryEntryType
+    status: MemoryEntryStatus
+    content: string
+    keywords: string[]
+    summary: string | null
+    sentiment: string | null
+    importance: number | null
+    isConsolidated: boolean
+    createdAt: Date
+    updatedAt: Date
+}
+
 export interface DreamMergeMutation {
     type: MemoryEntryType
     status: MemoryEntryStatus

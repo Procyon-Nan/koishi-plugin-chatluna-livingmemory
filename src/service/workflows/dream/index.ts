@@ -1,13 +1,12 @@
 import { Context } from 'koishi'
 import type { ChatLunaChatModel } from 'koishi-plugin-chatluna/llm-core/platform/model'
-import type { MemoryEntryRecord } from '../../../contracts/memory'
+import type { ManualDreamVectorReader } from '../../../contracts/vector_index'
 import type {
+    DreamMemoryEntryRecord,
     DreamMemoryRepository,
     LivingMemoryConfig,
-    RecallRepository,
     UserProfileRepository
 } from '../../../contracts/workflows'
-import type { EmbeddingRepositoryLike } from '../../shared/embeddings'
 import { isModelConfigured, summarizeError } from '../../shared/utils'
 import {
     resolveAssistantLabel,
@@ -30,15 +29,16 @@ export type { DreamRunResult } from './types'
 type LivingMemoryDreamConfig = Pick<
     LivingMemoryConfig,
     | 'mainModel'
-    | 'embeddingModel'
     | 'debug'
     | 'enableUserProfileInjection'
     | 'userProfileMemoryLimit'
 >
 
-export type DreamRepository = Pick<RecallRepository, 'listEntriesByPreset'> &
-    EmbeddingRepositoryLike &
-    UserProfileRepository
+export interface DreamRepository extends UserProfileRepository {
+    listDreamEntriesByPreset(
+        presetId: string
+    ): Promise<DreamMemoryEntryRecord[]>
+}
 
 export class LivingMemoryDreamService {
     private readonly clusterer: DreamClusterer
@@ -50,9 +50,14 @@ export class LivingMemoryDreamService {
         private readonly config: LivingMemoryDreamConfig,
         private readonly repository: DreamRepository,
         private readonly mutations: DreamMemoryRepository,
+        vectors: ManualDreamVectorReader,
         private readonly debug: (message: string) => void
     ) {
-        this.clusterer = new DreamClusterer(ctx, config, repository, debug)
+        this.clusterer = new DreamClusterer(
+            vectors,
+            debug,
+            config.debug
+        )
         this.unitProcessor = new DreamUnitProcessor(
             mutations,
             debug,
@@ -67,7 +72,7 @@ export class LivingMemoryDreamService {
     }
 
     async run(presetId: string): Promise<DreamRunResult> {
-        const entries = await this.repository.listEntriesByPreset(presetId)
+        const entries = await this.repository.listDreamEntriesByPreset(presetId)
         if (entries.length < 2) {
             if (entries.length === 1) {
                 await this.mutations.setMemoryConsolidation(
@@ -114,7 +119,7 @@ export class LivingMemoryDreamService {
             chatModel
         )
         const refreshedEntries =
-            await this.repository.listEntriesByPreset(presetId)
+            await this.repository.listDreamEntriesByPreset(presetId)
         const archivedEntries = refreshedEntries.filter(
             (entry) => entry.status === 'archived'
         )
@@ -163,7 +168,7 @@ export class LivingMemoryDreamService {
 
         try {
             const finalEntries =
-                await this.repository.listEntriesByPreset(presetId)
+                await this.repository.listDreamEntriesByPreset(presetId)
             const result = await this.userProfiles.regenerate(
                 presetId,
                 finalEntries.filter((entry) => entry.status === 'active'),
@@ -190,9 +195,14 @@ export class LivingMemoryDreamService {
         assistantLabel: string,
         presetPrompt: string,
         stage: DreamStage,
-        entries: MemoryEntryRecord[],
+        entries: DreamMemoryEntryRecord[],
         model: ChatLunaChatModel
     ): Promise<DreamStageResult> {
+        this.trace(
+            () =>
+                `memory dream stage started: presetId=${presetId} ` +
+                `stage=${stage} entries=${entries.length}`
+        )
         if (entries.length < 2) {
             if (entries.length === 1) {
                 await this.mutations.setMemoryConsolidation(
@@ -204,7 +214,7 @@ export class LivingMemoryDreamService {
             return createEmptyStageResult(stage, entries.length)
         }
 
-        const clusters = await this.clusterer.buildClusters(entries)
+        const clusters = await this.clusterer.buildClusters(presetId, entries)
         this.trace(() =>
             [
                 `memory dream clusters: presetId=${presetId}`,
