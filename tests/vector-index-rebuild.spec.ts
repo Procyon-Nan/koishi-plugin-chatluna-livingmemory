@@ -12,14 +12,14 @@ import { rebuildVectorIndex } from '../src/service/vector_index/rebuild'
 import { reconcileVectorIndexPreset } from '../src/service/vector_index/reconcile'
 import { LivingMemoryVectorIndexWorkerClient } from '../src/service/vector_index/worker_client'
 import {
-    ensureVectorIndexWorkerBuilt,
+    ensureWorkersBuilt,
     vectorIndexWorkerPath
-} from './vector-index-test-utils'
+} from './worker-test-utils'
 
 const workerPath = vectorIndexWorkerPath
 
 before(async () => {
-    await ensureVectorIndexWorkerBuilt()
+    await ensureWorkersBuilt()
 })
 
 const createSource = (

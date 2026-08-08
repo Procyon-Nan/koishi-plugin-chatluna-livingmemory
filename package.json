@@ -87,8 +87,8 @@
   },
   "scripts": {
     "build:server": "yarn yakumo build",
-    "build:vector-worker": "node scripts/build-vector-index-worker.mjs",
-    "yakumo:after:build": "yarn build:vector-worker",
+    "build:workers": "node scripts/build-workers.mjs",
+    "yakumo:after:build": "yarn build:workers",
     "build:client": "koishi-console build",
     "build": "yarn build:server && yarn build:client",
     "vector-index:smoke": "node scripts/vector-index-native-smoke.mjs",

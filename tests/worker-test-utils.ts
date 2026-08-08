@@ -11,12 +11,18 @@ export const vectorIndexWorkerPath = resolve(
     'vector-index-worker.mjs'
 )
 
+export const dreamHdbscanWorkerPath = resolve(
+    projectRoot,
+    'lib',
+    'dream-hdbscan-worker.mjs'
+)
+
 let workerBuild: Promise<unknown> | null = null
 
-export const ensureVectorIndexWorkerBuilt = () => {
+export const ensureWorkersBuilt = () => {
     if (workerBuild === null) {
         workerBuild = executeFile(process.execPath, [
-            resolve(projectRoot, 'scripts', 'build-vector-index-worker.mjs')
+            resolve(projectRoot, 'scripts', 'build-workers.mjs')
         ])
     }
     return workerBuild

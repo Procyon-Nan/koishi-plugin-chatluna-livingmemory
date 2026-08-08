@@ -17,14 +17,14 @@ import { LivingMemoryVectorIndexOwnershipLock } from '../src/service/vector_inde
 import { LivingMemoryVectorIndexService } from '../src/service/vector_index/service'
 import { LivingMemoryVectorIndexWorkerClient } from '../src/service/vector_index/worker_client'
 import {
-    ensureVectorIndexWorkerBuilt,
+    ensureWorkersBuilt,
     vectorIndexWorkerPath
-} from './vector-index-test-utils'
+} from './worker-test-utils'
 
 const workerPath = vectorIndexWorkerPath
 
 before(async () => {
-    await ensureVectorIndexWorkerBuilt()
+    await ensureWorkersBuilt()
 })
 
 const createSource = (

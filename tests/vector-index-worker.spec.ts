@@ -13,16 +13,16 @@ import type {
     VectorIndexReplaceUpsert
 } from '../src/service/vector_index/worker_protocol'
 import {
-    ensureVectorIndexWorkerBuilt,
+    ensureWorkersBuilt,
     vectorIndexWorkerPath
-} from './vector-index-test-utils'
+} from './worker-test-utils'
 
 const workerPath = vectorIndexWorkerPath
 
 let temporaryDirectory: string
 
 before(async () => {
-    await ensureVectorIndexWorkerBuilt()
+    await ensureWorkersBuilt()
     temporaryDirectory = await mkdtemp(
         resolve(tmpdir(), 'living-memory-vector-worker-test-')
     )
