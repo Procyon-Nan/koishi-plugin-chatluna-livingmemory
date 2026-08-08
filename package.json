@@ -86,8 +86,9 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "build:server": "yarn yakumo build && yarn build:vector-worker",
+    "build:server": "yarn yakumo build",
     "build:vector-worker": "node scripts/build-vector-index-worker.mjs",
+    "yakumo:after:build": "yarn build:vector-worker",
     "build:client": "koishi-console build",
     "build": "yarn build:server && yarn build:client",
     "test": "yarn node ../../node_modules/mocha/bin/mocha -r esbuild-register --exit tests/**/*.spec.ts",
