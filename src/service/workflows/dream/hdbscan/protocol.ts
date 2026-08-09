@@ -1,12 +1,15 @@
 import type { DreamHdbscanMatrix, DreamHdbscanPhase } from './algorithm'
 
-export interface DreamHdbscanWorkerProgress {
-    requestId: number
+export interface DreamHdbscanProgress {
     phase: DreamHdbscanPhase
     completed: number
     total: number
     elapsedMs: number
 }
+
+export type DreamHdbscanProgressHandler = (
+    progress: DreamHdbscanProgress
+) => void
 
 export interface DreamHdbscanWorkerError {
     name: string
@@ -47,7 +50,7 @@ export type DreamHdbscanWorkerResponse =
     | {
           id: number
           type: 'progress'
-          progress: DreamHdbscanWorkerProgress
+          progress: DreamHdbscanProgress
       }
     | {
           id: number
@@ -58,6 +61,6 @@ export type DreamHdbscanWorkerResponse =
 export interface DreamHdbscanRunner {
     run(
         matrix: DreamHdbscanMatrix,
-        reportProgress: boolean
+        onProgress?: DreamHdbscanProgressHandler
     ): Promise<Int32Array<ArrayBuffer>>
 }

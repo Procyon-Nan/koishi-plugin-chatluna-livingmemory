@@ -217,20 +217,10 @@ export class LivingMemoryDreamService {
             return createEmptyStageResult(stage, entries.length)
         }
 
-        const clusters = await this.clusterer.buildClusters(presetId, entries)
-        this.trace(() =>
-            [
-                `memory dream clusters: presetId=${presetId}`,
-                `stage=${stage}`,
-                `entryCount=${entries.length}`,
-                `clusterCount=${clusters.length}`,
-                clusters
-                    .map(
-                        (cluster) =>
-                            `${cluster.id} reason=${cluster.reason} entryCount=${cluster.entries.length}`
-                    )
-                    .join('\n')
-            ].join('\n')
+        const clusters = await this.clusterer.buildClusters(
+            presetId,
+            stage,
+            entries
         )
 
         const stats = createEmptyStats()

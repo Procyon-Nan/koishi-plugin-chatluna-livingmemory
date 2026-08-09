@@ -200,11 +200,12 @@ it('runs one global HDBSCAN pass over all first-pass noise', async () => {
     const partitions = partitionDreamEntries(entries)
     const vectors = createVectorReader(entries)
     const callSizes: number[] = []
+    const debugMessages: string[] = []
     const hdbscan: DreamHdbscanRunner = {
-        run: async (input, reportProgress) => {
+        run: async (input, onProgress) => {
             assert.equal(input.dimension, 2)
             assert.equal(input.vectors.length, input.entryCount * 2)
-            assert.equal(reportProgress, false)
+            assert.equal(typeof onProgress, 'function')
             callSizes.push(input.entryCount)
             if (callSizes.length <= partitions.length) {
                 return Int32Array.from(
@@ -212,6 +213,12 @@ it('runs one global HDBSCAN pass over all first-pass noise', async () => {
                     (_, index) => (index === 0 ? 0 : -1)
                 )
             }
+            onProgress?.({
+                phase: 'building-mst',
+                completed: 120,
+                total: 348,
+                elapsedMs: 25
+            })
             return Int32Array.from(
                 { length: input.entryCount },
                 (_, index) => (index < 3 ? 4 : -1)
@@ -220,12 +227,16 @@ it('runs one global HDBSCAN pass over all first-pass noise', async () => {
     }
     const clusterer = new DreamClusterer(
         vectors.reader,
-        () => {},
-        false,
+        (message) => debugMessages.push(message),
+        true,
         hdbscan
     )
 
-    const clusters = await clusterer.buildClusters('preset-1', entries)
+    const clusters = await clusterer.buildClusters(
+        'preset-1',
+        'active',
+        entries
+    )
 
     assert.deepEqual([...callSizes.slice(0, 2)].sort(), [175, 176])
     assert.equal(callSizes[2], 349)
@@ -247,6 +258,38 @@ it('runs one global HDBSCAN pass over all first-pass noise', async () => {
     )
     assert.equal(clusteredIds.length, entries.length)
     assert.equal(new Set(clusteredIds).size, entries.length)
+    assert.ok(
+        debugMessages.includes(
+            'memory dream clustering partitioned: presetId=preset-1 ' +
+                'stage=active entries=351 partitions=2 ' +
+                'partitionSizes=[175,176]'
+        )
+    )
+    assert.ok(
+        debugMessages.some((message) =>
+            message.includes(
+                'stage=active partition=1/2 entries=175 clusters=1 ' +
+                    'clusterSizes=[0:1] noise=174 dimension=2'
+            )
+        )
+    )
+    assert.ok(
+        debugMessages.some((message) =>
+            message.includes(
+                'memory dream clustering global-noise completed: ' +
+                    'presetId=preset-1 stage=active entries=349 ' +
+                    'clusters=1 clusterSizes=[4:3] finalNoise=346 dimension=2'
+            )
+        )
+    )
+    assert.ok(
+        debugMessages.includes(
+            'memory dream clustering progress: presetId=preset-1 ' +
+                'stage=active pass=global-noise entries=349 ' +
+                'phase=building-mst completed=120 total=348 ' +
+                'percent=34 elapsedMs=25'
+        )
+    )
 })
 
 it('reads first-pass partitions and global noise in bounded batches', async () => {
@@ -255,7 +298,8 @@ it('reads first-pass partitions and global noise in bounded batches', async () =
     const vectors = createVectorReader(entries)
     const callSizes: number[] = []
     const hdbscan: DreamHdbscanRunner = {
-        run: async (input) => {
+        run: async (input, onProgress) => {
+            assert.equal(onProgress, undefined)
             callSizes.push(input.entryCount)
             return new Int32Array(input.entryCount).fill(-1)
         }
@@ -267,7 +311,11 @@ it('reads first-pass partitions and global noise in bounded batches', async () =
         hdbscan
     )
 
-    const clusters = await clusterer.buildClusters('preset-1', entries)
+    const clusters = await clusterer.buildClusters(
+        'preset-1',
+        'active',
+        entries
+    )
 
     assert.deepEqual(
         vectors.calls.map((ids) => ids.length),
@@ -291,14 +339,19 @@ it('skips the global noise pass when the first pass has no noise', async () => {
             return new Int32Array(input.entryCount)
         }
     }
+    const debugMessages: string[] = []
     const clusterer = new DreamClusterer(
         vectors.reader,
-        () => {},
-        false,
+        (message) => debugMessages.push(message),
+        true,
         hdbscan
     )
 
-    const clusters = await clusterer.buildClusters('preset-1', entries)
+    const clusters = await clusterer.buildClusters(
+        'preset-1',
+        'active',
+        entries
+    )
 
     assert.deepEqual(
         [...callSizes].sort((left, right) => left - right),
@@ -311,6 +364,50 @@ it('skips the global noise pass when the first pass has no noise', async () => {
         [175, 176]
     )
     assert.equal(clusters.length, 2)
+    assert.ok(
+        debugMessages.includes(
+            'memory dream clustering global-noise completed: ' +
+                'presetId=preset-1 stage=active entries=0 hdbscan=skipped ' +
+                'clusters=0 clusterSizes=[] finalNoise=0'
+        )
+    )
+})
+
+it('logs a single first-pass noise entry without a global HDBSCAN run', async () => {
+    const entries = createEntries(4)
+    const vectors = createVectorReader(entries)
+    const debugMessages: string[] = []
+    let hdbscanCalls = 0
+    const clusterer = new DreamClusterer(
+        vectors.reader,
+        (message) => debugMessages.push(message),
+        true,
+        {
+            run: async () => {
+                hdbscanCalls++
+                return Int32Array.from([0, 0, 0, -1])
+            }
+        }
+    )
+
+    const clusters = await clusterer.buildClusters(
+        'preset-1',
+        'active',
+        entries
+    )
+
+    assert.equal(hdbscanCalls, 1)
+    assert.deepEqual(
+        clusters.map((cluster) => cluster.entries.length),
+        [3, 1]
+    )
+    assert.ok(
+        debugMessages.includes(
+            'memory dream clustering global-noise completed: ' +
+                'presetId=preset-1 stage=active entries=1 hdbscan=skipped ' +
+                'clusters=0 clusterSizes=[] finalNoise=1'
+        )
+    )
 })
 
 it('propagates asynchronous HDBSCAN failures', async () => {
@@ -328,7 +425,7 @@ it('propagates asynchronous HDBSCAN failures', async () => {
     )
 
     await assert.rejects(
-        clusterer.buildClusters('preset-1', entries),
+        clusterer.buildClusters('preset-1', 'active', entries),
         /Dream worker failed/u
     )
 })
@@ -343,20 +440,34 @@ it('enables worker progress and completion logs only for debug tracing', async (
         (message) => debugMessages.push(message),
         true,
         {
-            run: async ({ entryCount }, reportProgress) => {
-                progressFlags.push(reportProgress)
+            run: async ({ entryCount }, onProgress) => {
+                progressFlags.push(onProgress !== undefined)
+                onProgress?.({
+                    phase: 'building-mst',
+                    completed: 2,
+                    total: 3,
+                    elapsedMs: 12
+                })
                 return new Int32Array(entryCount)
             }
         }
     )
 
-    await clusterer.buildClusters('preset-1', entries)
+    await clusterer.buildClusters('preset-1', 'active', entries)
 
     assert.deepEqual(progressFlags, [true])
     assert.ok(
+        debugMessages.includes(
+            'memory dream clustering progress: presetId=preset-1 ' +
+                'stage=active pass=primary partition=1/1 entries=4 ' +
+                'phase=building-mst completed=2 total=3 percent=67 elapsedMs=12'
+        )
+    )
+    assert.ok(
         debugMessages.some((message) =>
             message.includes(
-                'entries=4 dimension=2 mstEdges=3 clusters=1 noise=0'
+                'stage=active partition=1/1 entries=4 clusters=1 ' +
+                    'clusterSizes=[0:4] noise=0 dimension=2'
             )
         )
     )

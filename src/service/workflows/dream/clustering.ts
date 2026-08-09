@@ -1,9 +1,37 @@
 import type { ManualDreamVectorReader } from '../../../contracts/vector_index'
 import type { DreamMemoryEntryRecord } from '../../../contracts/workflows'
 import { groupEntriesByLabel } from './hdbscan/labels'
-import type { DreamHdbscanRunner } from './hdbscan/protocol'
+import type {
+    DreamHdbscanProgress,
+    DreamHdbscanProgressHandler,
+    DreamHdbscanRunner
+} from './hdbscan/protocol'
 import { DREAM_PARTITION_MAX_SIZE, partitionDreamEntries } from './partitioning'
-import type { DreamCluster } from './types'
+import type { DreamCluster, DreamStage } from './types'
+
+type DreamHdbscanPass =
+    | {
+          type: 'primary'
+          partition: number
+          partitionCount: number
+      }
+    | { type: 'global-noise' }
+
+type LabeledEntries = [number, DreamMemoryEntryRecord[]]
+
+const formatSizes = (sizes: number[]) => `[${sizes.join(',')}]`
+
+const formatClusterSizes = (clusters: LabeledEntries[]) =>
+    `[${clusters
+        .map(([label, entries]) => `${label}:${entries.length}`)
+        .join(',')}]`
+
+const formatPass = (pass: DreamHdbscanPass) => {
+    if (pass.type === 'global-noise') {
+        return 'pass=global-noise'
+    }
+    return `pass=primary partition=${pass.partition}/${pass.partitionCount}`
+}
 
 export class DreamClusterer {
     constructor(
@@ -15,6 +43,7 @@ export class DreamClusterer {
 
     async buildClusters(
         presetId: string,
+        stage: DreamStage,
         entries: DreamMemoryEntryRecord[]
     ): Promise<DreamCluster[]> {
         if (entries.length < 2) {
@@ -26,42 +55,62 @@ export class DreamClusterer {
         const clusters: DreamCluster[] = []
         const firstPassNoise: DreamMemoryEntryRecord[] = []
         this.trace(
-            `memory dream partitioning completed: presetId=${presetId} ` +
-                `entries=${entries.length} partitions=${partitions.length}`
+            () =>
+                `memory dream clustering partitioned: presetId=${presetId} ` +
+                `stage=${stage} entries=${entries.length} ` +
+                `partitions=${partitions.length} ` +
+                `partitionSizes=${formatSizes(
+                    partitions.map((partition) => partition.length)
+                )}`
         )
 
         for (let index = 0; index < partitions.length; index++) {
             const partition = partitions[index]
-            const labels = await this.clusterEntries(presetId, partition)
-            const groups = groupEntriesByLabel(partition, labels)
-            const noise = groups.get(-1) ?? []
-            firstPassNoise.push(...noise)
+            const result = await this.clusterEntries(
+                presetId,
+                stage,
+                {
+                    type: 'primary',
+                    partition: index + 1,
+                    partitionCount: partitions.length
+                },
+                partition
+            )
+            firstPassNoise.push(...result.noise)
 
-            let clusterCount = 0
-            for (const [label, groupedEntries] of groups) {
-                if (label === -1) {
-                    continue
-                }
+            for (const [label, groupedEntries] of result.clusters) {
                 this.appendCluster(
                     clusters,
                     `hdbscan:primary:${index + 1}:${label}`,
                     groupedEntries
                 )
-                clusterCount++
             }
 
             this.trace(
-                `memory dream partition clustered: presetId=${presetId} ` +
+                () =>
+                    `memory dream clustering partition completed: ` +
+                    `presetId=${presetId} ` +
+                    `stage=${stage} ` +
                     `partition=${index + 1}/${partitions.length} ` +
-                    `entries=${partition.length} clusters=${clusterCount} ` +
-                    `noise=${noise.length}`
+                    `entries=${partition.length} ` +
+                    `clusters=${result.clusters.length} ` +
+                    `clusterSizes=${formatClusterSizes(result.clusters)} ` +
+                    `noise=${result.noise.length} ` +
+                    `dimension=${result.dimension} elapsedMs=${result.elapsedMs}`
             )
         }
 
-        await this.appendNoiseClusters(presetId, firstPassNoise, clusters)
+        await this.appendNoiseClusters(
+            presetId,
+            stage,
+            firstPassNoise,
+            clusters
+        )
         this.trace(
-            `memory dream clustering completed: presetId=${presetId} ` +
-                `entries=${entries.length} clusters=${clusters.length} ` +
+            () =>
+                `memory dream clustering completed: presetId=${presetId} ` +
+                `stage=${stage} entries=${entries.length} ` +
+                `units=${clusters.length} ` +
                 `elapsedMs=${Date.now() - startedAt}`
         )
         return clusters
@@ -69,49 +118,62 @@ export class DreamClusterer {
 
     private async appendNoiseClusters(
         presetId: string,
+        stage: DreamStage,
         entries: DreamMemoryEntryRecord[],
         clusters: DreamCluster[]
     ) {
-        this.trace(
-            `memory dream global noise collected: presetId=${presetId} ` +
-                `entries=${entries.length}`
-        )
-        if (entries.length === 0) {
-            return
-        }
-        if (entries.length === 1) {
-            this.appendCluster(clusters, 'hdbscan:final-noise', entries)
+        if (entries.length < 2) {
+            if (entries.length === 1) {
+                this.appendCluster(clusters, 'hdbscan:final-noise', entries)
+            }
+            this.trace(
+                () =>
+                    `memory dream clustering global-noise completed: ` +
+                    `presetId=${presetId} stage=${stage} ` +
+                    `entries=${entries.length} hdbscan=skipped ` +
+                    `clusters=0 clusterSizes=[] finalNoise=${entries.length}`
+            )
             return
         }
 
         this.trace(
-            `memory dream global noise clustering started: ` +
-                `presetId=${presetId} entries=${entries.length}`
+            () =>
+                `memory dream clustering global-noise started: ` +
+                `presetId=${presetId} stage=${stage} ` +
+                `entries=${entries.length}`
         )
-        const labels = await this.clusterEntries(presetId, entries)
-        const groups = groupEntriesByLabel(entries, labels)
-        for (const [label, groupedEntries] of groups) {
-            if (label === -1) {
-                continue
-            }
+        const result = await this.clusterEntries(
+            presetId,
+            stage,
+            { type: 'global-noise' },
+            entries
+        )
+        for (const [label, groupedEntries] of result.clusters) {
             this.appendCluster(
                 clusters,
                 `hdbscan:noise:${label}`,
                 groupedEntries
             )
         }
-        const finalNoise = groups.get(-1)
-        if (finalNoise !== undefined) {
-            this.appendCluster(clusters, 'hdbscan:final-noise', finalNoise)
+        if (result.noise.length > 0) {
+            this.appendCluster(clusters, 'hdbscan:final-noise', result.noise)
         }
         this.trace(
-            `memory dream global noise clustering completed: ` +
-                `presetId=${presetId} entries=${entries.length}`
+            () =>
+                `memory dream clustering global-noise completed: ` +
+                `presetId=${presetId} stage=${stage} ` +
+                `entries=${entries.length} ` +
+                `clusters=${result.clusters.length} ` +
+                `clusterSizes=${formatClusterSizes(result.clusters)} ` +
+                `finalNoise=${result.noise.length} ` +
+                `dimension=${result.dimension} elapsedMs=${result.elapsedMs}`
         )
     }
 
     private async clusterEntries(
         presetId: string,
+        stage: DreamStage,
+        pass: DreamHdbscanPass,
         entries: DreamMemoryEntryRecord[]
     ) {
         const startedAt = Date.now()
@@ -140,46 +202,28 @@ export class DreamClusterer {
             this.writeVectors(vectors, dimension, offset, batch, vectorById)
         }
 
+        let onProgress: DreamHdbscanProgressHandler | undefined
+        if (this.enableTrace) {
+            onProgress = (progress) =>
+                this.traceHdbscanProgress(
+                    presetId,
+                    stage,
+                    pass,
+                    entries.length,
+                    progress
+                )
+        }
         const labels = await this.hdbscan.run(
             { entryCount: entries.length, dimension, vectors },
-            this.enableTrace
+            onProgress
         )
-        this.traceHdbscanResult(
-            presetId,
-            entries.length,
+        const groups = groupEntriesByLabel(entries, labels)
+        return {
+            clusters: [...groups].filter(([label]) => label !== -1),
+            noise: groups.get(-1) ?? [],
             dimension,
-            labels,
-            startedAt
-        )
-        return labels
-    }
-
-    private traceHdbscanResult(
-        presetId: string,
-        entryCount: number,
-        dimension: number,
-        labels: Int32Array<ArrayBuffer>,
-        startedAt: number
-    ) {
-        if (!this.enableTrace) {
-            return
+            elapsedMs: Date.now() - startedAt
         }
-        const clusterLabels = new Set<number>()
-        let noiseCount = 0
-        for (const label of labels) {
-            if (label === -1) {
-                noiseCount++
-            } else {
-                clusterLabels.add(label)
-            }
-        }
-        this.debug(
-            `memory dream hdbscan completed: presetId=${presetId} ` +
-                `entries=${entryCount} dimension=${dimension} ` +
-                `mstEdges=${entryCount - 1} ` +
-                `clusters=${clusterLabels.size} noise=${noiseCount} ` +
-                `elapsedMs=${Date.now() - startedAt}`
-        )
     }
 
     private writeVectors(
@@ -206,9 +250,26 @@ export class DreamClusterer {
         })
     }
 
-    private trace(message: string) {
+    private traceHdbscanProgress(
+        presetId: string,
+        stage: DreamStage,
+        pass: DreamHdbscanPass,
+        entryCount: number,
+        progress: DreamHdbscanProgress
+    ) {
+        const percent = Math.round((progress.completed / progress.total) * 100)
+        this.debug(
+            `memory dream clustering progress: presetId=${presetId} ` +
+                `stage=${stage} ${formatPass(pass)} entries=${entryCount} ` +
+                `phase=${progress.phase} completed=${progress.completed} ` +
+                `total=${progress.total} percent=${percent} ` +
+                `elapsedMs=${Math.round(progress.elapsedMs)}`
+        )
+    }
+
+    private trace(buildMessage: () => string) {
         if (this.enableTrace) {
-            this.debug(message)
+            this.debug(buildMessage())
         }
     }
 }

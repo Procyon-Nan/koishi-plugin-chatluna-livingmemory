@@ -44,7 +44,6 @@ const run = (
                 id,
                 type: 'progress',
                 progress: {
-                    requestId: id,
                     phase,
                     completed,
                     total,

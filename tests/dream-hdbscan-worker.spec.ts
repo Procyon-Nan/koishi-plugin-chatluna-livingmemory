@@ -6,7 +6,7 @@ import {
     type DreamHdbscanMatrix
 } from '../src/service/workflows/dream/hdbscan/algorithm'
 import { LivingMemoryDreamHdbscanWorkerClient } from '../src/service/workflows/dream/hdbscan/worker_client'
-import type { DreamHdbscanWorkerProgress } from '../src/service/workflows/dream/hdbscan/protocol'
+import type { DreamHdbscanProgress } from '../src/service/workflows/dream/hdbscan/protocol'
 import {
     dreamHdbscanWorkerPath,
     ensureWorkersBuilt,
@@ -52,7 +52,7 @@ it('starts the Dream worker and transfers vectors and labels', async () => {
         vectors: new Float32Array(matrix.vectors)
     })
 
-    const labels = await client.run(matrix, false)
+    const labels = await client.run(matrix)
 
     assert.equal(matrix.vectors.byteLength, 0)
     assert.deepEqual([...labels], [...expected])
@@ -61,10 +61,9 @@ it('starts the Dream worker and transfers vectors and labels', async () => {
 })
 
 it('reports progress only for requests that enable it', async () => {
-    const progress: DreamHdbscanWorkerProgress[] = []
+    const progress: DreamHdbscanProgress[] = []
     const client = new LivingMemoryDreamHdbscanWorkerClient({
-        workerPath: dreamHdbscanWorkerPath,
-        onProgress: (update) => progress.push(update)
+        workerPath: dreamHdbscanWorkerPath
     })
     await client.start()
     const rows = Array.from({ length: 64 }, (_, index) => [
@@ -73,18 +72,55 @@ it('reports progress only for requests that enable it', async () => {
         1
     ])
 
-    await client.run(createMatrix(rows), false)
+    await client.run(createMatrix(rows))
     assert.deepEqual(progress, [])
 
-    await client.run(createMatrix(rows), true)
+    await client.run(createMatrix(rows), (update) => progress.push(update))
     const phases = progress.map(({ phase }) => phase)
     assert.ok(phases.includes('normalizing'))
     assert.ok(phases.includes('building-mst'))
     assert.ok(phases.includes('building-hierarchy'))
     assert.ok(phases.includes('selecting-clusters'))
-    assert.equal(new Set(progress.map(({ requestId }) => requestId)).size, 1)
     assert.ok(progress.every(({ elapsedMs }) => elapsedMs >= 0))
     assert.ok(progress.length < 40)
+    await client.stop()
+})
+
+it('routes progress to the callback for each concurrent request', async () => {
+    const client = new LivingMemoryDreamHdbscanWorkerClient({
+        workerPath: dreamHdbscanWorkerPath
+    })
+    await client.start()
+    const createRows = (count: number) =>
+        Array.from({ length: count }, (_, index) => [
+            Math.cos(index),
+            Math.sin(index),
+            1
+        ])
+    const firstProgress: DreamHdbscanProgress[] = []
+    const secondProgress: DreamHdbscanProgress[] = []
+
+    await Promise.all([
+        client.run(createMatrix(createRows(48)), (update) =>
+            firstProgress.push(update)
+        ),
+        client.run(createMatrix(createRows(72)), (update) =>
+            secondProgress.push(update)
+        )
+    ])
+
+    assert.ok(firstProgress.length > 0)
+    assert.ok(secondProgress.length > 0)
+    const firstNormalizing = firstProgress.filter(
+        ({ phase }) => phase === 'normalizing'
+    )
+    const secondNormalizing = secondProgress.filter(
+        ({ phase }) => phase === 'normalizing'
+    )
+    assert.ok(firstNormalizing.length > 0)
+    assert.ok(secondNormalizing.length > 0)
+    assert.ok(firstNormalizing.every(({ total }) => total === 48))
+    assert.ok(secondNormalizing.every(({ total }) => total === 72))
     await client.stop()
 })
 
@@ -103,7 +139,7 @@ it('keeps the main event loop responsive during clustering', async () => {
     await client.start()
 
     let completed = false
-    const clustering = client.run(createMatrix(rows), false).then(() => {
+    const clustering = client.run(createMatrix(rows)).then(() => {
         completed = true
     })
     await new Promise((resolve) => setTimeout(resolve, 0))
@@ -120,14 +156,11 @@ it('returns worker algorithm errors to the caller', async () => {
     await client.start()
 
     await assert.rejects(
-        client.run(
-            {
-                entryCount: 3,
-                dimension: 2,
-                vectors: new Float32Array(5)
-            },
-            false
-        ),
+        client.run({
+            entryCount: 3,
+            dimension: 2,
+            vectors: new Float32Array(5)
+        }),
         /matrix shape mismatch/
     )
     await client.stop()
@@ -145,7 +178,7 @@ it('rejects active requests when the worker stops', async () => {
     await client.start()
 
     const rejection = assert.rejects(
-        client.run(createMatrix(rows), false),
+        client.run(createMatrix(rows)),
         /worker stopped/
     )
     await client.stop()
@@ -162,7 +195,7 @@ it('rejects startup and later requests when the worker is unavailable', async ()
         /Cannot find module|cannot find module/
     )
     await assert.rejects(
-        client.run(createMatrix([[1, 0]]), false),
+        client.run(createMatrix([[1, 0]])),
         /Cannot find module|cannot find module/
     )
     await client.stop()

@@ -1,7 +1,6 @@
 import type { HumanMessage } from '@langchain/core/messages'
 import { Context, Logger, Service, Time } from 'koishi'
 import { LivingMemoryDreamService } from '../workflows/dream'
-import type { DreamHdbscanWorkerProgress } from '../workflows/dream/hdbscan/protocol'
 import { LivingMemoryDreamHdbscanWorkerClient } from '../workflows/dream/hdbscan/worker_client'
 import { LivingMemoryIncrementalDreamService } from '../workflows/dream/incremental'
 import { LivingMemoryDreamJobRunner } from '../workflows/dream/job_runner'
@@ -103,7 +102,6 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             this.serviceLogger
         )
         this.dreamHdbscan = new LivingMemoryDreamHdbscanWorkerClient({
-            onProgress: (progress) => this.logDreamHdbscanProgress(progress),
             onFailure: (error) => this.serviceLogger.warn(error)
         })
         this.mutations = new LivingMemoryMutationService(
@@ -269,16 +267,6 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         if (this.config.debug) {
             this.serviceLogger.info(message)
         }
-    }
-
-    private logDreamHdbscanProgress(progress: DreamHdbscanWorkerProgress) {
-        const percent = Math.round((progress.completed / progress.total) * 100)
-        this.debug(
-            `memory dream hdbscan progress: requestId=${progress.requestId} ` +
-                `phase=${progress.phase} completed=${progress.completed} ` +
-                `total=${progress.total} percent=${percent} ` +
-                `elapsedMs=${Math.round(progress.elapsedMs)}`
-        )
     }
 
     private queueAutoDreamIfThresholdReached(presetId: string) {
