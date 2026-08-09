@@ -124,6 +124,8 @@ const normalizeMatrix = (input: DreamHdbscanMatrix): NormalizedMatrix => {
     }
 }
 
+// minSamples 固定为 1，core distance 不会扩大任意点对距离；
+// mutual reachability graph 因此等同于当前的平方欧氏距离完整图。
 const buildNormalizedMst = (
     matrix: NormalizedMatrix,
     report?: DreamHdbscanProgressReporter
@@ -379,9 +381,7 @@ const selectClusters = (entryCount: number, condensed: CondensedEdge[]) => {
         }
     }
 
-    const candidates = [...stability.keys()]
-        .filter((cluster) => cluster !== root)
-        .sort((left, right) => right - left)
+    const candidates = [...stability.keys()].sort((left, right) => right - left)
     const selected = new Set(candidates)
 
     for (const cluster of candidates) {
@@ -448,6 +448,10 @@ const labelSelectedClusters = (
     condensed: CondensedEdge[],
     selected: Set<number>
 ) => {
+    if (selected.size === 1 && selected.has(root)) {
+        return labelSingleRootCluster(entryCount, root, condensed)
+    }
+
     const maximumNode = condensed.reduce(
         (maximum, edge) => Math.max(maximum, edge.parent, edge.child),
         root
@@ -488,6 +492,33 @@ const labelSelectedClusters = (
     for (let entry = 0; entry < entryCount; entry++) {
         const cluster = resolveCluster(entry)
         labels[entry] = labelByCluster.get(cluster) ?? -1
+    }
+    return labels
+}
+
+const labelSingleRootCluster = (
+    entryCount: number,
+    root: number,
+    condensed: CondensedEdge[]
+) => {
+    // 单一 root cluster 只保留在 root 中存活到最高 lambda 的密集核心。
+    const exitLambda = new Float64Array(entryCount)
+    let rootThreshold = 0
+    for (const edge of condensed) {
+        if (edge.parent === root && edge.lambda > rootThreshold) {
+            rootThreshold = edge.lambda
+        }
+        if (edge.child < entryCount) {
+            exitLambda[edge.child] = edge.lambda
+        }
+    }
+
+    const labels = new Int32Array(entryCount)
+    labels.fill(-1)
+    for (let entry = 0; entry < entryCount; entry++) {
+        if (exitLambda[entry] >= rootThreshold) {
+            labels[entry] = 0
+        }
     }
     return labels
 }

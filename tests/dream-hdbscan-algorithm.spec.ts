@@ -197,7 +197,21 @@ it('keeps separated clusters while leaving isolated entries as noise', () => {
     assertValidLabels(labels, rows.length)
 })
 
-it('leaves uniformly dispersed entries as noise', () => {
+it('keeps only the densest core of a single root cluster', () => {
+    const rows = [
+        [1, 0],
+        [0.99, 0.01],
+        [0.98, 0.02],
+        [-1, 0],
+        [0, -1]
+    ]
+    const labels = runDreamHdbscan(createMatrix(rows))
+
+    assert.deepEqual([...labels], [0, 0, -1, -1, -1])
+    assertValidLabels(labels, rows.length)
+})
+
+it('allows one root cluster when all points leave at the same density', () => {
     const rows = [
         [1, 0],
         [0, 1],
@@ -206,7 +220,7 @@ it('leaves uniformly dispersed entries as noise', () => {
     ]
     const labels = runDreamHdbscan(createMatrix(rows))
 
-    assert.deepEqual([...labels], [-1, -1, -1, -1])
+    assert.deepEqual([...labels], [0, 0, 0, 0])
     assertValidLabels(labels, rows.length)
 })
 
