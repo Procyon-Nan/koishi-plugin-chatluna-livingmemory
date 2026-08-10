@@ -42,6 +42,8 @@ const deserializeError = (serialized: VectorIndexWorkerError) => {
     return error
 }
 
+const uniqueBuffers = (buffers: ArrayBuffer[]) => [...new Set(buffers)]
+
 const commandTransferList = (
     command: VectorIndexWorkerCommand
 ): ArrayBuffer[] => {
@@ -50,14 +52,18 @@ const commandTransferList = (
         case 'queryHybrid':
             return [command.vector.buffer]
         case 'applyMutation':
-            return command.upserts.flatMap((upsert) => {
-                if (upsert.vectorAction === 'replace') {
-                    return [upsert.vector.buffer]
-                }
-                return []
-            })
+            return uniqueBuffers(
+                command.upserts.flatMap((upsert) => {
+                    if (upsert.vectorAction === 'replace') {
+                        return [upsert.vector.buffer]
+                    }
+                    return []
+                })
+            )
         case 'appendRebuildBatch':
-            return command.upserts.map((upsert) => upsert.vector.buffer)
+            return uniqueBuffers(
+                command.upserts.map((upsert) => upsert.vector.buffer)
+            )
         default:
             return []
     }
@@ -83,7 +89,7 @@ export class LivingMemoryVectorIndexWorkerClient {
         this.worker.on('message', (response: VectorIndexWorkerResponse) => {
             this.handleResponse(response)
         })
-        this.worker.on('error', (error) => {
+        this.worker.on('error', (error: Error) => {
             this.fail(error)
         })
         this.worker.on('exit', (code) => {
@@ -98,11 +104,11 @@ export class LivingMemoryVectorIndexWorkerClient {
         })
     }
 
-    open(databasePath: string, previousDatabasePath: string) {
+    open(databaseDirectory: string, previousDatabaseDirectory: string) {
         return this.request({
             type: 'open',
-            databasePath,
-            previousDatabasePath
+            databaseDirectory,
+            previousDatabaseDirectory
         })
     }
 
@@ -148,12 +154,12 @@ export class LivingMemoryVectorIndexWorkerClient {
     }
 
     createRebuildFile(
-        databasePath: string,
+        databaseDirectory: string,
         manifest: MemoryVectorIndexManifest
     ) {
         return this.request({
             type: 'createRebuildFile',
-            databasePath,
+            databaseDirectory,
             manifest
         })
     }
@@ -166,10 +172,13 @@ export class LivingMemoryVectorIndexWorkerClient {
         })
     }
 
-    finalizeRebuild(previousDatabasePath: string, expectedCount: number) {
+    finalizeRebuild(
+        previousDatabaseDirectory: string,
+        expectedCount: number
+    ) {
         return this.request({
             type: 'finalizeRebuild',
-            previousDatabasePath,
+            previousDatabaseDirectory,
             expectedCount
         })
     }

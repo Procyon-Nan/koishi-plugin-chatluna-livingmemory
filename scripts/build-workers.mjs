@@ -22,7 +22,7 @@ await build({
     target: 'node22',
     format: 'esm',
     outExtension: { '.js': '.mjs' },
-    external: ['sqlite-vec']
+    external: ['@electric-sql/pglite', '@electric-sql/pglite-pgvector']
 })
 
 for (const outputPath of outputs) {

@@ -5,7 +5,7 @@ import type {
 } from '../../contracts/vector_index'
 
 export interface VectorIndexInspection {
-    sqliteVecVersion: string
+    vectorExtensionVersion: string
     manifest: MemoryVectorIndexManifest | null
     indexedCount: number
     inventory: {
@@ -92,7 +92,10 @@ export interface VectorIndexInventoryPage {
 
 export interface VectorIndexWorkerCommandMap {
     open: {
-        input: { databasePath: string; previousDatabasePath: string }
+        input: {
+            databaseDirectory: string
+            previousDatabaseDirectory: string
+        }
         result: VectorIndexInspection
     }
     inspect: {
@@ -133,7 +136,7 @@ export interface VectorIndexWorkerCommandMap {
     }
     createRebuildFile: {
         input: {
-            databasePath: string
+            databaseDirectory: string
             manifest: MemoryVectorIndexManifest
         }
         result: VectorIndexInspection
@@ -147,7 +150,7 @@ export interface VectorIndexWorkerCommandMap {
     }
     finalizeRebuild: {
         input: {
-            previousDatabasePath: string
+            previousDatabaseDirectory: string
             expectedCount: number
         }
         result: VectorIndexInspection

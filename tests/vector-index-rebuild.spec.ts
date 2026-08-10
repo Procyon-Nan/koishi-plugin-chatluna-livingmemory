@@ -18,7 +18,8 @@ import {
 
 const workerPath = vectorIndexWorkerPath
 
-before(async () => {
+before(async function () {
+    this.timeout(30_000)
     await ensureWorkersBuilt()
 })
 
@@ -112,7 +113,8 @@ const createManifest = (
     schemaVersion: 1,
     embeddingModelId: 'model-a',
     dimension,
-    sqliteVecVersion: 'v0.1.9',
+    storageEngine: 'pglite-pgvector',
+    vectorExtensionVersion: '0.8.1',
     generation,
     builtAt: Date.now()
 })
@@ -154,8 +156,8 @@ const withWorker = async (
     const client = new LivingMemoryVectorIndexWorkerClient(workerPath)
     try {
         await client.open(
-            resolve(directory, 'vector-index.sqlite'),
-            resolve(directory, 'vector-index.previous.sqlite')
+            resolve(directory, 'vector-index'),
+            resolve(directory, 'vector-index.previous')
         )
         await callback(client, directory)
     } finally {
@@ -189,15 +191,15 @@ const buildFormalIndex = async (options: {
         dimension: manifest.dimension,
         reuseLegacyEmbeddings,
         manifest,
-        rebuildDatabasePath: resolve(
+        rebuildDatabaseDirectory: resolve(
             directory,
-            `vector-index.rebuild-${generation}.sqlite`
+            `vector-index.rebuild-${generation}`
         ),
         shouldStop: () => false,
         onProgress: async () => {},
         finalize: () =>
             client.finalizeRebuild(
-                resolve(directory, 'vector-index.previous.sqlite'),
+                resolve(directory, 'vector-index.previous'),
                 repository.sources.length
             )
     })

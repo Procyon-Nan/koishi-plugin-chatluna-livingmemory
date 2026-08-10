@@ -68,7 +68,7 @@ export class LivingMemoryDreamWorkerClient implements DreamWorkerRunner {
         this.worker.on('message', (response: DreamWorkerResponse) => {
             this.handleResponse(response)
         })
-        this.worker.on('error', (error) => {
+        this.worker.on('error', (error: Error) => {
             this.fail(error)
         })
         this.worker.on('exit', (code) => {

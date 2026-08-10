@@ -32,3 +32,5 @@ tmp/
 
 # use yakumo
 yarn.lock
+
+tsconfig.temp.json

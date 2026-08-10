@@ -65,6 +65,9 @@ export class LivingMemoryGetMessagesTool extends StructuredTool {
         }
 
         const livingMemory = this.ctx.get('chatluna_living_memory')
+        if (!livingMemory) {
+            throw new Error('Living Memory service not available')
+        }
         const result = await livingMemory.getMemorySourceMessages(
             presetId,
             input.memoryIds
