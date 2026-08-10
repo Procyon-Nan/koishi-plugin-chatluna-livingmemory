@@ -21,6 +21,7 @@ import type {
     LivingMemoryTranscriptMessage,
     MemoryScope
 } from '../../../contracts/memory'
+import { formatPromptMessagesTrace } from '../../prompts/prompt_format'
 
 type LivingMemoryExtractionConfig = Pick<
     LivingMemoryConfig,
@@ -91,7 +92,7 @@ export class LivingMemoryExtractionCoordinator {
         completedRound: LivingMemoryCompletedRound,
         options: QueueExtractionOptions
     ) {
-        this.debug(
+        this.debug(() =>
             [
                 'queueExtraction completed round:',
                 `conversationId=${scope.conversationId}`,
@@ -102,7 +103,7 @@ export class LivingMemoryExtractionCoordinator {
         )
 
         if (this.config.extractionInterval <= 0) {
-            this.debug(
+            this.debug(() =>
                 [
                     'queueExtraction skipped: auto extraction disabled,',
                     `conversationId=${scope.conversationId}`,
@@ -159,7 +160,7 @@ export class LivingMemoryExtractionCoordinator {
         const latestScope = state.scope
 
         if (this.runningScopeKeys.has(key)) {
-            this.debug(
+            this.debug(() =>
                 [
                     'queueExtraction pending: extraction running,',
                     `conversationId=${latestScope?.conversationId ?? 'unknown'}`,
@@ -170,7 +171,7 @@ export class LivingMemoryExtractionCoordinator {
         }
 
         if (pendingRounds < this.config.extractionInterval) {
-            this.debug(
+            this.debug(() =>
                 [
                     'queueExtraction pending: interval not reached,',
                     `conversationId=${latestScope?.conversationId ?? 'unknown'}`,
@@ -205,7 +206,7 @@ export class LivingMemoryExtractionCoordinator {
         }
         state.triggerRequests.delete(triggerSequence)
 
-        this.debug(
+        this.debug(() =>
             [
                 'queueExtraction accepted:',
                 `conversationId=${request.scope.conversationId}`,
@@ -266,7 +267,7 @@ export class LivingMemoryExtractionCoordinator {
             payload = this.formatter.toExtractionPayload(messages)
             input = payload.input
 
-            this.debug(
+            this.debug(() =>
                 [
                     'runExtraction started:',
                     `conversationId=${scope.conversationId}`,
@@ -284,7 +285,7 @@ export class LivingMemoryExtractionCoordinator {
                 presetPrompt
             })
             if (trace.skippedReason != null) {
-                this.debug(
+                this.debug(() =>
                     [
                         'memory extraction skipped:',
                         `conversationId=${scope.conversationId}`,
@@ -295,15 +296,15 @@ export class LivingMemoryExtractionCoordinator {
             }
 
             if (trace.prompt != null && trace.output != null) {
-                this.debug(
+                this.debug(() =>
                     [
                         'memory extraction llm input:',
                         `conversationId=${scope.conversationId}`,
                         `presetId=${scope.presetId}`,
-                        trace.prompt
+                        formatPromptMessagesTrace(trace.prompt)
                     ].join('\n')
                 )
-                this.debug(
+                this.debug(() =>
                     [
                         'memory extraction llm output:',
                         `conversationId=${scope.conversationId}`,
@@ -326,7 +327,7 @@ export class LivingMemoryExtractionCoordinator {
         // 结果工具在一次纠正重试后仍无法通过校验：持久化失败记录，
         // 使任务列表如实反映“结构化输出失败”而非“抽取 0 条”。
         if (trace.parseError != null) {
-            this.debug(
+            this.debug(() =>
                 [
                     'memory extraction parse failed:',
                     `conversationId=${scope.conversationId}`,
@@ -345,7 +346,7 @@ export class LivingMemoryExtractionCoordinator {
         }
 
         const extracted = trace.extracted
-        this.debug(
+        this.debug(() =>
             [
                 'memory extraction:',
                 `conversationId=${scope.conversationId}`,
@@ -373,7 +374,9 @@ export class LivingMemoryExtractionCoordinator {
             throw error
         }
 
-        this.debug(`runExtraction completed: extracted=${extracted.length}`)
+        this.debug(
+            () => `runExtraction completed: extracted=${extracted.length}`
+        )
         if (extracted.length > 0) {
             this.queueAutoDream(scope.presetId)
         }

@@ -12,7 +12,7 @@ import {
     summarizeError
 } from '../../shared/utils'
 import { buildRecallRewritePrompt } from '../../prompts'
-import { formatPromptMessagesTrace } from '../../prompts/prompt_format'
+import type { PromptMessages } from '../../prompts/prompt_format'
 
 const semanticTextPattern = /[\p{L}\p{N}]/u
 const queryLineTerminatorPattern = /[。！？!?；;，,、：:]$/u
@@ -90,7 +90,7 @@ export interface RecallQueryResult {
     rawInputLength: number
     cleanedQuery: string
     finalQuery: string
-    rewritePrompt: string | null
+    rewritePrompt: PromptMessages | null
     rewriteOutput: string | null
     fallbackReason: RecallQueryFallbackReason | null
     skippedReason: 'empty-cleaned-query' | null
@@ -187,8 +187,6 @@ export class LivingMemoryRecallQueryBuilder {
             currentTranscript,
             historyMessages
         )
-        const rewritePrompt = formatPromptMessagesTrace(rewritePromptMessages)
-
         try {
             const result = await model.value.invoke([
                 new SystemMessage(rewritePromptMessages.systemPrompt),
@@ -202,7 +200,7 @@ export class LivingMemoryRecallQueryBuilder {
                     rawInput,
                     cleanedQuery,
                     fallbackQuery,
-                    rewritePrompt,
+                    rewritePromptMessages,
                     rewriteOutput,
                     'empty-output'
                 )
@@ -213,7 +211,7 @@ export class LivingMemoryRecallQueryBuilder {
                     rawInput,
                     cleanedQuery,
                     fallbackQuery,
-                    rewritePrompt,
+                    rewritePromptMessages,
                     rewriteOutput,
                     'invalid-output'
                 )
@@ -224,7 +222,7 @@ export class LivingMemoryRecallQueryBuilder {
                 rawInputLength: rawInput.length,
                 cleanedQuery,
                 finalQuery: rewrittenQuery,
-                rewritePrompt,
+                rewritePrompt: rewritePromptMessages,
                 rewriteOutput,
                 fallbackReason: null,
                 skippedReason: null,
@@ -235,7 +233,7 @@ export class LivingMemoryRecallQueryBuilder {
                 rawInput,
                 cleanedQuery,
                 fallbackQuery,
-                rewritePrompt,
+                rewritePromptMessages,
                 null,
                 'invoke-failed',
                 summarizeError(error)
@@ -247,7 +245,7 @@ export class LivingMemoryRecallQueryBuilder {
         rawInput: string,
         cleanedQuery: string,
         finalQuery: string,
-        rewritePrompt: string | null,
+        rewritePrompt: PromptMessages | null,
         rewriteOutput: string | null,
         fallbackReason: RecallQueryFallbackReason,
         error: string | null = null

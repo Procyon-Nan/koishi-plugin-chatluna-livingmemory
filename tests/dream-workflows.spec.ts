@@ -550,7 +550,7 @@ it('runs one incremental Dream batch when pending memories reach the threshold',
         { clearByPreset: () => {} },
         new LivingMemoryJobTracker(jobStore),
         logger,
-        (message) => debugMessages.push(message)
+        (buildMessage) => debugMessages.push(buildMessage())
     )
 
     await coordinator.queueAutoIfThresholdReached(scope.presetId)

@@ -9,7 +9,11 @@ import type {
     LivingMemoryConfig,
     UserProfileRepository
 } from '../contracts/workflows'
-import { resolveAssistantLabel, resolvePresetPrompt } from './memory/helpers'
+import {
+    type DebugLogger,
+    resolveAssistantLabel,
+    resolvePresetPrompt
+} from './memory/helpers'
 import {
     buildUserProfilePrompt,
     createUserProfileResultSchema,
@@ -93,7 +97,7 @@ export class LivingMemoryUserProfileService {
         private readonly ctx: Context,
         private readonly config: LivingMemoryUserProfileConfig,
         private readonly repository: UserProfileRepository,
-        private readonly debug: (message: string) => void
+        private readonly debug: DebugLogger
     ) {}
 
     async regenerate(
@@ -157,7 +161,7 @@ export class LivingMemoryUserProfileService {
                 group,
                 maxProfileLength
             })
-            this.debug(
+            this.debug(() =>
                 [
                     `memory user profile llm prompt: presetId=${presetId}`,
                     `speaker=${group.speakerLabel}`,
@@ -189,7 +193,7 @@ export class LivingMemoryUserProfileService {
                 })
             } catch (error) {
                 failed++
-                this.debug(
+                this.debug(() =>
                     [
                         `memory user profile skipped: presetId=${presetId}`,
                         `speaker=${group.speakerLabel}`,
@@ -200,7 +204,7 @@ export class LivingMemoryUserProfileService {
                 continue
             }
 
-            this.debug(
+            this.debug(() =>
                 [
                     `memory user profile llm output: presetId=${presetId}`,
                     `speaker=${group.speakerLabel}`,
@@ -210,7 +214,7 @@ export class LivingMemoryUserProfileService {
 
             if (structuredResult.parseError !== null) {
                 failed++
-                this.debug(
+                this.debug(() =>
                     [
                         `memory user profile skipped: presetId=${presetId}`,
                         `speaker=${group.speakerLabel}`,
@@ -224,7 +228,7 @@ export class LivingMemoryUserProfileService {
             const parsed = parsedProfiles[0]
             if (parsed === undefined) {
                 empty++
-                this.debug(
+                this.debug(() =>
                     [
                         `memory user profile skipped: presetId=${presetId}`,
                         `speaker=${group.speakerLabel}`,
@@ -240,7 +244,7 @@ export class LivingMemoryUserProfileService {
             )
             if (content.length === 0) {
                 empty++
-                this.debug(
+                this.debug(() =>
                     [
                         `memory user profile skipped: presetId=${presetId}`,
                         `speaker=${group.speakerLabel}`,

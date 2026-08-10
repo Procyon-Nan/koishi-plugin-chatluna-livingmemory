@@ -41,7 +41,8 @@ export class LivingMemoryPresetCatalog {
             )
         } catch (error) {
             this.debug(
-                `webui preset list skipped chatluna presets: ${summarizeError(error)}`
+                () =>
+                    `webui preset list skipped chatluna presets: ${summarizeError(error)}`
             )
             return []
         }
@@ -65,7 +66,8 @@ export class LivingMemoryPresetCatalog {
             )
         } catch (error) {
             this.debug(
-                `webui preset list skipped character presets: ${summarizeError(error)}`
+                () =>
+                    `webui preset list skipped character presets: ${summarizeError(error)}`
             )
             return []
         }

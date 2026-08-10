@@ -121,8 +121,9 @@ it('sends persona context as system and escaped transcript as human input', asyn
     assert.ok(systemPrompt.includes('正确 {"memories":[]}'))
     const tools = model.bindings[0]?.['tools'] as { name?: string }[]
     assert.equal(tools[0]?.name, extractionResultToolName)
-    assert.match(trace.prompt ?? '', /^\[system\]/u)
-    assert.match(trace.prompt ?? '', /\n\[human\]\n/u)
+    assert.ok(trace.prompt)
+    assert.ok(trace.prompt.systemPrompt.length > 0)
+    assert.ok(trace.prompt.inputPrompt.length > 0)
     assert.equal(trace.parseError, null)
 })
 

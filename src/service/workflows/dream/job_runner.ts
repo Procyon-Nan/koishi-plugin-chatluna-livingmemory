@@ -77,7 +77,7 @@ export class LivingMemoryDreamJobRunner {
         }
 
         const { result } = outcome
-        this.debug(
+        this.debug(() =>
             [
                 `memory dream finished: jobId=${jobId}`,
                 `presetId=${scope.presetId}`,
@@ -102,7 +102,7 @@ export class LivingMemoryDreamJobRunner {
 
     private clearSnapshotCache(presetId: string, jobId: string) {
         this.snapshotCache.clearByPreset(presetId)
-        this.debug(
+        this.debug(() =>
             [
                 `memory dream cache cleared: jobId=${jobId}`,
                 `presetId=${presetId}`

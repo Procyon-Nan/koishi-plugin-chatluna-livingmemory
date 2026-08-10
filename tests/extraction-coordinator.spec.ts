@@ -124,7 +124,7 @@ const createExtractionCoordinator = (
         extractor,
         options.queueAutoDream ?? (() => {}),
         { warn: (error) => warnings.push(error) },
-        (message) => debugMessages.push(message)
+        (buildMessage) => debugMessages.push(buildMessage())
     )
     return {
         coordinator,

@@ -224,8 +224,8 @@ it('runs one search through AgentRunner and preserves preset-scoped trace data',
         String(harness.boundInvocations[0]?.messages[1]?.content),
         /<agentic_recall_input>/u
     )
-    assert.match(trace.prompt, /^\[system\]/u)
-    assert.match(trace.prompt, /\n\[human\]\n/u)
+    assert.ok(trace.prompt.systemPrompt.length > 0)
+    assert.ok(trace.prompt.inputPrompt.length > 0)
     assert.match(
         String(toolMessages(harness.boundInvocations[1])[0]?.content),
         /memory-1/u

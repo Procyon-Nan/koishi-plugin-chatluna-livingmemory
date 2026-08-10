@@ -144,7 +144,10 @@ export const createMemoryEntry = (
 export const createAgenticTrace = (
     finalText: string
 ): LivingMemoryAgenticRecallTrace => ({
-    prompt: 'agentic prompt',
+    prompt: {
+        systemPrompt: 'agentic system prompt',
+        inputPrompt: 'agentic input prompt'
+    },
     finalOutput: finalText.length > 0 ? finalText : '<NO_MEMORY>',
     item: {
         finalText,

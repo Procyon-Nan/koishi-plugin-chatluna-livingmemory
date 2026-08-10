@@ -83,7 +83,7 @@ const agenticRecallPromptTemplate = ChatPromptTemplate.fromMessages([
 ])
 
 export interface LivingMemoryAgenticRecallTrace {
-    prompt: string
+    prompt: AgenticRecallPromptMessages
     finalOutput: string
     item: AgenticMemorySnapshotItem
 }
@@ -341,7 +341,6 @@ export class LivingMemoryAgenticRecallExecutor {
             currentTranscript,
             history
         })
-        const promptTrace = formatPromptMessagesTrace(prompt)
         const agentContext = {
             requestId: [
                 'agentic-recall',
@@ -391,7 +390,7 @@ export class LivingMemoryAgenticRecallExecutor {
                     )
                 }
 
-                this.debug(
+                this.debug(() =>
                     [
                         `memory agentic recall turn: conversationId=${scope.conversationId}`,
                         `presetId=${scope.presetId}`,
@@ -427,11 +426,11 @@ export class LivingMemoryAgenticRecallExecutor {
             }
         })
 
-        this.debug(
+        this.debug(() =>
             [
                 `memory agentic recall prompt: conversationId=${scope.conversationId}`,
                 `presetId=${scope.presetId}`,
-                promptTrace
+                formatPromptMessagesTrace(prompt)
             ].join('\n')
         )
 
@@ -480,7 +479,7 @@ export class LivingMemoryAgenticRecallExecutor {
         }
 
         const trace = this.createTrace(
-            promptTrace,
+            prompt,
             result.output.trim(),
             matchedMemories,
             toolCallSummaries
@@ -490,7 +489,7 @@ export class LivingMemoryAgenticRecallExecutor {
             usedFinalizationCall &&
             trace.finalOutput === agenticRecallNoMemoryOutput
         ) {
-            this.debug(
+            this.debug(() =>
                 [
                     `memory agentic recall exhausted: conversationId=${scope.conversationId}`,
                     `presetId=${scope.presetId}`,
@@ -542,7 +541,7 @@ export class LivingMemoryAgenticRecallExecutor {
     }
 
     private createTrace(
-        prompt: string,
+        prompt: AgenticRecallPromptMessages,
         finalOutput: string,
         matchedMemories: AgenticMemorySnapshotMemoryItem[],
         toolCallSummaries: AgenticMemorySearchToolCallSummary[]

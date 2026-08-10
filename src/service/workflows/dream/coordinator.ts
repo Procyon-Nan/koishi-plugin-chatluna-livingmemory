@@ -52,7 +52,7 @@ export class LivingMemoryDreamCoordinator {
         const threshold = this.config.autoDreamMemoryGrowthThreshold
 
         if (pendingCount < threshold) {
-            this.debug(
+            this.debug(() =>
                 [
                     'memory auto dream skipped:',
                     `presetId=${presetId}`,
@@ -63,7 +63,7 @@ export class LivingMemoryDreamCoordinator {
             return
         }
 
-        this.debug(
+        this.debug(() =>
             [
                 'memory auto dream threshold reached:',
                 `presetId=${presetId}`,
@@ -158,7 +158,8 @@ export class LivingMemoryDreamCoordinator {
         )
         if (recovered.length > 0) {
             this.debug(
-                `memory dream stale jobs recovered: presetId=${presetId}, count=${recovered.length}`
+                () =>
+                    `memory dream stale jobs recovered: presetId=${presetId}, count=${recovered.length}`
             )
         }
     }

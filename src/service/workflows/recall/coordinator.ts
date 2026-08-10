@@ -19,6 +19,7 @@ import type {
     LivingMemoryTranscriptMessage,
     MemoryScope
 } from '../../../contracts/memory'
+import { formatPromptMessagesTrace } from '../../prompts/prompt_format'
 
 type LivingMemoryRecallCoordinatorConfig = Pick<
     LivingMemoryConfig,
@@ -57,7 +58,7 @@ export class LivingMemoryRecallCoordinator {
         if (this.recallLockByConversation.has(lockKey)) {
             // 同一会话同一预设已有召回在跑，本次请求直接丢弃，不做 coalescing。
             // snapshot 由后续请求基于最新历史消息重新触发追上，最多滞后一轮。
-            this.debug(
+            this.debug(() =>
                 [
                     `memory recall skipped: conversationId=${scope.conversationId}`,
                     `presetId=${scope.presetId}`,
@@ -87,7 +88,7 @@ export class LivingMemoryRecallCoordinator {
         try {
             historyMessages = await loadHistoryMessages()
         } catch (error) {
-            this.debug(
+            this.debug(() =>
                 [
                     `memory recall history unavailable: conversationId=${scope.conversationId}`,
                     `presetId=${scope.presetId}`,
@@ -119,7 +120,7 @@ export class LivingMemoryRecallCoordinator {
                 historyMessages
             )
 
-            this.debug(
+            this.debug(() =>
                 [
                     `memory recall query prepared: conversationId=${scope.conversationId}`,
                     `presetId=${scope.presetId}`,
@@ -132,7 +133,7 @@ export class LivingMemoryRecallCoordinator {
             )
 
             if (query.skippedReason != null) {
-                this.debug(
+                this.debug(() =>
                     [
                         `memory recall skipped: conversationId=${scope.conversationId}`,
                         `presetId=${scope.presetId}`,
@@ -143,17 +144,17 @@ export class LivingMemoryRecallCoordinator {
             }
 
             if (query.rewritePrompt != null) {
-                this.debug(
+                this.debug(() =>
                     [
                         `memory recall rewrite input: conversationId=${scope.conversationId}`,
                         `presetId=${scope.presetId}`,
-                        query.rewritePrompt
+                        formatPromptMessagesTrace(query.rewritePrompt)
                     ].join('\n')
                 )
             }
 
             if (query.rewriteOutput != null) {
-                this.debug(
+                this.debug(() =>
                     [
                         `memory recall rewrite output: conversationId=${scope.conversationId}`,
                         `presetId=${scope.presetId}`,
@@ -163,7 +164,7 @@ export class LivingMemoryRecallCoordinator {
             }
 
             if (query.fallbackReason != null) {
-                this.debug(
+                this.debug(() =>
                     [
                         `memory recall rewrite fallback: conversationId=${scope.conversationId}`,
                         `presetId=${scope.presetId}`,
@@ -186,7 +187,7 @@ export class LivingMemoryRecallCoordinator {
                 input,
                 this.config.recallTopK
             )
-            this.debug(
+            this.debug(() =>
                 [
                     `memory recall: conversationId=${scope.conversationId}`,
                     `presetId=${scope.presetId}`,
@@ -237,7 +238,7 @@ export class LivingMemoryRecallCoordinator {
             const matchedCount = trace.item.matchedMemories.length
 
             if (trace.item.finalText.trim().length === 0) {
-                this.debug(
+                this.debug(() =>
                     [
                         `memory agentic recall no memory selected: conversationId=${scope.conversationId}`,
                         `presetId=${scope.presetId}`,

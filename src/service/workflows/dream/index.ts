@@ -70,7 +70,7 @@ export class LivingMemoryDreamService {
             ctx,
             config,
             repository,
-            debug
+            (buildMessage) => this.trace(buildMessage)
         )
     }
 

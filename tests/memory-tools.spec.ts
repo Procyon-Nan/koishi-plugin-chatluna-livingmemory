@@ -14,6 +14,7 @@ import {
     LivingMemorySearchTool
 } from '../src/service/memory/tools/embedding_search_tool'
 import type { LivingMemoryEmbeddingSearchEngine } from '../src/service/workflows/recall/embedding_search_engine'
+import { LivingMemoryToolRuntime } from '../src/service/memory/tools/tool_runtime'
 
 const context = {
     logger: () => ({ info: () => {}, warn: () => {} })
@@ -65,4 +66,22 @@ it('exposes the strict source-message schema and rejects stringified ids', async
     await rejectsStringifiedArray(
         getMessagesTool.invoke({ memoryIds: '["memory-1"]' } as never)
     )
+})
+
+it('does not serialize tool payloads when debug logging is disabled', () => {
+    let serialized = false
+    const runtime = new LivingMemoryToolRuntime({
+        toolName: 'test_tool',
+        logger: context.logger('chatluna-livingmemory'),
+        isDebugEnabled: () => false
+    })
+
+    runtime.logInput(undefined, {
+        toJSON: () => {
+            serialized = true
+            return {}
+        }
+    })
+
+    assert.equal(serialized, false)
 })

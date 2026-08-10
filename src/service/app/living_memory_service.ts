@@ -45,13 +45,13 @@ import { LivingMemoryDreamCoordinator } from '../workflows/dream/coordinator'
 import { LivingMemoryExtractionCoordinator } from '../workflows/extraction/coordinator'
 import { LivingMemoryJobTracker } from '../workflows/job_tracker'
 import { LivingMemoryPresetCatalog } from '../memory/preset_catalog'
+import type { DebugLogger, QueueExtractionOptions } from '../memory/helpers'
 import { LivingMemoryRecallCoordinator } from '../workflows/recall/coordinator'
 import { LivingMemorySnapshotCache } from '../memory/snapshot/snapshot_cache'
 import { LivingMemoryVectorIndexService } from '../vector_index/service'
 import { LivingMemoryMutationService } from './memory_mutation_service'
 import { LivingMemoryAgenticRecallExecutor } from '../workflows/recall/agentic_recall'
 import { LivingMemoryEmbeddingSearchEngine } from '../workflows/recall/embedding_search_engine'
-import type { QueueExtractionOptions } from '../memory/helpers'
 import {
     createLivingMemoryServiceStatus,
     validateLivingMemoryConfig
@@ -93,6 +93,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         super(ctx, 'chatluna_living_memory', true)
         this.serviceLogger = ctx.logger('chatluna-livingmemory')
         const debug = (message: string) => this.debug(message)
+        const trace: DebugLogger = (buildMessage) => this.trace(buildMessage)
 
         this.repository = new LivingMemoryRepository(ctx)
         this.vectorIndex = new LivingMemoryVectorIndexService(
@@ -126,13 +127,13 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             ctx,
             config,
             this.searchEngine,
-            debug
+            trace
         )
         this.userProfiles = new LivingMemoryUserProfileService(
             ctx,
             config,
             this.repository,
-            debug
+            trace
         )
         const dream = new LivingMemoryDreamService(
             ctx,
@@ -159,7 +160,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             incrementalDream,
             this.snapshotCache,
             jobTracker,
-            debug
+            trace
         )
         this.recallCoordinator = new LivingMemoryRecallCoordinator(
             config,
@@ -169,14 +170,14 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             agenticRecall,
             this.snapshotCache,
             this.serviceLogger,
-            debug
+            trace
         )
         this.dreamCoordinator = new LivingMemoryDreamCoordinator(
             config,
             dreamJobRunner,
             this.repository,
             this.serviceLogger,
-            debug
+            trace
         )
         this.extractionCoordinator = new LivingMemoryExtractionCoordinator(
             config,
@@ -186,12 +187,12 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             extractor,
             (presetId) => this.queueAutoDreamIfThresholdReached(presetId),
             this.serviceLogger,
-            debug
+            trace
         )
         this.presetCatalog = new LivingMemoryPresetCatalog(
             ctx,
             this.repository,
-            debug
+            trace
         )
 
         this.repository.defineTables()
@@ -266,6 +267,12 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     private debug(message: string) {
         if (this.config.debug) {
             this.serviceLogger.info(message)
+        }
+    }
+
+    private trace(buildMessage: () => string) {
+        if (this.config.debug) {
+            this.serviceLogger.info(buildMessage())
         }
     }
 

@@ -83,7 +83,7 @@ const createHarness = (
             userProfileMemoryLimit: 20
         },
         repository,
-        (message) => debugMessages.push(message)
+        (buildMessage) => debugMessages.push(buildMessage())
     )
 
     return {

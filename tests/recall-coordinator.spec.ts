@@ -67,6 +67,45 @@ it('completes embedding-rerank recall without persisting a successful job', asyn
     ])
 })
 
+it('does not format recalled memory logs when debug logging is disabled', async () => {
+    let contentRead = false
+    let hydrated = false
+    const coordinator = new LivingMemoryRecallCoordinator(
+        { recallStrategy: 'embedding-rerank', recallTopK: 1 },
+        {
+            createFailedJob: createJobStore().createFailedJob,
+            upsertSnapshot: async () => {}
+        },
+        { resolve: async () => createRecallQueryResult() },
+        {
+            retrieve: async () => [
+                {
+                    id: 'memory-1',
+                    get content() {
+                        contentRead = true
+                        return 'matched content'
+                    },
+                    score: 0.9
+                }
+            ]
+        },
+        { run: async () => createAgenticTrace('unused') },
+        {
+            hydrate: async () => {
+                hydrated = true
+                return ''
+            }
+        },
+        logger,
+        () => {}
+    )
+
+    await coordinator.queue(scope, currentMessage, async () => [])
+    await waitFor(() => hydrated, 'embedding recall hydration')
+
+    assert.equal(contentRead, false)
+})
+
 it('writes an empty embedding snapshot without persisting a job', async () => {
     const jobStore = createJobStore()
     let snapshotItems: MemorySnapshotItem[] | undefined
@@ -141,8 +180,8 @@ it('keeps the previous snapshot without persisting a job for <NO_MEMORY>', async
         { run: async () => createAgenticTrace('') },
         { hydrate: async () => '' },
         logger,
-        (message) => {
-            noMemoryLogged ||= message.includes('no memory selected')
+        (buildMessage) => {
+            noMemoryLogged ||= buildMessage().includes('no memory selected')
         }
     )
 

@@ -7,7 +7,7 @@ import {
     extractionResultToolDescription,
     extractionResultToolName
 } from '../../prompts'
-import { formatPromptMessagesTrace } from '../../prompts/prompt_format'
+import type { PromptMessages } from '../../prompts/prompt_format'
 import {
     normalizeMemoryKeywords,
     normalizeMemoryText
@@ -19,7 +19,7 @@ export type LivingMemoryExtractionSkipReason =
 
 export interface LivingMemoryExtractionTrace {
     extracted: ExtractedMemoryItem[]
-    prompt: string | null
+    prompt: PromptMessages | null
     output: string | null
     skippedReason: LivingMemoryExtractionSkipReason | null
     // 结果工具调用或参数无法通过 Schema 校验时的原因。为 null 表示成功，
@@ -92,7 +92,7 @@ export class LivingMemoryExtractor {
 
         return {
             extracted,
-            prompt: formatPromptMessagesTrace(prompt),
+            prompt,
             output: result.output,
             skippedReason: null,
             parseError: result.parseError

@@ -7,7 +7,7 @@ export interface QueueExtractionOptions {
     resolvePresetPrompt: () => Promise<string>
 }
 
-export type DebugLogger = (message: string) => void
+export type DebugLogger = (buildMessage: () => string) => void
 
 export interface CharacterPresetPromptSource {
     system: {

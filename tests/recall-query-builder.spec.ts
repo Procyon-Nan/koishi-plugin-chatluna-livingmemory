@@ -35,7 +35,7 @@ it('does not recognize [skip] as a recall rewrite control value', async () => {
 
     assert.equal(result.finalQuery, '[skip]')
     assert.equal(result.fallbackReason, null)
-    assert.match(result.rewritePrompt ?? '', /不得输出 \[skip\]/u)
+    assert.match(result.rewritePrompt?.systemPrompt ?? '', /不得输出 \[skip\]/u)
     assert.ok(Array.isArray(capturedInput))
     const messages = capturedInput as {
         content: unknown

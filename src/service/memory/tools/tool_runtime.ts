@@ -30,7 +30,7 @@ export class LivingMemoryToolRuntime {
         configurable: LivingMemoryToolConfigurable | undefined,
         input: unknown
     ) {
-        this.debug(
+        this.debug(() =>
             [
                 `${this.options.toolName} input:`,
                 ...this.logContext(configurable),
@@ -44,7 +44,7 @@ export class LivingMemoryToolRuntime {
         output: string,
         details: string[] = []
     ) {
-        this.debug(
+        this.debug(() =>
             [
                 `${this.options.toolName} output:`,
                 ...this.logContext(configurable),
@@ -64,9 +64,9 @@ export class LivingMemoryToolRuntime {
         ]
     }
 
-    private debug(message: string) {
+    private debug(buildMessage: () => string) {
         if (this.options.isDebugEnabled()) {
-            this.options.logger.info(message)
+            this.options.logger.info(buildMessage())
         }
     }
 }
