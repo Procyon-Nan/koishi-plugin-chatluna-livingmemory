@@ -546,7 +546,9 @@ export class LivingMemoryVectorIndexService
         }
         await this.inspectAfterFailure()
         this.status.markMaintenanceFailure(state, failure.message)
-        this.logger.warn(failure)
+        if (this.workerFailure === null) {
+            this.logger.warn(failure)
+        }
     }
 
     private async inspectAfterFailure() {

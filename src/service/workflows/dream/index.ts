@@ -145,20 +145,6 @@ export class LivingMemoryDreamService {
             profileDetail
         ].join('\n')
 
-        this.debug(
-            [
-                `memory dream execution summary: presetId=${presetId}`,
-                `entries=${entries.length}`,
-                `clusters=${activeResult.clusterCount + archivedResult.clusterCount}`,
-                `kept=${stats.kept}`,
-                `merged=${stats.merged}`,
-                `updated=${stats.updated}`,
-                `archived=${stats.archived}`,
-                `deleted=${stats.deleted}`,
-                `skipped=${stats.skipped}`
-            ].join(' ')
-        )
-
         return {
             entryCount: entries.length,
             clusterCount:

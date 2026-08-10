@@ -211,6 +211,11 @@ it('keeps Dream successful when post-Dream user profile generation fails', async
             message.includes('user profile generation failed after dream')
         )
     )
+    assert.ok(
+        harness.debugMessages.every(
+            (message) => !message.includes('memory dream execution summary')
+        )
+    )
     assert.deepEqual(harness.consolidatedIds, [
         'active-memory',
         'archived-memory'
@@ -270,6 +275,7 @@ it('locks a Dream preset while its job is running', async () => {
     const dreamResult = new Promise<DreamRunResult>((resolve) => {
         resolveDream = resolve
     })
+    const debugMessages: string[] = []
     const coordinator = createDreamCoordinator(
         {
             enableAutoDream: false,
@@ -286,7 +292,7 @@ it('locks a Dream preset while its job is running', async () => {
         { clearByPreset: () => {} },
         new LivingMemoryJobTracker(jobStore),
         logger,
-        debug
+        (buildMessage) => debugMessages.push(buildMessage())
     )
 
     const first = await coordinator.runManual(scope.presetId)
@@ -303,6 +309,12 @@ it('locks a Dream preset while its job is running', async () => {
         'Dream completion'
     )
     assert.equal(dreamCalls, 1)
+    assert.equal(
+        debugMessages.filter((message) =>
+            message.includes('memory dream finished:')
+        ).length,
+        1
+    )
 })
 
 const completeDreamUpdateOperation = (): Extract<

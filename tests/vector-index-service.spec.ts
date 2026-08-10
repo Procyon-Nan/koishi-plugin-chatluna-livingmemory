@@ -474,12 +474,14 @@ it('replaces a corrupt formal database through the rebuild path', async () => {
 it('reports worker startup failure as unavailable', async () => {
     await withTemporaryDirectory(async (baseDir) => {
         const repository = new TestVectorIndexRepository([])
+        const captured = createLogger()
         const service = createService({
             baseDir,
             repository,
             modelId: 'model-a',
             dimension: 3,
-            workerPath: resolve(baseDir, 'missing-worker.mjs')
+            workerPath: resolve(baseDir, 'missing-worker.mjs'),
+            logger: captured.logger
         })
 
         await service.start()
@@ -487,6 +489,7 @@ it('reports worker startup failure as unavailable', async () => {
         const status = service.getStatus()
         assert.equal(status.state, 'unavailable')
         assert.match(status.lastError ?? '', /worker/u)
+        assert.equal(captured.warnings.length, 1)
         await service.stop()
     })
 })
@@ -531,11 +534,13 @@ it('keeps index jobs running until work completes and records failures', async (
         const repository = new TestVectorIndexRepository([
             createSource('memory-a')
         ])
+        const captured = createLogger()
         const service = createService({
             baseDir,
             repository,
             modelId: 'model-a',
             dimension: 3,
+            logger: captured.logger,
             onDocuments: async (texts) => {
                 if (!texts[0].includes('dimension probe')) {
                     throw new Error('injected embedding failure')
@@ -549,6 +554,7 @@ it('keeps index jobs running until work completes and records failures', async (
         assert.match(repository.jobs[0].error ?? '', /embedding failure/u)
         assert.equal(service.getStatus().state, 'unavailable')
         assert.equal(repository.legacyEmbeddingsMigrated, false)
+        assert.equal(captured.warnings.length, 1)
         await service.stop()
     })
 })
