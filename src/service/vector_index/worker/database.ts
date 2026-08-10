@@ -1,4 +1,4 @@
-import BetterSqlite3 from 'better-sqlite3'
+import { DatabaseSync } from 'node:sqlite'
 import { existsSync, mkdirSync, renameSync, unlinkSync } from 'node:fs'
 import { dirname } from 'node:path'
 import * as sqliteVec from 'sqlite-vec'
@@ -52,7 +52,7 @@ interface PresetInventoryRow {
 }
 
 export class LivingMemoryVectorIndexDatabase {
-    private database: BetterSqlite3.Database | null = null
+    private database: DatabaseSync | null = null
     private sqliteVecVersion: string | null = null
     private formalDatabasePath: string | null = null
     private rebuildDatabasePath: string | null = null
@@ -122,7 +122,7 @@ export class LivingMemoryVectorIndexDatabase {
                  FROM lm_index_manifest
                  WHERE singleton = 1`
             )
-            .get() as ManifestRow | undefined
+            .get() as unknown as ManifestRow | undefined
         const presets = database
             .prepare(
                 `SELECT
@@ -135,7 +135,7 @@ export class LivingMemoryVectorIndexDatabase {
                  FROM lm_index_preset_state
                  ORDER BY preset_id ASC`
             )
-            .all() as PresetStateRow[]
+            .all() as unknown as PresetStateRow[]
         const inventory = database
             .prepare(
                 `SELECT
@@ -145,7 +145,7 @@ export class LivingMemoryVectorIndexDatabase {
                  GROUP BY preset_id
                  ORDER BY preset_id ASC`
             )
-            .all() as PresetInventoryRow[]
+            .all() as unknown as PresetInventoryRow[]
         let manifest: MemoryVectorIndexManifest | null = null
         if (manifestRow !== undefined) {
             manifest = manifestRow
@@ -322,11 +322,11 @@ export class LivingMemoryVectorIndexDatabase {
 
     private openConnection(databasePath: string) {
         mkdirSync(dirname(databasePath), { recursive: true })
-        const database = new BetterSqlite3(databasePath)
+        const database = new DatabaseSync(databasePath, { allowExtension: true })
         try {
-            database.pragma('foreign_keys = ON')
-            database.pragma('journal_mode = DELETE')
-            database.pragma('synchronous = NORMAL')
+            database.exec('PRAGMA foreign_keys = ON')
+            database.exec('PRAGMA journal_mode = DELETE')
+            database.exec('PRAGMA synchronous = NORMAL')
             sqliteVec.load(database)
             const versionRow = database
                 .prepare('SELECT vec_version() AS version')

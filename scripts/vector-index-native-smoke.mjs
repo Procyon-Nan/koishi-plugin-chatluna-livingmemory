@@ -5,14 +5,16 @@ import { tmpdir } from 'node:os'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Worker } from 'node:worker_threads'
-import Database from 'better-sqlite3'
+import { DatabaseSync } from 'node:sqlite'
 import * as sqliteVec from 'sqlite-vec'
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const temporaryDirectory = await mkdtemp(
     resolve(tmpdir(), 'living-memory-vector-smoke-')
 )
-const database = new Database(resolve(temporaryDirectory, 'native.sqlite'))
+const database = new DatabaseSync(resolve(temporaryDirectory, 'native.sqlite'), {
+    allowExtension: true
+})
 
 const toBlob = (values) => {
     const vector = new Float32Array(values)

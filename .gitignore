@@ -24,6 +24,11 @@ tmp/
 .codex
 .agents
 .claude/
+.omc/
 
 # codegraph
 .codegraph/
+.yarn/
+
+# use yakumo
+yarn.lock
