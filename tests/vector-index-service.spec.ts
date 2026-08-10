@@ -14,7 +14,10 @@ import type {
     MemoryIndexSourceRecord
 } from '../src/contracts/vector_index'
 import { LivingMemoryVectorIndexOwnershipLock } from '../src/service/vector_index/ownership_lock'
-import { LivingMemoryVectorIndexService } from '../src/service/vector_index/service'
+import {
+    LivingMemoryVectorIndexService,
+    type VectorIndexWorkerFactory
+} from '../src/service/vector_index/service'
 import { LivingMemoryVectorIndexWorkerClient } from '../src/service/vector_index/worker_client'
 import {
     ensureWorkersBuilt,
@@ -179,10 +182,10 @@ const createEmbeddings = (
 
 const createLogger = () => {
     const info: string[] = []
-    const warnings: unknown[] = []
+    const warnings: unknown[][] = []
     const logger = {
         info: (message: unknown) => info.push(String(message)),
-        warn: (message: unknown) => warnings.push(message)
+        warn: (...args: unknown[]) => warnings.push(args)
     } as unknown as Logger
     return { logger, info, warnings }
 }
@@ -197,6 +200,7 @@ const createService = (options: {
     calls?: string[][]
     schemaVersion?: number
     workerPath?: string
+    workerFactory?: VectorIndexWorkerFactory
     onDocuments?: (texts: string[]) => Promise<void>
 }) => {
     const calls = options.calls ?? []
@@ -225,11 +229,13 @@ const createService = (options: {
         logger,
         {
             schemaVersion: options.schemaVersion,
-            workerFactory: (onFailure) =>
-                new LivingMemoryVectorIndexWorkerClient(
-                    options.workerPath ?? workerPath,
-                    onFailure
-                )
+            workerFactory:
+                options.workerFactory ??
+                ((onFailure) =>
+                    new LivingMemoryVectorIndexWorkerClient(
+                        options.workerPath ?? workerPath,
+                        onFailure
+                    ))
         }
     )
 }
@@ -600,6 +606,44 @@ it('logs rebuild batch progress only when debug is enabled', async () => {
             )
         )
         await service.stop()
+    })
+})
+
+it('warns with context when vector worker disposal fails', async () => {
+    await withTemporaryDirectory(async (baseDir) => {
+        const repository = new TestVectorIndexRepository([])
+        const captured = createLogger()
+        const disposeError = new Error('injected worker disposal failure')
+        const service = createService({
+            baseDir,
+            repository,
+            modelId: 'model-a',
+            dimension: 3,
+            logger: captured.logger,
+            workerFactory: (onFailure) => {
+                const worker = new LivingMemoryVectorIndexWorkerClient(
+                    workerPath,
+                    onFailure
+                )
+                const dispose = worker.dispose.bind(worker)
+                worker.dispose = async () => {
+                    await dispose()
+                    throw disposeError
+                }
+                return worker
+            }
+        })
+
+        await service.start()
+        await service.waitForInitialization()
+        await service.stop()
+
+        assert.deepEqual(captured.warnings, [
+            [
+                'memory background operation failed: workflow=vector-index operation=vector-index-worker-dispose',
+                disposeError
+            ]
+        ])
     })
 })
 

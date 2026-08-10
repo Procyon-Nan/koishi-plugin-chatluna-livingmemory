@@ -166,8 +166,13 @@ export class LivingMemoryVectorIndexService
             try {
                 await this.worker.dispose()
             } catch (error) {
-                this.debug(
-                    `vector index worker disposal: ${summarizeError(error)}`
+                this.logger.warn(
+                    [
+                        'memory background operation failed:',
+                        'workflow=vector-index',
+                        'operation=vector-index-worker-dispose'
+                    ].join(' '),
+                    error
                 )
             }
             this.worker = null
