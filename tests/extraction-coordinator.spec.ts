@@ -60,6 +60,7 @@ interface ExtractionCoordinatorOptions {
     extractionInterval?: number
     extractionRounds?: number
     extractWithTrace?: () => Promise<LivingMemoryExtractionTrace>
+    createFailedJob?: ExtractionJobRepository['createFailedJob']
     queueAutoDream?: (presetId: string) => void
     toExtractionPayload?: (
         messages: LivingMemoryTranscriptMessage[]
@@ -78,7 +79,7 @@ const createExtractionCoordinator = (
         extracted: ExtractedMemoryItem[]
     }[] = []
     const debugMessages: string[] = []
-    const warnings: unknown[] = []
+    const warnings: unknown[][] = []
     let extractorCalls = 0
     const formatter = {
         toExtractionPayload:
@@ -101,7 +102,7 @@ const createExtractionCoordinator = (
         }
     }
     const repository: ExtractionJobRepository & ExtractionMemoryWriter = {
-        createFailedJob: jobStore.createFailedJob,
+        createFailedJob: options.createFailedJob ?? jobStore.createFailedJob,
         appendMemories:
             options.appendMemories ??
             (async (entryScope, sourceOriginMessages, extracted) => {
@@ -123,7 +124,7 @@ const createExtractionCoordinator = (
         formatter,
         extractor,
         options.queueAutoDream ?? (() => {}),
-        { warn: (error) => warnings.push(error) },
+        { warn: (...args) => warnings.push(args) },
         (buildMessage) => debugMessages.push(buildMessage())
     )
     return {
@@ -416,6 +417,27 @@ it('persists one failed extraction job when the model throws', async () => {
 
     assert.equal(jobStore.jobs[0]?.input, 'payload')
     assert.match(jobStore.jobs[0]?.error ?? '', /extraction failure/u)
+})
+
+it('logs extraction scope and preserves the original background error', async () => {
+    const backgroundError = new Error('failed to persist extraction failure')
+    const { coordinator, warnings } = createExtractionCoordinator({
+        extractWithTrace: async () => {
+            throw new Error('extraction failure')
+        },
+        createFailedJob: async () => {
+            throw backgroundError
+        }
+    })
+
+    await queueExtraction(coordinator)
+    await waitFor(() => warnings.length === 1, 'extraction background warning')
+
+    assert.match(
+        String(warnings[0]?.[0]),
+        /workflow=extraction operation=run conversationId=conversation-1 presetId=preset-1 triggerSequence=1/u
+    )
+    assert.equal(warnings[0]?.[1], backgroundError)
 })
 
 it('persists one failed extraction job when preset prompt resolution throws', async () => {

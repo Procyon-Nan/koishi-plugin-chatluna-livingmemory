@@ -605,6 +605,38 @@ it('records partial incremental Dream failures in the job detail', async () => {
     assert.equal(jobStore.jobs[0]?.error, 'automatic incremental dream failed')
 })
 
+it('logs Dream job context and preserves the original background error', async () => {
+    const jobStore = createJobStore()
+    const backgroundError = new Error('manual Dream failed')
+    const warnings: unknown[][] = []
+    const coordinator = createDreamCoordinator(
+        {
+            enableAutoDream: false,
+            autoDreamMemoryGrowthThreshold: 3
+        },
+        {
+            run: async () => {
+                throw backgroundError
+            }
+        },
+        incrementalDream,
+        createDreamCoordinatorRepository(jobStore),
+        { clearByPreset: () => {} },
+        new LivingMemoryJobTracker(jobStore),
+        { warn: (...args) => warnings.push(args) },
+        debug
+    )
+
+    await coordinator.runManual(scope.presetId)
+    await waitFor(() => warnings.length === 1, 'Dream background warning')
+
+    assert.match(
+        String(warnings[0]?.[0]),
+        /workflow=dream operation=run-job conversationId=dream:manual:preset-1 presetId=preset-1 jobId=job-1 trigger=manual/u
+    )
+    assert.equal(warnings[0]?.[1], backgroundError)
+})
+
 it('clears snapshot cache only when successful Dream changes memories', async () => {
     const runDream = async (result: DreamRunResult) => {
         const jobStore = createJobStore()

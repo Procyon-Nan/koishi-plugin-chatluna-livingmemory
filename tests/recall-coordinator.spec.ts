@@ -269,6 +269,39 @@ it('persists one failed recall job when query construction throws', async () => 
     assert.match(jobStore.jobs[0]?.error ?? '', /query failure/u)
 })
 
+it('logs recall scope and preserves the original background error', async () => {
+    const backgroundError = new Error('failed to persist recall failure')
+    const warnings: unknown[][] = []
+    const coordinator = new LivingMemoryRecallCoordinator(
+        { recallStrategy: 'embedding-rerank', recallTopK: 3 },
+        {
+            createFailedJob: async () => {
+                throw backgroundError
+            },
+            upsertSnapshot: async () => {}
+        },
+        {
+            resolve: async () => {
+                throw new Error('query failure')
+            }
+        },
+        { retrieve: async () => [] },
+        { run: async () => createAgenticTrace('unused') },
+        { hydrate: async () => '' },
+        { warn: (...args) => warnings.push(args) },
+        debug
+    )
+
+    await coordinator.queue(scope, currentMessage, async () => [])
+    await waitFor(() => warnings.length === 1, 'recall background warning')
+
+    assert.match(
+        String(warnings[0]?.[0]),
+        /workflow=recall operation=run conversationId=conversation-1 presetId=preset-1/u
+    )
+    assert.equal(warnings[0]?.[1], backgroundError)
+})
+
 it('persists one failed recall job when retrieval throws', async () => {
     const jobStore = createJobStore()
     const coordinator = new LivingMemoryRecallCoordinator(

@@ -224,7 +224,16 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                     currentTranscript.message.speakerLabel
                 )
                 .catch((error) => {
-                    logger.warn(error)
+                    logger.warn(
+                        [
+                            'memory background operation failed:',
+                            'workflow=chat',
+                            'operation=record-preset-speaker',
+                            `conversationId=${scope.conversationId}`,
+                            `presetId=${scope.presetId}`
+                        ].join(' '),
+                        error
+                    )
                 })
 
             let historyMessagesPromise: Promise<
@@ -306,7 +315,16 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                         )
                     }
                 } catch (error) {
-                    logger.warn(error)
+                    logger.warn(
+                        [
+                            'memory background operation failed:',
+                            'workflow=chat',
+                            'operation=hydrate-prompt-sections',
+                            `conversationId=${scope.conversationId}`,
+                            `presetId=${scope.presetId}`
+                        ].join(' '),
+                        error
+                    )
                 }
             }
 

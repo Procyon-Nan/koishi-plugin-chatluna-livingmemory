@@ -66,7 +66,16 @@ export class LivingMemoryRecallCoordinator {
 
         this.run(scope, currentMessage, loadHistoryMessages)
             .catch((error) => {
-                this.logger.warn(error)
+                this.logger.warn(
+                    [
+                        'memory background operation failed:',
+                        'workflow=recall',
+                        'operation=run',
+                        `conversationId=${scope.conversationId}`,
+                        `presetId=${scope.presetId}`
+                    ].join(' '),
+                    error
+                )
             })
             .finally(() => {
                 this.recallLockByConversation.delete(lockKey)

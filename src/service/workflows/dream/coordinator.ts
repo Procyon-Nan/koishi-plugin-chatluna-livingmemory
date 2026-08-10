@@ -124,7 +124,18 @@ export class LivingMemoryDreamCoordinator {
             })
             this.runJob(scope, job.id, trigger)
                 .catch((error) => {
-                    this.logger.warn(error)
+                    this.logger.warn(
+                        [
+                            'memory background operation failed:',
+                            'workflow=dream',
+                            'operation=run-job',
+                            `conversationId=${scope.conversationId}`,
+                            `presetId=${scope.presetId}`,
+                            `jobId=${job.id}`,
+                            `trigger=${trigger}`
+                        ].join(' '),
+                        error
+                    )
                 })
                 .finally(() => {
                     this.lockByPreset.delete(presetId)

@@ -245,7 +245,16 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
 
                     return rendered
                 } catch (error) {
-                    logger.warn(error)
+                    logger.warn(
+                        [
+                            'memory background operation failed:',
+                            'workflow=character',
+                            'operation=render-prompt-variable',
+                            `conversationId=${scope.conversationId}`,
+                            `presetId=${scope.presetId}`
+                        ].join(' '),
+                        error
+                    )
                     return ''
                 }
             }
@@ -294,7 +303,16 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                     currentTranscript.message.speakerLabel
                 )
                 .catch((error) => {
-                    logger.warn(error)
+                    logger.warn(
+                        [
+                            'memory background operation failed:',
+                            'workflow=character',
+                            'operation=record-preset-speaker',
+                            `conversationId=${scope.conversationId}`,
+                            `presetId=${scope.presetId}`
+                        ].join(' '),
+                        error
+                    )
                 })
 
             const historyMessages = payload.messages.filter(

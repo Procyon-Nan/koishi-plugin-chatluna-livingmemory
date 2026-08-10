@@ -103,7 +103,15 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             this.serviceLogger
         )
         this.dreamHdbscan = new LivingMemoryDreamHdbscanWorkerClient({
-            onFailure: (error) => this.serviceLogger.warn(error)
+            onFailure: (error) =>
+                this.serviceLogger.warn(
+                    [
+                        'memory background operation failed:',
+                        'workflow=dream',
+                        'operation=hdbscan-worker'
+                    ].join(' '),
+                    error
+                )
         })
         this.mutations = new LivingMemoryMutationService(
             this.repository,
@@ -198,7 +206,15 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         this.repository.defineTables()
         ctx.setInterval(() => {
             this.cleanupStaleJobs().catch((error) => {
-                this.serviceLogger.warn(error)
+                this.serviceLogger.warn(
+                    [
+                        'memory background operation failed:',
+                        'workflow=maintenance',
+                        'operation=cleanup-stale-jobs',
+                        'trigger=scheduled'
+                    ].join(' '),
+                    error
+                )
             })
         }, Time.day)
     }
@@ -223,7 +239,15 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
                 )
             }
         } catch (error) {
-            this.serviceLogger.warn(error)
+            this.serviceLogger.warn(
+                [
+                    'memory background operation failed:',
+                    'workflow=maintenance',
+                    'operation=recover-stale-jobs',
+                    'trigger=startup'
+                ].join(' '),
+                error
+            )
         }
 
         for (const warning of this.validateConfig()) {
@@ -280,7 +304,16 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         this.dreamCoordinator
             .queueAutoIfThresholdReached(presetId)
             .catch((error) => {
-                this.serviceLogger.warn(error)
+                this.serviceLogger.warn(
+                    [
+                        'memory background operation failed:',
+                        'workflow=dream',
+                        'operation=queue-automatic',
+                        `presetId=${presetId}`,
+                        'trigger=memory-threshold'
+                    ].join(' '),
+                    error
+                )
             })
     }
 

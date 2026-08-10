@@ -219,7 +219,17 @@ export class LivingMemoryExtractionCoordinator {
         this.runningScopeKeys.add(key)
         this.run(request.scope, rounds, request.resolvePresetPrompt)
             .catch((error) => {
-                this.logger.warn(error)
+                this.logger.warn(
+                    [
+                        'memory background operation failed:',
+                        'workflow=extraction',
+                        'operation=run',
+                        `conversationId=${request.scope.conversationId}`,
+                        `presetId=${request.scope.presetId}`,
+                        `triggerSequence=${triggerSequence}`
+                    ].join(' '),
+                    error
+                )
             })
             .finally(() => {
                 this.runningScopeKeys.delete(key)
