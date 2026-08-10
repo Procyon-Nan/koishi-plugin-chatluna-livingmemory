@@ -48,7 +48,8 @@ export const defineLivingMemoryTables = (ctx: Context) => {
         },
         {
             autoInc: false,
-            primary: 'id'
+            primary: 'id',
+            indexes: [['presetId', 'isConsolidated', 'createdAt', 'id']]
         }
     )
 

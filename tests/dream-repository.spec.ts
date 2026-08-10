@@ -104,6 +104,24 @@ it('atomically updates an active Dream merge and archives its sources', async ()
     })
 })
 
+it('defines the pending Dream query index', () => {
+    const ctx = new Context({ baseDir: process.cwd() })
+    const repository = new LivingMemoryRepository(ctx)
+    repository.defineTables()
+
+    assert.deepEqual(
+        ctx.model.tables.living_memory_entry.indexes.map((index) => index.keys),
+        [
+            {
+                presetId: 'asc',
+                isConsolidated: 'asc',
+                createdAt: 'asc',
+                id: 'asc'
+            }
+        ]
+    )
+})
+
 it('counts pending memories and selects the earliest stable batch', async () => {
     await withRepository(async (ctx, repository) => {
         const entries = await Promise.all([

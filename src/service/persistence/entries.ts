@@ -234,13 +234,12 @@ export class LivingMemoryEntryRepository
         return entries.map((entry) => entry.presetId).sort()
     }
 
-    async countPendingEntries(presetId: string): Promise<number> {
-        const entries = await this.ctx.database.get(
+    countPendingEntries(presetId: string) {
+        return this.ctx.database.eval(
             'living_memory_entry',
-            { presetId, isConsolidated: false },
-            ['id']
+            (entry) => $.count(entry.id),
+            { presetId, isConsolidated: false }
         )
-        return entries.length
     }
 
     async listPendingEntries(
