@@ -2,7 +2,7 @@ import { performance } from 'node:perf_hooks'
 import { mkdtemp, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
-import Database from 'better-sqlite3'
+import { DatabaseSync } from 'node:sqlite'
 import * as sqliteVec from 'sqlite-vec'
 
 const memoryCount = Number(process.argv[2] ?? 5_000)
@@ -49,10 +49,10 @@ const createMetadata = (index) => {
 }
 
 try {
-    database = new Database(databasePath)
+    database = new DatabaseSync(databasePath, { allowExtension: true })
     sqliteVec.load(database)
-    database.pragma('journal_mode = DELETE')
-    database.pragma('synchronous = NORMAL')
+    database.exec('PRAGMA journal_mode = DELETE')
+    database.exec('PRAGMA synchronous = NORMAL')
     database.exec(`
         CREATE VIRTUAL TABLE benchmark_vectors USING vec0(
             embedding FLOAT[${dimension}] distance_metric=cosine,
@@ -72,7 +72,9 @@ try {
             is_consolidated
         ) VALUES (?, ?, ?, ?, ?, ?)`
     )
-    const insertAll = database.transaction(() => {
+    const buildStartedAt = performance.now()
+    database.exec('BEGIN')
+    try {
         for (let index = 1; index <= memoryCount; index++) {
             const metadata = createMetadata(index)
             insert.run(
@@ -84,10 +86,13 @@ try {
                 BigInt(index % 2)
             )
         }
-    })
-
-    const buildStartedAt = performance.now()
-    insertAll()
+        database.exec('COMMIT')
+    } catch (error) {
+        try {
+            database.exec('ROLLBACK')
+        } catch {}
+        throw error
+    }
     const buildDuration = performance.now() - buildStartedAt
     const query = database.prepare(
         `SELECT rowid, distance
@@ -110,6 +115,7 @@ try {
     const p95Index = Math.ceil(queryDurations.length * 0.95) - 1
     const file = await stat(databasePath)
     database.close()
+    database = undefined
 
     console.log(
         JSON.stringify(
@@ -128,7 +134,7 @@ try {
         )
     )
 } finally {
-    if (database?.open) {
+    if (database !== undefined) {
         database.close()
     }
     await rm(temporaryDirectory, { recursive: true, force: true })

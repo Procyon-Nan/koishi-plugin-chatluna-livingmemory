@@ -37,7 +37,6 @@
   ],
   "dependencies": {
     "@langchain/core": "^0.3.80",
-    "better-sqlite3": "11.10.0",
     "sqlite-vec": "0.1.9",
     "zod": "3.25.76"
   },
@@ -56,7 +55,6 @@
     "@koishijs/client": "^5.30.11",
     "@koishijs/plugin-console": "^5.30.11",
     "@koishijs/plugin-database-sqlite": "^4.7.0",
-    "@types/better-sqlite3": "9.6.0",
     "@typescript-eslint/eslint-plugin": "^7.18.1-alpha.3",
     "@typescript-eslint/parser": "^8.45.1-alpha.0",
     "atsc": "^1.2.2",
@@ -82,7 +80,7 @@
     "koishi-plugin-chatluna": "^1.4.0-alpha.37"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.13.0"
   },
   "scripts": {
     "build:server": "yarn yakumo build",

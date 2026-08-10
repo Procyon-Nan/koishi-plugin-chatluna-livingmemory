@@ -19,10 +19,10 @@ await build({
     outdir: outputDirectory,
     bundle: true,
     platform: 'node',
-    target: 'node18',
+    target: 'node22',
     format: 'esm',
     outExtension: { '.js': '.mjs' },
-    external: ['better-sqlite3', 'sqlite-vec']
+    external: ['sqlite-vec']
 })
 
 for (const outputPath of outputs) {

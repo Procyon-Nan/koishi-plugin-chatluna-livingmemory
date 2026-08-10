@@ -1,4 +1,4 @@
-import type BetterSqlite3 from 'better-sqlite3'
+import type { DatabaseSync, SQLInputValue } from 'node:sqlite'
 import type {
     VectorIndexHybridHit,
     VectorIndexHybridQuery,
@@ -64,7 +64,7 @@ const compareKnnHits = (left: VectorIndexKnnHit, right: VectorIndexKnnHit) => {
 }
 
 const queryKnnForType = (
-    database: BetterSqlite3.Database,
+    database: DatabaseSync,
     query: VectorIndexKnnQuery,
     type: VectorIndexInventoryItem['type'] | null
 ) => {
@@ -74,7 +74,7 @@ const queryKnnForType = (
         'v.preset_id = ?',
         'v.status = ?'
     ]
-    const parameters: unknown[] = [
+    const parameters: SQLInputValue[] = [
         toSqliteVector(query.vector),
         query.limit,
         query.presetId,
@@ -99,11 +99,11 @@ const queryKnnForType = (
              WHERE ${conditions.join(' AND ')}
              ORDER BY v.distance ASC, m.memory_id ASC`
         )
-        .all(...parameters) as KnnRow[]
+        .all(...parameters) as unknown as KnnRow[]
 }
 
 export const queryVectorIndexKnn = (
-    database: BetterSqlite3.Database,
+    database: DatabaseSync,
     query: VectorIndexKnnQuery
 ): VectorIndexKnnHit[] => {
     if (query.types !== null && query.types.length === 0) {
@@ -130,7 +130,7 @@ export const queryVectorIndexKnn = (
 }
 
 const queryKeywordCandidates = (
-    database: BetterSqlite3.Database,
+    database: DatabaseSync,
     query: VectorIndexHybridQuery
 ) => {
     const keywords = normalizeIndexKeywords(query.keywords)
@@ -147,7 +147,7 @@ const queryKeywordCandidates = (
         'm.status = ?',
         `k.keyword IN (${keywordPlaceholders})`
     ]
-    const parameters: unknown[] = [query.presetId, query.status, ...keywords]
+    const parameters: SQLInputValue[] = [query.presetId, query.status, ...keywords]
     if (query.types !== null) {
         const typePlaceholders = query.types.map(() => '?').join(', ')
         conditions.push(`m.type IN (${typePlaceholders})`)
@@ -176,11 +176,11 @@ const queryKeywordCandidates = (
              ) AS matches
              JOIN lm_index_vectors AS v ON v.rowid = matches.rowid`
         )
-        .all(...parameters) as KeywordCandidateRow[]
+        .all(...parameters) as unknown as KeywordCandidateRow[]
 }
 
 export const queryVectorIndexHybrid = (
-    database: BetterSqlite3.Database,
+    database: DatabaseSync,
     query: VectorIndexHybridQuery
 ): VectorIndexHybridHit[] => {
     const semanticHits = queryVectorIndexKnn(database, query)
@@ -246,7 +246,7 @@ export const queryVectorIndexHybrid = (
 }
 
 export const readVectorIndexVectors = (
-    database: BetterSqlite3.Database,
+    database: DatabaseSync,
     presetId: string,
     memoryIds: string[]
 ): VectorIndexReadVectorsResult => {
@@ -265,7 +265,7 @@ export const readVectorIndexVectors = (
              WHERE m.preset_id = ?
                AND m.memory_id IN (${placeholders})`
         )
-        .all(presetId, ...memoryIds) as VectorRow[]
+        .all(presetId, ...memoryIds) as unknown as VectorRow[]
     const vectorsById = new Map(
         rows.map((row) => [row.memoryId, decodeVector(row.embedding)])
     )
@@ -284,7 +284,7 @@ export const readVectorIndexVectors = (
 }
 
 export const readVectorIndexInventoryPage = (
-    database: BetterSqlite3.Database,
+    database: DatabaseSync,
     presetId: string | null,
     afterMemoryId: string | null,
     limit: number
@@ -320,7 +320,7 @@ export const readVectorIndexInventoryPage = (
              ORDER BY memory_id ASC
              LIMIT ?`
         )
-        .all(...parameters, limit + 1) as InventoryRow[]
+        .all(...parameters, limit + 1) as unknown as InventoryRow[]
     const items = rows.slice(0, limit).map(toInventoryItem)
     let nextCursor: string | null = null
     if (rows.length > limit) {
