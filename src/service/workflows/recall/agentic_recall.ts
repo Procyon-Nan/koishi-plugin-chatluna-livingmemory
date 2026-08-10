@@ -40,7 +40,6 @@ import {
     buildAgenticRecallPrompt
 } from '../../prompts'
 import type { AgenticRecallPromptMessages } from '../../prompts'
-import { formatPromptMessagesTrace } from '../../prompts/prompt_format'
 import { isModelConfigured, stringifyModelContent } from '../../shared/utils'
 import type { DebugLogger } from '../../memory/helpers'
 import {
@@ -68,6 +67,16 @@ interface RecordedAgenticSearchCall {
 }
 
 type AgenticRecallDecision = AgentAction | AgentAction[] | AgentFinish
+
+const countDecisionToolCalls = (decision: AgenticRecallDecision) => {
+    if (Array.isArray(decision)) {
+        return decision.length
+    }
+    if ('returnValues' in decision) {
+        return 0
+    }
+    return 1
+}
 
 type AgenticRecallToolAgentInput = ChainValues & {
     steps: AgentStep[]
@@ -244,21 +253,6 @@ const orderRecordedSearchCalls = (
     return ordered
 }
 
-const formatDecisionOutput = (decision: AgenticRecallDecision) => {
-    if (Array.isArray(decision)) {
-        return decision
-            .map((action) => action.log.trim())
-            .filter((value) => value.length > 0)
-            .join('\n')
-    }
-
-    if ('returnValues' in decision) {
-        return toToolOutputText(decision.returnValues['output']).trim()
-    }
-
-    return decision.log.trim()
-}
-
 class RecordingLivingMemorySearchTool extends StructuredTool {
     name = livingMemorySearchToolName
     description = livingMemorySearchToolDescription
@@ -395,18 +389,9 @@ export class LivingMemoryAgenticRecallExecutor {
                         `memory agentic recall turn: conversationId=${scope.conversationId}`,
                         `presetId=${scope.presetId}`,
                         `modelCall=${modelCallCount}`,
-                        `toolCalls=${
-                            Array.isArray(decision)
-                                ? decision.length
-                                : 'returnValues' in decision
-                                  ? 0
-                                  : 1
-                        }`,
-                        'output:',
-                        formatDecisionOutput(decision)
-                    ].join('\n')
+                        `toolCalls=${countDecisionToolCalls(decision)}`
+                    ].join(' ')
                 )
-
                 return decision
             }
         )
@@ -428,12 +413,12 @@ export class LivingMemoryAgenticRecallExecutor {
 
         this.debug(() =>
             [
-                `memory agentic recall prompt: conversationId=${scope.conversationId}`,
+                `memory agentic recall prompt prepared: conversationId=${scope.conversationId}`,
                 `presetId=${scope.presetId}`,
-                formatPromptMessagesTrace(prompt)
-            ].join('\n')
+                `systemPromptLength=${prompt.systemPrompt.length}`,
+                `inputPromptLength=${prompt.inputPrompt.length}`
+            ].join(' ')
         )
-
         const result = await runner.invoke(
             {
                 systemPrompt: prompt.systemPrompt,

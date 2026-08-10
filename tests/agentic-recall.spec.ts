@@ -161,15 +161,17 @@ const createHarness = (options: AgenticRecallHarnessOptions) => {
         },
         logger: () => ({ info: () => {}, warn: () => {} })
     } as unknown as Context
+    const debugMessages: string[] = []
     const executor = new LivingMemoryAgenticRecallExecutor(
         context,
         config,
         mockEngine,
-        () => {}
+        (buildMessage) => debugMessages.push(buildMessage())
     )
 
     return {
         boundInvocations,
+        debugMessages,
         directInvocations,
         searchInvocations,
         run: () => executor.run(testScope, currentMessage, [])
@@ -229,6 +231,13 @@ it('runs one search through AgentRunner and preserves preset-scoped trace data',
     assert.match(
         String(toolMessages(harness.boundInvocations[1])[0]?.content),
         /memory-1/u
+    )
+    assert.ok(
+        harness.debugMessages.every(
+            (message) =>
+                !message.includes('记忆查询') &&
+                !message.includes('我记得一段可靠的往事。')
+        )
     )
 })
 

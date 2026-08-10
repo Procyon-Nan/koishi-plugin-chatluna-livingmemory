@@ -156,11 +156,6 @@ for (const [name, sourceMemoryIds] of invalidSourceMemoryIds) {
         assert.equal(result.generated, 0)
         assert.equal(harness.savedProfiles.length, 0)
         assert.match(result.detail, /failed=1/u)
-        assert.ok(
-            harness.debugMessages.some((message) =>
-                message.includes('sourceMemoryIds')
-            )
-        )
     })
 }
 
@@ -203,6 +198,24 @@ it('passes user profile rules and memory data through tool-calling messages', as
     assert.doesNotMatch(prompt.inputPrompt, /<preset_context>\n无/u)
     assert.match(prompt.inputPrompt, /<memory_entries>/u)
     assert.match(prompt.inputPrompt, /张三正在准备考试/u)
+})
+
+it('keeps user profile payloads out of ordinary debug logs', async () => {
+    const harness = createHarness()
+    await harness.run([
+        createProfileCall({
+            ...baseProfileOutput,
+            sourceMemoryIds: ['memory-1']
+        })
+    ])
+
+    assert.ok(
+        harness.debugMessages.every(
+            (message) =>
+                !message.includes(memory.content) &&
+                !message.includes(baseProfileOutput.content)
+        )
+    )
 })
 
 it('uses the Character preset name as the user profile assistant label', async () => {
@@ -275,11 +288,6 @@ it('accepts a stringified profiles array through bounded normalization', async (
 
     assert.equal(result.generated, 1)
     assert.equal(model.invocations.length, 1)
-    assert.ok(
-        harness.debugMessages.some((message) =>
-            message.includes('decoded stringified JSON array field: profiles')
-        )
-    )
 })
 
 it('retries once after a non-tool response', async () => {
@@ -344,11 +352,6 @@ it('rejects a profile for a different speaker after the correction attempt', asy
     assert.equal(model.invocations.length, 3)
     assert.equal(harness.savedProfiles.length, 0)
     assert.match(result.detail, /failed=1/u)
-    assert.ok(
-        harness.debugMessages.some((message) =>
-            message.includes('profiles.0.speakerLabel')
-        )
-    )
 })
 
 it('preserves brackets inside profile content', async () => {

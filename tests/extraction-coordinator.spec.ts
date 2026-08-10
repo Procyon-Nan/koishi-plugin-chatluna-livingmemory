@@ -364,9 +364,15 @@ it('keeps separate trigger boundaries when multiple intervals arrive in flight',
 })
 
 it('writes extracted memories and queues auto Dream without persisting a job', async () => {
-    const extracted: ExtractedMemoryItem[] = [createExtractedMemory()]
+    const extracted: ExtractedMemoryItem[] = [
+        {
+            ...createExtractedMemory(),
+            content: 'private extracted detail'
+        }
+    ]
     const autoDreamPresets: string[] = []
-    const { coordinator, jobStore, appended } = createExtractionCoordinator({
+    const { coordinator, jobStore, appended, debugMessages } =
+        createExtractionCoordinator({
         trace: createExtractionTrace({ extracted }),
         queueAutoDream: (presetId) => autoDreamPresets.push(presetId)
     })
@@ -377,6 +383,11 @@ it('writes extracted memories and queues auto Dream without persisting a job', a
     assert.equal(jobStore.jobs.length, 0)
     assert.deepEqual(appended[0]?.extracted, extracted)
     assert.deepEqual(autoDreamPresets, [scope.presetId])
+    assert.ok(
+        debugMessages.every(
+            (message) => !message.includes(extracted[0].content)
+        )
+    )
 })
 
 it('persists one failed extraction job when payload construction throws', async () => {

@@ -110,4 +110,4 @@ input: |
 
 `living_memory_get_messages` 用于在当前预设内按记忆 `id` 批量查看来源消息。它只接受 `living_memory_search` 返回的记忆 `id`，每次最多查询 10 条记忆。返回结果包含目标记忆的基本信息、按 `originIndex` 编号的 `sourceOrigins`，以及未找到或不属于当前预设的 `notFoundMemoryIds`。
 
-启用 `debug` 后，插件会输出工具调用输入和工具调用输出，便于排查模型调用流程。
+启用 `debug` 后，插件只输出调用标识符、数量、长度、状态和进度等诊断信息，不记录对话、预设提示词、记忆正文或模型载荷。

@@ -19,7 +19,7 @@ export const getLivingMemoryToolConfigurable = (
 
 interface LivingMemoryToolRuntimeOptions {
     toolName: string
-    logger: Logger
+    logger: Pick<Logger, 'info'>
     isDebugEnabled: () => boolean
 }
 
@@ -34,8 +34,8 @@ export class LivingMemoryToolRuntime {
             [
                 `${this.options.toolName} input:`,
                 ...this.logContext(configurable),
-                JSON.stringify(input, null, 2)
-            ].join('\n')
+                `inputLength=${JSON.stringify(input).length}`
+            ].join(' ')
         )
     }
 
@@ -49,8 +49,8 @@ export class LivingMemoryToolRuntime {
                 `${this.options.toolName} output:`,
                 ...this.logContext(configurable),
                 ...details,
-                output
-            ].join('\n')
+                `outputLength=${output.length}`
+            ].join(' ')
         )
     }
 

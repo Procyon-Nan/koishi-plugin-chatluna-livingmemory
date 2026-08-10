@@ -85,3 +85,18 @@ it('does not serialize tool payloads when debug logging is disabled', () => {
 
     assert.equal(serialized, false)
 })
+
+it('keeps ordinary tool debug logs free of payload content', () => {
+    const messages: string[] = []
+    const runtime = new LivingMemoryToolRuntime({
+        toolName: 'test_tool',
+        logger: { info: (message) => messages.push(String(message)) },
+        isDebugEnabled: () => true
+    })
+
+    runtime.logInput({ preset: 'preset-1' }, { query: 'private conversation' })
+
+    assert.equal(messages.length, 1)
+    assert.match(messages[0], /inputLength=\d+/u)
+    assert.doesNotMatch(messages[0], /private conversation/u)
+})

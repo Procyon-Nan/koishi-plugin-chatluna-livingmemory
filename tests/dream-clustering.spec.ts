@@ -430,7 +430,7 @@ it('propagates asynchronous HDBSCAN failures', async () => {
     )
 })
 
-it('enables worker progress and completion logs only for debug tracing', async () => {
+it('enables worker progress and completion logs only for debug logging', async () => {
     const entries = createEntries(4)
     const vectors = createVectorReader(entries)
     const debugMessages: string[] = []

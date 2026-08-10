@@ -13,13 +13,3 @@ export const escapeXmlText = (value: string) => {
 export const formatXmlBlock = (name: string, value: string) => {
     return [`<${name}>`, escapeXmlText(value), `</${name}>`]
 }
-
-export const formatPromptMessagesTrace = (prompt: PromptMessages) => {
-    return [
-        '[system]',
-        prompt.systemPrompt,
-        '',
-        '[human]',
-        prompt.inputPrompt
-    ].join('\n')
-}

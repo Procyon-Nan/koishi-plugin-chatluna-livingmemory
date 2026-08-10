@@ -20,7 +20,6 @@ import {
     userProfileResultToolDescription,
     userProfileResultToolName
 } from './prompts'
-import { formatPromptMessagesTrace } from './prompts/prompt_format'
 import { summarizeError } from './shared/utils'
 import { invokeStructuredOutput } from './workflows/structured_output'
 
@@ -163,12 +162,12 @@ export class LivingMemoryUserProfileService {
             })
             this.debug(() =>
                 [
-                    `memory user profile llm prompt: presetId=${presetId}`,
+                    `memory user profile llm prompt prepared: presetId=${presetId}`,
                     `speaker=${group.speakerLabel}`,
-                    formatPromptMessagesTrace(prompt)
-                ].join('\n')
+                    `systemPromptLength=${prompt.systemPrompt.length}`,
+                    `inputPromptLength=${prompt.inputPrompt.length}`
+                ].join(' ')
             )
-
             let structuredResult
             try {
                 structuredResult = await invokeStructuredOutput({
@@ -198,7 +197,7 @@ export class LivingMemoryUserProfileService {
                         `memory user profile skipped: presetId=${presetId}`,
                         `speaker=${group.speakerLabel}`,
                         'reason=invoke-failed',
-                        `error=${summarizeError(error)}`
+                        `errorLength=${summarizeError(error).length}`
                     ].join(' ')
                 )
                 continue
@@ -206,19 +205,20 @@ export class LivingMemoryUserProfileService {
 
             this.debug(() =>
                 [
-                    `memory user profile llm output: presetId=${presetId}`,
+                    `memory user profile llm output received: presetId=${presetId}`,
                     `speaker=${group.speakerLabel}`,
-                    structuredResult.output
-                ].join('\n')
+                    `outputLength=${structuredResult.output.length}`
+                ].join(' ')
             )
-
             if (structuredResult.parseError !== null) {
                 failed++
+                const parseError = structuredResult.parseError
                 this.debug(() =>
                     [
                         `memory user profile skipped: presetId=${presetId}`,
                         `speaker=${group.speakerLabel}`,
-                        `reason=structured-output-failed error=${structuredResult.parseError}`
+                        'reason=structured-output-failed',
+                        `errorLength=${parseError.length}`
                     ].join(' ')
                 )
                 continue

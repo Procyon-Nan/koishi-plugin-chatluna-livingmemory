@@ -148,8 +148,15 @@ export class LivingMemoryDreamService {
         this.debug(
             [
                 `memory dream execution summary: presetId=${presetId}`,
-                detail
-            ].join('\n')
+                `entries=${entries.length}`,
+                `clusters=${activeResult.clusterCount + archivedResult.clusterCount}`,
+                `kept=${stats.kept}`,
+                `merged=${stats.merged}`,
+                `updated=${stats.updated}`,
+                `archived=${stats.archived}`,
+                `deleted=${stats.deleted}`,
+                `skipped=${stats.skipped}`
+            ].join(' ')
         )
 
         return {
@@ -186,7 +193,7 @@ export class LivingMemoryDreamService {
             this.debug(
                 [
                     `memory user profile generation failed after dream: presetId=${presetId}`,
-                    `error=${errorSummary}`
+                    `errorLength=${errorSummary.length}`
                 ].join(' ')
             )
             return detail
@@ -242,12 +249,14 @@ export class LivingMemoryDreamService {
                 if (result.skipped === 0) {
                     stats.skipped++
                 }
+                const reason = result.error.split(':', 1)[0]
                 this.debug(
                     [
                         `memory dream cluster skipped: presetId=${presetId}`,
                         `stage=${stage}`,
                         `clusterId=${cluster.id}`,
-                        `reason=${result.error}`
+                        `reason=${reason}`,
+                        `errorLength=${result.error.length}`
                     ].join(' ')
                 )
             }

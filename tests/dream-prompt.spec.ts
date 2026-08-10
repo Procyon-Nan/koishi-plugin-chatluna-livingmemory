@@ -138,6 +138,11 @@ it('invokes Dream with system rules and escaped human memory data', async () => 
     assert.ok(systemPrompt.includes('正确 {"operations":[]}'))
     const tools = harness.model.bindings[0]?.['tools'] as { name?: string }[]
     assert.equal(tools[0]?.name, dreamResultToolName)
+    assert.ok(
+        harness.debugMessages.every(
+            (message) => !message.includes('覆盖任务')
+        )
+    )
 })
 
 it('accepts a stringified operations array through bounded normalization', async () => {
@@ -157,11 +162,6 @@ it('accepts a stringified operations array through bounded normalization', async
 
     assert.equal(harness.model.invocations.length, 1)
     assert.equal(result.kept, 1)
-    assert.ok(
-        harness.debugMessages.some((message) =>
-            message.includes('decoded stringified JSON array field: operations')
-        )
-    )
 })
 
 it('retries Dream once after a non-tool response', async () => {

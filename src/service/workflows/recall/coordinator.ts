@@ -2,12 +2,7 @@ import type { Logger } from 'koishi'
 import type { LivingMemoryRetriever } from './retriever'
 import type { LivingMemoryRecallQueryBuilder } from './query_builder'
 import { summarizeError } from '../../shared/utils'
-import {
-    type DebugLogger,
-    formatMemoryItemsForLog,
-    normalizeText,
-    scopeKey
-} from '../../memory/helpers'
+import { type DebugLogger, normalizeText, scopeKey } from '../../memory/helpers'
 import type { LivingMemorySnapshotCache } from '../../memory/snapshot/snapshot_cache'
 import type { LivingMemoryAgenticRecallExecutor } from './agentic_recall'
 import type {
@@ -19,7 +14,6 @@ import type {
     LivingMemoryTranscriptMessage,
     MemoryScope
 } from '../../../contracts/memory'
-import { formatPromptMessagesTrace } from '../../prompts/prompt_format'
 
 type LivingMemoryRecallCoordinatorConfig = Pick<
     LivingMemoryConfig,
@@ -92,7 +86,7 @@ export class LivingMemoryRecallCoordinator {
                 [
                     `memory recall history unavailable: conversationId=${scope.conversationId}`,
                     `presetId=${scope.presetId}`,
-                    `error=${summarizeError(error)}`
+                    `errorLength=${summarizeError(error).length}`
                 ].join(' ')
             )
         }
@@ -125,13 +119,10 @@ export class LivingMemoryRecallCoordinator {
                     `memory recall query prepared: conversationId=${scope.conversationId}`,
                     `presetId=${scope.presetId}`,
                     `rawInputLength=${query.rawInputLength}`,
-                    'cleanedQuery:',
-                    query.cleanedQuery,
-                    'finalQuery:',
-                    query.finalQuery
-                ].join('\n')
+                    `cleanedQueryLength=${query.cleanedQuery.length}`,
+                    `finalQueryLength=${query.finalQuery.length}`
+                ].join(' ')
             )
-
             if (query.skippedReason != null) {
                 this.debug(() =>
                     [
@@ -143,38 +134,43 @@ export class LivingMemoryRecallCoordinator {
                 return
             }
 
-            if (query.rewritePrompt != null) {
+            const rewritePrompt = query.rewritePrompt
+            if (rewritePrompt != null) {
                 this.debug(() =>
                     [
-                        `memory recall rewrite input: conversationId=${scope.conversationId}`,
+                        `memory recall rewrite input prepared: conversationId=${scope.conversationId}`,
                         `presetId=${scope.presetId}`,
-                        formatPromptMessagesTrace(query.rewritePrompt)
-                    ].join('\n')
+                        `systemPromptLength=${rewritePrompt.systemPrompt.length}`,
+                        `inputPromptLength=${rewritePrompt.inputPrompt.length}`
+                    ].join(' ')
                 )
             }
 
-            if (query.rewriteOutput != null) {
+            const rewriteOutput = query.rewriteOutput
+            if (rewriteOutput != null) {
                 this.debug(() =>
                     [
-                        `memory recall rewrite output: conversationId=${scope.conversationId}`,
+                        `memory recall rewrite output received: conversationId=${scope.conversationId}`,
                         `presetId=${scope.presetId}`,
-                        query.rewriteOutput
-                    ].join('\n')
+                        `outputLength=${rewriteOutput.length}`
+                    ].join(' ')
                 )
             }
 
             if (query.fallbackReason != null) {
-                this.debug(() =>
-                    [
+                const fallbackError = query.error
+                this.debug(() => {
+                    const details = [
                         `memory recall rewrite fallback: conversationId=${scope.conversationId}`,
                         `presetId=${scope.presetId}`,
-                        `reason=${query.fallbackReason}`,
-                        query.error == null ? '' : `error=${query.error}`,
-                        `finalQuery=${query.finalQuery}`
+                        `reason=${query.fallbackReason}`
                     ]
-                        .filter((part) => part.length > 0)
-                        .join(' ')
-                )
+                    if (fallbackError != null) {
+                        details.push(`errorLength=${fallbackError.length}`)
+                    }
+                    details.push(`finalQueryLength=${query.finalQuery.length}`)
+                    return details.join(' ')
+                })
             }
 
             input = normalizeText(query.finalQuery)
@@ -191,10 +187,10 @@ export class LivingMemoryRecallCoordinator {
                 [
                     `memory recall: conversationId=${scope.conversationId}`,
                     `presetId=${scope.presetId}`,
-                    `query=${input}\n${formatMemoryItemsForLog(items)}`
+                    `queryLength=${input.length}`,
+                    `count=${items.length}`
                 ].join(' ')
             )
-
             await this.repository.upsertSnapshot(
                 scope,
                 'embedding-rerank',

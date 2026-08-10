@@ -6,7 +6,6 @@ import type {
 import type { LivingMemoryMessageFormatter } from '../../transcript/message_formatter'
 import {
     type DebugLogger,
-    formatMemoryItemsForLog,
     type QueueExtractionOptions,
     scopeKey
 } from '../../memory/helpers'
@@ -21,7 +20,6 @@ import type {
     LivingMemoryTranscriptMessage,
     MemoryScope
 } from '../../../contracts/memory'
-import { formatPromptMessagesTrace } from '../../prompts/prompt_format'
 
 type LivingMemoryExtractionConfig = Pick<
     LivingMemoryConfig,
@@ -295,22 +293,25 @@ export class LivingMemoryExtractionCoordinator {
                 )
             }
 
-            if (trace.prompt != null && trace.output != null) {
+            const prompt = trace.prompt
+            const output = trace.output
+            if (prompt != null && output != null) {
                 this.debug(() =>
                     [
-                        'memory extraction llm input:',
+                        'memory extraction llm input prepared:',
                         `conversationId=${scope.conversationId}`,
                         `presetId=${scope.presetId}`,
-                        formatPromptMessagesTrace(trace.prompt)
-                    ].join('\n')
+                        `systemPromptLength=${prompt.systemPrompt.length}`,
+                        `inputPromptLength=${prompt.inputPrompt.length}`
+                    ].join(' ')
                 )
                 this.debug(() =>
                     [
-                        'memory extraction llm output:',
+                        'memory extraction llm output received:',
                         `conversationId=${scope.conversationId}`,
                         `presetId=${scope.presetId}`,
-                        trace.output
-                    ].join('\n')
+                        `outputLength=${output.length}`
+                    ].join(' ')
                 )
             }
         } catch (error) {
@@ -327,19 +328,20 @@ export class LivingMemoryExtractionCoordinator {
         // 结果工具在一次纠正重试后仍无法通过校验：持久化失败记录，
         // 使任务列表如实反映“结构化输出失败”而非“抽取 0 条”。
         if (trace.parseError != null) {
+            const parseError = trace.parseError
             this.debug(() =>
                 [
                     'memory extraction parse failed:',
                     `conversationId=${scope.conversationId}`,
                     `presetId=${scope.presetId}`,
-                    `parseError=${trace.parseError}`
+                    `errorLength=${parseError.length}`
                 ].join(' ')
             )
             await this.jobRepository.createFailedJob(
                 scope,
                 'extract',
                 input,
-                `extraction parse failed: ${trace.parseError}`,
+                `extraction parse failed: ${parseError}`,
                 startedAt
             )
             return
@@ -351,10 +353,9 @@ export class LivingMemoryExtractionCoordinator {
                 'memory extraction:',
                 `conversationId=${scope.conversationId}`,
                 `presetId=${scope.presetId}`,
-                `count=${extracted.length}\n${formatMemoryItemsForLog(extracted)}`
+                `count=${extracted.length}`
             ].join(' ')
         )
-
         try {
             if (extracted.length > 0) {
                 await this.memoryWriter.appendMemories(

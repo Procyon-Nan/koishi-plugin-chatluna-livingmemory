@@ -7,7 +7,6 @@ import {
     dreamResultToolDescription,
     dreamResultToolName
 } from '../../prompts'
-import { formatPromptMessagesTrace } from '../../prompts/prompt_format'
 import { summarizeError } from '../../shared/utils'
 import {
     invokeStructuredOutput,
@@ -48,7 +47,7 @@ export class DreamUnitProcessor {
         private readonly debug: (message: string) => void,
         private readonly enableTrace: boolean
     ) {
-        this.executor = new DreamExecutor(repository, debug)
+        this.executor = new DreamExecutor(repository, this.debug)
     }
 
     async process(input: DreamUnitInput): Promise<DreamUnitResult> {
@@ -61,13 +60,14 @@ export class DreamUnitProcessor {
         })
         this.trace(() =>
             [
-                `memory dream llm input: presetId=${input.presetId}`,
+                `memory dream llm input prepared: presetId=${input.presetId}`,
                 `stage=${input.stage}`,
                 `clusterId=${input.cluster.id}`,
-                formatPromptMessagesTrace(prompt)
-            ].join('\n')
+                `entries=${input.cluster.entries.length}`,
+                `systemPromptLength=${prompt.systemPrompt.length}`,
+                `inputPromptLength=${prompt.inputPrompt.length}`
+            ].join(' ')
         )
-
         let structuredResult
         let schema:
             typeof dreamActiveResultSchema | typeof dreamArchivedResultSchema =
@@ -97,22 +97,39 @@ export class DreamUnitProcessor {
             if (!isStructuredOutputModelInvocationError(error)) {
                 throw error
             }
-            return this.failure(`invoke-failed: ${summarizeError(error)}`)
+            const errorSummary = summarizeError(error)
+            this.trace(() =>
+                [
+                    `memory dream llm failed: presetId=${input.presetId}`,
+                    `stage=${input.stage}`,
+                    `clusterId=${input.cluster.id}`,
+                    'reason=invoke-failed',
+                    `errorLength=${errorSummary.length}`
+                ].join(' ')
+            )
+            return this.failure(`invoke-failed: ${errorSummary}`)
         }
 
         this.trace(() =>
             [
-                `memory dream llm output: presetId=${input.presetId}`,
+                `memory dream llm output received: presetId=${input.presetId}`,
                 `stage=${input.stage}`,
                 `clusterId=${input.cluster.id}`,
-                structuredResult.output
-            ].join('\n')
+                `outputLength=${structuredResult.output.length}`
+            ].join(' ')
         )
-
         if (structuredResult.parseError !== null) {
-            return this.failure(
-                `structured-output-failed: ${structuredResult.parseError}`
+            const parseError = structuredResult.parseError
+            this.trace(() =>
+                [
+                    `memory dream llm failed: presetId=${input.presetId}`,
+                    `stage=${input.stage}`,
+                    `clusterId=${input.cluster.id}`,
+                    'reason=structured-output-failed',
+                    `errorLength=${parseError.length}`
+                ].join(' ')
             )
+            return this.failure(`structured-output-failed: ${parseError}`)
         }
 
         const operations = structuredResult.value.operations as DreamOperation[]

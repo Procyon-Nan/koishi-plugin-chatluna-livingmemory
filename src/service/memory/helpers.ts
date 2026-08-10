@@ -62,21 +62,6 @@ export const mergePresetIds = (...groups: string[][]): string[] => {
     return result
 }
 
-export const formatMemoryItemsForLog = (
-    items: { content: string; score?: number }[]
-) => {
-    if (items.length === 0) {
-        return '[]'
-    }
-
-    return items
-        .map((item, index) => {
-            const score = item.score == null ? '' : ` score=${item.score}`
-            return `${index + 1}.${score} ${item.content}`
-        })
-        .join('\n')
-}
-
 const stringifyMessageContent = (content: unknown) => {
     if (typeof content === 'string') {
         return content.trim()

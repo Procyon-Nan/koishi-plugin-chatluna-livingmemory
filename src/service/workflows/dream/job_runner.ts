@@ -82,7 +82,14 @@ export class LivingMemoryDreamJobRunner {
                 `memory dream finished: jobId=${jobId}`,
                 `presetId=${scope.presetId}`,
                 `trigger=${trigger}`,
-                result.detail
+                `entries=${result.entryCount}`,
+                `clusters=${result.clusterCount}`,
+                `kept=${result.kept}`,
+                `merged=${result.merged}`,
+                `updated=${result.updated}`,
+                `archived=${result.archived}`,
+                `deleted=${result.deleted}`,
+                `skipped=${result.skipped}`
             ].join(' ')
         )
 
