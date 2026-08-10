@@ -147,7 +147,11 @@ const queryKeywordCandidates = (
         'm.status = ?',
         `k.keyword IN (${keywordPlaceholders})`
     ]
-    const parameters: SQLInputValue[] = [query.presetId, query.status, ...keywords]
+    const parameters: SQLInputValue[] = [
+        query.presetId,
+        query.status,
+        ...keywords
+    ]
     if (query.types !== null) {
         const typePlaceholders = query.types.map(() => '?').join(', ')
         conditions.push(`m.type IN (${typePlaceholders})`)

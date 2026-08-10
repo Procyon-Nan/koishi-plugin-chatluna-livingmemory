@@ -322,7 +322,9 @@ export class LivingMemoryVectorIndexDatabase {
 
     private openConnection(databasePath: string) {
         mkdirSync(dirname(databasePath), { recursive: true })
-        const database = new DatabaseSync(databasePath, { allowExtension: true })
+        const database = new DatabaseSync(databasePath, {
+            allowExtension: true
+        })
         try {
             database.exec('PRAGMA foreign_keys = ON')
             database.exec('PRAGMA journal_mode = DELETE')

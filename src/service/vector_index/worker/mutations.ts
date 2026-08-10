@@ -122,8 +122,10 @@ const deleteMemory = (
     presetId: string,
     memoryId: string
 ) => {
-    const row = statements.selectMemoryInPreset.get(presetId, memoryId) as
-        MemoryRowId | undefined
+    const row = statements.selectMemoryInPreset.get(
+        presetId,
+        memoryId
+    ) as unknown as MemoryRowId | undefined
     if (row === undefined) {
         return
     }
@@ -218,8 +220,9 @@ const upsertMemory = (
     statements: MutationStatements,
     upsert: VectorIndexUpsert
 ) => {
-    const existing = statements.selectMemory.get(upsert.document.memoryId) as
-        MemoryRowId | undefined
+    const existing = statements.selectMemory.get(
+        upsert.document.memoryId
+    ) as unknown as MemoryRowId | undefined
 
     let rowid: number
     if (existing === undefined) {
