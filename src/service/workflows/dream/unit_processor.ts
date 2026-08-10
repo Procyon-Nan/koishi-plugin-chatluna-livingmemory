@@ -145,6 +145,7 @@ export class DreamUnitProcessor {
             return this.failure('seed-not-in-operations')
         }
         const result = await this.executor.executeOperations(
+            input.presetId,
             input.stage,
             input.cluster,
             operations,

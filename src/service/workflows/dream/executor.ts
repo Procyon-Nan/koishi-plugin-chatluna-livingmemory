@@ -56,6 +56,7 @@ export class DreamExecutor {
     ) {}
 
     async executeOperations(
+        presetId: string,
         stage: DreamStage,
         cluster: DreamCluster,
         operations: DreamOperation[],
@@ -84,6 +85,7 @@ export class DreamExecutor {
                 stats.skipped++
                 this.debug(
                     this.formatSkipLog(
+                        presetId,
                         stage,
                         cluster.id,
                         operation.action,
@@ -96,6 +98,7 @@ export class DreamExecutor {
             const logSkip = (reason: string) => {
                 this.debug(
                     this.formatSkipLog(
+                        presetId,
                         stage,
                         cluster.id,
                         operation.action,
@@ -307,6 +310,7 @@ export class DreamExecutor {
     }
 
     private formatSkipLog(
+        presetId: string,
         stage: DreamStage,
         clusterId: string,
         action: string,
@@ -314,6 +318,7 @@ export class DreamExecutor {
     ): string {
         return [
             'memory dream operation skipped:',
+            `presetId=${presetId}`,
             `stage=${stage}`,
             `clusterId=${clusterId}`,
             `action=${action}`,

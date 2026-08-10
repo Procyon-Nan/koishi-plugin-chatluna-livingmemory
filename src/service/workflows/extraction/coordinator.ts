@@ -385,8 +385,13 @@ export class LivingMemoryExtractionCoordinator {
             throw error
         }
 
-        this.debug(
-            () => `runExtraction completed: extracted=${extracted.length}`
+        this.debug(() =>
+            [
+                'memory extraction completed:',
+                `conversationId=${scope.conversationId}`,
+                `presetId=${scope.presetId}`,
+                `extracted=${extracted.length}`
+            ].join(' ')
         )
         if (extracted.length > 0) {
             this.queueAutoDream(scope.presetId)

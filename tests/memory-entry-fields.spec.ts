@@ -156,6 +156,7 @@ it('applies shared field rules to Dream mutations', async () => {
         ]
     }).operations
     const stats = await executor.executeOperations(
+        entry.presetId,
         'active',
         { id: 'cluster-1', reason: 'test', entries: [entry] },
         operations,

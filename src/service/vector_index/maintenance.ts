@@ -123,7 +123,12 @@ export class LivingMemoryVectorIndexMaintenance {
             )
             const inspection = await this.options.worker().inspect()
             this.options.onInspection(inspection)
-            return `vector index reconcile completed: ${indexedCount} entries`
+            return [
+                'vector index reconcile completed:',
+                `jobId=${job.id}`,
+                `presetId=${job.presetId}`,
+                `indexed=${indexedCount}`
+            ].join(' ')
         })
     }
 
@@ -251,16 +256,23 @@ export class LivingMemoryVectorIndexMaintenance {
                     rebuildDatabasePath,
                     shouldStop: this.options.shouldStop,
                     onProgress: async (progress) => {
-                        const detail =
-                            `vector index rebuild: ` +
-                            `${progress.completed}/${progress.total}`
+                        const detail = [
+                            'vector index rebuild progress:',
+                            `jobId=${job.id}`,
+                            `presetId=${job.presetId}`,
+                            `completed=${progress.completed}`,
+                            `total=${progress.total}`
+                        ].join(' ')
                         await repository.updateJob(job.id, {
                             detail,
                             updatedAt: new Date()
                         })
                         this.options.debug(
-                            `${detail}, batch=${progress.batchDuration.toFixed(1)}ms, ` +
-                                `total=${progress.totalDuration.toFixed(1)}ms`
+                            [
+                                detail,
+                                `batchElapsedMs=${progress.batchDuration.toFixed(1)}`,
+                                `elapsedMs=${progress.totalDuration.toFixed(1)}`
+                            ].join(' ')
                         )
                     },
                     finalize: () =>
@@ -281,7 +293,12 @@ export class LivingMemoryVectorIndexMaintenance {
                         })
                 })
                 this.options.onInspection(inspection)
-                return `vector index rebuild completed: ${inspection.indexedCount} entries`
+                return [
+                    'vector index rebuild completed:',
+                    `jobId=${job.id}`,
+                    `presetId=${job.presetId}`,
+                    `indexed=${inspection.indexedCount}`
+                ].join(' ')
             }
         )
     }
@@ -300,7 +317,12 @@ export class LivingMemoryVectorIndexMaintenance {
                 )
                 const inspection = await this.options.worker().inspect()
                 this.options.onInspection(inspection)
-                return `vector index reconcile completed: ${inspection.indexedCount} entries`
+                return [
+                    'vector index reconcile completed:',
+                    `jobId=${job.id}`,
+                    `presetId=${job.presetId}`,
+                    `indexed=${inspection.indexedCount}`
+                ].join(' ')
             }
         )
     }
@@ -337,9 +359,13 @@ export class LivingMemoryVectorIndexMaintenance {
         job: MemoryJobRecord,
         progress: VectorIndexReconcileProgress
     ) {
-        const detail =
-            `vector index reconcile: preset=${progress.presetId}, ` +
-            `${progress.completed}/${progress.total}`
+        const detail = [
+            'vector index reconcile progress:',
+            `jobId=${job.id}`,
+            `presetId=${progress.presetId}`,
+            `completed=${progress.completed}`,
+            `total=${progress.total}`
+        ].join(' ')
         await this.options.repository.updateJob(job.id, {
             detail,
             updatedAt: new Date()

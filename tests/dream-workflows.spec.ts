@@ -349,12 +349,16 @@ it('enforces Dream touched-memory guards', async () => {
         setMemoryConsolidation: async () => {},
         applyDreamMerge: async () => {}
     } as unknown as DreamExecutorRepository
-    const executor = new DreamExecutor(repository, () => {})
+    const debugMessages: string[] = []
+    const executor = new DreamExecutor(repository, (message) =>
+        debugMessages.push(message)
+    )
     const entry = createMemoryEntry('memory-1')
     const cluster = { id: 'cluster-1', reason: 'test', entries: [entry] }
 
     const touchedMemoryIds = new Set<string>()
     const repeatedUpdate = await executor.executeOperations(
+        scope.presetId,
         'active',
         cluster,
         [completeDreamUpdateOperation(), completeDreamUpdateOperation()],
@@ -365,6 +369,9 @@ it('enforces Dream touched-memory guards', async () => {
     assert.equal(repeatedUpdate.updated, 1)
     assert.equal(repeatedUpdate.skipped, 1)
     assert.equal(updates.length, 1)
+    assert.deepEqual(debugMessages, [
+        'memory dream operation skipped: presetId=preset-1 stage=active clusterId=cluster-1 action=update reason=already-touched'
+    ])
 })
 
 it('delegates each Dream merge to one atomic repository operation', async () => {
@@ -386,6 +393,7 @@ it('delegates each Dream merge to one atomic repository operation', async () => 
     ]
     const activeTouched = new Set<string>()
     const activeResult = await executor.executeOperations(
+        scope.presetId,
         'active',
         { id: 'active-cluster', reason: 'test', entries: activeEntries },
         [
@@ -404,6 +412,7 @@ it('delegates each Dream merge to one atomic repository operation', async () => 
     ]
     const archivedTouched = new Set<string>()
     const archivedResult = await executor.executeOperations(
+        scope.presetId,
         'archived',
         {
             id: 'archived-cluster',
@@ -480,6 +489,7 @@ it('does not touch merge state when the atomic repository write fails', async ()
 
     await assert.rejects(
         executor.executeOperations(
+            scope.presetId,
             'active',
             {
                 id: 'cluster-1',

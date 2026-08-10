@@ -275,6 +275,10 @@ it('builds the index once and reuses its manifest after restart', async () => {
         assert.equal(firstStatus.presets[0].indexedCount, 2)
         assert.doesNotThrow(() => first.assertPresetReady('preset-a'))
         assert.equal(repository.jobs[0].status, 'completed')
+        assert.equal(
+            repository.jobs[0].detail,
+            'vector index rebuild completed: jobId=job-1 presetId=* indexed=2'
+        )
         assert.equal(repository.legacyEmbeddingsMigrated, true)
         assert.ok(
             firstCalls.some((texts) => texts.includes('content memory-a'))
@@ -335,6 +339,10 @@ it('builds the index once and reuses its manifest after restart', async () => {
             firstStatus.manifest?.generation
         )
         assert.equal(repository.jobs[1].status, 'completed')
+        assert.equal(
+            repository.jobs[1].detail,
+            'vector index reconcile completed: jobId=job-2 presetId=* indexed=2'
+        )
         assert.equal(secondCalls.length, 1)
         await second.stop()
     })
@@ -566,12 +574,23 @@ it('logs rebuild batch progress only when debug is enabled', async () => {
         await service.waitForInitialization()
         assert.ok(
             captured.info.some((message) =>
-                /vector index rebuild: 50\/51, batch=.*total=/u.test(message)
+                /vector index rebuild progress: jobId=job-1 presetId=\* completed=50 total=51 batchElapsedMs=\d+\.\d elapsedMs=\d+\.\d/u.test(
+                    message
+                )
             )
         )
         assert.ok(
             captured.info.some((message) =>
-                /vector index rebuild: 51\/51, batch=.*total=/u.test(message)
+                /vector index rebuild progress: jobId=job-1 presetId=\* completed=51 total=51 batchElapsedMs=\d+\.\d elapsedMs=\d+\.\d/u.test(
+                    message
+                )
+            )
+        )
+        assert.ok(
+            captured.info.some((message) =>
+                /vector index reconcile progress: jobId=job-1 presetId=preset-a completed=51 total=51/u.test(
+                    message
+                )
             )
         )
         await service.stop()

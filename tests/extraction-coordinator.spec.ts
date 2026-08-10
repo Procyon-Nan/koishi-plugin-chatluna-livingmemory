@@ -385,6 +385,11 @@ it('writes extracted memories and queues auto Dream without persisting a job', a
     assert.deepEqual(appended[0]?.extracted, extracted)
     assert.deepEqual(autoDreamPresets, [scope.presetId])
     assert.ok(
+        debugMessages.includes(
+            'memory extraction completed: conversationId=conversation-1 presetId=preset-1 extracted=1'
+        )
+    )
+    assert.ok(
         debugMessages.every(
             (message) => !message.includes(extracted[0].content)
         )
@@ -480,7 +485,7 @@ it('consumes a failed boundary and processes the next completed round once', asy
     await waitFor(
         () =>
             debugMessages.some((message) =>
-                message.includes('runExtraction completed')
+                message.includes('memory extraction completed')
             ),
         'next extraction completion'
     )
