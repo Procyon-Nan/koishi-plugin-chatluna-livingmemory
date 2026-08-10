@@ -1,7 +1,7 @@
-import type { DreamMemoryEntryRecord } from '../../../contracts/workflows'
 import { selectBestInitialPartition } from './partitioning/initial'
 import { optimizePartition } from './partitioning/optimization'
 import { buildSimilarityData, compareEntryIds } from './partitioning/similarity'
+import type { DreamPartitionEntry } from './partitioning/types'
 
 export const DREAM_PARTITION_TARGET_SIZE = 300
 export const DREAM_PARTITION_MAX_SIZE = 350
@@ -53,9 +53,9 @@ export const buildDreamPartitionTargetSizes = (
     })
 }
 
-export const partitionDreamEntries = (
-    inputEntries: readonly DreamMemoryEntryRecord[]
-): DreamMemoryEntryRecord[][] => {
+export const partitionDreamEntries = <Entry extends DreamPartitionEntry>(
+    inputEntries: readonly Entry[]
+): Entry[][] => {
     if (inputEntries.length === 0) {
         return []
     }

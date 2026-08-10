@@ -1,9 +1,9 @@
-import type { DreamMemoryEntryRecord } from '../../../../contracts/workflows'
 import {
     calculatePartitionQuality,
     compareEntryIds,
     similarityAt
 } from './similarity'
+import type { DreamPartitionEntry } from './types'
 
 export interface PartitionState {
     batches: number[][]
@@ -37,7 +37,7 @@ const assignEntry = (
 }
 
 const selectDispersedSeed = (
-    entries: readonly DreamMemoryEntryRecord[],
+    entries: readonly DreamPartitionEntry[],
     similarities: Uint8Array,
     degrees: Uint32Array,
     seeds: readonly number[],
@@ -85,7 +85,7 @@ const selectDispersedSeed = (
 }
 
 const selectPreferredChoices = (
-    entries: readonly DreamMemoryEntryRecord[],
+    entries: readonly DreamPartitionEntry[],
     degrees: Uint32Array,
     state: PartitionState,
     openBatches: readonly number[]
@@ -209,7 +209,7 @@ const selectPreferredChoices = (
 }
 
 export const createInitialPartition = (
-    entries: readonly DreamMemoryEntryRecord[],
+    entries: readonly DreamPartitionEntry[],
     similarities: Uint8Array,
     degrees: Uint32Array,
     targetSizes: readonly number[],
@@ -282,7 +282,7 @@ export const createInitialPartition = (
 }
 
 export const selectBestInitialPartition = (
-    entries: readonly DreamMemoryEntryRecord[],
+    entries: readonly DreamPartitionEntry[],
     similarities: Uint8Array,
     degrees: Uint32Array,
     targetSizes: readonly number[],

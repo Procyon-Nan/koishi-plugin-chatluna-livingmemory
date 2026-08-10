@@ -31,7 +31,7 @@ const createService = (options: {
         vectorIndex: {
             value: { start: options.vectorStart, stop: options.vectorStop }
         },
-        dreamHdbscan: {
+        dreamWorker: {
             value: { start: options.dreamStart, stop: options.dreamStop }
         }
     })

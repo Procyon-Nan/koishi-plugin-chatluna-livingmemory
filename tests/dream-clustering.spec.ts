@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict'
 import type { ManualDreamVectorReader } from '../src/contracts/vector_index'
 import { DreamClusterer } from '../src/service/workflows/dream/clustering'
-import type { DreamHdbscanRunner } from '../src/service/workflows/dream/hdbscan/protocol'
 import {
     buildDreamPartitionTargetSizes,
     partitionDreamEntries,
     selectDreamPartitionCount
 } from '../src/service/workflows/dream/partitioning'
+import type { DreamWorkerRunner } from '../src/service/workflows/dream/worker/protocol'
 import {
     createInitialPartition,
     selectBestInitialPartition
@@ -24,6 +24,13 @@ const createEntries = (count: number) =>
         ...createMemoryEntry(`memory-${index.toString().padStart(4, '0')}`),
         keywords: [`group-${index % 8}`, `topic-${index % 23}`]
     }))
+
+const createDreamWorker = (
+    runHdbscan: DreamWorkerRunner['runHdbscan']
+): DreamWorkerRunner => ({
+    partition: async (entries) => partitionDreamEntries(entries),
+    runHdbscan
+})
 
 it('selects balanced Dream partition counts around the target size', () => {
     assert.equal(selectDreamPartitionCount(400), 2)
@@ -201,35 +208,33 @@ it('runs one global HDBSCAN pass over all first-pass noise', async () => {
     const vectors = createVectorReader(entries)
     const callSizes: number[] = []
     const debugMessages: string[] = []
-    const hdbscan: DreamHdbscanRunner = {
-        run: async (input, onProgress) => {
-            assert.equal(input.dimension, 2)
-            assert.equal(input.vectors.length, input.entryCount * 2)
-            assert.equal(typeof onProgress, 'function')
-            callSizes.push(input.entryCount)
-            if (callSizes.length <= partitions.length) {
-                return Int32Array.from(
-                    { length: input.entryCount },
-                    (_, index) => (index === 0 ? 0 : -1)
-                )
-            }
-            onProgress?.({
-                phase: 'building-mst',
-                completed: 120,
-                total: 348,
-                elapsedMs: 25
-            })
+    const worker = createDreamWorker(async (input, onProgress) => {
+        assert.equal(input.dimension, 2)
+        assert.equal(input.vectors.length, input.entryCount * 2)
+        assert.equal(typeof onProgress, 'function')
+        callSizes.push(input.entryCount)
+        if (callSizes.length <= partitions.length) {
             return Int32Array.from(
                 { length: input.entryCount },
-                (_, index) => (index < 3 ? 4 : -1)
+                (_, index) => (index === 0 ? 0 : -1)
             )
         }
-    }
+        onProgress?.({
+            phase: 'building-mst',
+            completed: 120,
+            total: 348,
+            elapsedMs: 25
+        })
+        return Int32Array.from(
+            { length: input.entryCount },
+            (_, index) => (index < 3 ? 4 : -1)
+        )
+    })
     const clusterer = new DreamClusterer(
         vectors.reader,
         (message) => debugMessages.push(message),
         true,
-        hdbscan
+        worker
     )
 
     const clusters = await clusterer.buildClusters(
@@ -297,18 +302,16 @@ it('reads first-pass partitions and global noise in bounded batches', async () =
     const partitions = partitionDreamEntries(entries)
     const vectors = createVectorReader(entries)
     const callSizes: number[] = []
-    const hdbscan: DreamHdbscanRunner = {
-        run: async (input, onProgress) => {
-            assert.equal(onProgress, undefined)
-            callSizes.push(input.entryCount)
-            return new Int32Array(input.entryCount).fill(-1)
-        }
-    }
+    const worker = createDreamWorker(async (input, onProgress) => {
+        assert.equal(onProgress, undefined)
+        callSizes.push(input.entryCount)
+        return new Int32Array(input.entryCount).fill(-1)
+    })
     const clusterer = new DreamClusterer(
         vectors.reader,
         () => {},
         false,
-        hdbscan
+        worker
     )
 
     const clusters = await clusterer.buildClusters(
@@ -333,18 +336,16 @@ it('skips the global noise pass when the first pass has no noise', async () => {
     const entries = createEntries(351)
     const vectors = createVectorReader(entries)
     const callSizes: number[] = []
-    const hdbscan: DreamHdbscanRunner = {
-        run: async (input) => {
-            callSizes.push(input.entryCount)
-            return new Int32Array(input.entryCount)
-        }
-    }
+    const worker = createDreamWorker(async (input) => {
+        callSizes.push(input.entryCount)
+        return new Int32Array(input.entryCount)
+    })
     const debugMessages: string[] = []
     const clusterer = new DreamClusterer(
         vectors.reader,
         (message) => debugMessages.push(message),
         true,
-        hdbscan
+        worker
     )
 
     const clusters = await clusterer.buildClusters(
@@ -382,12 +383,10 @@ it('logs a single first-pass noise entry without a global HDBSCAN run', async ()
         vectors.reader,
         (message) => debugMessages.push(message),
         true,
-        {
-            run: async () => {
-                hdbscanCalls++
-                return Int32Array.from([0, 0, 0, -1])
-            }
-        }
+        createDreamWorker(async () => {
+            hdbscanCalls++
+            return Int32Array.from([0, 0, 0, -1])
+        })
     )
 
     const clusters = await clusterer.buildClusters(
@@ -417,17 +416,40 @@ it('propagates asynchronous HDBSCAN failures', async () => {
         vectors.reader,
         () => {},
         false,
-        {
-            run: async () => {
-                throw new Error('Dream worker failed')
-            }
-        }
+        createDreamWorker(async () => {
+            throw new Error('Dream worker failed')
+        })
     )
 
     await assert.rejects(
         clusterer.buildClusters('preset-1', 'active', entries),
         /Dream worker failed/u
     )
+})
+
+it('propagates asynchronous partition failures before reading vectors', async () => {
+    const entries = createEntries(10)
+    const vectors = createVectorReader(entries)
+    const worker: DreamWorkerRunner = {
+        partition: async () => {
+            throw new Error('Dream partition worker failed')
+        },
+        runHdbscan: async () => {
+            throw new Error('HDBSCAN must not run')
+        }
+    }
+    const clusterer = new DreamClusterer(
+        vectors.reader,
+        () => {},
+        false,
+        worker
+    )
+
+    await assert.rejects(
+        clusterer.buildClusters('preset-1', 'active', entries),
+        /Dream partition worker failed/u
+    )
+    assert.deepEqual(vectors.calls, [])
 })
 
 it('enables worker progress and completion logs only for debug logging', async () => {
@@ -439,18 +461,16 @@ it('enables worker progress and completion logs only for debug logging', async (
         vectors.reader,
         (message) => debugMessages.push(message),
         true,
-        {
-            run: async ({ entryCount }, onProgress) => {
-                progressFlags.push(onProgress !== undefined)
-                onProgress?.({
-                    phase: 'building-mst',
-                    completed: 2,
-                    total: 3,
-                    elapsedMs: 12
-                })
-                return new Int32Array(entryCount)
-            }
-        }
+        createDreamWorker(async ({ entryCount }, onProgress) => {
+            progressFlags.push(onProgress !== undefined)
+            onProgress?.({
+                phase: 'building-mst',
+                completed: 2,
+                total: 3,
+                elapsedMs: 12
+            })
+            return new Int32Array(entryCount)
+        })
     )
 
     await clusterer.buildClusters('preset-1', 'active', entries)

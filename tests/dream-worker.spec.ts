@@ -5,10 +5,11 @@ import {
     runDreamHdbscan,
     type DreamHdbscanMatrix
 } from '../src/service/workflows/dream/hdbscan/algorithm'
-import { LivingMemoryDreamHdbscanWorkerClient } from '../src/service/workflows/dream/hdbscan/worker_client'
-import type { DreamHdbscanProgress } from '../src/service/workflows/dream/hdbscan/protocol'
+import { partitionDreamEntries } from '../src/service/workflows/dream/partitioning'
+import { LivingMemoryDreamWorkerClient } from '../src/service/workflows/dream/worker/client'
+import type { DreamHdbscanProgress } from '../src/service/workflows/dream/worker/protocol'
 import {
-    dreamHdbscanWorkerPath,
+    dreamWorkerPath,
     ensureWorkersBuilt,
     vectorIndexWorkerPath
 } from './worker-test-utils'
@@ -24,20 +25,20 @@ before(async () => {
 })
 
 it('builds both worker artifacts through the shared build script', async () => {
-    for (const workerPath of [vectorIndexWorkerPath, dreamHdbscanWorkerPath]) {
+    for (const workerPath of [vectorIndexWorkerPath, dreamWorkerPath]) {
         const worker = await stat(workerPath)
         assert.equal(worker.isFile(), true)
         assert.ok(worker.size > 0)
     }
 
-    const dreamWorker = await readFile(dreamHdbscanWorkerPath, 'utf8')
+    const dreamWorker = await readFile(dreamWorkerPath, 'utf8')
     assert.equal(dreamWorker.includes('better-sqlite3'), false)
     assert.equal(dreamWorker.includes('sqlite-vec'), false)
 })
 
 it('starts the Dream worker and transfers vectors and labels', async () => {
-    const client = new LivingMemoryDreamHdbscanWorkerClient({
-        workerPath: dreamHdbscanWorkerPath
+    const client = new LivingMemoryDreamWorkerClient({
+        workerPath: dreamWorkerPath
     })
     await client.start()
     const matrix = createMatrix([
@@ -52,7 +53,7 @@ it('starts the Dream worker and transfers vectors and labels', async () => {
         vectors: new Float32Array(matrix.vectors)
     })
 
-    const labels = await client.run(matrix)
+    const labels = await client.runHdbscan(matrix)
 
     assert.equal(matrix.vectors.byteLength, 0)
     assert.deepEqual([...labels], [...expected])
@@ -60,10 +61,63 @@ it('starts the Dream worker and transfers vectors and labels', async () => {
     await client.stop()
 })
 
+it('partitions entries without cloning full memory records', async () => {
+    const entries = Array.from({ length: 720 }, (_, index) => ({
+        id: `memory-${index.toString().padStart(4, '0')}`,
+        keywords: [`group-${index % 8}`, `topic-${index % 23}`],
+        content: `content-${index}`
+    }))
+    const expected = partitionDreamEntries(entries).map((partition) =>
+        partition.map((entry) => entry.id)
+    )
+    const client = new LivingMemoryDreamWorkerClient({
+        workerPath: dreamWorkerPath
+    })
+    await client.start()
+
+    const partitions = await client.partition(entries)
+
+    assert.deepEqual(
+        partitions.map((partition) => partition.map((entry) => entry.id)),
+        expected
+    )
+    assert.ok(
+        partitions.every((partition) =>
+            partition.every((entry) => entries.includes(entry))
+        )
+    )
+    await client.stop()
+})
+
+it('keeps the main event loop responsive during partitioning', async () => {
+    const entries = Array.from({ length: 5_000 }, (_, index) => ({
+        id: `memory-${index.toString().padStart(4, '0')}`,
+        keywords: [`group-${index % 8}`, `topic-${index % 23}`]
+    }))
+    const client = new LivingMemoryDreamWorkerClient({
+        workerPath: dreamWorkerPath
+    })
+    await client.start()
+
+    let completed = false
+    const partitioning = client.partition(entries).then((partitions) => {
+        completed = true
+        return partitions
+    })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    assert.equal(completed, false)
+    const partitions = await partitioning
+    assert.equal(partitions.length, 17)
+    assert.equal(partitions.flat().length, entries.length)
+    assert.ok(partitions.every((partition) => partition.length <= 350))
+    await client.stop()
+})
+
 it('reports progress only for requests that enable it', async () => {
     const progress: DreamHdbscanProgress[] = []
-    const client = new LivingMemoryDreamHdbscanWorkerClient({
-        workerPath: dreamHdbscanWorkerPath
+    const client = new LivingMemoryDreamWorkerClient({
+        workerPath: dreamWorkerPath
     })
     await client.start()
     const rows = Array.from({ length: 64 }, (_, index) => [
@@ -72,10 +126,10 @@ it('reports progress only for requests that enable it', async () => {
         1
     ])
 
-    await client.run(createMatrix(rows))
+    await client.runHdbscan(createMatrix(rows))
     assert.deepEqual(progress, [])
 
-    await client.run(createMatrix(rows), (update) => progress.push(update))
+    await client.runHdbscan(createMatrix(rows), (update) => progress.push(update))
     const phases = progress.map(({ phase }) => phase)
     assert.ok(phases.includes('normalizing'))
     assert.ok(phases.includes('building-mst'))
@@ -87,8 +141,8 @@ it('reports progress only for requests that enable it', async () => {
 })
 
 it('routes progress to the callback for each concurrent request', async () => {
-    const client = new LivingMemoryDreamHdbscanWorkerClient({
-        workerPath: dreamHdbscanWorkerPath
+    const client = new LivingMemoryDreamWorkerClient({
+        workerPath: dreamWorkerPath
     })
     await client.start()
     const createRows = (count: number) =>
@@ -101,10 +155,10 @@ it('routes progress to the callback for each concurrent request', async () => {
     const secondProgress: DreamHdbscanProgress[] = []
 
     await Promise.all([
-        client.run(createMatrix(createRows(48)), (update) =>
+        client.runHdbscan(createMatrix(createRows(48)), (update) =>
             firstProgress.push(update)
         ),
-        client.run(createMatrix(createRows(72)), (update) =>
+        client.runHdbscan(createMatrix(createRows(72)), (update) =>
             secondProgress.push(update)
         )
     ])
@@ -133,13 +187,13 @@ it('keeps the main event loop responsive during clustering', async () => {
     const rows = Array.from({ length: 1200 }, () =>
         Array.from({ length: 32 }, random)
     )
-    const client = new LivingMemoryDreamHdbscanWorkerClient({
-        workerPath: dreamHdbscanWorkerPath
+    const client = new LivingMemoryDreamWorkerClient({
+        workerPath: dreamWorkerPath
     })
     await client.start()
 
     let completed = false
-    const clustering = client.run(createMatrix(rows)).then(() => {
+    const clustering = client.runHdbscan(createMatrix(rows)).then(() => {
         completed = true
     })
     await new Promise((resolve) => setTimeout(resolve, 0))
@@ -150,13 +204,13 @@ it('keeps the main event loop responsive during clustering', async () => {
 })
 
 it('returns worker algorithm errors to the caller', async () => {
-    const client = new LivingMemoryDreamHdbscanWorkerClient({
-        workerPath: dreamHdbscanWorkerPath
+    const client = new LivingMemoryDreamWorkerClient({
+        workerPath: dreamWorkerPath
     })
     await client.start()
 
     await assert.rejects(
-        client.run({
+        client.runHdbscan({
             entryCount: 3,
             dimension: 2,
             vectors: new Float32Array(5)
@@ -172,13 +226,13 @@ it('rejects active requests when the worker stops', async () => {
         Math.sin(index),
         index % 17
     ])
-    const client = new LivingMemoryDreamHdbscanWorkerClient({
-        workerPath: dreamHdbscanWorkerPath
+    const client = new LivingMemoryDreamWorkerClient({
+        workerPath: dreamWorkerPath
     })
     await client.start()
 
     const rejection = assert.rejects(
-        client.run(createMatrix(rows)),
+        client.runHdbscan(createMatrix(rows)),
         /worker stopped/
     )
     await client.stop()
@@ -186,8 +240,8 @@ it('rejects active requests when the worker stops', async () => {
 })
 
 it('rejects startup and later requests when the worker is unavailable', async () => {
-    const client = new LivingMemoryDreamHdbscanWorkerClient({
-        workerPath: resolve(__dirname, 'missing-dream-hdbscan-worker.mjs')
+    const client = new LivingMemoryDreamWorkerClient({
+        workerPath: resolve(__dirname, 'missing-dream-worker.mjs')
     })
 
     await assert.rejects(
@@ -195,7 +249,7 @@ it('rejects startup and later requests when the worker is unavailable', async ()
         /Cannot find module|cannot find module/
     )
     await assert.rejects(
-        client.run(createMatrix([[1, 0]])),
+        client.runHdbscan(createMatrix([[1, 0]])),
         /Cannot find module|cannot find module/
     )
     await client.stop()

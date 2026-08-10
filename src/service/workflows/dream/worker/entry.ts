@@ -1,17 +1,21 @@
 import { parentPort } from 'node:worker_threads'
-import { type DreamHdbscanProgressReporter, runDreamHdbscan } from './algorithm'
+import {
+    type DreamHdbscanProgressReporter,
+    runDreamHdbscan
+} from '../hdbscan/algorithm'
+import { partitionDreamEntries } from '../partitioning'
 import type {
-    DreamHdbscanWorkerError,
-    DreamHdbscanWorkerRequest,
-    DreamHdbscanWorkerResponse
+    DreamWorkerError,
+    DreamWorkerRequest,
+    DreamWorkerResponse
 } from './protocol'
 
 if (parentPort === null) {
-    throw new Error('Dream HDBSCAN worker requires a parent port')
+    throw new Error('Dream worker requires a parent port')
 }
 const workerPort = parentPort
 
-const serializeError = (error: unknown): DreamHdbscanWorkerError => {
+const serializeError = (error: unknown): DreamWorkerError => {
     if (error instanceof Error) {
         return {
             name: error.name,
@@ -26,9 +30,19 @@ const serializeError = (error: unknown): DreamHdbscanWorkerError => {
     }
 }
 
-const run = (
-    request: Extract<DreamHdbscanWorkerRequest, { type: 'run' }>
-): Extract<DreamHdbscanWorkerResponse, { type: 'run' }> => {
+const partition = (
+    request: Extract<DreamWorkerRequest, { type: 'partition' }>
+): Extract<DreamWorkerResponse, { type: 'partition' }> => {
+    const entries = request.entries.map((entry, index) => ({ ...entry, index }))
+    const partitions = partitionDreamEntries(entries).map((items) =>
+        items.map((entry) => entry.index)
+    )
+    return { id: request.id, type: 'partition', ok: true, partitions }
+}
+
+const runHdbscan = (
+    request: Extract<DreamWorkerRequest, { type: 'hdbscan' }>
+): Extract<DreamWorkerResponse, { type: 'hdbscan' }> => {
     const { id, entryCount, dimension, vectors, reportProgress } = request
     if (vectors.length !== entryCount * dimension) {
         throw new Error(
@@ -49,34 +63,39 @@ const run = (
                     total,
                     elapsedMs: performance.now() - startedAt
                 }
-            } satisfies DreamHdbscanWorkerResponse)
+            } satisfies DreamWorkerResponse)
         }
     }
     const labels = runDreamHdbscan(
         { entryCount, dimension, vectors },
         progressReporter
     )
-    return { id, type: 'run', ok: true, labels }
+    return { id, type: 'hdbscan', ok: true, labels }
 }
 
-workerPort.on('message', (request: DreamHdbscanWorkerRequest) => {
+workerPort.on('message', (request: DreamWorkerRequest) => {
     try {
         if (request.type === 'ready') {
             workerPort.postMessage({
                 id: request.id,
                 type: 'ready',
                 ok: true
-            } satisfies DreamHdbscanWorkerResponse)
+            } satisfies DreamWorkerResponse)
             return
         }
 
-        const response = run(request)
+        if (request.type === 'partition') {
+            workerPort.postMessage(partition(request))
+            return
+        }
+
+        const response = runHdbscan(request)
         workerPort.postMessage(response, [response.labels.buffer])
     } catch (error) {
         workerPort.postMessage({
             id: request.id,
             type: 'error',
             error: serializeError(error)
-        } satisfies DreamHdbscanWorkerResponse)
+        } satisfies DreamWorkerResponse)
     }
 })

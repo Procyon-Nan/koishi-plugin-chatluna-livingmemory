@@ -14,8 +14,7 @@ await build({
     absWorkingDir: projectRoot,
     entryPoints: {
         'vector-index-worker': 'src/service/vector_index/worker/entry.ts',
-        'dream-hdbscan-worker':
-            'src/service/workflows/dream/hdbscan/worker_entry.ts'
+        'dream-hdbscan-worker': 'src/service/workflows/dream/worker/entry.ts'
     },
     outdir: outputDirectory,
     bundle: true,

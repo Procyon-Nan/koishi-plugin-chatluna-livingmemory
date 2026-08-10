@@ -1,4 +1,8 @@
-import type { DreamHdbscanMatrix, DreamHdbscanPhase } from './algorithm'
+import type {
+    DreamHdbscanMatrix,
+    DreamHdbscanPhase
+} from '../hdbscan/algorithm'
+import type { DreamPartitionEntry } from '../partitioning/types'
 
 export interface DreamHdbscanProgress {
     phase: DreamHdbscanPhase
@@ -11,31 +15,35 @@ export type DreamHdbscanProgressHandler = (
     progress: DreamHdbscanProgress
 ) => void
 
-export interface DreamHdbscanWorkerError {
+export interface DreamWorkerError {
     name: string
     message: string
     stack: string | null
 }
 
-export type DreamHdbscanWorkerCommand =
+export type DreamWorkerCommand =
     | {
           type: 'ready'
       }
     | {
-          type: 'run'
+          type: 'partition'
+          entries: DreamPartitionEntry[]
+      }
+    | {
+          type: 'hdbscan'
           entryCount: number
           dimension: number
           vectors: Float32Array<ArrayBuffer>
           reportProgress: boolean
       }
 
-type WithRequestId<Command> = Command extends DreamHdbscanWorkerCommand
+type WithRequestId<Command> = Command extends DreamWorkerCommand
     ? Command & { id: number }
     : never
 
-export type DreamHdbscanWorkerRequest = WithRequestId<DreamHdbscanWorkerCommand>
+export type DreamWorkerRequest = WithRequestId<DreamWorkerCommand>
 
-export type DreamHdbscanWorkerResponse =
+export type DreamWorkerResponse =
     | {
           id: number
           type: 'ready'
@@ -43,7 +51,13 @@ export type DreamHdbscanWorkerResponse =
       }
     | {
           id: number
-          type: 'run'
+          type: 'partition'
+          ok: true
+          partitions: number[][]
+      }
+    | {
+          id: number
+          type: 'hdbscan'
           ok: true
           labels: Int32Array<ArrayBuffer>
       }
@@ -55,11 +69,15 @@ export type DreamHdbscanWorkerResponse =
     | {
           id: number
           type: 'error'
-          error: DreamHdbscanWorkerError
+          error: DreamWorkerError
       }
 
-export interface DreamHdbscanRunner {
-    run(
+export interface DreamWorkerRunner {
+    partition<Entry extends DreamPartitionEntry>(
+        entries: readonly Entry[]
+    ): Promise<Entry[][]>
+
+    runHdbscan(
         matrix: DreamHdbscanMatrix,
         onProgress?: DreamHdbscanProgressHandler
     ): Promise<Int32Array<ArrayBuffer>>

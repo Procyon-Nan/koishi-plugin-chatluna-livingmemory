@@ -1,7 +1,7 @@
 import type { HumanMessage } from '@langchain/core/messages'
 import { Context, Logger, Service, Time } from 'koishi'
 import { LivingMemoryDreamService } from '../workflows/dream'
-import { LivingMemoryDreamHdbscanWorkerClient } from '../workflows/dream/hdbscan/worker_client'
+import { LivingMemoryDreamWorkerClient } from '../workflows/dream/worker/client'
 import { LivingMemoryIncrementalDreamService } from '../workflows/dream/incremental'
 import { LivingMemoryDreamJobRunner } from '../workflows/dream/job_runner'
 import { LivingMemoryExtractor } from '../workflows/extraction/extractor'
@@ -83,7 +83,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     private readonly userProfiles: LivingMemoryUserProfileService
     private readonly searchEngine: LivingMemoryEmbeddingSearchEngine
     private readonly vectorIndex: LivingMemoryVectorIndexService
-    private readonly dreamHdbscan: LivingMemoryDreamHdbscanWorkerClient
+    private readonly dreamWorker: LivingMemoryDreamWorkerClient
     private readonly mutations: LivingMemoryMutationService
 
     constructor(
@@ -102,13 +102,13 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             this.repository,
             this.serviceLogger
         )
-        this.dreamHdbscan = new LivingMemoryDreamHdbscanWorkerClient({
+        this.dreamWorker = new LivingMemoryDreamWorkerClient({
             onFailure: (error) =>
                 this.serviceLogger.warn(
                     [
                         'memory background operation failed:',
                         'workflow=dream',
-                        'operation=hdbscan-worker'
+                        'operation=dream-worker'
                     ].join(' '),
                     error
                 )
@@ -149,7 +149,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             this.repository,
             this.mutations,
             this.vectorIndex,
-            this.dreamHdbscan,
+            this.dreamWorker,
             debug
         )
         const incrementalDream = new LivingMemoryIncrementalDreamService(
@@ -258,10 +258,10 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
 
         await this.vectorIndex.start()
         try {
-            await this.dreamHdbscan.start()
+            await this.dreamWorker.start()
         } catch (error) {
             try {
-                await this.dreamHdbscan.stop()
+                await this.dreamWorker.stop()
             } finally {
                 await this.vectorIndex.stop()
             }
@@ -271,7 +271,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
 
     protected async stop() {
         try {
-            await this.dreamHdbscan.stop()
+            await this.dreamWorker.stop()
         } finally {
             await this.vectorIndex.stop()
         }

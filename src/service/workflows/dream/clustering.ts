@@ -4,9 +4,9 @@ import { groupEntriesByLabel } from './hdbscan/labels'
 import type {
     DreamHdbscanProgress,
     DreamHdbscanProgressHandler,
-    DreamHdbscanRunner
-} from './hdbscan/protocol'
-import { DREAM_PARTITION_MAX_SIZE, partitionDreamEntries } from './partitioning'
+    DreamWorkerRunner
+} from './worker/protocol'
+import { DREAM_PARTITION_MAX_SIZE } from './partitioning'
 import type { DreamCluster, DreamStage } from './types'
 
 type DreamHdbscanPass =
@@ -38,7 +38,7 @@ export class DreamClusterer {
         private readonly vectorReader: ManualDreamVectorReader,
         private readonly debug: (message: string) => void,
         private readonly enableTrace: boolean,
-        private readonly hdbscan: DreamHdbscanRunner
+        private readonly worker: DreamWorkerRunner
     ) {}
 
     async buildClusters(
@@ -51,7 +51,7 @@ export class DreamClusterer {
         }
 
         const startedAt = Date.now()
-        const partitions = partitionDreamEntries(entries)
+        const partitions = await this.worker.partition(entries)
         const clusters: DreamCluster[] = []
         const firstPassNoise: DreamMemoryEntryRecord[] = []
         this.trace(
@@ -213,7 +213,7 @@ export class DreamClusterer {
                     progress
                 )
         }
-        const labels = await this.hdbscan.run(
+        const labels = await this.worker.runHdbscan(
             { entryCount: entries.length, dimension, vectors },
             onProgress
         )

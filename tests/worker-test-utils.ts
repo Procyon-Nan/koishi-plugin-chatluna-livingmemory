@@ -11,7 +11,7 @@ export const vectorIndexWorkerPath = resolve(
     'vector-index-worker.mjs'
 )
 
-export const dreamHdbscanWorkerPath = resolve(
+export const dreamWorkerPath = resolve(
     projectRoot,
     'lib',
     'dream-hdbscan-worker.mjs'
