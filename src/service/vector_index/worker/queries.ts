@@ -8,7 +8,11 @@ import type {
     VectorIndexKnnQuery,
     VectorIndexReadVectorsResult
 } from '../worker_protocol'
-import { decodeVector, normalizeIndexKeywords, toPgVector } from './vector_values'
+import {
+    decodeVector,
+    normalizeIndexKeywords,
+    toPgVector
+} from './vector_values'
 
 const KEYWORD_MATCH_BOOST = 0.15
 const KEYWORD_ONLY_BASE_SCORE = 0.3
@@ -121,7 +125,8 @@ export const queryVectorIndexHybrid = async (
                         memoryId,
                         cosineScore: 0,
                         keywordMatchCount,
-                        boostedScore: KEYWORD_ONLY_BASE_SCORE * keywordMatchCount
+                        boostedScore:
+                            KEYWORD_ONLY_BASE_SCORE * keywordMatchCount
                     }
                 }
                 return null
@@ -223,6 +228,7 @@ export const readVectorIndexInventoryPage = async (
     }))
     return {
         items,
-        nextCursor: rows.length > limit ? items.at(-1)?.memoryId ?? null : null
+        nextCursor:
+            rows.length > limit ? (items.at(-1)?.memoryId ?? null) : null
     }
 }

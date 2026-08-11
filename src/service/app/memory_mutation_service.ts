@@ -167,14 +167,14 @@ export class LivingMemoryMutationService
                     result.target,
                     this.vectorAction(result.targetContentChanged)
                 ),
-                ...result.archivedSources.map((source: any) =>
+                ...result.archivedSources.map((source) =>
                     this.upsert(source, 'preserve')
                 )
             ]
             await this.applyCommittedMutation({
                 presetId: result.target.presetId,
                 upserts,
-                deletes: result.deletedSourceIds.map((id: string) => ({
+                deletes: result.deletedSourceIds.map((id) => ({
                     id,
                     presetId: result.target.presetId
                 }))

@@ -172,10 +172,7 @@ export class LivingMemoryVectorIndexWorkerClient {
         })
     }
 
-    finalizeRebuild(
-        previousDatabaseDirectory: string,
-        expectedCount: number
-    ) {
+    finalizeRebuild(previousDatabaseDirectory: string, expectedCount: number) {
         return this.request({
             type: 'finalizeRebuild',
             previousDatabaseDirectory,
@@ -189,8 +186,17 @@ export class LivingMemoryVectorIndexWorkerClient {
 
     async dispose() {
         this.disposeRequested = true
-        await this.request({ type: 'dispose' })
+        let disposeError: Error | null = null
+        try {
+            await this.request({ type: 'dispose' })
+        } catch (error) {
+            disposeError = toError(error)
+            await this.worker.terminate()
+        }
         const exitCode = await this.exitPromise
+        if (disposeError !== null) {
+            throw disposeError
+        }
         if (exitCode !== 0) {
             throw new Error(
                 `vector index worker dispose failed: exitCode=${exitCode}`

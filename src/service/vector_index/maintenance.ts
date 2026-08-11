@@ -179,8 +179,10 @@ export class LivingMemoryVectorIndexMaintenance {
             return 'index manifest is missing'
         }
         if (inspection.manifest.storageEngine !== VECTOR_STORAGE_ENGINE) {
-            return `vector index storage engine changed: expected=${VECTOR_STORAGE_ENGINE}, ` +
+            return (
+                `vector index storage engine changed: expected=${VECTOR_STORAGE_ENGINE}, ` +
                 `actual=${inspection.manifest.storageEngine}`
+            )
         }
         if (
             inspection.vectorExtensionVersion !==
@@ -245,9 +247,9 @@ export class LivingMemoryVectorIndexMaintenance {
                     embeddingModelId: config.embeddingModel,
                     dimension,
                     storageEngine: VECTOR_STORAGE_ENGINE,
-                    vectorExtensionVersion:
-                        (await this.options.worker().inspect())
-                            .vectorExtensionVersion,
+                    vectorExtensionVersion: (
+                        await this.options.worker().inspect()
+                    ).vectorExtensionVersion,
                     generation: randomUUID(),
                     builtAt: Date.now()
                 }

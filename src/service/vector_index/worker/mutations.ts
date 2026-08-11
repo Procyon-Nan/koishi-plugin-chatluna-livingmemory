@@ -1,6 +1,10 @@
 import type { PGlite } from '@electric-sql/pglite'
 import type { MemoryVectorIndexPresetStatus } from '../../../contracts/vector_index'
-import type { VectorIndexMutation } from '../worker_protocol'
+import type {
+    VectorIndexMutation,
+    VectorIndexPreserveUpsert,
+    VectorIndexReplaceUpsert
+} from '../worker_protocol'
 import { normalizeIndexKeywords, toPgVector } from './vector_values'
 
 interface CountRow {
@@ -23,36 +27,86 @@ export const applyVectorIndexMutation = async (
     database: PGlite,
     mutation: VectorIndexMutation
 ) => {
+    const upsertIds = new Set<string>()
+    const replacements: VectorIndexReplaceUpsert[] = []
+    const preserves: VectorIndexPreserveUpsert[] = []
+    for (const upsert of mutation.upserts) {
+        const document = upsert.document
+        if (document.presetId !== mutation.presetId) {
+            throw new Error(
+                `vector index mutation preset mismatch: ` +
+                    `batch=${mutation.presetId}, memory=${document.memoryId}`
+            )
+        }
+        if (upsertIds.has(document.memoryId)) {
+            throw new Error(
+                `vector index mutation contains duplicate upsert: ` +
+                    `memory=${document.memoryId}`
+            )
+        }
+        upsertIds.add(document.memoryId)
+        if (upsert.vectorAction === 'replace') {
+            replacements.push(upsert)
+        } else {
+            preserves.push(upsert)
+        }
+    }
+
     await database.transaction(async (transaction) => {
-        for (const memoryId of mutation.deletes) {
+        if (mutation.deletes.length > 0) {
             await transaction.query(
                 `DELETE FROM lm_index_memory
-                 WHERE preset_id = $1 AND memory_id = $2`,
-                [mutation.presetId, memoryId]
+                 WHERE preset_id = $1
+                   AND memory_id = ANY($2::text[])`,
+                [mutation.presetId, mutation.deletes]
             )
         }
 
-        for (const upsert of mutation.upserts) {
-            const document = upsert.document
-            if (document.presetId !== mutation.presetId) {
-                throw new Error(
-                    `vector index mutation preset mismatch: batch=${mutation.presetId}, memory=${document.memoryId}`
+        if (replacements.length > 0) {
+            const rows = replacements.map(({ document, vector }) => ({
+                memory_id: document.memoryId,
+                preset_id: document.presetId,
+                status: document.status,
+                type: document.type,
+                is_consolidated: document.isConsolidated,
+                content_hash: document.contentHash,
+                keywords_hash: document.keywordsHash,
+                updated_at: document.updatedAt,
+                embedding: toPgVector(vector)
+            }))
+            await transaction.query(
+                `INSERT INTO lm_index_memory (
+                    memory_id,
+                    preset_id,
+                    status,
+                    type,
+                    is_consolidated,
+                    content_hash,
+                    keywords_hash,
+                    updated_at,
+                    embedding
                 )
-            }
-
-            if (upsert.vectorAction === 'replace') {
-                await transaction.query(
-                    `INSERT INTO lm_index_memory (
-                        memory_id,
-                        preset_id,
-                        status,
-                        type,
-                        is_consolidated,
-                        content_hash,
-                        keywords_hash,
-                        updated_at,
-                        embedding
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::vector)
+                SELECT
+                    memory_id,
+                    preset_id,
+                    status,
+                    type,
+                    is_consolidated,
+                    content_hash,
+                    keywords_hash,
+                    updated_at,
+                    embedding::vector
+                FROM jsonb_to_recordset($1::jsonb) AS input(
+                    memory_id text,
+                    preset_id text,
+                    status text,
+                    type text,
+                    is_consolidated boolean,
+                    content_hash text,
+                    keywords_hash text,
+                    updated_at bigint,
+                    embedding text
+                )
                     ON CONFLICT (memory_id) DO UPDATE SET
                         preset_id = excluded.preset_id,
                         status = excluded.status,
@@ -62,56 +116,78 @@ export const applyVectorIndexMutation = async (
                         keywords_hash = excluded.keywords_hash,
                         updated_at = excluded.updated_at,
                         embedding = excluded.embedding`,
-                    [
-                        document.memoryId,
-                        document.presetId,
-                        document.status,
-                        document.type,
-                        document.isConsolidated,
-                        document.contentHash,
-                        document.keywordsHash,
-                        document.updatedAt,
-                        toPgVector(upsert.vector)
-                    ]
-                )
-            } else {
-                const result = await transaction.query(
-                    `UPDATE lm_index_memory
-                     SET preset_id = $1,
-                         status = $2,
-                         type = $3,
-                         is_consolidated = $4,
-                         content_hash = $5,
-                         keywords_hash = $6,
-                         updated_at = $7
-                     WHERE memory_id = $8`,
-                    [
-                        document.presetId,
-                        document.status,
-                        document.type,
-                        document.isConsolidated,
-                        document.contentHash,
-                        document.keywordsHash,
-                        document.updatedAt,
-                        document.memoryId
-                    ]
-                )
-                if (result.affectedRows !== 1) {
-                    throw new Error(
-                        `cannot preserve missing vector: memory=${document.memoryId}`
-                    )
-                }
-            }
-
-            await transaction.query(
-                'DELETE FROM lm_index_keywords WHERE memory_id = $1',
-                [document.memoryId]
+                [JSON.stringify(rows)]
             )
-            for (const keyword of normalizeIndexKeywords(document.keywords)) {
+        }
+
+        if (preserves.length > 0) {
+            const rows = preserves.map(({ document }) => ({
+                memory_id: document.memoryId,
+                preset_id: document.presetId,
+                status: document.status,
+                type: document.type,
+                is_consolidated: document.isConsolidated,
+                content_hash: document.contentHash,
+                keywords_hash: document.keywordsHash,
+                updated_at: document.updatedAt
+            }))
+            const result = await transaction.query<{ memoryId: string }>(
+                `UPDATE lm_index_memory AS memory
+                 SET preset_id = input.preset_id,
+                     status = input.status,
+                     type = input.type,
+                     is_consolidated = input.is_consolidated,
+                     content_hash = input.content_hash,
+                     keywords_hash = input.keywords_hash,
+                     updated_at = input.updated_at
+                 FROM jsonb_to_recordset($1::jsonb) AS input(
+                    memory_id text,
+                    preset_id text,
+                    status text,
+                    type text,
+                    is_consolidated boolean,
+                    content_hash text,
+                    keywords_hash text,
+                    updated_at bigint
+                 )
+                 WHERE memory.memory_id = input.memory_id
+                 RETURNING memory.memory_id AS "memoryId"`,
+                [JSON.stringify(rows)]
+            )
+            const updatedIds = new Set(result.rows.map((row) => row.memoryId))
+            const missing = preserves.find(
+                ({ document }) => !updatedIds.has(document.memoryId)
+            )
+            if (missing !== undefined) {
+                throw new Error(
+                    `cannot preserve missing vector: ` +
+                        `memory=${missing.document.memoryId}`
+                )
+            }
+        }
+
+        if (mutation.upserts.length > 0) {
+            await transaction.query(
+                `DELETE FROM lm_index_keywords
+                 WHERE memory_id = ANY($1::text[])`,
+                [[...upsertIds]]
+            )
+
+            const keywordRows = mutation.upserts.flatMap(({ document }) =>
+                normalizeIndexKeywords(document.keywords).map((keyword) => ({
+                    memory_id: document.memoryId,
+                    keyword
+                }))
+            )
+            if (keywordRows.length > 0) {
                 await transaction.query(
                     `INSERT INTO lm_index_keywords (memory_id, keyword)
-                     VALUES ($1, $2)`,
-                    [document.memoryId, keyword]
+                     SELECT memory_id, keyword
+                     FROM jsonb_to_recordset($1::jsonb) AS input(
+                        memory_id text,
+                        keyword text
+                     )`,
+                    [JSON.stringify(keywordRows)]
                 )
             }
         }

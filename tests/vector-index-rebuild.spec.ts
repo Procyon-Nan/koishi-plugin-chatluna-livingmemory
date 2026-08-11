@@ -11,10 +11,7 @@ import { VectorIndexOperationGate } from '../src/service/vector_index/operation_
 import { rebuildVectorIndex } from '../src/service/vector_index/rebuild'
 import { reconcileVectorIndexPreset } from '../src/service/vector_index/reconcile'
 import { LivingMemoryVectorIndexWorkerClient } from '../src/service/vector_index/worker_client'
-import {
-    ensureWorkersBuilt,
-    vectorIndexWorkerPath
-} from './worker-test-utils'
+import { ensureWorkersBuilt, vectorIndexWorkerPath } from './worker-test-utils'
 
 const workerPath = vectorIndexWorkerPath
 
@@ -265,9 +262,7 @@ it('reuses only valid legacy vectors during a full rebuild', async () => {
 
 it('does not read legacy vectors after the migration is complete', async () => {
     await withWorker(async (client, directory) => {
-        const repository = new TestRebuildRepository([
-            createSource('memory-a')
-        ])
+        const repository = new TestRebuildRepository([createSource('memory-a')])
         repository.legacy.set('memory-a', {
             id: 'memory-a',
             embedding: [0, 1, 0],
@@ -334,11 +329,7 @@ it('reconciles additions, metadata updates, content changes, and orphans', async
         assert.deepEqual(calls, [
             ['updated content memory-b', 'content memory-new']
         ])
-        const inventory = await client.readInventoryPage(
-            'preset-a',
-            null,
-            10
-        )
+        const inventory = await client.readInventoryPage('preset-a', null, 10)
         assert.deepEqual(
             inventory.items.map((item) => item.memoryId),
             ['memory-a', 'memory-b', 'memory-new']
@@ -363,9 +354,7 @@ it('reconciles additions, metadata updates, content changes, and orphans', async
 
 it('marks a preset dirty when reconcile embedding fails', async () => {
     await withWorker(async (client, directory) => {
-        const repository = new TestRebuildRepository([
-            createSource('memory-a')
-        ])
+        const repository = new TestRebuildRepository([createSource('memory-a')])
         await buildFormalIndex({
             client,
             directory,

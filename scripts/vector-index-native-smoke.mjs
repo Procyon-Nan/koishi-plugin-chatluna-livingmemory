@@ -70,7 +70,10 @@ try {
          LIMIT 10`,
         ['[1,0,0]']
     )
-    assert.deepEqual(nearest.rows.map((row) => row.id), [1])
+    assert.deepEqual(
+        nearest.rows.map((row) => row.id),
+        [1]
+    )
     assert.ok(Number(nearest.rows[0].distance) < 0.000_001)
 
     await database.query(
@@ -86,7 +89,10 @@ try {
            AND is_consolidated = false`,
         ['[1,0,0]']
     )
-    assert.deepEqual(updated.rows.map((row) => row.id), [1])
+    assert.deepEqual(
+        updated.rows.map((row) => row.id),
+        [1]
+    )
 
     await database.query('DELETE FROM smoke_vectors WHERE id = 1')
     const count = await database.query(
@@ -110,12 +116,29 @@ try {
             'worker.previous'
         )
     })
-    assert.equal(inspection.storageEngine, 'pglite-pgvector')
+    assert.equal(inspection.manifest, null)
     assert.equal(inspection.vectorExtensionVersion, version.rows[0].version)
-    await waitForWorkerCall(worker, 2, { type: 'dispose' })
+    const manifest = {
+        schemaVersion: 2,
+        embeddingModelId: 'smoke-model',
+        dimension: 3,
+        storageEngine: 'pglite-pgvector',
+        vectorExtensionVersion: inspection.vectorExtensionVersion,
+        generation: 'smoke-generation',
+        builtAt: Date.now()
+    }
+    const created = await waitForWorkerCall(worker, 2, {
+        type: 'createRebuildFile',
+        databaseDirectory: resolve(temporaryDirectory, 'worker.rebuild'),
+        manifest
+    })
+    assert.deepEqual(created.manifest, manifest)
+    await waitForWorkerCall(worker, 3, { type: 'dispose' })
     assert.equal(await exitPromise, 0)
 
-    console.log(`PGlite pgvector ${version.rows[0].version} native smoke passed`)
+    console.log(
+        `PGlite pgvector ${version.rows[0].version} native smoke passed`
+    )
 } finally {
     await database.close()
     await rm(temporaryDirectory, { recursive: true, force: true })

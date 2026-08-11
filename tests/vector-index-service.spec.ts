@@ -19,10 +19,7 @@ import {
     type VectorIndexWorkerFactory
 } from '../src/service/vector_index/service'
 import { LivingMemoryVectorIndexWorkerClient } from '../src/service/vector_index/worker_client'
-import {
-    ensureWorkersBuilt,
-    vectorIndexWorkerPath
-} from './worker-test-utils'
+import { ensureWorkersBuilt, vectorIndexWorkerPath } from './worker-test-utils'
 
 const workerPath = vectorIndexWorkerPath
 

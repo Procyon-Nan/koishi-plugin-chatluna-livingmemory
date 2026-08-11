@@ -1,5 +1,6 @@
 import { PGlite } from '@electric-sql/pglite'
 import { vector } from '@electric-sql/pglite-pgvector'
+import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type {
@@ -7,6 +8,7 @@ import type {
     MemoryVectorIndexPresetStatus,
     MemoryVectorIndexState
 } from '../../../contracts/vector_index'
+import { summarizeError } from '../../shared/utils'
 import type {
     VectorIndexHybridQuery,
     VectorIndexInspection,
@@ -51,11 +53,26 @@ const removeDirectory = (directory: string) => {
     rmSync(directory, { recursive: true, force: true })
 }
 
+interface VectorIndexDatabaseOptions {
+    removeDirectory?: (directory: string) => void
+    reportWarning?: (warning: Error) => void
+}
+
 export class LivingMemoryVectorIndexDatabase {
     private database: PGlite | null = null
     private activeDatabaseDirectory: string | null = null
     private rebuildDatabaseDirectory: string | null = null
     private mode: 'active' | 'rebuild' | null = null
+
+    private readonly removeDatabaseDirectory: (directory: string) => void
+    private readonly reportWarning: (warning: Error) => void
+
+    constructor(options: VectorIndexDatabaseOptions = {}) {
+        this.removeDatabaseDirectory =
+            options.removeDirectory ?? removeDirectory
+        this.reportWarning =
+            options.reportWarning ?? ((warning) => process.emitWarning(warning))
+    }
 
     async open(
         databaseDirectory: string,
@@ -65,42 +82,57 @@ export class LivingMemoryVectorIndexDatabase {
             throw new Error('vector index database is already open')
         }
         this.activeDatabaseDirectory = databaseDirectory
-        if (!existsSync(databaseDirectory) && existsSync(previousDatabaseDirectory)) {
+        if (
+            !existsSync(databaseDirectory) &&
+            existsSync(previousDatabaseDirectory)
+        ) {
             renameSync(previousDatabaseDirectory, databaseDirectory)
         }
 
+        let inspection: VectorIndexInspection
         try {
             this.database = await this.openConnection(databaseDirectory)
             this.mode = 'active'
-            const inspection = await this.inspect()
-            if (existsSync(previousDatabaseDirectory)) {
-                if (inspection.manifest === null) {
-                    return this.restorePreviousDatabase(
-                        databaseDirectory,
-                        previousDatabaseDirectory
-                    )
-                }
-                removeDirectory(previousDatabaseDirectory)
-            }
-            return inspection
+            inspection = await this.inspect()
         } catch (error) {
             if (existsSync(previousDatabaseDirectory)) {
                 return this.restorePreviousDatabase(
                     databaseDirectory,
-                    previousDatabaseDirectory
+                    previousDatabaseDirectory,
+                    error
                 )
             }
             await this.closeConnection()
-            removeDirectory(databaseDirectory)
+            this.quarantineDatabaseDirectory(
+                databaseDirectory,
+                'database open',
+                error
+            )
             this.database = await this.openConnection(databaseDirectory)
             this.mode = 'active'
             return this.inspect()
         }
+
+        if (existsSync(previousDatabaseDirectory)) {
+            if (inspection.manifest === null) {
+                return this.restorePreviousDatabase(
+                    databaseDirectory,
+                    previousDatabaseDirectory,
+                    null
+                )
+            }
+            this.cleanupDatabaseDirectory(
+                previousDatabaseDirectory,
+                'previous index cleanup after recovery'
+            )
+        }
+        return inspection
     }
 
     async inspect(): Promise<VectorIndexInspection> {
         const database = this.requireDatabase()
-        const vectorExtensionVersion = await this.readVectorExtensionVersion(database)
+        const vectorExtensionVersion =
+            await this.readVectorExtensionVersion(database)
         if (!(await hasVectorIndexSchema(database))) {
             return {
                 vectorExtensionVersion,
@@ -152,10 +184,7 @@ export class LivingMemoryVectorIndexDatabase {
 
         return {
             vectorExtensionVersion,
-            manifest:
-                manifest === undefined
-                    ? null
-                    : manifest,
+            manifest: manifest === undefined ? null : manifest,
             indexedCount: await countVectorIndexMemories(database),
             inventory,
             presets: presets.map((preset) => ({
@@ -264,6 +293,7 @@ export class LivingMemoryVectorIndexDatabase {
         await this.closeConnection()
         let activeMoved = false
         let rebuildMoved = false
+        let inspection: VectorIndexInspection
         try {
             if (existsSync(activeDirectory)) {
                 renameSync(activeDirectory, previousDatabaseDirectory)
@@ -274,9 +304,7 @@ export class LivingMemoryVectorIndexDatabase {
             this.database = await this.openConnection(activeDirectory)
             this.mode = 'active'
             this.rebuildDatabaseDirectory = null
-            const inspection = await this.inspect()
-            removeDirectory(previousDatabaseDirectory)
-            return inspection
+            inspection = await this.inspect()
         } catch (error) {
             await this.closeConnection()
             if (rebuildMoved && existsSync(activeDirectory)) {
@@ -293,6 +321,11 @@ export class LivingMemoryVectorIndexDatabase {
             this.rebuildDatabaseDirectory = null
             throw error
         }
+        this.cleanupDatabaseDirectory(
+            previousDatabaseDirectory,
+            'previous index cleanup after rebuild'
+        )
+        return inspection
     }
 
     async abortRebuild(): Promise<VectorIndexInspection> {
@@ -332,10 +365,19 @@ export class LivingMemoryVectorIndexDatabase {
 
     private async restorePreviousDatabase(
         databaseDirectory: string,
-        previousDatabaseDirectory: string
+        previousDatabaseDirectory: string,
+        currentDirectoryError: unknown | null
     ) {
         await this.closeConnection()
-        removeDirectory(databaseDirectory)
+        if (currentDirectoryError !== null) {
+            this.quarantineDatabaseDirectory(
+                databaseDirectory,
+                'database recovery',
+                currentDirectoryError
+            )
+        } else {
+            this.removeDatabaseDirectory(databaseDirectory)
+        }
         renameSync(previousDatabaseDirectory, databaseDirectory)
         this.database = await this.openConnection(databaseDirectory)
         this.mode = 'active'
@@ -344,8 +386,45 @@ export class LivingMemoryVectorIndexDatabase {
 
     private async closeConnection() {
         if (this.database !== null) {
-            await this.database.close()
+            const database = this.database
             this.database = null
+            await database.close()
+        }
+    }
+
+    private quarantineDatabaseDirectory(
+        directory: string,
+        operation: string,
+        cause: unknown
+    ) {
+        if (!existsSync(directory)) {
+            return
+        }
+        const quarantineDirectory = `${directory}.failed-${randomUUID()}`
+        renameSync(directory, quarantineDirectory)
+        this.reportWarning(
+            new Error(
+                `vector index database quarantined: operation=${operation} ` +
+                    `source=${directory} quarantine=${quarantineDirectory}: ` +
+                    summarizeError(cause),
+                { cause }
+            )
+        )
+    }
+
+    private cleanupDatabaseDirectory(directory: string, operation: string) {
+        try {
+            this.removeDatabaseDirectory(directory)
+        } catch (error) {
+            const message =
+                error instanceof Error ? error.message : String(error)
+            this.reportWarning(
+                new Error(
+                    `vector index cleanup failed: operation=${operation} ` +
+                        `directory=${directory}: ${message}`,
+                    { cause: error }
+                )
+            )
         }
     }
 

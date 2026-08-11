@@ -17,7 +17,9 @@ let database
 let randomState = 0x6d2b79f5
 const random = () => {
     randomState = Math.imul(randomState ^ (randomState >>> 15), 1 | randomState)
-    randomState ^= randomState + Math.imul(randomState ^ (randomState >>> 7), 61 | randomState)
+    randomState ^=
+        randomState +
+        Math.imul(randomState ^ (randomState >>> 7), 61 | randomState)
     return ((randomState ^ (randomState >>> 14)) >>> 0) / 4_294_967_296
 }
 
@@ -43,12 +45,16 @@ const createMetadata = (index) => ({
 
 const directorySize = async (path) => {
     const entries = await readdir(path, { withFileTypes: true })
-    return (await Promise.all(entries.map(async (entry) => {
-        const entryPath = resolve(path, entry.name)
-        return entry.isDirectory()
-            ? directorySize(entryPath)
-            : (await stat(entryPath)).size
-    }))).reduce((total, size) => total + size, 0)
+    return (
+        await Promise.all(
+            entries.map(async (entry) => {
+                const entryPath = resolve(path, entry.name)
+                return entry.isDirectory()
+                    ? directorySize(entryPath)
+                    : (await stat(entryPath)).size
+            })
+        )
+    ).reduce((total, size) => total + size, 0)
 }
 
 try {
@@ -71,7 +77,14 @@ try {
             const metadata = createMetadata(index)
             await database.query(
                 `INSERT INTO benchmark_vectors VALUES ($1, $2::vector, $3, $4, $5, $6)`,
-                [BigInt(index), createVector(), 'benchmark-preset', metadata.status, metadata.type, index % 2 === 1]
+                [
+                    BigInt(index),
+                    createVector(),
+                    'benchmark-preset',
+                    metadata.status,
+                    metadata.type,
+                    index % 2 === 1
+                ]
             )
         }
         await database.exec('COMMIT')
@@ -100,14 +113,22 @@ try {
     database = undefined
 
     const fileSize = await directorySize(databasePath)
-    console.log(JSON.stringify({
-        memoryCount,
-        dimension,
-        queryCount,
-        buildMilliseconds: Math.round(buildDuration),
-        queryP95Milliseconds: Number(queryDurations[p95Index].toFixed(3)),
-        fileMiB: Number((fileSize / 1024 / 1024).toFixed(2))
-    }, null, 2))
+    console.log(
+        JSON.stringify(
+            {
+                memoryCount,
+                dimension,
+                queryCount,
+                buildMilliseconds: Math.round(buildDuration),
+                queryP95Milliseconds: Number(
+                    queryDurations[p95Index].toFixed(3)
+                ),
+                fileMiB: Number((fileSize / 1024 / 1024).toFixed(2))
+            },
+            null,
+            2
+        )
+    )
 } finally {
     if (database !== undefined) {
         await database.close()
