@@ -1,6 +1,5 @@
-import { dirname, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { Worker } from 'node:worker_threads'
+import { resolveWorkerArtifact } from '../../worker_artifacts'
 import { toError } from '../shared/utils'
 import type {
     VectorIndexHybridQuery,
@@ -21,16 +20,6 @@ import type {
 interface PendingRequest {
     resolve: (result: unknown) => void
     reject: (error: Error) => void
-}
-
-const resolveDefaultWorkerPath = () => {
-    let moduleDirectory: string
-    if (typeof __dirname !== 'undefined') {
-        moduleDirectory = __dirname
-    } else {
-        moduleDirectory = dirname(fileURLToPath(import.meta.url))
-    }
-    return resolve(moduleDirectory, 'vector-index-worker.mjs')
 }
 
 const deserializeError = (serialized: VectorIndexWorkerError) => {
@@ -79,7 +68,7 @@ export class LivingMemoryVectorIndexWorkerClient {
     private disposeRequested = false
 
     constructor(
-        workerPath = resolveDefaultWorkerPath(),
+        workerPath = resolveWorkerArtifact('vector-index-worker.mjs'),
         private readonly onFailure?: (error: Error) => void
     ) {
         this.worker = new Worker(workerPath)

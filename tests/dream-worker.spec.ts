@@ -8,6 +8,7 @@ import {
 import { partitionDreamEntries } from '../src/service/workflows/dream/partitioning'
 import { LivingMemoryDreamWorkerClient } from '../src/service/workflows/dream/worker/client'
 import type { DreamHdbscanProgress } from '../src/service/workflows/dream/worker/protocol'
+import { LivingMemoryVectorIndexWorkerClient } from '../src/service/vector_index/worker_client'
 import {
     dreamWorkerPath,
     ensureWorkersBuilt,
@@ -34,6 +35,15 @@ it('builds both worker artifacts through the shared build script', async () => {
     const dreamWorker = await readFile(dreamWorkerPath, 'utf8')
     assert.equal(dreamWorker.includes('better-sqlite3'), false)
     assert.equal(dreamWorker.includes('sqlite-vec'), false)
+})
+
+it('starts both workers from source-loaded default paths', async () => {
+    const dreamClient = new LivingMemoryDreamWorkerClient()
+    await dreamClient.start()
+    await dreamClient.stop()
+
+    const vectorIndexClient = new LivingMemoryVectorIndexWorkerClient()
+    await vectorIndexClient.dispose()
 })
 
 it('starts the Dream worker and transfers vectors and labels', async () => {

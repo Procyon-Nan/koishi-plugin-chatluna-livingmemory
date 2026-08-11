@@ -1,6 +1,5 @@
-import { dirname, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { Worker } from 'node:worker_threads'
+import { resolveWorkerArtifact } from '../../../../worker_artifacts'
 import { toError } from '../../../shared/utils'
 import type { DreamHdbscanMatrix } from '../hdbscan/algorithm'
 import type { DreamPartitionEntry } from '../partitioning/types'
@@ -16,16 +15,6 @@ interface PendingRequest {
     resolve: (response: DreamWorkerResponse) => void
     reject: (error: Error) => void
     onProgress?: DreamHdbscanProgressHandler
-}
-
-const resolveDefaultWorkerPath = () => {
-    let moduleDirectory: string
-    if (typeof __dirname !== 'undefined') {
-        moduleDirectory = __dirname
-    } else {
-        moduleDirectory = dirname(fileURLToPath(import.meta.url))
-    }
-    return resolve(moduleDirectory, 'dream-hdbscan-worker.mjs')
 }
 
 const deserializeError = (serialized: DreamWorkerError) => {
@@ -52,7 +41,9 @@ export class LivingMemoryDreamWorkerClient implements DreamWorkerRunner {
     private closed = false
 
     constructor(options: DreamWorkerClientOptions = {}) {
-        this.workerPath = options.workerPath ?? resolveDefaultWorkerPath()
+        this.workerPath =
+            options.workerPath ??
+            resolveWorkerArtifact('dream-hdbscan-worker.mjs')
         this.onFailure = options.onFailure
     }
 
