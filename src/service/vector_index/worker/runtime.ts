@@ -141,7 +141,7 @@ export const startVectorIndexWorker = (
                 try {
                     port.postMessage(response, responseTransferList(response))
                 } finally {
-                    if (request.command.type === 'dispose') {
+                    if (response.type === 'dispose') {
                         port.close()
                     }
                 }

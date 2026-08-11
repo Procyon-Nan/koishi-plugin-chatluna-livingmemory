@@ -208,22 +208,18 @@ export const clearVectorIndexPreset = async (
     database: PGlite,
     presetId: string
 ) => {
-    const deletedCount = await readCount(
-        database,
-        `SELECT COUNT(*)::text AS count
-         FROM lm_index_memory
-         WHERE preset_id = $1`,
-        [presetId]
-    )
-    await database.transaction(async (transaction) => {
-        await transaction.query(
-            'DELETE FROM lm_index_memory WHERE preset_id = $1',
+    const deletedCount = await database.transaction(async (transaction) => {
+        const deleted = await transaction.query<{ memoryId: string }>(
+            `DELETE FROM lm_index_memory
+             WHERE preset_id = $1
+             RETURNING memory_id AS "memoryId"`,
             [presetId]
         )
         await transaction.query(
             'DELETE FROM lm_index_preset_state WHERE preset_id = $1',
             [presetId]
         )
+        return deleted.rows.length
     })
     return { deletedCount }
 }
