@@ -1,3 +1,4 @@
+import { readdir, unlink } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import type { Context, Logger } from 'koishi'
 import type {
@@ -47,6 +48,12 @@ interface VectorIndexServiceOptions {
 const createDefaultWorker: VectorIndexWorkerFactory = (onFailure) =>
     new LivingMemoryVectorIndexWorkerClient(undefined, onFailure)
 
+const legacyIndexFiles = new Set([
+    'vector-index.sqlite',
+    'vector-index.previous.sqlite'
+])
+const legacyRebuildFile = /^vector-index\.rebuild-.+\.sqlite$/u
+
 export class LivingMemoryVectorIndexService
     implements
         ManualDreamVectorReader,
@@ -61,6 +68,7 @@ export class LivingMemoryVectorIndexService
 
     private readonly status = new VectorIndexStatusStore()
 
+    private readonly indexDirectory: string
     private readonly databaseDirectory: string
     private readonly previousDatabaseDirectory: string
     private readonly ownershipLock: LivingMemoryVectorIndexOwnershipLock
@@ -84,19 +92,22 @@ export class LivingMemoryVectorIndexService
             options.schemaVersion ?? VECTOR_INDEX_SCHEMA_VERSION
         this.workerFactory = options.workerFactory ?? createDefaultWorker
 
-        const indexDirectory = resolve(
+        this.indexDirectory = resolve(
             ctx.baseDir,
             'data',
             'chatluna',
             'living-memory'
         )
-        this.databaseDirectory = resolve(indexDirectory, 'vector-index.pglite')
+        this.databaseDirectory = resolve(
+            this.indexDirectory,
+            'vector-index.pglite'
+        )
         this.previousDatabaseDirectory = resolve(
-            indexDirectory,
+            this.indexDirectory,
             'vector-index.previous.pglite'
         )
         this.ownershipLock = new LivingMemoryVectorIndexOwnershipLock(
-            resolve(indexDirectory, 'vector-index.lock'),
+            resolve(this.indexDirectory, 'vector-index.lock'),
             (error) => this.recordWorkerFailure(error)
         )
         this.maintenance = new LivingMemoryVectorIndexMaintenance({
@@ -105,7 +116,7 @@ export class LivingMemoryVectorIndexService
             repository,
             operationGate: this.operationGate,
             schemaVersion,
-            indexDirectory,
+            indexDirectory: this.indexDirectory,
             previousDatabaseDirectory: this.previousDatabaseDirectory,
             worker: () => this.requireWorker(),
             shouldStop: () => this.stopping,
@@ -434,6 +445,27 @@ export class LivingMemoryVectorIndexService
             )
         }
         await this.maintenance.initialize(inspection, openError)
+        try {
+            await this.removeLegacyIndexFiles()
+        } catch (error) {
+            this.logger.warn(
+                'memory background operation failed: workflow=vector-index operation=legacy-index-cleanup',
+                error
+            )
+        }
+    }
+
+    private async removeLegacyIndexFiles() {
+        const filenames = await readdir(this.indexDirectory)
+        for (const filename of filenames) {
+            if (
+                !legacyIndexFiles.has(filename) &&
+                !legacyRebuildFile.test(filename)
+            ) {
+                continue
+            }
+            await unlink(resolve(this.indexDirectory, filename))
+        }
     }
 
     private async embedSearchTexts(searchTexts: string[]) {

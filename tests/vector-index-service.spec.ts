@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, rm, utimes, writeFile } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import type { Context, Logger } from 'koishi'
@@ -258,6 +258,9 @@ const withTemporaryDirectory = async (
     }
 }
 
+const resolveIndexDirectory = (baseDir: string) =>
+    resolve(baseDir, 'data', 'chatluna', 'living-memory')
+
 it('builds the index once and reuses its manifest after restart', async () => {
     await withTemporaryDirectory(async (baseDir) => {
         const repository = new TestVectorIndexRepository([
@@ -356,6 +359,101 @@ it('builds the index once and reuses its manifest after restart', async () => {
         )
         assert.equal(secondCalls.length, 1)
         await second.stop()
+    })
+})
+
+it('removes legacy SQLite index files after initialization succeeds', async () => {
+    await withTemporaryDirectory(async (baseDir) => {
+        const indexDirectory = resolveIndexDirectory(baseDir)
+        await mkdir(indexDirectory, { recursive: true })
+        const legacyFiles = [
+            'vector-index.sqlite',
+            'vector-index.previous.sqlite',
+            'vector-index.rebuild-job-1.sqlite'
+        ].map((filename) => resolve(indexDirectory, filename))
+        for (const file of legacyFiles) {
+            await writeFile(file, 'legacy index')
+        }
+        const unrelatedFile = resolve(indexDirectory, 'unrelated.sqlite')
+        await writeFile(unrelatedFile, 'unrelated data')
+
+        const service = createService({
+            baseDir,
+            repository: new TestVectorIndexRepository([
+                createSource('memory-a')
+            ]),
+            modelId: 'model-a',
+            dimension: 3
+        })
+        await service.start()
+        await service.waitForInitialization()
+
+        assert.equal(service.getStatus().state, 'ready')
+        for (const file of legacyFiles) {
+            await assert.rejects(access(file), { code: 'ENOENT' })
+        }
+        await access(unrelatedFile)
+        await service.stop()
+    })
+})
+
+it('keeps legacy SQLite index files when initialization fails', async () => {
+    await withTemporaryDirectory(async (baseDir) => {
+        const indexDirectory = resolveIndexDirectory(baseDir)
+        const legacyFile = resolve(indexDirectory, 'vector-index.sqlite')
+        await mkdir(indexDirectory, { recursive: true })
+        await writeFile(legacyFile, 'legacy index')
+
+        const service = createService({
+            baseDir,
+            repository: new TestVectorIndexRepository([
+                createSource('memory-a')
+            ]),
+            modelId: 'model-a',
+            dimension: 3,
+            onDocuments: async (texts) => {
+                if (!texts[0].includes('dimension probe')) {
+                    throw new Error('injected embedding failure')
+                }
+            }
+        })
+        await service.start()
+        await service.waitForInitialization()
+
+        assert.equal(service.getStatus().state, 'unavailable')
+        await access(legacyFile)
+        await service.stop()
+    })
+})
+
+it('warns without failing initialization when legacy cleanup fails', async () => {
+    await withTemporaryDirectory(async (baseDir) => {
+        const legacyDirectory = resolve(
+            resolveIndexDirectory(baseDir),
+            'vector-index.sqlite'
+        )
+        await mkdir(legacyDirectory, { recursive: true })
+        const captured = createLogger()
+        const service = createService({
+            baseDir,
+            repository: new TestVectorIndexRepository([
+                createSource('memory-a')
+            ]),
+            modelId: 'model-a',
+            dimension: 3,
+            logger: captured.logger
+        })
+        await service.start()
+        await service.waitForInitialization()
+
+        assert.equal(service.getStatus().state, 'ready')
+        assert.equal(captured.warnings.length, 1)
+        assert.equal(
+            captured.warnings[0][0],
+            'memory background operation failed: workflow=vector-index operation=legacy-index-cleanup'
+        )
+        await access(legacyDirectory)
+        await service.stop()
     })
 })
 
