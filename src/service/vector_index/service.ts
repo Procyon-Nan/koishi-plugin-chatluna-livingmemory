@@ -61,8 +61,8 @@ export class LivingMemoryVectorIndexService
 
     private readonly status = new VectorIndexStatusStore()
 
-    private readonly databasePath: string
-    private readonly previousDatabasePath: string
+    private readonly databaseDirectory: string
+    private readonly previousDatabaseDirectory: string
     private readonly ownershipLock: LivingMemoryVectorIndexOwnershipLock
     private readonly maintenance: LivingMemoryVectorIndexMaintenance
     private readonly workerFactory: VectorIndexWorkerFactory
@@ -90,10 +90,10 @@ export class LivingMemoryVectorIndexService
             'chatluna',
             'living-memory'
         )
-        this.databasePath = resolve(indexDirectory, 'vector-index.sqlite')
-        this.previousDatabasePath = resolve(
+        this.databaseDirectory = resolve(indexDirectory, 'vector-index.pglite')
+        this.previousDatabaseDirectory = resolve(
             indexDirectory,
-            'vector-index.previous.sqlite'
+            'vector-index.previous.pglite'
         )
         this.ownershipLock = new LivingMemoryVectorIndexOwnershipLock(
             resolve(indexDirectory, 'vector-index.lock'),
@@ -106,7 +106,7 @@ export class LivingMemoryVectorIndexService
             operationGate: this.operationGate,
             schemaVersion,
             indexDirectory,
-            previousDatabasePath: this.previousDatabasePath,
+            previousDatabaseDirectory: this.previousDatabaseDirectory,
             worker: () => this.requireWorker(),
             shouldStop: () => this.stopping,
             onBuilding: (jobId) => this.markBuilding(jobId),
@@ -142,8 +142,8 @@ export class LivingMemoryVectorIndexService
         let openError: Error | null = null
         try {
             inspection = await this.worker.open(
-                this.databasePath,
-                this.previousDatabasePath
+                this.databaseDirectory,
+                this.previousDatabaseDirectory
             )
         } catch (error) {
             openError = toError(error)

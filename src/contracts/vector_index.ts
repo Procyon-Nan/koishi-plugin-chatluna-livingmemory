@@ -18,7 +18,8 @@ export interface MemoryVectorIndexManifest {
     schemaVersion: number
     embeddingModelId: string
     dimension: number
-    sqliteVecVersion: string
+    storageEngine: 'pglite-pgvector'
+    vectorExtensionVersion: string
     generation: string
     builtAt: number
 }

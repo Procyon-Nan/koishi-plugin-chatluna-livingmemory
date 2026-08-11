@@ -36,8 +36,9 @@
     "memory"
   ],
   "dependencies": {
+    "@electric-sql/pglite": "^0.5.4",
+    "@electric-sql/pglite-pgvector": "^0.0.5",
     "@langchain/core": "^0.3.80",
-    "sqlite-vec": "0.1.9",
     "zod": "3.25.76"
   },
   "resolutions": {
@@ -69,6 +70,8 @@
     "eslint-plugin-promise": "^7.2.1",
     "koishi": "^4.18.9",
     "koishi-plugin-chatluna": "^1.4.0-alpha.37",
+    "mocha": "^9.2.2",
+    "typescript": "^5.9.3",
     "yakumo": "^1.0.0",
     "yakumo-esbuild": "^1.0.0",
     "yakumo-mocha": "^1.0.0",
@@ -83,18 +86,18 @@
     "node": ">=22.13.0"
   },
   "scripts": {
-    "build:server": "yarn yakumo build",
+    "build:server": "yakumo build",
     "build:workers": "node scripts/build-workers.mjs",
-    "yakumo:after:build": "yarn build:workers",
+    "yakumo:after:build": "node --run build:workers",
     "build:client": "koishi-console build",
-    "build": "yarn build:server && yarn build:client",
+    "build": "node --run build:server && node --run build:client",
     "vector-index:smoke": "node scripts/vector-index-native-smoke.mjs",
-    "test": "yarn node ../../node_modules/mocha/bin/mocha -r esbuild-register --exit tests/**/*.spec.ts",
-    "bump": "yarn yakumo version",
-    "dep": "yarn yakumo upgrade",
-    "pub": "yarn yakumo publish",
-    "lint": "yarn eslint src client --ext=ts",
-    "lint-fix": "yarn eslint src client --ext=ts --fix"
+    "test": "mocha --timeout 30000 -r esbuild-register --exit tests/**/*.spec.ts",
+    "bump": "yakumo version",
+    "dep": "yakumo upgrade",
+    "pub": "yakumo publish",
+    "lint": "eslint src client --ext=ts",
+    "lint-fix": "eslint src client --ext=ts --fix"
   },
   "koishi": {
     "description": {

@@ -1,329 +1,256 @@
-import type { DatabaseSync } from 'node:sqlite'
+import type { PGlite } from '@electric-sql/pglite'
 import type { MemoryVectorIndexPresetStatus } from '../../../contracts/vector_index'
-import type { VectorIndexMutation, VectorIndexUpsert } from '../worker_protocol'
-import {
-    normalizeIndexKeywords,
-    toSqliteBoolean,
-    toSqliteVector
-} from './vector_values'
+import type {
+    VectorIndexMutation,
+    VectorIndexPreserveUpsert,
+    VectorIndexReplaceUpsert
+} from '../worker_protocol'
+import { normalizeIndexKeywords, toPgVector } from './vector_values'
 
 interface CountRow {
-    count: number
+    count: string
 }
 
-interface MemoryRowId {
-    rowid: number
-}
-
-const prepareMutationStatements = (database: DatabaseSync) => ({
-    selectMemory: database.prepare(
-        `SELECT rowid
-         FROM lm_index_memory
-         WHERE memory_id = ?`
-    ),
-    selectMemoryInPreset: database.prepare(
-        `SELECT rowid
-         FROM lm_index_memory
-         WHERE preset_id = ? AND memory_id = ?`
-    ),
-    insertMemory: database.prepare(
-        `INSERT INTO lm_index_memory (
-            memory_id,
-            preset_id,
-            status,
-            type,
-            is_consolidated,
-            content_hash,
-            keywords_hash,
-            updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ),
-    updateMemory: database.prepare(
-        `UPDATE lm_index_memory
-         SET preset_id = ?,
-             status = ?,
-             type = ?,
-             is_consolidated = ?,
-             content_hash = ?,
-             keywords_hash = ?,
-             updated_at = ?
-         WHERE rowid = ?`
-    ),
-    deleteMemory: database.prepare(
-        'DELETE FROM lm_index_memory WHERE rowid = ?'
-    ),
-    insertVector: database.prepare(
-        `INSERT INTO lm_index_vectors (
-            rowid,
-            embedding,
-            preset_id,
-            status,
-            type,
-            is_consolidated
-        ) VALUES (?, ?, ?, ?, ?, ?)`
-    ),
-    updateVector: database.prepare(
-        `UPDATE lm_index_vectors
-         SET status = ?,
-             type = ?,
-             is_consolidated = ?
-         WHERE rowid = ?`
-    ),
-    deleteVector: database.prepare(
-        'DELETE FROM lm_index_vectors WHERE rowid = ?'
-    ),
-    deleteKeywords: database.prepare(
-        'DELETE FROM lm_index_keywords WHERE memory_rowid = ?'
-    ),
-    insertKeyword: database.prepare(
-        `INSERT INTO lm_index_keywords (memory_rowid, keyword)
-         VALUES (?, ?)`
-    ),
-    countPreset: database.prepare(
-        `SELECT COUNT(*) AS count
-         FROM lm_index_memory
-         WHERE preset_id = ?`
-    )
-})
-
-type MutationStatements = ReturnType<typeof prepareMutationStatements>
-
-const transaction = <T>(database: DatabaseSync, operation: () => T) => {
-    database.exec('BEGIN')
-    try {
-        const result = operation()
-        database.exec('COMMIT')
-        return result
-    } catch (error) {
-        try {
-            database.exec('ROLLBACK')
-        } catch {}
-        throw error
-    }
-}
-
-export const countVectorIndexMemories = (database: DatabaseSync) => {
-    const row = database
-        .prepare('SELECT COUNT(*) AS count FROM lm_index_memory')
-        .get() as unknown as CountRow
-    return row.count
-}
-
-const countPresetMemories = (
-    statements: MutationStatements,
-    presetId: string
+const readCount = async (
+    database: PGlite,
+    sql: string,
+    parameters: unknown[] = []
 ) => {
-    const row = statements.countPreset.get(presetId) as unknown as CountRow
-    return row.count
+    const row = (await database.query<CountRow>(sql, parameters)).rows[0]
+    return Number(row?.count ?? 0)
 }
 
-const deleteMemory = (
-    statements: MutationStatements,
-    presetId: string,
-    memoryId: string
-) => {
-    const row = statements.selectMemoryInPreset.get(
-        presetId,
-        memoryId
-    ) as unknown as MemoryRowId | undefined
-    if (row === undefined) {
-        return
-    }
-    statements.deleteVector.run(row.rowid)
-    statements.deleteMemory.run(row.rowid)
-}
+export const countVectorIndexMemories = (database: PGlite) =>
+    readCount(database, 'SELECT COUNT(*)::text AS count FROM lm_index_memory')
 
-const insertMemory = (
-    statements: MutationStatements,
-    upsert: Extract<VectorIndexUpsert, { vectorAction: 'replace' }>
-) => {
-    const document = upsert.document
-    const result = statements.insertMemory.run(
-        document.memoryId,
-        document.presetId,
-        document.status,
-        document.type,
-        toSqliteBoolean(document.isConsolidated),
-        document.contentHash,
-        document.keywordsHash,
-        document.updatedAt
-    )
-    return Number(result.lastInsertRowid)
-}
-
-const updateMemory = (
-    statements: MutationStatements,
-    rowid: number,
-    upsert: VectorIndexUpsert
-) => {
-    const document = upsert.document
-    statements.updateMemory.run(
-        document.presetId,
-        document.status,
-        document.type,
-        toSqliteBoolean(document.isConsolidated),
-        document.contentHash,
-        document.keywordsHash,
-        document.updatedAt,
-        rowid
-    )
-}
-
-const replaceVector = (
-    statements: MutationStatements,
-    rowid: number,
-    upsert: Extract<VectorIndexUpsert, { vectorAction: 'replace' }>
-) => {
-    const document = upsert.document
-    statements.deleteVector.run(rowid)
-    statements.insertVector.run(
-        BigInt(rowid),
-        toSqliteVector(upsert.vector),
-        document.presetId,
-        document.status,
-        document.type,
-        toSqliteBoolean(document.isConsolidated)
-    )
-}
-
-const updateVectorMetadata = (
-    statements: MutationStatements,
-    rowid: number,
-    upsert: VectorIndexUpsert
-) => {
-    const document = upsert.document
-    const result = statements.updateVector.run(
-        document.status,
-        document.type,
-        toSqliteBoolean(document.isConsolidated),
-        rowid
-    )
-    if (result.changes !== 1) {
-        throw new Error(
-            `cannot preserve missing vector: memory=${document.memoryId}`
-        )
-    }
-}
-
-const replaceKeywords = (
-    statements: MutationStatements,
-    rowid: number,
-    keywords: string[]
-) => {
-    statements.deleteKeywords.run(rowid)
-    for (const keyword of normalizeIndexKeywords(keywords)) {
-        statements.insertKeyword.run(rowid, keyword)
-    }
-}
-
-const upsertMemory = (
-    statements: MutationStatements,
-    upsert: VectorIndexUpsert
-) => {
-    const existing = statements.selectMemory.get(
-        upsert.document.memoryId
-    ) as unknown as MemoryRowId | undefined
-
-    let rowid: number
-    if (existing === undefined) {
-        if (upsert.vectorAction === 'preserve') {
-            throw new Error(
-                `cannot preserve missing vector: memory=${upsert.document.memoryId}`
-            )
-        }
-        rowid = insertMemory(statements, upsert)
-    } else {
-        rowid = existing.rowid
-        updateMemory(statements, rowid, upsert)
-    }
-
-    if (upsert.vectorAction === 'replace') {
-        replaceVector(statements, rowid, upsert)
-    } else {
-        updateVectorMetadata(statements, rowid, upsert)
-    }
-    replaceKeywords(statements, rowid, upsert.document.keywords)
-}
-
-export const applyVectorIndexMutation = (
-    database: DatabaseSync,
+export const applyVectorIndexMutation = async (
+    database: PGlite,
     mutation: VectorIndexMutation
 ) => {
-    const statements = prepareMutationStatements(database)
-    return transaction(database, () => {
-        for (const memoryId of mutation.deletes) {
-            deleteMemory(statements, mutation.presetId, memoryId)
+    const upsertIds = new Set<string>()
+    const replacements: VectorIndexReplaceUpsert[] = []
+    const preserves: VectorIndexPreserveUpsert[] = []
+    for (const upsert of mutation.upserts) {
+        const document = upsert.document
+        if (document.presetId !== mutation.presetId) {
+            throw new Error(
+                `vector index mutation preset mismatch: ` +
+                    `batch=${mutation.presetId}, memory=${document.memoryId}`
+            )
         }
-        for (const upsert of mutation.upserts) {
-            if (upsert.document.presetId !== mutation.presetId) {
+        if (upsertIds.has(document.memoryId)) {
+            throw new Error(
+                `vector index mutation contains duplicate upsert: ` +
+                    `memory=${document.memoryId}`
+            )
+        }
+        upsertIds.add(document.memoryId)
+        if (upsert.vectorAction === 'replace') {
+            replacements.push(upsert)
+        } else {
+            preserves.push(upsert)
+        }
+    }
+
+    await database.transaction(async (transaction) => {
+        if (mutation.deletes.length > 0) {
+            await transaction.query(
+                `DELETE FROM lm_index_memory
+                 WHERE preset_id = $1
+                   AND memory_id = ANY($2::text[])`,
+                [mutation.presetId, mutation.deletes]
+            )
+        }
+
+        if (replacements.length > 0) {
+            const rows = replacements.map(({ document, vector }) => ({
+                memory_id: document.memoryId,
+                preset_id: document.presetId,
+                status: document.status,
+                type: document.type,
+                is_consolidated: document.isConsolidated,
+                content_hash: document.contentHash,
+                keywords_hash: document.keywordsHash,
+                updated_at: document.updatedAt,
+                embedding: toPgVector(vector)
+            }))
+            await transaction.query(
+                `INSERT INTO lm_index_memory (
+                    memory_id,
+                    preset_id,
+                    status,
+                    type,
+                    is_consolidated,
+                    content_hash,
+                    keywords_hash,
+                    updated_at,
+                    embedding
+                )
+                SELECT
+                    memory_id,
+                    preset_id,
+                    status,
+                    type,
+                    is_consolidated,
+                    content_hash,
+                    keywords_hash,
+                    updated_at,
+                    embedding::vector
+                FROM jsonb_to_recordset($1::jsonb) AS input(
+                    memory_id text,
+                    preset_id text,
+                    status text,
+                    type text,
+                    is_consolidated boolean,
+                    content_hash text,
+                    keywords_hash text,
+                    updated_at bigint,
+                    embedding text
+                )
+                    ON CONFLICT (memory_id) DO UPDATE SET
+                        preset_id = excluded.preset_id,
+                        status = excluded.status,
+                        type = excluded.type,
+                        is_consolidated = excluded.is_consolidated,
+                        content_hash = excluded.content_hash,
+                        keywords_hash = excluded.keywords_hash,
+                        updated_at = excluded.updated_at,
+                        embedding = excluded.embedding`,
+                [JSON.stringify(rows)]
+            )
+        }
+
+        if (preserves.length > 0) {
+            const rows = preserves.map(({ document }) => ({
+                memory_id: document.memoryId,
+                preset_id: document.presetId,
+                status: document.status,
+                type: document.type,
+                is_consolidated: document.isConsolidated,
+                content_hash: document.contentHash,
+                keywords_hash: document.keywordsHash,
+                updated_at: document.updatedAt
+            }))
+            const result = await transaction.query<{ memoryId: string }>(
+                `UPDATE lm_index_memory AS memory
+                 SET preset_id = input.preset_id,
+                     status = input.status,
+                     type = input.type,
+                     is_consolidated = input.is_consolidated,
+                     content_hash = input.content_hash,
+                     keywords_hash = input.keywords_hash,
+                     updated_at = input.updated_at
+                 FROM jsonb_to_recordset($1::jsonb) AS input(
+                    memory_id text,
+                    preset_id text,
+                    status text,
+                    type text,
+                    is_consolidated boolean,
+                    content_hash text,
+                    keywords_hash text,
+                    updated_at bigint
+                 )
+                 WHERE memory.memory_id = input.memory_id
+                 RETURNING memory.memory_id AS "memoryId"`,
+                [JSON.stringify(rows)]
+            )
+            const updatedIds = new Set(result.rows.map((row) => row.memoryId))
+            const missing = preserves.find(
+                ({ document }) => !updatedIds.has(document.memoryId)
+            )
+            if (missing !== undefined) {
                 throw new Error(
-                    `vector index mutation preset mismatch: batch=${mutation.presetId}, memory=${upsert.document.presetId}`
+                    `cannot preserve missing vector: ` +
+                        `memory=${missing.document.memoryId}`
                 )
             }
-            upsertMemory(statements, upsert)
         }
-        return {
-            indexedCount: countPresetMemories(statements, mutation.presetId)
+
+        if (mutation.upserts.length > 0) {
+            await transaction.query(
+                `DELETE FROM lm_index_keywords
+                 WHERE memory_id = ANY($1::text[])`,
+                [[...upsertIds]]
+            )
+
+            const keywordRows = mutation.upserts.flatMap(({ document }) =>
+                normalizeIndexKeywords(document.keywords).map((keyword) => ({
+                    memory_id: document.memoryId,
+                    keyword
+                }))
+            )
+            if (keywordRows.length > 0) {
+                await transaction.query(
+                    `INSERT INTO lm_index_keywords (memory_id, keyword)
+                     SELECT memory_id, keyword
+                     FROM jsonb_to_recordset($1::jsonb) AS input(
+                        memory_id text,
+                        keyword text
+                     )`,
+                    [JSON.stringify(keywordRows)]
+                )
+            }
         }
     })
+
+    return {
+        indexedCount: await readCount(
+            database,
+            `SELECT COUNT(*)::text AS count
+             FROM lm_index_memory
+             WHERE preset_id = $1`,
+            [mutation.presetId]
+        )
+    }
 }
 
-export const clearVectorIndexPreset = (
-    database: DatabaseSync,
+export const clearVectorIndexPreset = async (
+    database: PGlite,
     presetId: string
 ) => {
-    return transaction(database, () => {
-        const rows = database
-            .prepare(
-                `SELECT rowid
-                 FROM lm_index_memory
-                 WHERE preset_id = ?`
-            )
-            .all(presetId) as unknown as MemoryRowId[]
-        const deleteVector = database.prepare(
-            'DELETE FROM lm_index_vectors WHERE rowid = ?'
+    const deletedCount = await database.transaction(async (transaction) => {
+        const deleted = await transaction.query<{ memoryId: string }>(
+            `DELETE FROM lm_index_memory
+             WHERE preset_id = $1
+             RETURNING memory_id AS "memoryId"`,
+            [presetId]
         )
-        for (const row of rows) {
-            deleteVector.run(row.rowid)
-        }
-        database
-            .prepare('DELETE FROM lm_index_memory WHERE preset_id = ?')
-            .run(presetId)
-        database
-            .prepare('DELETE FROM lm_index_preset_state WHERE preset_id = ?')
-            .run(presetId)
-        return { deletedCount: rows.length }
+        await transaction.query(
+            'DELETE FROM lm_index_preset_state WHERE preset_id = $1',
+            [presetId]
+        )
+        return deleted.rows.length
     })
+    return { deletedCount }
 }
 
-export const markVectorIndexPresetState = (
-    database: DatabaseSync,
+export const markVectorIndexPresetState = async (
+    database: PGlite,
     status: MemoryVectorIndexPresetStatus
-): MemoryVectorIndexPresetStatus => {
-    database
-        .prepare(
-            `INSERT INTO lm_index_preset_state (
-                preset_id,
-                state,
-                expected_count,
-                indexed_count,
-                last_error,
-                updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(preset_id) DO UPDATE SET
-                state = excluded.state,
-                expected_count = excluded.expected_count,
-                indexed_count = excluded.indexed_count,
-                last_error = excluded.last_error,
-                updated_at = excluded.updated_at`
-        )
-        .run(
+): Promise<MemoryVectorIndexPresetStatus> => {
+    await database.query(
+        `INSERT INTO lm_index_preset_state (
+            preset_id,
+            state,
+            expected_count,
+            indexed_count,
+            last_error,
+            updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (preset_id) DO UPDATE SET
+            state = excluded.state,
+            expected_count = excluded.expected_count,
+            indexed_count = excluded.indexed_count,
+            last_error = excluded.last_error,
+            updated_at = excluded.updated_at`,
+        [
             status.presetId,
             status.state,
             status.expectedCount,
             status.indexedCount,
             status.lastError,
             status.updatedAt
-        )
+        ]
+    )
     return status
 }

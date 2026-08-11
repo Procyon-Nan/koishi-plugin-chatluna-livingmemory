@@ -19,12 +19,17 @@ import {
     type VectorIndexWorkerFactory
 } from '../src/service/vector_index/service'
 import { LivingMemoryVectorIndexWorkerClient } from '../src/service/vector_index/worker_client'
-import {
-    ensureWorkersBuilt,
-    vectorIndexWorkerPath
-} from './worker-test-utils'
+import { ensureWorkersBuilt, vectorIndexWorkerPath } from './worker-test-utils'
 
 const workerPath = vectorIndexWorkerPath
+
+beforeEach(function () {
+    this.timeout(30_000)
+})
+
+afterEach(function () {
+    this.timeout(30_000)
+})
 
 before(async () => {
     await ensureWorkersBuilt()
@@ -454,8 +459,8 @@ it('replaces a corrupt formal database through the rebuild path', async () => {
         )
         await mkdir(indexDirectory, { recursive: true })
         await writeFile(
-            resolve(indexDirectory, 'vector-index.sqlite'),
-            'not a sqlite database'
+            resolve(indexDirectory, 'vector-index.pglite'),
+            'not a PGlite data directory'
         )
         const repository = new TestVectorIndexRepository([
             createSource('memory-a')
@@ -472,7 +477,7 @@ it('replaces a corrupt formal database through the rebuild path', async () => {
         const status = service.getStatus()
         assert.equal(status.state, 'ready')
         assert.equal(status.presets[0].indexedCount, 1)
-        assert.match(repository.jobs[0].input, /database open failed/u)
+        assert.match(repository.jobs[0].input, /index manifest is missing/u)
         await service.stop()
     })
 })

@@ -27,7 +27,7 @@ import {
 import type { LivingMemoryVectorIndexWorkerClient } from './worker_client'
 import type { VectorIndexInspection } from './worker_protocol'
 
-const SQLITE_VEC_VERSION = 'v0.1.9'
+const VECTOR_STORAGE_ENGINE = 'pglite-pgvector' as const
 const GLOBAL_INDEX_JOB_PRESET = '*'
 
 export interface LivingMemoryVectorIndexRepository
@@ -48,7 +48,7 @@ interface VectorIndexMaintenanceOptions {
     operationGate: VectorIndexOperationGate
     schemaVersion: number
     indexDirectory: string
-    previousDatabasePath: string
+    previousDatabaseDirectory: string
     shouldStop: () => boolean
     onBuilding: (jobId: string) => void
     onCurrentJobChanged: (jobId: string | null) => void
@@ -178,10 +178,20 @@ export class LivingMemoryVectorIndexMaintenance {
         if (inspection === null || inspection.manifest === null) {
             return 'index manifest is missing'
         }
-        if (inspection.sqliteVecVersion !== SQLITE_VEC_VERSION) {
+        if (inspection.manifest.storageEngine !== VECTOR_STORAGE_ENGINE) {
             return (
-                `sqlite-vec version changed: expected=${SQLITE_VEC_VERSION}, ` +
-                `actual=${inspection.sqliteVecVersion}`
+                `vector index storage engine changed: expected=${VECTOR_STORAGE_ENGINE}, ` +
+                `actual=${inspection.manifest.storageEngine}`
+            )
+        }
+        if (
+            inspection.vectorExtensionVersion !==
+            inspection.manifest.vectorExtensionVersion
+        ) {
+            return (
+                `manifest pgvector version changed: ` +
+                `manifest=${inspection.manifest.vectorExtensionVersion}, ` +
+                `runtime=${inspection.vectorExtensionVersion}`
             )
         }
 
@@ -204,11 +214,10 @@ export class LivingMemoryVectorIndexMaintenance {
                 `actual=${manifest.dimension}`
             )
         }
-        if (manifest.sqliteVecVersion !== inspection.sqliteVecVersion) {
+        if (manifest.storageEngine !== VECTOR_STORAGE_ENGINE) {
             return (
-                `manifest sqlite-vec version changed: ` +
-                `manifest=${manifest.sqliteVecVersion}, ` +
-                `runtime=${inspection.sqliteVecVersion}`
+                `manifest storage engine changed: expected=${VECTOR_STORAGE_ENGINE}, ` +
+                `actual=${manifest.storageEngine}`
             )
         }
         return null
@@ -226,7 +235,7 @@ export class LivingMemoryVectorIndexMaintenance {
             indexDirectory,
             schemaVersion,
             operationGate,
-            previousDatabasePath
+            previousDatabaseDirectory
         } = this.options
         await this.jobRunner.run(
             GLOBAL_INDEX_JOB_PRESET,
@@ -237,13 +246,16 @@ export class LivingMemoryVectorIndexMaintenance {
                     schemaVersion,
                     embeddingModelId: config.embeddingModel,
                     dimension,
-                    sqliteVecVersion: SQLITE_VEC_VERSION,
+                    storageEngine: VECTOR_STORAGE_ENGINE,
+                    vectorExtensionVersion: (
+                        await this.options.worker().inspect()
+                    ).vectorExtensionVersion,
                     generation: randomUUID(),
                     builtAt: Date.now()
                 }
-                const rebuildDatabasePath = resolve(
+                const rebuildDatabaseDirectory = resolve(
                     indexDirectory,
-                    `vector-index.rebuild-${job.id}.sqlite`
+                    `vector-index.rebuild-${job.id}.pglite`
                 )
                 const inspection = await rebuildVectorIndex({
                     repository,
@@ -253,7 +265,7 @@ export class LivingMemoryVectorIndexMaintenance {
                     dimension,
                     reuseLegacyEmbeddings,
                     manifest,
-                    rebuildDatabasePath,
+                    rebuildDatabaseDirectory,
                     shouldStop: this.options.shouldStop,
                     onProgress: async (progress) => {
                         const detail = [
@@ -287,7 +299,7 @@ export class LivingMemoryVectorIndexMaintenance {
                             return this.options
                                 .worker()
                                 .finalizeRebuild(
-                                    previousDatabasePath,
+                                    previousDatabaseDirectory,
                                     expectedCount
                                 )
                         })

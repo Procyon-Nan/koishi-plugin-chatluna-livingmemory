@@ -1,5 +1,15 @@
 import assert from 'node:assert/strict'
-import { access, copyFile, mkdtemp, rename, rm } from 'node:fs/promises'
+import { rmSync } from 'node:fs'
+import {
+    access,
+    cp,
+    mkdtemp,
+    readFile,
+    readdir,
+    rename,
+    rm,
+    writeFile
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import type {
@@ -7,21 +17,23 @@ import type {
     MemoryEntryType
 } from '../src/contracts/memory'
 import type { MemoryVectorIndexManifest } from '../src/contracts/vector_index'
+import { LivingMemoryVectorIndexDatabase } from '../src/service/vector_index/worker/database'
+import { startVectorIndexWorker } from '../src/service/vector_index/worker/runtime'
 import { LivingMemoryVectorIndexWorkerClient } from '../src/service/vector_index/worker_client'
 import type {
     VectorIndexDocument,
-    VectorIndexReplaceUpsert
+    VectorIndexReplaceUpsert,
+    VectorIndexWorkerRequest,
+    VectorIndexWorkerResponse
 } from '../src/service/vector_index/worker_protocol'
-import {
-    ensureWorkersBuilt,
-    vectorIndexWorkerPath
-} from './worker-test-utils'
+import { ensureWorkersBuilt, vectorIndexWorkerPath } from './worker-test-utils'
 
 const workerPath = vectorIndexWorkerPath
 
 let temporaryDirectory: string
 
-before(async () => {
+before(async function () {
+    this.timeout(30_000)
     await ensureWorkersBuilt()
     temporaryDirectory = await mkdtemp(
         resolve(tmpdir(), 'living-memory-vector-worker-test-')
@@ -36,7 +48,8 @@ const createManifest = (): MemoryVectorIndexManifest => ({
     schemaVersion: 1,
     embeddingModelId: 'test-embedding-model',
     dimension: 3,
-    sqliteVecVersion: 'v0.1.9',
+    storageEngine: 'pglite-pgvector',
+    vectorExtensionVersion: '0.8.1',
     generation: 'test-generation',
     builtAt: Date.now()
 })
@@ -90,17 +103,41 @@ const query = (
     vector: new Float32Array(vector)
 })
 
+class TestVectorIndexWorkerPort {
+    readonly responses: VectorIndexWorkerResponse[] = []
+    closed = false
+    private listener: ((request: VectorIndexWorkerRequest) => void) | null =
+        null
+
+    on(
+        _event: 'message',
+        listener: (request: VectorIndexWorkerRequest) => void
+    ) {
+        this.listener = listener
+    }
+
+    postMessage(
+        response: VectorIndexWorkerResponse,
+        _transferList: ArrayBuffer[]
+    ) {
+        this.responses.push(response)
+    }
+
+    close() {
+        this.closed = true
+    }
+
+    send(request: VectorIndexWorkerRequest) {
+        assert.notEqual(this.listener, null)
+        this.listener!(request)
+    }
+}
+
 it('runs typed vector index worker mutations and filtered searches', async () => {
     const client = new LivingMemoryVectorIndexWorkerClient(workerPath)
-    const formalPath = resolve(temporaryDirectory, 'vector-index.sqlite')
-    const rebuildPath = resolve(
-        temporaryDirectory,
-        'vector-index.rebuild-test.sqlite'
-    )
-    const previousPath = resolve(
-        temporaryDirectory,
-        'vector-index.previous.sqlite'
-    )
+    const formalPath = resolve(temporaryDirectory, 'vector-index')
+    const rebuildPath = resolve(temporaryDirectory, 'vector-index.rebuild-test')
+    const previousPath = resolve(temporaryDirectory, 'vector-index.previous')
 
     const initial = await client.open(formalPath, previousPath)
     assert.equal(initial.manifest, null)
@@ -239,6 +276,7 @@ it('runs typed vector index worker mutations and filtered searches', async () =>
     })
     const vectors = await client.readVectors('preset-a', [
         'memory-b',
+        'memory-b',
         'memory-c',
         'missing-memory'
     ])
@@ -247,12 +285,12 @@ it('runs typed vector index worker mutations and filtered searches', async () =>
             memoryId,
             vector: [...vector]
         })),
-        [{ memoryId: 'memory-b', vector: [1, 0, 0] }]
+        [
+            { memoryId: 'memory-b', vector: [1, 0, 0] },
+            { memoryId: 'memory-b', vector: [1, 0, 0] }
+        ]
     )
-    assert.deepEqual(vectors.missingMemoryIds, [
-        'memory-c',
-        'missing-memory'
-    ])
+    assert.deepEqual(vectors.missingMemoryIds, ['memory-c', 'missing-memory'])
 
     const inventory = await client.readInventoryPage(null, null, 2)
     assert.deepEqual(
@@ -271,9 +309,9 @@ it('runs typed vector index worker mutations and filtered searches', async () =>
 
 it('rolls back a complete mutation batch when one upsert fails', async () => {
     const client = new LivingMemoryVectorIndexWorkerClient(workerPath)
-    const formalPath = resolve(temporaryDirectory, 'atomic.sqlite')
-    const rebuildPath = resolve(temporaryDirectory, 'atomic-rebuild.sqlite')
-    const previousPath = resolve(temporaryDirectory, 'atomic-previous.sqlite')
+    const formalPath = resolve(temporaryDirectory, 'atomic')
+    const rebuildPath = resolve(temporaryDirectory, 'atomic-rebuild')
+    const previousPath = resolve(temporaryDirectory, 'atomic-previous')
     await client.open(formalPath, previousPath)
     await client.createRebuildFile(rebuildPath, createManifest())
     await client.appendRebuildBatch('preset-a', [
@@ -310,16 +348,13 @@ it('rolls back a complete mutation batch when one upsert fails', async () => {
 
 it('restores the formal index when a rebuild is aborted', async () => {
     const client = new LivingMemoryVectorIndexWorkerClient(workerPath)
-    const formalPath = resolve(temporaryDirectory, 'abort.sqlite')
-    const firstRebuildPath = resolve(
-        temporaryDirectory,
-        'abort-first-rebuild.sqlite'
-    )
+    const formalPath = resolve(temporaryDirectory, 'abort')
+    const firstRebuildPath = resolve(temporaryDirectory, 'abort-first-rebuild')
     const secondRebuildPath = resolve(
         temporaryDirectory,
-        'abort-second-rebuild.sqlite'
+        'abort-second-rebuild'
     )
-    const previousPath = resolve(temporaryDirectory, 'abort-previous.sqlite')
+    const previousPath = resolve(temporaryDirectory, 'abort-previous')
     await client.open(formalPath, previousPath)
     await client.createRebuildFile(firstRebuildPath, createManifest())
     await client.appendRebuildBatch('preset-a', [
@@ -338,15 +373,9 @@ it('restores the formal index when a rebuild is aborted', async () => {
 })
 
 it('recovers files left by an interrupted rebuild switch', async () => {
-    const formalPath = resolve(temporaryDirectory, 'recovery.sqlite')
-    const rebuildPath = resolve(
-        temporaryDirectory,
-        'recovery-rebuild.sqlite'
-    )
-    const previousPath = resolve(
-        temporaryDirectory,
-        'recovery-previous.sqlite'
-    )
+    const formalPath = resolve(temporaryDirectory, 'recovery')
+    const rebuildPath = resolve(temporaryDirectory, 'recovery-rebuild')
+    const previousPath = resolve(temporaryDirectory, 'recovery-previous')
     const first = new LivingMemoryVectorIndexWorkerClient(workerPath)
     await first.open(formalPath, previousPath)
     await first.createRebuildFile(rebuildPath, createManifest())
@@ -363,11 +392,89 @@ it('recovers files left by an interrupted rebuild switch', async () => {
     assert.equal(inspection.indexedCount, 1)
     await recovered.dispose()
 
-    await copyFile(formalPath, previousPath)
+    await cp(formalPath, previousPath, { recursive: true })
     const cleaned = new LivingMemoryVectorIndexWorkerClient(workerPath)
     await cleaned.open(formalPath, previousPath)
     await assert.rejects(access(previousPath), { code: 'ENOENT' })
     await cleaned.dispose()
+})
+
+it('quarantines an unreadable recovered index before rebuilding', async () => {
+    const formalPath = resolve(temporaryDirectory, 'quarantine-recovery')
+    const previousPath = resolve(
+        temporaryDirectory,
+        'quarantine-recovery-previous'
+    )
+    const originalContent = 'unreadable recovered index'
+    await writeFile(previousPath, originalContent)
+
+    const client = new LivingMemoryVectorIndexWorkerClient(workerPath)
+    const inspection = await client.open(formalPath, previousPath)
+    assert.equal(inspection.manifest, null)
+    await client.dispose()
+
+    const quarantineName = (await readdir(temporaryDirectory)).find((name) =>
+        name.startsWith('quarantine-recovery.failed-')
+    )
+    assert.notEqual(quarantineName, undefined)
+    assert.equal(
+        await readFile(resolve(temporaryDirectory, quarantineName!), 'utf8'),
+        originalContent
+    )
+})
+
+it('keeps a completed rebuild when previous index cleanup fails', async () => {
+    const formalPath = resolve(temporaryDirectory, 'cleanup-failure')
+    const rebuildPath = resolve(temporaryDirectory, 'cleanup-failure-rebuild')
+    const previousPath = resolve(temporaryDirectory, 'cleanup-failure-previous')
+    const cleanupError = new Error('injected cleanup failure')
+    const warnings: Error[] = []
+    const database = new LivingMemoryVectorIndexDatabase({
+        removeDirectory: (directory) => {
+            if (directory === previousPath) {
+                throw cleanupError
+            }
+            rmSync(directory, { recursive: true, force: true })
+        },
+        reportWarning: (warning) => warnings.push(warning)
+    })
+
+    await database.open(formalPath, previousPath)
+    await database.createRebuildFile(rebuildPath, createManifest())
+    await database.appendRebuildBatch('preset-a', [
+        replace(createDocument('retained-after-cleanup-failure'), [1, 0, 0])
+    ])
+    const inspection = await database.finalizeRebuild(previousPath, 1)
+
+    assert.equal(inspection.manifest?.generation, 'test-generation')
+    assert.equal(inspection.indexedCount, 1)
+    await access(previousPath)
+    assert.equal(warnings.length, 1)
+    assert.match(warnings[0].message, /previous index cleanup after rebuild/)
+    assert.equal(warnings[0].cause, cleanupError)
+    await database.dispose()
+})
+
+it('closes the worker port when database disposal fails', async () => {
+    const disposeError = new Error('injected database disposal failure')
+    const database = new LivingMemoryVectorIndexDatabase()
+    database.dispose = async () => {
+        throw disposeError
+    }
+    const port = new TestVectorIndexWorkerPort()
+    const runtime = startVectorIndexWorker(port, database)
+
+    port.send({ id: 1, command: { type: 'dispose' } })
+    await runtime.waitForIdle()
+
+    assert.equal(port.closed, true)
+    assert.equal(port.responses.length, 1)
+    const response = port.responses[0]
+    assert.equal(response.ok, false)
+    if (response.ok) {
+        assert.fail('dispose failure returned a successful worker response')
+    }
+    assert.equal(response.error.message, disposeError.message)
 })
 
 it('rejects pending requests when the worker cannot start', async () => {
@@ -376,8 +483,8 @@ it('rejects pending requests when the worker cannot start', async () => {
     )
     await assert.rejects(
         client.open(
-            resolve(temporaryDirectory, 'never-opened.sqlite'),
-            resolve(temporaryDirectory, 'never-opened.previous.sqlite')
+            resolve(temporaryDirectory, 'never-opened'),
+            resolve(temporaryDirectory, 'never-opened.previous')
         ),
         /Cannot find module|cannot find module/
     )

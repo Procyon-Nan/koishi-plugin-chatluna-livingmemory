@@ -194,7 +194,7 @@ export const toCharacterTranscriptMessageResult = async (
 
     return createLivingMemoryTranscriptMessageResult({
         role: isAssistant ? 'assistant' : 'user',
-        speakerLabel,
+        speakerLabel: speakerLabel ?? '',
         content: message.content,
         createdAt: message.timestamp,
         stripSpeakerPrefix: !isAssistant

@@ -66,7 +66,7 @@ export const rebuildVectorIndex = async (options: {
     dimension: number
     reuseLegacyEmbeddings: boolean
     manifest: MemoryVectorIndexManifest
-    rebuildDatabasePath: string
+    rebuildDatabaseDirectory: string
     finalize: () => Promise<VectorIndexInspection>
     onProgress: (progress: VectorIndexRebuildProgress) => Promise<void>
     shouldStop: () => boolean
@@ -79,7 +79,7 @@ export const rebuildVectorIndex = async (options: {
         dimension,
         reuseLegacyEmbeddings,
         manifest,
-        rebuildDatabasePath,
+        rebuildDatabaseDirectory,
         finalize,
         onProgress,
         shouldStop
@@ -87,15 +87,17 @@ export const rebuildVectorIndex = async (options: {
     let rebuildCreated = false
     try {
         const created = await worker.createRebuildFile(
-            rebuildDatabasePath,
+            rebuildDatabaseDirectory,
             manifest
         )
         rebuildCreated = true
-        if (created.sqliteVecVersion !== manifest.sqliteVecVersion) {
+        if (
+            created.vectorExtensionVersion !== manifest.vectorExtensionVersion
+        ) {
             throw new Error(
-                `sqlite-vec version mismatch: ` +
-                    `expected=${manifest.sqliteVecVersion}, ` +
-                    `actual=${created.sqliteVecVersion}`
+                `pgvector version mismatch: ` +
+                    `expected=${manifest.vectorExtensionVersion}, ` +
+                    `actual=${created.vectorExtensionVersion}`
             )
         }
         const presetIds = await repository.listEntryPresetIds()

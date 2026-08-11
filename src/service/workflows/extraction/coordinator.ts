@@ -124,7 +124,7 @@ export class LivingMemoryExtractionCoordinator {
         }
 
         const key = scopeKey(scope)
-        const state = this.stateByScope.get(key) ?? {
+        const state: ExtractionScopeState = this.stateByScope.get(key) ?? {
             scope,
             lastCompletedSequence: 0,
             lastConsumedSequence: 0,
