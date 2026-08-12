@@ -2,7 +2,9 @@ import { PGlite } from '@electric-sql/pglite'
 import { vector } from '@electric-sql/pglite-pgvector'
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
+import { rename } from 'node:fs/promises'
 import { dirname } from 'node:path'
+import { setTimeout as delay } from 'node:timers/promises'
 import type {
     MemoryVectorIndexManifest,
     MemoryVectorIndexPresetStatus,
@@ -57,8 +59,19 @@ const removeDirectory = (directory: string) => {
     rmSync(directory, { recursive: true, force: true })
 }
 
+const DATABASE_RENAME_RETRY_DELAYS = [50, 100, 200, 400, 800, 1_000]
+
+const isTransientRenameError = (error: unknown) =>
+    error instanceof Error &&
+    'code' in error &&
+    (error.code === 'EPERM' ||
+        error.code === 'EACCES' ||
+        error.code === 'EBUSY')
+
 interface VectorIndexDatabaseOptions {
     removeDirectory?: (directory: string) => void
+    renameDirectory?: (source: string, destination: string) => Promise<void>
+    waitBeforeRenameRetry?: (milliseconds: number) => Promise<void>
     reportWarning?: (warning: Error) => void
     analyze?: typeof analyzeVectorIndex
 }
@@ -70,12 +83,23 @@ export class LivingMemoryVectorIndexDatabase {
     private mode: 'active' | 'rebuild' | null = null
 
     private readonly removeDatabaseDirectory: (directory: string) => void
+    private readonly renameDatabaseDirectory: (
+        source: string,
+        destination: string
+    ) => Promise<void>
+
+    private readonly waitBeforeRenameRetry: (
+        milliseconds: number
+    ) => Promise<void>
+
     private readonly reportWarning: (warning: Error) => void
     private readonly analyze: typeof analyzeVectorIndex
 
     constructor(options: VectorIndexDatabaseOptions = {}) {
         this.removeDatabaseDirectory =
             options.removeDirectory ?? removeDirectory
+        this.renameDatabaseDirectory = options.renameDirectory ?? rename
+        this.waitBeforeRenameRetry = options.waitBeforeRenameRetry ?? delay
         this.reportWarning =
             options.reportWarning ?? ((warning) => process.emitWarning(warning))
         this.analyze = options.analyze ?? analyzeVectorIndex
@@ -305,10 +329,13 @@ export class LivingMemoryVectorIndexDatabase {
         let inspection: VectorIndexInspection
         try {
             if (existsSync(activeDirectory)) {
-                renameSync(activeDirectory, previousDatabaseDirectory)
+                await this.moveDatabaseDirectory(
+                    activeDirectory,
+                    previousDatabaseDirectory
+                )
                 activeMoved = true
             }
-            renameSync(rebuildDirectory, activeDirectory)
+            await this.moveDatabaseDirectory(rebuildDirectory, activeDirectory)
             rebuildMoved = true
             this.database = await this.openConnection(activeDirectory)
             this.mode = 'active'
@@ -317,10 +344,16 @@ export class LivingMemoryVectorIndexDatabase {
         } catch (error) {
             await this.closeConnection()
             if (rebuildMoved && existsSync(activeDirectory)) {
-                renameSync(activeDirectory, rebuildDirectory)
+                await this.moveDatabaseDirectory(
+                    activeDirectory,
+                    rebuildDirectory
+                )
             }
             if (activeMoved && existsSync(previousDatabaseDirectory)) {
-                renameSync(previousDatabaseDirectory, activeDirectory)
+                await this.moveDatabaseDirectory(
+                    previousDatabaseDirectory,
+                    activeDirectory
+                )
             }
             if (existsSync(rebuildDirectory)) {
                 removeDirectory(rebuildDirectory)
@@ -398,6 +431,24 @@ export class LivingMemoryVectorIndexDatabase {
             const database = this.database
             this.database = null
             await database.close()
+        }
+    }
+
+    private async moveDatabaseDirectory(source: string, destination: string) {
+        for (let attempt = 0; ; attempt += 1) {
+            try {
+                await this.renameDatabaseDirectory(source, destination)
+                return
+            } catch (error) {
+                const retryDelay = DATABASE_RENAME_RETRY_DELAYS[attempt]
+                if (
+                    retryDelay === undefined ||
+                    !isTransientRenameError(error)
+                ) {
+                    throw error
+                }
+                await this.waitBeforeRenameRetry(retryDelay)
+            }
         }
     }
 

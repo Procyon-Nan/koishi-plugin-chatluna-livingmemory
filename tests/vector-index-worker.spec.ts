@@ -486,6 +486,38 @@ it('keeps a completed rebuild when previous index cleanup fails', async () => {
     await database.dispose()
 })
 
+it('retries transient directory locks while finalizing a rebuild', async () => {
+    const formalPath = resolve(temporaryDirectory, 'rename-retry')
+    const rebuildPath = resolve(temporaryDirectory, 'rename-retry-rebuild')
+    const previousPath = resolve(temporaryDirectory, 'rename-retry-previous')
+    let activeMoveAttempts = 0
+    const database = new LivingMemoryVectorIndexDatabase({
+        renameDirectory: async (source, destination) => {
+            if (source === formalPath && destination === previousPath) {
+                activeMoveAttempts += 1
+                if (activeMoveAttempts < 3) {
+                    throw Object.assign(new Error('injected directory lock'), {
+                        code: 'EPERM'
+                    })
+                }
+            }
+            await rename(source, destination)
+        },
+        waitBeforeRenameRetry: async () => {}
+    })
+
+    await database.open(formalPath, previousPath)
+    await database.createRebuildFile(rebuildPath, createManifest())
+    await database.appendRebuildBatch('preset-a', [
+        replace(createDocument('retained-after-rename-retry'), [1, 0, 0])
+    ])
+    const inspection = await database.finalizeRebuild(previousPath, 1)
+
+    assert.equal(activeMoveAttempts, 3)
+    assert.equal(inspection.indexedCount, 1)
+    await database.dispose()
+})
+
 it('analyzes the rebuild database before switching it into place', async () => {
     const formalPath = resolve(temporaryDirectory, 'analyze-order')
     const rebuildPath = resolve(temporaryDirectory, 'analyze-order-rebuild')
