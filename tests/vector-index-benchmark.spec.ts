@@ -15,6 +15,8 @@ interface BenchmarkWorkloadResult {
     keywordCandidateCount: number | null
     semanticCandidateCount: number | null
     semanticKeywordOverlapCount: number | null
+    keywordDistanceCandidateCount: number | null
+    avoidedKeywordDistanceCount: number | null
     queryCount: number
     searchTextCount: number
     durationMilliseconds: {
@@ -158,10 +160,26 @@ it('benchmarks production vector-index workloads reproducibly', async function (
     assert.ok(first.workloads.hybrid.semanticCandidateCount > 0)
     assert.ok(first.workloads.hybrid.semanticKeywordOverlapCount != null)
     assert.ok(first.workloads.hybrid.semanticKeywordOverlapCount > 0)
+    assert.equal(
+        first.workloads.hybrid.keywordDistanceCandidateCount,
+        first.workloads.hybrid.keywordCandidateCount -
+            first.workloads.hybrid.semanticKeywordOverlapCount
+    )
+    assert.equal(
+        first.workloads.hybrid.avoidedKeywordDistanceCount,
+        first.workloads.hybrid.semanticKeywordOverlapCount
+    )
     assert.equal(first.workloads.semantic.keywordCandidateCount, null)
     assert.equal(first.workloads.semantic.semanticCandidateCount, null)
     assert.equal(first.workloads.semantic.semanticKeywordOverlapCount, null)
+    assert.equal(first.workloads.semantic.keywordDistanceCandidateCount, null)
+    assert.equal(first.workloads.semantic.avoidedKeywordDistanceCount, null)
     assert.equal(first.workloads.incremental.keywordCandidateCount, null)
     assert.equal(first.workloads.incremental.semanticCandidateCount, null)
     assert.equal(first.workloads.incremental.semanticKeywordOverlapCount, null)
+    assert.equal(
+        first.workloads.incremental.keywordDistanceCandidateCount,
+        null
+    )
+    assert.equal(first.workloads.incremental.avoidedKeywordDistanceCount, null)
 })

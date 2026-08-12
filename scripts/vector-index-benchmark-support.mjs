@@ -327,6 +327,11 @@ export const runWorkload = async ({
         keywordCandidateCount: keywordCandidateIds?.length ?? null,
         semanticCandidateCount,
         semanticKeywordOverlapCount,
+        keywordDistanceCandidateCount:
+            keywordCandidateIds === null
+                ? null
+                : keywordCandidateIds.length - semanticKeywordOverlapCount,
+        avoidedKeywordDistanceCount: semanticKeywordOverlapCount,
         queryCount: options.queryCount,
         searchTextCount: options.searchTextCount,
         durationMilliseconds: summarizeDurations(durations),

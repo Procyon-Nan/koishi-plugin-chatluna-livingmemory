@@ -22,6 +22,12 @@ interface KnnRow {
     cosineScore: number
 }
 
+interface KeywordRow {
+    memoryId: string
+    cosineScore: number | null
+    matchCount: string
+}
+
 const appendFilters = (query: VectorIndexKnnQuery) => {
     const conditions = ['preset_id = $1', 'status = $2']
     const parameters: unknown[] = [query.presetId, query.status]
@@ -79,18 +85,23 @@ export const queryVectorIndexHybrid = async (
     const keywords = normalizeIndexKeywords(query.keywords)
     if (keywords.length > 0) {
         const { conditions, parameters } = appendFilters(query)
-        parameters.push(keywords, toPgVector(query.vector))
-        const keywordParameter = parameters.length - 1
-        const vectorParameter = parameters.length
+        parameters.push(
+            keywords,
+            toPgVector(query.vector),
+            semanticHits.map((hit) => hit.memoryId)
+        )
+        const keywordParameter = parameters.length - 2
+        const vectorParameter = parameters.length - 1
+        const semanticIdsParameter = parameters.length
         const keywordRows = (
-            await database.query<{
-                memoryId: string
-                cosineScore: number
-                matchCount: string
-            }>(
+            await database.query<KeywordRow>(
                 `SELECT
                     m.memory_id AS "memoryId",
-                    1 - (m.embedding <=> $${vectorParameter}::vector) AS "cosineScore",
+                    CASE
+                        WHEN m.memory_id = ANY($${semanticIdsParameter}::text[])
+                        THEN NULL
+                        ELSE 1 - (m.embedding <=> $${vectorParameter}::vector)
+                    END AS "cosineScore",
                     COUNT(*)::text AS "matchCount"
                  FROM lm_index_keywords AS k
                  JOIN lm_index_memory AS m ON m.memory_id = k.memory_id
@@ -101,6 +112,14 @@ export const queryVectorIndexHybrid = async (
             )
         ).rows
         for (const row of keywordRows) {
+            if (scores.has(row.memoryId)) {
+                continue
+            }
+            if (row.cosineScore === null) {
+                throw new Error(
+                    `keyword-only vector score is missing: memoryId=${row.memoryId}`
+                )
+            }
             scores.set(row.memoryId, Number(row.cosineScore))
         }
 
