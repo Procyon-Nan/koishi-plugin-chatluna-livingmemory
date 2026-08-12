@@ -115,29 +115,39 @@ it('does not read recalled memory content for logging', async () => {
     assert.equal(contentRead, false)
 })
 
-it('writes an empty embedding snapshot without persisting a job', async () => {
+it('keeps the previous snapshot when embedding recall returns no results', async () => {
     const jobStore = createJobStore()
-    let snapshotItems: MemorySnapshotItem[] | undefined
+    let snapshotWrites = 0
+    let hydrateCalls = 0
+    let noMemoryLogged = false
     const coordinator = new LivingMemoryRecallCoordinator(
         { recallStrategy: 'embedding-rerank', recallTopK: 3 },
         {
             createFailedJob: jobStore.createFailedJob,
-            upsertSnapshot: async (_scope, _strategy, _query, items) => {
-                snapshotItems = items
+            upsertSnapshot: async () => {
+                snapshotWrites += 1
             }
         },
         { resolve: async () => createRecallQueryResult() },
         { retrieve: async () => [] },
         { run: async () => createAgenticTrace('unused') },
-        { hydrate: async () => '' },
+        {
+            hydrate: async () => {
+                hydrateCalls += 1
+                return ''
+            }
+        },
         logger,
-        debug
+        (buildMessage) => {
+            noMemoryLogged ||= buildMessage().includes('count=0')
+        }
     )
 
     await coordinator.queue(scope, currentMessage, async () => [])
-    await waitFor(() => snapshotItems != null, 'empty embedding snapshot')
+    await waitFor(() => noMemoryLogged, 'empty embedding recall')
 
-    assert.deepEqual(snapshotItems, [])
+    assert.equal(snapshotWrites, 0)
+    assert.equal(hydrateCalls, 0)
     assert.equal(jobStore.jobs.length, 0)
 })
 
@@ -205,7 +215,7 @@ it('serializes recall runs for the same scope without persisted running state', 
     const jobStore = createJobStore()
     let resolveQuery!: (result: RecallQueryResult) => void
     let queryCalls = 0
-    let snapshotWrites = 0
+    let noMemoryLogged = false
     const queryResult = new Promise<RecallQueryResult>((resolve) => {
         resolveQuery = resolve
     })
@@ -213,9 +223,7 @@ it('serializes recall runs for the same scope without persisted running state', 
         { recallStrategy: 'embedding-rerank', recallTopK: 3 },
         {
             createFailedJob: jobStore.createFailedJob,
-            upsertSnapshot: async () => {
-                snapshotWrites += 1
-            }
+            upsertSnapshot: async () => {}
         },
         {
             resolve: async () => {
@@ -227,7 +235,9 @@ it('serializes recall runs for the same scope without persisted running state', 
         { run: async () => createAgenticTrace('unused') },
         { hydrate: async () => '' },
         logger,
-        debug
+        (buildMessage) => {
+            noMemoryLogged ||= buildMessage().includes('count=0')
+        }
     )
 
     await coordinator.queue(scope, currentMessage, async () => [])
@@ -235,7 +245,7 @@ it('serializes recall runs for the same scope without persisted running state', 
     assert.equal(queryCalls, 1)
 
     resolveQuery(createRecallQueryResult())
-    await waitFor(() => snapshotWrites === 1, 'serialized recall completion')
+    await waitFor(() => noMemoryLogged, 'serialized recall completion')
 
     assert.equal(jobStore.jobs.length, 0)
 })
@@ -342,7 +352,11 @@ it('persists one failed recall job when snapshot hydration throws', async () => 
             upsertSnapshot: async () => {}
         },
         { resolve: async () => createRecallQueryResult() },
-        { retrieve: async () => [] },
+        {
+            retrieve: async () => [
+                { id: 'memory-1', content: 'matched content', score: 0.9 }
+            ]
+        },
         { run: async () => createAgenticTrace('unused') },
         {
             hydrate: async () => {
@@ -450,7 +464,11 @@ it('continues recall with empty history without persisting a job', async () => {
                 return createRecallQueryResult()
             }
         },
-        { retrieve: async () => [] },
+        {
+            retrieve: async () => [
+                { id: 'memory-1', content: 'matched content', score: 0.9 }
+            ]
+        },
         { run: async () => createAgenticTrace('unused') },
         {
             hydrate: async () => {

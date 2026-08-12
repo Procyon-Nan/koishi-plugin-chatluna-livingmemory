@@ -200,6 +200,9 @@ export class LivingMemoryRecallCoordinator {
                     `count=${items.length}`
                 ].join(' ')
             )
+            if (items.length === 0) {
+                return
+            }
             await this.repository.upsertSnapshot(
                 scope,
                 'embedding-rerank',
