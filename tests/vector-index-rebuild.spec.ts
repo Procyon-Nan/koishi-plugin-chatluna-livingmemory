@@ -107,7 +107,7 @@ const createManifest = (
     generation: string,
     dimension = 3
 ): MemoryVectorIndexManifest => ({
-    schemaVersion: 1,
+    schemaVersion: 3,
     embeddingModelId: 'model-a',
     dimension,
     storageEngine: 'pglite-pgvector',

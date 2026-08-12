@@ -516,7 +516,8 @@ it('rebuilds when the model, dimension, or schema version changes', async () => 
             { modelId: 'model-a', dimension: 3, schemaVersion: 1 },
             { modelId: 'model-b', dimension: 3, schemaVersion: 1 },
             { modelId: 'model-b', dimension: 4, schemaVersion: 1 },
-            { modelId: 'model-b', dimension: 4, schemaVersion: 2 }
+            { modelId: 'model-b', dimension: 4, schemaVersion: 2 },
+            { modelId: 'model-b', dimension: 4, schemaVersion: 3 }
         ]
         const generations: string[] = []
 

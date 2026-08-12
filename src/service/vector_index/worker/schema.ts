@@ -1,7 +1,7 @@
 import type { PGlite } from '@electric-sql/pglite'
 import type { MemoryVectorIndexManifest } from '../../../contracts/vector_index'
 
-export const VECTOR_INDEX_SCHEMA_VERSION = 2
+export const VECTOR_INDEX_SCHEMA_VERSION = 3
 
 const assertDimension = (dimension: number) => {
     if (!Number.isInteger(dimension) || dimension < 1) {
@@ -51,6 +51,10 @@ export const createVectorIndexSchema = async (
         CREATE INDEX lm_index_memory_preset_filter
         ON lm_index_memory (preset_id, status, type, is_consolidated);
 
+        CREATE INDEX lm_index_memory_consolidated_filter
+        ON lm_index_memory (preset_id, status)
+        WHERE is_consolidated = true;
+
         CREATE TABLE lm_index_keywords (
             memory_id text NOT NULL REFERENCES lm_index_memory(memory_id)
                 ON DELETE CASCADE,
@@ -91,4 +95,11 @@ export const createVectorIndexSchema = async (
             manifest.builtAt
         ]
     )
+}
+
+export const analyzeVectorIndex = async (database: PGlite) => {
+    await database.exec(`
+        ANALYZE lm_index_memory;
+        ANALYZE lm_index_keywords;
+    `)
 }

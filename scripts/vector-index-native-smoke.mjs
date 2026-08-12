@@ -119,7 +119,7 @@ try {
     assert.equal(inspection.manifest, null)
     assert.equal(inspection.vectorExtensionVersion, version.rows[0].version)
     const manifest = {
-        schemaVersion: 2,
+        schemaVersion: 3,
         embeddingModelId: 'smoke-model',
         dimension: 3,
         storageEngine: 'pglite-pgvector',

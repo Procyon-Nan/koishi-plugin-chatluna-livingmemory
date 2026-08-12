@@ -12,6 +12,8 @@ import {
 } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
+import { PGlite } from '@electric-sql/pglite'
+import { vector } from '@electric-sql/pglite-pgvector'
 import type {
     MemoryEntryStatus,
     MemoryEntryType
@@ -45,7 +47,7 @@ after(async () => {
 })
 
 const createManifest = (): MemoryVectorIndexManifest => ({
-    schemaVersion: 1,
+    schemaVersion: 3,
     embeddingModelId: 'test-embedding-model',
     dimension: 3,
     storageEngine: 'pglite-pgvector',
@@ -305,6 +307,35 @@ it('runs typed vector index worker mutations and filtered searches', async () =>
     assert.equal(inspection.indexedCount, 2)
 
     await client.dispose()
+
+    const finalizedDatabase = await PGlite.create(formalPath, {
+        extensions: { vector }
+    })
+    try {
+        await finalizedDatabase.exec('CREATE EXTENSION IF NOT EXISTS vector')
+        const indexes = await finalizedDatabase.query<{
+            indexName: string
+            indexDefinition: string
+        }>(
+            `SELECT
+                indexname AS "indexName",
+                indexdef AS "indexDefinition"
+             FROM pg_indexes
+             WHERE schemaname = 'public'
+               AND tablename = 'lm_index_memory'
+             ORDER BY indexname ASC`
+        )
+        const consolidatedIndex = indexes.rows.find(
+            (row) => row.indexName === 'lm_index_memory_consolidated_filter'
+        )
+        assert.notEqual(consolidatedIndex, undefined)
+        assert.match(
+            consolidatedIndex!.indexDefinition,
+            /\(preset_id, status\) WHERE \(is_consolidated = true\)$/u
+        )
+    } finally {
+        await finalizedDatabase.close()
+    }
 })
 
 it('rolls back a complete mutation batch when one upsert fails', async () => {
@@ -452,6 +483,34 @@ it('keeps a completed rebuild when previous index cleanup fails', async () => {
     assert.equal(warnings.length, 1)
     assert.match(warnings[0].message, /previous index cleanup after rebuild/)
     assert.equal(warnings[0].cause, cleanupError)
+    await database.dispose()
+})
+
+it('analyzes the rebuild database before switching it into place', async () => {
+    const formalPath = resolve(temporaryDirectory, 'analyze-order')
+    const rebuildPath = resolve(temporaryDirectory, 'analyze-order-rebuild')
+    const previousPath = resolve(temporaryDirectory, 'analyze-order-previous')
+    let analyzed = false
+    const database = new LivingMemoryVectorIndexDatabase({
+        analyze: async (connection) => {
+            assert.equal(analyzed, false)
+            const count = await connection.query<{ count: string }>(
+                `SELECT COUNT(*)::text AS count FROM lm_index_memory`
+            )
+            assert.equal(count.rows[0].count, '1')
+            analyzed = true
+        }
+    })
+
+    await database.open(formalPath, previousPath)
+    await database.createRebuildFile(rebuildPath, createManifest())
+    await database.appendRebuildBatch('preset-a', [
+        replace(createDocument('analyzed-before-switch'), [1, 0, 0])
+    ])
+    const inspection = await database.finalizeRebuild(previousPath, 1)
+
+    assert.equal(analyzed, true)
+    assert.equal(inspection.indexedCount, 1)
     await database.dispose()
 })
 

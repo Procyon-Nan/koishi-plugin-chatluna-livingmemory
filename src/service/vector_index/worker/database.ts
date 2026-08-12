@@ -28,7 +28,11 @@ import {
     readVectorIndexInventoryPage,
     readVectorIndexVectors
 } from './queries'
-import { createVectorIndexSchema, hasVectorIndexSchema } from './schema'
+import {
+    analyzeVectorIndex,
+    createVectorIndexSchema,
+    hasVectorIndexSchema
+} from './schema'
 
 interface ManifestRow {
     schemaVersion: number
@@ -56,6 +60,7 @@ const removeDirectory = (directory: string) => {
 interface VectorIndexDatabaseOptions {
     removeDirectory?: (directory: string) => void
     reportWarning?: (warning: Error) => void
+    analyze?: typeof analyzeVectorIndex
 }
 
 export class LivingMemoryVectorIndexDatabase {
@@ -66,12 +71,14 @@ export class LivingMemoryVectorIndexDatabase {
 
     private readonly removeDatabaseDirectory: (directory: string) => void
     private readonly reportWarning: (warning: Error) => void
+    private readonly analyze: typeof analyzeVectorIndex
 
     constructor(options: VectorIndexDatabaseOptions = {}) {
         this.removeDatabaseDirectory =
             options.removeDirectory ?? removeDirectory
         this.reportWarning =
             options.reportWarning ?? ((warning) => process.emitWarning(warning))
+        this.analyze = options.analyze ?? analyzeVectorIndex
     }
 
     async open(
@@ -289,6 +296,8 @@ export class LivingMemoryVectorIndexDatabase {
                 `vector index previous directory already exists: ${previousDatabaseDirectory}`
             )
         }
+
+        await this.analyze(database)
 
         await this.closeConnection()
         let activeMoved = false
