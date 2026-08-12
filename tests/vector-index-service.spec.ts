@@ -1,5 +1,13 @@
 import assert from 'node:assert/strict'
-import { access, mkdir, mkdtemp, rm, utimes, writeFile } from 'node:fs/promises'
+import {
+    access,
+    mkdir,
+    mkdtemp,
+    readdir,
+    rm,
+    utimes,
+    writeFile
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import type { Context, Logger } from 'koishi'
@@ -507,6 +515,81 @@ it('starts a full rebuild without blocking the caller', async () => {
     })
 })
 
+it('rolls back to the previous index when the candidate worker cannot open', async () => {
+    await withTemporaryDirectory(async (baseDir) => {
+        const repository = new TestVectorIndexRepository([
+            createSource('memory-a')
+        ])
+        const initial = createService({
+            baseDir,
+            repository,
+            modelId: 'model-a',
+            dimension: 3
+        })
+        await initial.start()
+        await initial.waitForInitialization()
+        const initialGeneration = initial.getStatus().manifest?.generation
+        await initial.stop()
+
+        const candidateError = new Error('injected candidate open failure')
+        let created = 0
+        const failed = createService({
+            baseDir,
+            repository,
+            modelId: 'model-b',
+            dimension: 3,
+            workerFactory: (onFailure) => {
+                created += 1
+                const worker = new LivingMemoryVectorIndexWorkerClient(
+                    workerPath,
+                    onFailure
+                )
+                if (created === 2) {
+                    const openCandidate = worker.openCandidate.bind(worker)
+                    worker.openCandidate = async (directory) => {
+                        await openCandidate(directory)
+                        throw candidateError
+                    }
+                }
+                return worker
+            }
+        })
+        await failed.start()
+        await failed.waitForInitialization()
+        assert.equal(failed.getStatus().state, 'unavailable')
+        assert.match(
+            failed.getStatus().lastError ?? '',
+            /injected candidate open failure/u
+        )
+        await failed.stop()
+
+        const indexFiles = await readdir(resolveIndexDirectory(baseDir))
+        assert.equal(
+            indexFiles.some((file) => file.startsWith('vector-index.rebuild-')),
+            false
+        )
+        assert.equal(
+            indexFiles.includes('vector-index.previous.pglite'),
+            false
+        )
+
+        const recovered = createService({
+            baseDir,
+            repository,
+            modelId: 'model-a',
+            dimension: 3
+        })
+        await recovered.start()
+        await recovered.waitForInitialization()
+        assert.equal(recovered.getStatus().state, 'ready')
+        assert.equal(
+            recovered.getStatus().manifest?.generation,
+            initialGeneration
+        )
+        await recovered.stop()
+    })
+})
+
 it('rebuilds when the model, dimension, or schema version changes', async () => {
     await withTemporaryDirectory(async (baseDir) => {
         const repository = new TestVectorIndexRepository([
@@ -713,11 +796,12 @@ it('logs rebuild batch progress only when debug is enabled', async () => {
     })
 })
 
-it('warns with context when vector worker disposal fails', async () => {
+it('restores the active worker when rebuild worker shutdown reports failure', async () => {
     await withTemporaryDirectory(async (baseDir) => {
         const repository = new TestVectorIndexRepository([])
         const captured = createLogger()
         const disposeError = new Error('injected worker disposal failure')
+        let created = 0
         const service = createService({
             baseDir,
             repository,
@@ -725,6 +809,7 @@ it('warns with context when vector worker disposal fails', async () => {
             dimension: 3,
             logger: captured.logger,
             workerFactory: (onFailure) => {
+                created += 1
                 const worker = new LivingMemoryVectorIndexWorkerClient(
                     workerPath,
                     onFailure
@@ -732,7 +817,9 @@ it('warns with context when vector worker disposal fails', async () => {
                 const dispose = worker.dispose.bind(worker)
                 worker.dispose = async () => {
                     await dispose()
-                    throw disposeError
+                    if (created === 1) {
+                        throw disposeError
+                    }
                 }
                 return worker
             }
@@ -740,14 +827,13 @@ it('warns with context when vector worker disposal fails', async () => {
 
         await service.start()
         await service.waitForInitialization()
+        assert.equal(captured.warnings.length, 1)
+        assert.match(
+            String(captured.warnings[0][0]),
+            /vector index rebuild failed: Error: injected worker disposal failure/u
+        )
         await service.stop()
-
-        assert.deepEqual(captured.warnings, [
-            [
-                'memory background operation failed: workflow=vector-index operation=vector-index-worker-dispose',
-                disposeError
-            ]
-        ])
+        assert.equal(captured.warnings.length, 1)
     })
 })
 

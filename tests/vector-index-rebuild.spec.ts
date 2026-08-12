@@ -194,11 +194,13 @@ const buildFormalIndex = async (options: {
         ),
         shouldStop: () => false,
         onProgress: async () => {},
-        finalize: () =>
-            client.finalizeRebuild(
-                resolve(directory, 'vector-index.previous'),
-                repository.sources.length
+        finalize: async (transferCleanupOwnership) => {
+            await client.prepareRebuild(repository.sources.length)
+            transferCleanupOwnership()
+            return await client.openCandidate(
+                resolve(directory, `vector-index.rebuild-${generation}`)
             )
+        }
     })
 }
 
@@ -258,6 +260,89 @@ it('reuses only valid legacy vectors during a full rebuild', async () => {
         const vectors = await client.readVectors('preset-a', ['memory-a'])
         assert.deepEqual([...vectors.vectors[0].vector], [1, 0, 0])
     })
+})
+
+it('does not abort through the old worker after finalize takes cleanup ownership', async () => {
+    const finalizeError = new Error('injected finalize failure')
+    let abortCalls = 0
+    await assert.rejects(
+        rebuildVectorIndex({
+            repository: new TestRebuildRepository([]),
+            worker: {
+                createRebuildFile: async () => ({
+                    vectorExtensionVersion: '0.8.1',
+                    manifest: null,
+                    indexedCount: 0,
+                    inventory: [],
+                    presets: []
+                }),
+                markPresetState: async () => {},
+                appendRebuildBatch: async () => ({ indexedCount: 0 }),
+                abortRebuild: async () => {
+                    abortCalls += 1
+                    throw new Error('abort must not run')
+                }
+            },
+            embeddings: createEmbeddings(3, []),
+            embeddingModelId: 'model-a',
+            dimension: 3,
+            reuseLegacyEmbeddings: false,
+            manifest: createManifest('finalize-failure'),
+            rebuildDatabaseDirectory: 'unused',
+            shouldStop: () => false,
+            onProgress: async () => {},
+            finalize: async (transferCleanupOwnership) => {
+                transferCleanupOwnership()
+                throw finalizeError
+            }
+        }),
+        /injected finalize failure/u
+    )
+    assert.equal(abortCalls, 0)
+})
+
+it('aborts through the worker when finalize fails before taking cleanup ownership', async () => {
+    const finalizeError = new Error('injected pre-transfer failure')
+    let abortCalls = 0
+    await assert.rejects(
+        rebuildVectorIndex({
+            repository: new TestRebuildRepository([]),
+            worker: {
+                createRebuildFile: async () => ({
+                    vectorExtensionVersion: '0.8.1',
+                    manifest: null,
+                    indexedCount: 0,
+                    inventory: [],
+                    presets: []
+                }),
+                markPresetState: async () => {},
+                appendRebuildBatch: async () => ({ indexedCount: 0 }),
+                abortRebuild: async () => {
+                    abortCalls += 1
+                    return {
+                        vectorExtensionVersion: '0.8.1',
+                        manifest: null,
+                        indexedCount: 0,
+                        inventory: [],
+                        presets: []
+                    }
+                }
+            },
+            embeddings: createEmbeddings(3, []),
+            embeddingModelId: 'model-a',
+            dimension: 3,
+            reuseLegacyEmbeddings: false,
+            manifest: createManifest('pre-transfer-failure'),
+            rebuildDatabaseDirectory: 'unused',
+            shouldStop: () => false,
+            onProgress: async () => {},
+            finalize: async () => {
+                throw finalizeError
+            }
+        }),
+        /injected pre-transfer failure/u
+    )
+    assert.equal(abortCalls, 1)
 })
 
 it('does not read legacy vectors after the migration is complete', async () => {

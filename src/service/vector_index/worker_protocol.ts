@@ -98,6 +98,10 @@ export interface VectorIndexWorkerCommandMap {
         }
         result: VectorIndexInspection
     }
+    openCandidate: {
+        input: { databaseDirectory: string }
+        result: VectorIndexInspection
+    }
     inspect: {
         input: Record<never, never>
         result: VectorIndexInspection
@@ -148,12 +152,9 @@ export interface VectorIndexWorkerCommandMap {
         }
         result: { indexedCount: number }
     }
-    finalizeRebuild: {
-        input: {
-            previousDatabaseDirectory: string
-            expectedCount: number
-        }
-        result: VectorIndexInspection
+    prepareRebuild: {
+        input: { expectedCount: number }
+        result: { indexedCount: number }
     }
     abortRebuild: {
         input: Record<never, never>

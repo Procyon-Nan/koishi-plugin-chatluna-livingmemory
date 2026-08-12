@@ -42,6 +42,9 @@ const execute = async (
                     command.previousDatabaseDirectory
                 )
                 break
+            case 'openCandidate':
+                result = await database.openCandidate(command.databaseDirectory)
+                break
             case 'inspect':
                 result = await database.inspect()
                 break
@@ -85,11 +88,8 @@ const execute = async (
                     command.upserts
                 )
                 break
-            case 'finalizeRebuild':
-                result = await database.finalizeRebuild(
-                    command.previousDatabaseDirectory,
-                    command.expectedCount
-                )
+            case 'prepareRebuild':
+                result = await database.prepareRebuild(command.expectedCount)
                 break
             case 'abortRebuild':
                 result = await database.abortRebuild()

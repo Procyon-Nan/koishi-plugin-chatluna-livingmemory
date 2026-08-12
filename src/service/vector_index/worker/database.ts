@@ -2,9 +2,7 @@ import { PGlite } from '@electric-sql/pglite'
 import { vector } from '@electric-sql/pglite-pgvector'
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
-import { rename } from 'node:fs/promises'
 import { dirname } from 'node:path'
-import { setTimeout as delay } from 'node:timers/promises'
 import type {
     MemoryVectorIndexManifest,
     MemoryVectorIndexPresetStatus,
@@ -59,19 +57,8 @@ const removeDirectory = (directory: string) => {
     rmSync(directory, { recursive: true, force: true })
 }
 
-const DATABASE_RENAME_RETRY_DELAYS = [50, 100, 200, 400, 800, 1_000]
-
-const isTransientRenameError = (error: unknown) =>
-    error instanceof Error &&
-    'code' in error &&
-    (error.code === 'EPERM' ||
-        error.code === 'EACCES' ||
-        error.code === 'EBUSY')
-
 interface VectorIndexDatabaseOptions {
     removeDirectory?: (directory: string) => void
-    renameDirectory?: (source: string, destination: string) => Promise<void>
-    waitBeforeRenameRetry?: (milliseconds: number) => Promise<void>
     reportWarning?: (warning: Error) => void
     analyze?: typeof analyzeVectorIndex
 }
@@ -83,23 +70,12 @@ export class LivingMemoryVectorIndexDatabase {
     private mode: 'active' | 'rebuild' | null = null
 
     private readonly removeDatabaseDirectory: (directory: string) => void
-    private readonly renameDatabaseDirectory: (
-        source: string,
-        destination: string
-    ) => Promise<void>
-
-    private readonly waitBeforeRenameRetry: (
-        milliseconds: number
-    ) => Promise<void>
-
     private readonly reportWarning: (warning: Error) => void
     private readonly analyze: typeof analyzeVectorIndex
 
     constructor(options: VectorIndexDatabaseOptions = {}) {
         this.removeDatabaseDirectory =
             options.removeDirectory ?? removeDirectory
-        this.renameDatabaseDirectory = options.renameDirectory ?? rename
-        this.waitBeforeRenameRetry = options.waitBeforeRenameRetry ?? delay
         this.reportWarning =
             options.reportWarning ?? ((warning) => process.emitWarning(warning))
         this.analyze = options.analyze ?? analyzeVectorIndex
@@ -227,6 +203,22 @@ export class LivingMemoryVectorIndexDatabase {
         }
     }
 
+    async openCandidate(databaseDirectory: string) {
+        if (this.database !== null) {
+            throw new Error('vector index database is already open')
+        }
+        this.activeDatabaseDirectory = databaseDirectory
+        try {
+            this.database = await this.openConnection(databaseDirectory)
+            this.mode = 'active'
+            return await this.inspect()
+        } catch (error) {
+            await this.closeConnection()
+            this.mode = null
+            throw error
+        }
+    }
+
     queryKnn(query: VectorIndexKnnQuery) {
         return queryVectorIndexKnn(this.requireActiveDatabase(), query)
     }
@@ -302,72 +294,18 @@ export class LivingMemoryVectorIndexDatabase {
         })
     }
 
-    async finalizeRebuild(
-        previousDatabaseDirectory: string,
-        expectedCount: number
-    ): Promise<VectorIndexInspection> {
+    async prepareRebuild(expectedCount: number) {
         const database = this.requireRebuildDatabase()
-        const activeDirectory = this.requireActiveDatabaseDirectory()
-        const rebuildDirectory = this.requireRebuildDatabaseDirectory()
         const indexedCount = await countVectorIndexMemories(database)
         if (indexedCount !== expectedCount) {
             throw new Error(
                 `vector index rebuild count mismatch: expected=${expectedCount}, actual=${indexedCount}`
             )
         }
-        if (existsSync(previousDatabaseDirectory)) {
-            throw new Error(
-                `vector index previous directory already exists: ${previousDatabaseDirectory}`
-            )
-        }
-
         await this.analyze(database)
-
         await this.closeConnection()
-        let activeMoved = false
-        let rebuildMoved = false
-        let inspection: VectorIndexInspection
-        try {
-            if (existsSync(activeDirectory)) {
-                await this.moveDatabaseDirectory(
-                    activeDirectory,
-                    previousDatabaseDirectory
-                )
-                activeMoved = true
-            }
-            await this.moveDatabaseDirectory(rebuildDirectory, activeDirectory)
-            rebuildMoved = true
-            this.database = await this.openConnection(activeDirectory)
-            this.mode = 'active'
-            this.rebuildDatabaseDirectory = null
-            inspection = await this.inspect()
-        } catch (error) {
-            await this.closeConnection()
-            if (rebuildMoved && existsSync(activeDirectory)) {
-                await this.moveDatabaseDirectory(
-                    activeDirectory,
-                    rebuildDirectory
-                )
-            }
-            if (activeMoved && existsSync(previousDatabaseDirectory)) {
-                await this.moveDatabaseDirectory(
-                    previousDatabaseDirectory,
-                    activeDirectory
-                )
-            }
-            if (existsSync(rebuildDirectory)) {
-                removeDirectory(rebuildDirectory)
-            }
-            this.database = await this.openConnection(activeDirectory)
-            this.mode = 'active'
-            this.rebuildDatabaseDirectory = null
-            throw error
-        }
-        this.cleanupDatabaseDirectory(
-            previousDatabaseDirectory,
-            'previous index cleanup after rebuild'
-        )
-        return inspection
+        this.mode = null
+        return { indexedCount }
     }
 
     async abortRebuild(): Promise<VectorIndexInspection> {
@@ -431,24 +369,6 @@ export class LivingMemoryVectorIndexDatabase {
             const database = this.database
             this.database = null
             await database.close()
-        }
-    }
-
-    private async moveDatabaseDirectory(source: string, destination: string) {
-        for (let attempt = 0; ; attempt += 1) {
-            try {
-                await this.renameDatabaseDirectory(source, destination)
-                return
-            } catch (error) {
-                const retryDelay = DATABASE_RENAME_RETRY_DELAYS[attempt]
-                if (
-                    retryDelay === undefined ||
-                    !isTransientRenameError(error)
-                ) {
-                    throw error
-                }
-                await this.waitBeforeRenameRetry(retryDelay)
-            }
         }
     }
 

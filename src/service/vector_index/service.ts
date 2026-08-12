@@ -17,6 +17,8 @@ import type {
 } from '../../contracts/vector_index'
 import { summarizeError, toError } from '../shared/utils'
 import { LivingMemoryVectorIndexError } from './errors'
+import { VectorIndexDirectorySwitch } from './directory_switch'
+import type { VectorIndexDirectoryActivation } from './directory_switch'
 import {
     LivingMemoryVectorIndexMaintenance,
     type LivingMemoryVectorIndexRepository
@@ -73,6 +75,7 @@ export class LivingMemoryVectorIndexService
     private readonly previousDatabaseDirectory: string
     private readonly ownershipLock: LivingMemoryVectorIndexOwnershipLock
     private readonly maintenance: LivingMemoryVectorIndexMaintenance
+    private readonly directorySwitch: VectorIndexDirectorySwitch
     private readonly workerFactory: VectorIndexWorkerFactory
     private worker: LivingMemoryVectorIndexWorkerClient | null = null
     private initialization: Promise<void> | null = null
@@ -91,6 +94,9 @@ export class LivingMemoryVectorIndexService
         const schemaVersion =
             options.schemaVersion ?? VECTOR_INDEX_SCHEMA_VERSION
         this.workerFactory = options.workerFactory ?? createDefaultWorker
+        this.directorySwitch = new VectorIndexDirectorySwitch({
+            reportWarning: (warning) => this.logger.warn(warning)
+        })
 
         this.indexDirectory = resolve(
             ctx.baseDir,
@@ -118,6 +124,8 @@ export class LivingMemoryVectorIndexService
             schemaVersion,
             indexDirectory: this.indexDirectory,
             previousDatabaseDirectory: this.previousDatabaseDirectory,
+            finalizeRebuild: (input, transferCleanupOwnership) =>
+                this.finalizeRebuild(input, transferCleanupOwnership),
             worker: () => this.requireWorker(),
             shouldStop: () => this.stopping,
             onBuilding: (jobId) => this.markBuilding(jobId),
@@ -174,18 +182,7 @@ export class LivingMemoryVectorIndexService
         this.stopping = true
         await this.waitForMaintenanceDuringStop()
         if (this.worker !== null) {
-            try {
-                await this.worker.dispose()
-            } catch (error) {
-                this.logger.warn(
-                    [
-                        'memory background operation failed:',
-                        'workflow=vector-index',
-                        'operation=vector-index-worker-dispose'
-                    ].join(' '),
-                    error
-                )
-            }
+            await this.disposeWorker(this.worker)
             this.worker = null
         }
         await this.ownershipLock.release()
@@ -553,6 +550,188 @@ export class LivingMemoryVectorIndexService
     private async refreshInspection() {
         const inspection = await this.requireWorker().inspect()
         this.status.applyInspection(inspection)
+    }
+
+    private async finalizeRebuild(
+        input: {
+            rebuildDatabaseDirectory: string
+            expectedCount: number
+            manifest: NonNullable<VectorIndexInspection['manifest']>
+        },
+        transferCleanupOwnership: () => void
+    ) {
+        const currentWorker = this.requireWorker()
+        await currentWorker.prepareRebuild(input.expectedCount)
+        transferCleanupOwnership()
+        this.worker = null
+        try {
+            await currentWorker.dispose()
+        } catch (error) {
+            await this.directorySwitch.cleanup(
+                input.rebuildDatabaseDirectory,
+                'failed rebuild cleanup after worker shutdown'
+            )
+            await this.startWorkerCandidate(this.databaseDirectory)
+            throw error
+        }
+
+        let activation: VectorIndexDirectoryActivation | null = null
+        try {
+            activation = await this.directorySwitch.activate(
+                this.databaseDirectory,
+                input.rebuildDatabaseDirectory,
+                this.previousDatabaseDirectory
+            )
+            const inspection = await this.startWorkerCandidate(
+                this.databaseDirectory
+            )
+            this.assertFinalizedInspection(inspection, input)
+            await this.directorySwitch.cleanup(
+                this.previousDatabaseDirectory,
+                'previous index cleanup after rebuild'
+            )
+            return inspection
+        } catch (error) {
+            await this.disposeWorkerAfterSwitchFailure()
+            if (activation !== null) {
+                try {
+                    await this.directorySwitch.rollback(activation)
+                } catch (rollbackError) {
+                    await this.recoverAfterRollbackFailure(
+                        input,
+                        error,
+                        rollbackError
+                    )
+                }
+            }
+            try {
+                const restored = await this.startWorkerCandidate(
+                    this.databaseDirectory
+                )
+                if (
+                    restored.manifest?.generation !== input.manifest.generation
+                ) {
+                    await this.directorySwitch.cleanup(
+                        input.rebuildDatabaseDirectory,
+                        'failed rebuild cleanup after rollback'
+                    )
+                }
+            } catch (recoveryError) {
+                throw new Error(
+                    `vector index rebuild switch failed: ` +
+                        `${summarizeError(error)}; recovery failed: ` +
+                        summarizeError(recoveryError),
+                    { cause: error }
+                )
+            }
+            throw error
+        }
+    }
+
+    private async recoverAfterRollbackFailure(
+        input: {
+            rebuildDatabaseDirectory: string
+            manifest: NonNullable<VectorIndexInspection['manifest']>
+        },
+        switchError: unknown,
+        rollbackError: unknown
+    ) {
+        const message =
+            `vector index rebuild switch failed: ` +
+            `${summarizeError(switchError)}; rollback failed: ` +
+            summarizeError(rollbackError)
+        try {
+            const inspection = await this.startWorkerCandidate(
+                this.databaseDirectory
+            )
+            if (inspection.manifest?.generation !== input.manifest.generation) {
+                await this.directorySwitch.cleanup(
+                    input.rebuildDatabaseDirectory,
+                    'failed rebuild cleanup after rollback failure'
+                )
+            }
+        } catch (recoveryError) {
+            throw new Error(
+                `${message}; recovery failed: ${summarizeError(recoveryError)}`,
+                { cause: switchError }
+            )
+        }
+        throw new Error(message, { cause: switchError })
+    }
+
+    private async startWorkerCandidate(databaseDirectory: string) {
+        const worker = this.workerFactory((error) => {
+            this.recordWorkerFailure(error)
+        })
+        this.worker = worker
+        try {
+            return await worker.openCandidate(databaseDirectory)
+        } catch (error) {
+            try {
+                await worker.dispose()
+            } catch (disposeError) {
+                this.debug(
+                    `vector index candidate worker cleanup: ` +
+                        summarizeError(disposeError)
+                )
+            } finally {
+                if (this.worker === worker) {
+                    this.worker = null
+                }
+            }
+            throw error
+        }
+    }
+
+    private assertFinalizedInspection(
+        inspection: VectorIndexInspection,
+        expected: {
+            expectedCount: number
+            manifest: NonNullable<VectorIndexInspection['manifest']>
+        }
+    ) {
+        if (
+            inspection.indexedCount !== expected.expectedCount ||
+            inspection.manifest?.generation !== expected.manifest.generation
+        ) {
+            throw new Error(
+                `vector index finalized inspection mismatch: ` +
+                    `expectedCount=${expected.expectedCount}, ` +
+                    `actualCount=${inspection.indexedCount}, ` +
+                    `expectedGeneration=${expected.manifest.generation}, ` +
+                    `actualGeneration=${inspection.manifest?.generation ?? 'none'}`
+            )
+        }
+    }
+
+    private async disposeWorkerAfterSwitchFailure() {
+        if (this.worker === null) {
+            return
+        }
+        const worker = this.worker
+        this.worker = null
+        try {
+            await worker.dispose()
+        } catch (error) {
+            this.debug(
+                `vector index switch worker cleanup: ${summarizeError(error)}`
+            )
+        }
+    }
+
+    private async disposeWorker(worker: LivingMemoryVectorIndexWorkerClient) {
+        try {
+            await worker.dispose()
+        } catch (error) {
+            this.logger.warn(
+                [
+                    'memory background operation failed:',
+                    'workflow=vector-index',
+                    'operation=vector-index-worker-dispose'
+                ].join(' '),
+                error
+            )
+        }
     }
 
     private markBuilding(jobId: string) {

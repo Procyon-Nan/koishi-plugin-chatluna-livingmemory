@@ -67,7 +67,9 @@ export const rebuildVectorIndex = async (options: {
     reuseLegacyEmbeddings: boolean
     manifest: MemoryVectorIndexManifest
     rebuildDatabaseDirectory: string
-    finalize: () => Promise<VectorIndexInspection>
+    finalize: (
+        transferCleanupOwnership: () => void
+    ) => Promise<VectorIndexInspection>
     onProgress: (progress: VectorIndexRebuildProgress) => Promise<void>
     shouldStop: () => boolean
 }) => {
@@ -85,6 +87,7 @@ export const rebuildVectorIndex = async (options: {
         shouldStop
     } = options
     let rebuildCreated = false
+    let cleanupOwnedByFinalize = false
     try {
         const created = await worker.createRebuildFile(
             rebuildDatabaseDirectory,
@@ -185,10 +188,12 @@ export const rebuildVectorIndex = async (options: {
             cursor = sources[sources.length - 1].id
         } while (true)
 
-        return await finalize()
+        return await finalize(() => {
+            cleanupOwnedByFinalize = true
+        })
     } catch (error) {
         let cleanupError: unknown = null
-        if (rebuildCreated) {
+        if (rebuildCreated && !cleanupOwnedByFinalize) {
             try {
                 await worker.abortRebuild()
             } catch (abortError) {

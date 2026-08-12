@@ -66,6 +66,7 @@ export class LivingMemoryVectorIndexWorkerClient {
     private nextRequestId = 1
     private failure: Error | null = null
     private disposeRequested = false
+    private disposePromise: Promise<void> | null = null
 
     constructor(
         workerPath = resolveWorkerArtifact('vector-index-worker.mjs'),
@@ -99,6 +100,10 @@ export class LivingMemoryVectorIndexWorkerClient {
             databaseDirectory,
             previousDatabaseDirectory
         })
+    }
+
+    openCandidate(databaseDirectory: string) {
+        return this.request({ type: 'openCandidate', databaseDirectory })
     }
 
     inspect() {
@@ -161,12 +166,8 @@ export class LivingMemoryVectorIndexWorkerClient {
         })
     }
 
-    finalizeRebuild(previousDatabaseDirectory: string, expectedCount: number) {
-        return this.request({
-            type: 'finalizeRebuild',
-            previousDatabaseDirectory,
-            expectedCount
-        })
+    prepareRebuild(expectedCount: number) {
+        return this.request({ type: 'prepareRebuild', expectedCount })
     }
 
     abortRebuild() {
@@ -174,6 +175,13 @@ export class LivingMemoryVectorIndexWorkerClient {
     }
 
     async dispose() {
+        if (this.disposePromise === null) {
+            this.disposePromise = this.disposeWorker()
+        }
+        return this.disposePromise
+    }
+
+    private async disposeWorker() {
         this.disposeRequested = true
         let disposeError: Error | null = null
         try {

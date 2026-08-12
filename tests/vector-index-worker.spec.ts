@@ -189,7 +189,9 @@ it('runs typed vector index worker mutations and filtered searches', async () =>
         lastError: null,
         updatedAt: Date.now()
     })
-    const finalized = await client.finalizeRebuild(previousPath, 4)
+    const prepared = await client.prepareRebuild(4)
+    assert.equal(prepared.indexedCount, 4)
+    const finalized = await client.openCandidate(rebuildPath)
     assert.equal(finalized.indexedCount, 4)
 
     const factHits = await client.queryKnn(
@@ -308,6 +310,9 @@ it('runs typed vector index worker mutations and filtered searches', async () =>
 
     await client.dispose()
 
+    await rm(formalPath, { recursive: true, force: true })
+    await rename(rebuildPath, formalPath)
+
     const finalizedDatabase = await PGlite.create(formalPath, {
         extensions: { vector }
     })
@@ -348,7 +353,8 @@ it('rolls back a complete mutation batch when one upsert fails', async () => {
     await client.appendRebuildBatch('preset-a', [
         replace(createDocument('stable-memory'), [1, 0, 0])
     ])
-    await client.finalizeRebuild(previousPath, 1)
+    await client.prepareRebuild(1)
+    await client.openCandidate(rebuildPath)
 
     await assert.rejects(
         client.applyMutation({
@@ -391,7 +397,8 @@ it('restores the formal index when a rebuild is aborted', async () => {
     await client.appendRebuildBatch('preset-a', [
         replace(createDocument('retained-memory'), [1, 0, 0])
     ])
-    await client.finalizeRebuild(previousPath, 1)
+    await client.prepareRebuild(1)
+    await client.openCandidate(firstRebuildPath)
 
     await client.createRebuildFile(secondRebuildPath, {
         ...createManifest(),
@@ -413,10 +420,10 @@ it('recovers files left by an interrupted rebuild switch', async () => {
     await first.appendRebuildBatch('preset-a', [
         replace(createDocument('retained-memory'), [1, 0, 0])
     ])
-    await first.finalizeRebuild(previousPath, 1)
+    await first.prepareRebuild(1)
     await first.dispose()
 
-    await rename(formalPath, previousPath)
+    await rename(rebuildPath, previousPath)
     const recovered = new LivingMemoryVectorIndexWorkerClient(workerPath)
     const inspection = await recovered.open(formalPath, previousPath)
     assert.equal(inspection.manifest?.generation, 'test-generation')
@@ -454,70 +461,6 @@ it('quarantines an unreadable recovered index before rebuilding', async () => {
     )
 })
 
-it('keeps a completed rebuild when previous index cleanup fails', async () => {
-    const formalPath = resolve(temporaryDirectory, 'cleanup-failure')
-    const rebuildPath = resolve(temporaryDirectory, 'cleanup-failure-rebuild')
-    const previousPath = resolve(temporaryDirectory, 'cleanup-failure-previous')
-    const cleanupError = new Error('injected cleanup failure')
-    const warnings: Error[] = []
-    const database = new LivingMemoryVectorIndexDatabase({
-        removeDirectory: (directory) => {
-            if (directory === previousPath) {
-                throw cleanupError
-            }
-            rmSync(directory, { recursive: true, force: true })
-        },
-        reportWarning: (warning) => warnings.push(warning)
-    })
-
-    await database.open(formalPath, previousPath)
-    await database.createRebuildFile(rebuildPath, createManifest())
-    await database.appendRebuildBatch('preset-a', [
-        replace(createDocument('retained-after-cleanup-failure'), [1, 0, 0])
-    ])
-    const inspection = await database.finalizeRebuild(previousPath, 1)
-
-    assert.equal(inspection.manifest?.generation, 'test-generation')
-    assert.equal(inspection.indexedCount, 1)
-    await access(previousPath)
-    assert.equal(warnings.length, 1)
-    assert.match(warnings[0].message, /previous index cleanup after rebuild/)
-    assert.equal(warnings[0].cause, cleanupError)
-    await database.dispose()
-})
-
-it('retries transient directory locks while finalizing a rebuild', async () => {
-    const formalPath = resolve(temporaryDirectory, 'rename-retry')
-    const rebuildPath = resolve(temporaryDirectory, 'rename-retry-rebuild')
-    const previousPath = resolve(temporaryDirectory, 'rename-retry-previous')
-    let activeMoveAttempts = 0
-    const database = new LivingMemoryVectorIndexDatabase({
-        renameDirectory: async (source, destination) => {
-            if (source === formalPath && destination === previousPath) {
-                activeMoveAttempts += 1
-                if (activeMoveAttempts < 3) {
-                    throw Object.assign(new Error('injected directory lock'), {
-                        code: 'EPERM'
-                    })
-                }
-            }
-            await rename(source, destination)
-        },
-        waitBeforeRenameRetry: async () => {}
-    })
-
-    await database.open(formalPath, previousPath)
-    await database.createRebuildFile(rebuildPath, createManifest())
-    await database.appendRebuildBatch('preset-a', [
-        replace(createDocument('retained-after-rename-retry'), [1, 0, 0])
-    ])
-    const inspection = await database.finalizeRebuild(previousPath, 1)
-
-    assert.equal(activeMoveAttempts, 3)
-    assert.equal(inspection.indexedCount, 1)
-    await database.dispose()
-})
-
 it('analyzes the rebuild database before switching it into place', async () => {
     const formalPath = resolve(temporaryDirectory, 'analyze-order')
     const rebuildPath = resolve(temporaryDirectory, 'analyze-order-rebuild')
@@ -539,9 +482,11 @@ it('analyzes the rebuild database before switching it into place', async () => {
     await database.appendRebuildBatch('preset-a', [
         replace(createDocument('analyzed-before-switch'), [1, 0, 0])
     ])
-    const inspection = await database.finalizeRebuild(previousPath, 1)
+    const prepared = await database.prepareRebuild(1)
+    const inspection = await database.openCandidate(rebuildPath)
 
     assert.equal(analyzed, true)
+    assert.equal(prepared.indexedCount, 1)
     assert.equal(inspection.indexedCount, 1)
     await database.dispose()
 })

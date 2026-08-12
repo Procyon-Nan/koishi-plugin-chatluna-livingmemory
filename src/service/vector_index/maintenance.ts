@@ -49,6 +49,14 @@ interface VectorIndexMaintenanceOptions {
     schemaVersion: number
     indexDirectory: string
     previousDatabaseDirectory: string
+    finalizeRebuild: (
+        input: {
+            rebuildDatabaseDirectory: string
+            expectedCount: number
+            manifest: MemoryVectorIndexManifest
+        },
+        transferCleanupOwnership: () => void
+    ) => Promise<VectorIndexInspection>
     shouldStop: () => boolean
     onBuilding: (jobId: string) => void
     onCurrentJobChanged: (jobId: string | null) => void
@@ -234,8 +242,7 @@ export class LivingMemoryVectorIndexMaintenance {
             repository,
             indexDirectory,
             schemaVersion,
-            operationGate,
-            previousDatabaseDirectory
+            operationGate
         } = this.options
         await this.jobRunner.run(
             GLOBAL_INDEX_JOB_PRESET,
@@ -287,7 +294,7 @@ export class LivingMemoryVectorIndexMaintenance {
                             ].join(' ')
                         )
                     },
-                    finalize: () =>
+                    finalize: (transferCleanupOwnership) =>
                         operationGate.runExclusive(async () => {
                             await this.reconcileAllPresets(
                                 embeddings,
@@ -296,12 +303,14 @@ export class LivingMemoryVectorIndexMaintenance {
                             )
                             const expectedCount =
                                 await repository.countEntries()
-                            return this.options
-                                .worker()
-                                .finalizeRebuild(
-                                    previousDatabaseDirectory,
-                                    expectedCount
-                                )
+                            return this.options.finalizeRebuild(
+                                {
+                                    rebuildDatabaseDirectory,
+                                    expectedCount,
+                                    manifest
+                                },
+                                transferCleanupOwnership
+                            )
                         })
                 })
                 this.options.onInspection(inspection)
