@@ -1,91 +1,108 @@
+import { createRequire } from 'node:module'
 import { performance } from 'node:perf_hooks'
-import { mkdtemp, readdir, rm, stat } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import { PGlite } from '@electric-sql/pglite'
 import { vector } from '@electric-sql/pglite-pgvector'
+import { createBenchmarkConfiguration } from './vector-index-benchmark-options.mjs'
+import {
+    createMemory,
+    createMemorySampler,
+    createQueryVectors,
+    createRandom,
+    directorySize,
+    measureCpu,
+    runWorkload,
+    toPgVector
+} from './vector-index-benchmark-support.mjs'
 
-const memoryCount = Number(process.argv[2] ?? 5_000)
-const dimension = Number(process.argv[3] ?? 1_536)
-const queryCount = Number(process.argv[4] ?? 100)
+const require = createRequire(import.meta.url)
+require('esbuild-register/dist/node').register()
+const {
+    VECTOR_INDEX_SCHEMA_VERSION,
+    createVectorIndexSchema
+} = require('../src/service/vector_index/worker/schema.ts')
+const {
+    queryVectorIndexHybrid,
+    queryVectorIndexKnn
+} = require('../src/service/vector_index/worker/queries.ts')
+
+const { options, selectedWorkloads, memoryTypeDistribution } =
+    createBenchmarkConfiguration(process.argv.slice(2))
 const temporaryDirectory = await mkdtemp(
     resolve(tmpdir(), 'living-memory-vector-benchmark-')
 )
 const databasePath = resolve(temporaryDirectory, 'benchmark')
+const dataRandom = createRandom(options.seed)
+const queryRandom = createRandom(options.seed ^ 0x9e3779b9)
+const queryVectors = createQueryVectors(options, queryRandom)
+const memorySampler = createMemorySampler()
 let database
-
-let randomState = 0x6d2b79f5
-const random = () => {
-    randomState = Math.imul(randomState ^ (randomState >>> 15), 1 | randomState)
-    randomState ^=
-        randomState +
-        Math.imul(randomState ^ (randomState >>> 7), 61 | randomState)
-    return ((randomState ^ (randomState >>> 14)) >>> 0) / 4_294_967_296
-}
-
-const createVector = () => {
-    const values = new Float32Array(dimension)
-    let squaredNorm = 0
-    for (let index = 0; index < dimension; index++) {
-        const value = random() * 2 - 1
-        values[index] = value
-        squaredNorm += value * value
-    }
-    const norm = Math.sqrt(squaredNorm)
-    for (let index = 0; index < dimension; index++) {
-        values[index] /= norm
-    }
-    return `[${Array.from(values).join(',')}]`
-}
-
-const createMetadata = (index) => ({
-    status: index % 5 === 0 ? 'archived' : 'active',
-    type: index % 3 === 0 ? 'preference' : 'fact'
-})
-
-const directorySize = async (path) => {
-    const entries = await readdir(path, { withFileTypes: true })
-    return (
-        await Promise.all(
-            entries.map(async (entry) => {
-                const entryPath = resolve(path, entry.name)
-                return entry.isDirectory()
-                    ? directorySize(entryPath)
-                    : (await stat(entryPath)).size
-            })
-        )
-    ).reduce((total, size) => total + size, 0)
-}
+let memoryMetrics
 
 try {
+    const schemaStartedAt = performance.now()
     database = new PGlite(databasePath, { extensions: { vector } })
     await database.exec('CREATE EXTENSION IF NOT EXISTS vector')
-    await database.exec(`
-        CREATE TABLE benchmark_vectors (
-            id BIGINT PRIMARY KEY,
-            embedding vector(${dimension}) NOT NULL,
-            preset_id TEXT NOT NULL,
-            status TEXT NOT NULL,
-            type TEXT NOT NULL,
-            is_consolidated BOOLEAN NOT NULL
-        )
-    `)
+    const extension = await database.query(
+        `SELECT extversion
+         FROM pg_extension
+         WHERE extname = 'vector'`
+    )
+    const vectorExtensionVersion = extension.rows[0].extversion
+    await createVectorIndexSchema(database, {
+        schemaVersion: VECTOR_INDEX_SCHEMA_VERSION,
+        embeddingModelId: 'benchmark-embedding-model',
+        dimension: options.dimension,
+        storageEngine: 'pglite-pgvector',
+        vectorExtensionVersion,
+        generation: 'benchmark-generation',
+        builtAt: 1_700_000_000_000
+    })
+    const schemaMilliseconds = performance.now() - schemaStartedAt
+
+    const buildCpuStartedAt = process.cpuUsage()
     const buildStartedAt = performance.now()
     await database.exec('BEGIN')
     try {
-        for (let index = 1; index <= memoryCount; index++) {
-            const metadata = createMetadata(index)
+        for (let index = 1; index <= options.memoryCount; index++) {
+            const memory = createMemory(
+                index,
+                options,
+                memoryTypeDistribution,
+                dataRandom
+            )
             await database.query(
-                `INSERT INTO benchmark_vectors VALUES ($1, $2::vector, $3, $4, $5, $6)`,
+                `INSERT INTO lm_index_memory (
+                    memory_id,
+                    preset_id,
+                    status,
+                    type,
+                    is_consolidated,
+                    content_hash,
+                    keywords_hash,
+                    updated_at,
+                    embedding
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::vector)`,
                 [
-                    BigInt(index),
-                    createVector(),
-                    'benchmark-preset',
-                    metadata.status,
-                    metadata.type,
-                    index % 2 === 1
+                    memory.id,
+                    memory.presetId,
+                    memory.status,
+                    memory.type,
+                    memory.isConsolidated,
+                    memory.contentHash,
+                    memory.keywordsHash,
+                    memory.updatedAt,
+                    toPgVector(memory.vector)
                 ]
             )
+            await database.query(
+                `INSERT INTO lm_index_keywords (memory_id, keyword)
+                 SELECT $1, UNNEST($2::text[])`,
+                [memory.id, memory.keywords]
+            )
+            memorySampler.sample()
         }
         await database.exec('COMMIT')
     } catch (error) {
@@ -94,44 +111,76 @@ try {
         } catch {}
         throw error
     }
-    const buildDuration = performance.now() - buildStartedAt
-    const queryDurations = []
-    for (let index = 0; index < queryCount; index++) {
-        const startedAt = performance.now()
-        await database.query(
-            `SELECT id, embedding <=> $1::vector AS distance
-             FROM benchmark_vectors
-             WHERE preset_id = $2 AND status = 'active' AND type = 'fact' AND is_consolidated = true
-             ORDER BY embedding <=> $1::vector LIMIT 30`,
-            [createVector(), 'benchmark-preset']
-        )
-        queryDurations.push(performance.now() - startedAt)
+    const buildMilliseconds = performance.now() - buildStartedAt
+    const buildCpuMilliseconds = measureCpu(buildCpuStartedAt)
+
+    let analyzeMilliseconds = null
+    if (options.analyze) {
+        const analyzeStartedAt = performance.now()
+        await database.exec('ANALYZE lm_index_memory')
+        await database.exec('ANALYZE lm_index_keywords')
+        analyzeMilliseconds = performance.now() - analyzeStartedAt
     }
-    queryDurations.sort((left, right) => left - right)
-    const p95Index = Math.ceil(queryDurations.length * 0.95) - 1
+
+    const workloads = {}
+    for (const workload of selectedWorkloads) {
+        workloads[workload] = await runWorkload({
+            database,
+            options,
+            name: workload,
+            queryVectors,
+            memorySampler,
+            queryVectorIndexHybrid,
+            queryVectorIndexKnn
+        })
+    }
+
     await database.close()
     database = undefined
-
+    memoryMetrics = memorySampler.stop()
     const fileSize = await directorySize(databasePath)
     console.log(
         JSON.stringify(
             {
-                memoryCount,
-                dimension,
-                queryCount,
-                buildMilliseconds: Math.round(buildDuration),
-                queryP95Milliseconds: Number(
-                    queryDurations[p95Index].toFixed(3)
-                ),
-                fileMiB: Number((fileSize / 1024 / 1024).toFixed(2))
+                config: options,
+                schema: {
+                    schemaVersion: VECTOR_INDEX_SCHEMA_VERSION,
+                    storageEngine: 'pglite-pgvector',
+                    vectorExtensionVersion
+                },
+                build: {
+                    schemaMilliseconds: Number(schemaMilliseconds.toFixed(3)),
+                    dataMilliseconds: Number(buildMilliseconds.toFixed(3)),
+                    cpuMilliseconds: buildCpuMilliseconds,
+                    analyzeMilliseconds:
+                        analyzeMilliseconds === null
+                            ? null
+                            : Number(analyzeMilliseconds.toFixed(3)),
+                    databaseFileMiB: Number((fileSize / 1024 / 1024).toFixed(2))
+                },
+                memory: {
+                    baselineRssMiB: Number(
+                        (memoryMetrics.baselineRss / 1024 / 1024).toFixed(2)
+                    ),
+                    peakRssMiB: Number(
+                        (memoryMetrics.peakRss / 1024 / 1024).toFixed(2)
+                    )
+                },
+                workloads
             },
             null,
             2
         )
     )
 } finally {
-    if (database !== undefined) {
-        await database.close()
+    try {
+        if (database !== undefined) {
+            await database.close()
+        }
+    } finally {
+        if (memoryMetrics === undefined) {
+            memorySampler.stop()
+        }
+        await rm(temporaryDirectory, { recursive: true, force: true })
     }
-    await rm(temporaryDirectory, { recursive: true, force: true })
 }
