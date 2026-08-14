@@ -197,6 +197,10 @@ export class LivingMemoryVectorIndexService
         await this.ownershipLock.release()
     }
 
+    prepareLockRelease() {
+        this.ownershipLock.prepareRelease()
+    }
+
     async restart() {
         await this.stop()
         this.stopping = false

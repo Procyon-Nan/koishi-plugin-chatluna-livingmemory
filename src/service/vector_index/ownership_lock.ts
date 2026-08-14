@@ -7,11 +7,22 @@ import { LivingMemoryVectorIndexError } from './errors'
 
 const LOCK_REFRESH_INTERVAL = 10_000
 const LOCK_STALE_AFTER = 60_000
+const LOCK_HANDOFF_TIMEOUT = 30_000
 
 interface VectorIndexLockRecord {
     pid: number
     token: string
 }
+
+interface VectorIndexLockHolder {
+    releasing: boolean
+    released: Promise<void>
+    resolveReleased: () => void
+}
+
+// 同进程内的锁持有者登记。koishi 重载插件时，cordis 的 restart() 会在旧实例
+// 异步 stop() 完成前同步启动新实例，新实例需等待旧实例释放锁文件后才能接管。
+const lockHolders = new Map<string, VectorIndexLockHolder>()
 
 const isFileExistsError = (error: unknown) => {
     return error instanceof Error && 'code' in error && error.code === 'EEXIST'
@@ -74,6 +85,7 @@ export class LivingMemoryVectorIndexOwnershipLock {
     private readonly token = randomUUID()
     private refreshTimer: NodeJS.Timeout | null = null
     private acquired = false
+    private holder: VectorIndexLockHolder | null = null
 
     constructor(
         private readonly lockPath: string,
@@ -82,22 +94,72 @@ export class LivingMemoryVectorIndexOwnershipLock {
 
     async acquire() {
         await mkdir(dirname(this.lockPath), { recursive: true })
+        await this.awaitInProcessHandoff()
         await this.claimLock()
+        this.registerHolder()
         this.acquired = true
         this.startRefresh()
     }
 
+    prepareRelease() {
+        if (this.holder !== null) {
+            this.holder.releasing = true
+        }
+    }
+
     async release() {
         this.stopRefresh()
-        if (!this.acquired) {
+        try {
+            if (!this.acquired) {
+                return
+            }
+
+            const record = await readLockRecord(this.lockPath)
+            if (record !== null && record.token === this.token) {
+                await unlink(this.lockPath)
+            }
+        } finally {
+            this.acquired = false
+            this.releaseHolder()
+        }
+    }
+
+    private registerHolder() {
+        let resolveReleased!: () => void
+        const released = new Promise<void>((resolve) => {
+            resolveReleased = resolve
+        })
+        this.holder = { releasing: false, released, resolveReleased }
+        lockHolders.set(this.lockPath, this.holder)
+    }
+
+    private releaseHolder() {
+        const holder = this.holder
+        if (holder === null) {
             return
         }
-
-        const record = await readLockRecord(this.lockPath)
-        if (record !== null && record.token === this.token) {
-            await unlink(this.lockPath)
+        this.holder = null
+        if (lockHolders.get(this.lockPath) === holder) {
+            lockHolders.delete(this.lockPath)
         }
-        this.acquired = false
+        holder.resolveReleased()
+    }
+
+    private async awaitInProcessHandoff() {
+        const holder = lockHolders.get(this.lockPath)
+        if (holder === undefined || !holder.releasing) {
+            return
+        }
+        let timer: NodeJS.Timeout | undefined
+        const timeout = new Promise<void>((resolve) => {
+            timer = setTimeout(resolve, LOCK_HANDOFF_TIMEOUT)
+        })
+        timer?.unref()
+        try {
+            await Promise.race([holder.released, timeout])
+        } finally {
+            clearTimeout(timer)
+        }
     }
 
     private async claimLock() {

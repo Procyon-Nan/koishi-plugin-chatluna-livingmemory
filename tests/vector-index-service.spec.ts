@@ -899,3 +899,24 @@ it('rejects a lock with an unreadable record while fresh', async () => {
         await assert.rejects(lock.acquire(), /held by another process/u)
     })
 })
+
+it('hands over the lock to a waiting owner during release', async () => {
+    await withTemporaryDirectory(async (baseDir) => {
+        const lockPath = resolve(baseDir, 'vector-index.lock')
+        const first = new LivingMemoryVectorIndexOwnershipLock(
+            lockPath,
+            () => {}
+        )
+        const second = new LivingMemoryVectorIndexOwnershipLock(
+            lockPath,
+            () => {}
+        )
+        await first.acquire()
+        first.prepareRelease()
+        const takeover = second.acquire()
+        await new Promise((resolve) => setTimeout(resolve, 20))
+        await first.release()
+        await takeover
+        await second.release()
+    })
+})
