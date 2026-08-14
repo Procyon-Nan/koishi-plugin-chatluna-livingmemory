@@ -2,7 +2,6 @@ import { StructuredTool } from '@langchain/core/tools'
 import type { ToolRunnableConfig } from '@langchain/core/tools'
 import type { LivingMemorySearchInput } from '../../../contracts/memory'
 import type { LivingMemorySearchProvider } from '../../../contracts/workflows'
-import type { LivingMemoryLogger } from '../../logging/logger'
 import {
     formatSearchTextLengthRange,
     livingMemorySearchInputSchema,
@@ -12,10 +11,7 @@ import {
     searchKeywordRule,
     searchTextRule
 } from './search_contract'
-import {
-    getLivingMemoryToolConfigurable,
-    LivingMemoryToolRuntime
-} from './tool_runtime'
+import { getLivingMemoryToolConfigurable } from './tool_runtime'
 export const livingMemorySearchToolDescription = [
     '在你的记忆库中搜索记忆。',
     '',
@@ -38,17 +34,9 @@ export class LivingMemorySearchTool extends StructuredTool {
     description = livingMemorySearchToolDescription
 
     schema = livingMemorySearchInputSchema
-    private readonly runtime: LivingMemoryToolRuntime
 
-    constructor(
-        private readonly searchProvider: LivingMemorySearchProvider,
-        logger: LivingMemoryLogger
-    ) {
+    constructor(private readonly searchProvider: LivingMemorySearchProvider) {
         super({ verboseParsingErrors: true })
-        this.runtime = new LivingMemoryToolRuntime({
-            toolName: livingMemorySearchToolName,
-            logger
-        })
     }
 
     async _call(
@@ -59,8 +47,6 @@ export class LivingMemorySearchTool extends StructuredTool {
         const configurable = getLivingMemoryToolConfigurable(runConfig)
         const presetId = configurable?.preset
 
-        this.runtime.logInput(configurable, input)
-
         if (typeof presetId !== 'string' || presetId.length === 0) {
             throw new Error('Missing preset in the current tool call.')
         }
@@ -70,12 +56,6 @@ export class LivingMemorySearchTool extends StructuredTool {
             input
         )
 
-        const output = JSON.stringify(results, null, 2)
-
-        this.runtime.logOutput(configurable, output, {
-            resultCount: results.length
-        })
-
-        return output
+        return JSON.stringify(results, null, 2)
     }
 }

@@ -45,6 +45,32 @@ const createDreamCoordinatorRepository = (
 
 const createIncrementalDreamRunResult = () => ({
     ...createDreamRunResult(),
+    stageResults: [
+        {
+            stage: 'active' as const,
+            entryCount: 0,
+            clusterCount: 0,
+            kept: 0,
+            merged: 0,
+            updated: 0,
+            archived: 0,
+            deleted: 0,
+            skipped: 0,
+            detail: 'active completed'
+        },
+        {
+            stage: 'archived' as const,
+            entryCount: 0,
+            clusterCount: 0,
+            kept: 0,
+            merged: 0,
+            updated: 0,
+            archived: 0,
+            deleted: 0,
+            skipped: 0,
+            detail: 'archived completed'
+        }
+    ],
     selectedCount: 0,
     seedCount: 0,
     successfulSeedCount: 0,
@@ -229,6 +255,17 @@ it('does not start post-Dream user profile generation when disabled', async () =
     const result = await harness.service.run(scope.presetId)
 
     assert.match(result.detail, /user profiles skipped: disabled/u)
+    assert.deepEqual(
+        result.stageResults?.map((stageResult) => ({
+            stage: stageResult.stage,
+            entries: stageResult.entryCount,
+            clusters: stageResult.clusterCount
+        })),
+        [
+            { stage: 'active', entries: 1, clusters: 0 },
+            { stage: 'archived', entries: 1, clusters: 0 }
+        ]
+    )
     assert.deepEqual(harness.events, [
         'list-entries',
         'create-model',
@@ -314,6 +351,93 @@ it('locks a Dream preset while its job is running', async () => {
             message.includes('event=dream.completed')
         ).length,
         1
+    )
+})
+
+it('logs manual Dream completion as separate active and archived results', async () => {
+    const jobStore = createJobStore()
+    const captured = createCapturedLogger()
+    const clearedPresets: string[] = []
+    const result: DreamRunResult = {
+        entryCount: 33,
+        clusterCount: 6,
+        kept: 10,
+        merged: 2,
+        updated: 0,
+        archived: 0,
+        deleted: 2,
+        skipped: 1,
+        detail: 'Dream completed',
+        stageResults: [
+            {
+                stage: 'active',
+                entryCount: 20,
+                clusterCount: 3,
+                kept: 7,
+                merged: 1,
+                updated: 0,
+                archived: 0,
+                deleted: 0,
+                skipped: 1,
+                detail: 'active completed'
+            },
+            {
+                stage: 'archived',
+                entryCount: 13,
+                clusterCount: 3,
+                kept: 3,
+                merged: 1,
+                updated: 0,
+                archived: 0,
+                deleted: 2,
+                skipped: 0,
+                detail: 'archived completed'
+            }
+        ]
+    }
+    const coordinator = createDreamCoordinator(
+        {
+            enableAutoDream: false,
+            autoDreamMemoryGrowthThreshold: 1
+        },
+        { run: async () => result },
+        incrementalDream,
+        createDreamCoordinatorRepository(jobStore),
+        {
+            clearByPreset: (presetId) => {
+                clearedPresets.push(presetId)
+            }
+        },
+        new LivingMemoryJobTracker(jobStore),
+        captured.logger
+    )
+
+    await coordinator.runManual(scope.presetId)
+    await waitFor(
+        () => jobStore.jobs[0]?.status === 'completed',
+        'Dream stage completion logs'
+    )
+
+    const completionLogs = captured.info.filter((message) =>
+        message.includes('event=dream.completed')
+    )
+    assert.equal(completionLogs.length, 2)
+    assert.match(
+        completionLogs[0],
+        /stage=active.*archived=0.*clusters=3.*entries=20.*kept=7.*merged=1.*skipped=1.*updated=0/u
+    )
+    assert.doesNotMatch(completionLogs[0], /deleted=/u)
+    assert.match(
+        completionLogs[1],
+        /stage=archived.*clusters=3.*deleted=2.*entries=13.*kept=3.*merged=1.*skipped=0.*updated=0/u
+    )
+    assert.doesNotMatch(completionLogs[1], /archived=/u)
+    assert.deepEqual(clearedPresets, [scope.presetId])
+    assert.ok(
+        captured.info.every(
+            (message) =>
+                !message.includes('event=dream.snapshot-cache.cleared')
+        )
     )
 })
 
@@ -580,6 +704,12 @@ it('runs one incremental Dream batch when pending memories reach the threshold',
     )
     assert.equal(incrementalCalls, 1)
     assert.equal(jobStore.jobs.length, 1)
+    const completionLogs = captured.info.filter((message) =>
+        message.includes('event=dream.completed')
+    )
+    assert.equal(completionLogs.length, 2)
+    assert.ok(completionLogs[0]?.includes('stage=active'))
+    assert.ok(completionLogs[1]?.includes('stage=archived'))
     assert.ok(
         captured.info.some((message) =>
             message.includes('event=dream.automatic.threshold-reached')

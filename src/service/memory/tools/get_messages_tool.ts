@@ -2,16 +2,12 @@ import { StructuredTool } from '@langchain/core/tools'
 import type { ToolRunnableConfig } from '@langchain/core/tools'
 import type { Context } from 'koishi'
 import type { z } from 'zod'
-import type { LivingMemoryLogger } from '../../logging/logger'
 import {
     livingMemoryGetMessagesInputSchema,
     livingMemoryGetMessagesToolName,
     memoryGetMessagesMaxIdCount
 } from './search_contract'
-import {
-    getLivingMemoryToolConfigurable,
-    LivingMemoryToolRuntime
-} from './tool_runtime'
+import { getLivingMemoryToolConfigurable } from './tool_runtime'
 
 export const livingMemoryGetMessagesToolDescription = [
     '按记忆 ID 获取当前预设中记忆的来源对话消息。',
@@ -34,17 +30,9 @@ export class LivingMemoryGetMessagesTool extends StructuredTool {
     description = livingMemoryGetMessagesToolDescription
 
     schema = livingMemoryGetMessagesInputSchema
-    private readonly runtime: LivingMemoryToolRuntime
 
-    constructor(
-        private readonly ctx: Context,
-        logger: LivingMemoryLogger
-    ) {
+    constructor(private readonly ctx: Context) {
         super({ verboseParsingErrors: true })
-        this.runtime = new LivingMemoryToolRuntime({
-            toolName: livingMemoryGetMessagesToolName,
-            logger
-        })
     }
 
     async _call(
@@ -54,8 +42,6 @@ export class LivingMemoryGetMessagesTool extends StructuredTool {
     ) {
         const configurable = getLivingMemoryToolConfigurable(runConfig)
         const presetId = configurable?.preset
-
-        this.runtime.logInput(configurable, input)
 
         if (typeof presetId !== 'string' || presetId.length === 0) {
             throw new Error('Missing preset in the current tool call.')
@@ -70,13 +56,6 @@ export class LivingMemoryGetMessagesTool extends StructuredTool {
             input.memoryIds
         )
 
-        const output = JSON.stringify(result, null, 2)
-
-        this.runtime.logOutput(configurable, output, {
-            resultCount: result.memories.length,
-            notFoundCount: result.notFoundMemoryIds.length
-        })
-
-        return output
+        return JSON.stringify(result, null, 2)
     }
 }

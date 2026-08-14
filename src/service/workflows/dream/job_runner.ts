@@ -5,7 +5,7 @@ import type { LivingMemorySnapshotCache } from '../../memory/snapshot/snapshot_c
 import type { LivingMemoryJobTracker } from '../job_tracker'
 import type { LivingMemoryIncrementalDreamService } from './incremental'
 import type { LivingMemoryDreamService } from './index'
-import type { DreamRunResult } from './types'
+import type { DreamRunResult, DreamStageResult } from './types'
 
 type DreamService = Pick<LivingMemoryDreamService, 'run'>
 type IncrementalDreamService = Pick<LivingMemoryIncrementalDreamService, 'run'>
@@ -79,20 +79,11 @@ export class LivingMemoryDreamJobRunner {
             const outcome = await workflow(jobLogger)
             const { result } = outcome
             if (hasMemoryChanges(result)) {
-                this.clearSnapshotCache(scope.presetId, jobId)
+                this.clearSnapshotCache(scope.presetId)
             }
             if (outcome.success === true) {
                 await this.jobTracker.markCompleted(jobId, result.detail)
-                jobLogger.info('dream.completed', {
-                    entries: result.entryCount,
-                    clusters: result.clusterCount,
-                    kept: result.kept,
-                    merged: result.merged,
-                    updated: result.updated,
-                    archived: result.archived,
-                    deleted: result.deleted,
-                    skipped: result.skipped
-                })
+                this.logCompletion(jobLogger, result)
                 return
             }
 
@@ -109,7 +100,7 @@ export class LivingMemoryDreamJobRunner {
             })
         } catch (error) {
             if (workflowStarted) {
-                this.clearSnapshotCache(scope.presetId, jobId)
+                this.clearSnapshotCache(scope.presetId)
             }
             if (failureDetail == null && trigger === 'automatic') {
                 failureDetail = `dream automatic incremental failed: ${summarizeError(error)}`
@@ -138,14 +129,47 @@ export class LivingMemoryDreamJobRunner {
         }
     }
 
-    private clearSnapshotCache(presetId: string, jobId: string) {
-        this.snapshotCache.clearByPreset(presetId)
-        this.logger.diagnostic('dream.snapshot-cache.cleared', {
-            workflow: 'dream',
-            jobId,
-            presetId
+    private logCompletion(logger: LivingMemoryLogger, result: DreamRunResult) {
+        if (result.stageResults != null && result.stageResults.length > 0) {
+            for (const stageResult of result.stageResults) {
+                logger.info(
+                    'dream.completed',
+                    toStageCompletionFields(stageResult)
+                )
+            }
+            return
+        }
+
+        logger.info('dream.completed', {
+            entries: result.entryCount,
+            clusters: result.clusterCount,
+            kept: result.kept,
+            merged: result.merged,
+            updated: result.updated,
+            archived: result.archived,
+            deleted: result.deleted,
+            skipped: result.skipped
         })
     }
+
+    private clearSnapshotCache(presetId: string) {
+        this.snapshotCache.clearByPreset(presetId)
+    }
+}
+
+const toStageCompletionFields = (result: DreamStageResult) => {
+    const fields = {
+        stage: result.stage,
+        entries: result.entryCount,
+        clusters: result.clusterCount,
+        kept: result.kept,
+        merged: result.merged,
+        updated: result.updated,
+        skipped: result.skipped
+    }
+    return result.stage === 'active'
+        ? { ...fields, archived: result.archived }
+        : { ...fields, deleted: result.deleted }
 }
 
 const hasMemoryChanges = (result: DreamRunResult) =>

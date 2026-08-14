@@ -153,6 +153,7 @@ export class LivingMemoryDreamService {
             entryCount: entries.length,
             clusterCount:
                 activeResult.clusterCount + archivedResult.clusterCount,
+            stageResults: [activeResult, archivedResult],
             ...stats,
             detail
         }

@@ -243,8 +243,30 @@ it('runs one search through AgentRunner and preserves preset-scoped trace data',
     assert.ok(
         harness.debugMessages.some(
             (message) =>
-                !message.includes('记忆查询') &&
-                !message.includes('我记得一段可靠的往事。')
+                message.includes('event=model.response') &&
+                message.includes('response.tool_calls')
+        )
+    )
+    assert.equal(
+        harness.debugMessages.filter((message) =>
+            message.includes('event=model.prompt')
+        ).length,
+        1
+    )
+    assert.ok(
+        harness.debugMessages.some(
+            (message) =>
+                message.includes('event=recall.agentic.search.results') &&
+                message.includes('content-memory-1')
+        )
+    )
+    assert.ok(
+        harness.debugMessages.every(
+            (message) =>
+                !message.includes('我记得一段可靠的往事。') &&
+                !message.includes('event=recall.agentic.turn.completed') &&
+                !message.includes('event=tool.input') &&
+                !message.includes('event=tool.output')
         )
     )
 })
@@ -488,6 +510,18 @@ it('accepts a valid sixth-call finalization when prior searches matched memory',
     assert.equal(trace.item.matchedMemories.length, 5)
     assert.equal(harness.boundInvocations.length, 5)
     assert.equal(harness.directInvocations.length, 1)
+    assert.equal(
+        harness.debugMessages.filter((message) =>
+            message.includes('event=model.prompt')
+        ).length,
+        1
+    )
+    assert.ok(
+        harness.debugMessages.every(
+            (message) =>
+                !message.includes('我记得在多次查询中确认的事实。')
+        )
+    )
 })
 
 it('normalizes a sixth-call tool request to <NO_MEMORY>', async () => {

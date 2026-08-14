@@ -11,7 +11,7 @@ import {
     resolvePresetPrompt
 } from '../../memory/helpers'
 import { isModelConfigured } from '../../shared/utils'
-import { addStats, createEmptyStats } from './stats'
+import { addStats, createEmptyStats, formatStageDetail } from './stats'
 import type { DreamOperationStats, DreamRunResult, DreamStage } from './types'
 import { DreamUnitProcessor } from './unit_processor'
 import type { LivingMemoryLogger } from '../../logging/logger'
@@ -45,6 +45,8 @@ interface IncrementalRunState {
     stats: DreamOperationStats
     firstRoundStats: DreamOperationStats
     secondRoundStats: DreamOperationStats
+    stageStats: Record<DreamStage, DreamOperationStats>
+    stageClusterCounts: Record<DreamStage, number>
     clusterCount: number
     activeInputCount: number
     archivedInputCount: number
@@ -82,6 +84,11 @@ export class LivingMemoryIncrementalDreamService {
             stats: createEmptyStats(),
             firstRoundStats: createEmptyStats(),
             secondRoundStats: createEmptyStats(),
+            stageStats: {
+                active: createEmptyStats(),
+                archived: createEmptyStats()
+            },
+            stageClusterCounts: { active: 0, archived: 0 },
             clusterCount: 0,
             activeInputCount: batch.filter((entry) => entry.status === 'active')
                 .length,
@@ -108,6 +115,7 @@ export class LivingMemoryIncrementalDreamService {
                 continue
             }
             state.clusterCount++
+            state.stageClusterCounts[stage]++
             const result = await this.unitProcessor.process({
                 presetId,
                 assistantLabel,
@@ -125,6 +133,7 @@ export class LivingMemoryIncrementalDreamService {
             })
             addStats(state.stats, result)
             addStats(state.firstRoundStats, result)
+            addStats(state.stageStats[stage], result)
             if (result.success === false) {
                 state.errors.push(`first-round ${stage}: ${result.error}`)
                 return this.createResult(presetId, batch, state)
@@ -157,6 +166,7 @@ export class LivingMemoryIncrementalDreamService {
             }
 
             state.clusterCount++
+            state.stageClusterCounts[seed.status]++
             const result = await this.unitProcessor.process({
                 presetId,
                 assistantLabel,
@@ -175,6 +185,7 @@ export class LivingMemoryIncrementalDreamService {
             })
             addStats(state.stats, result)
             addStats(state.secondRoundStats, result)
+            addStats(state.stageStats[seed.status], result)
             if (result.success === true) {
                 state.successfulSeedCount++
             } else {
@@ -280,10 +291,31 @@ export class LivingMemoryIncrementalDreamService {
             `remaining pending ${remainingPendingCount}`,
             ...state.errors.map((error) => `error: ${error}`)
         ].join('\n')
+        const stageResults = (['active', 'archived'] as const).map((stage) => {
+            const entryCount =
+                stage === 'active'
+                    ? state.activeInputCount
+                    : state.archivedInputCount
+            const clusterCount = state.stageClusterCounts[stage]
+            const stats = state.stageStats[stage]
+            return {
+                stage,
+                entryCount,
+                clusterCount,
+                ...stats,
+                detail: formatStageDetail(
+                    stage,
+                    entryCount,
+                    clusterCount,
+                    stats
+                )
+            }
+        })
 
         return {
             entryCount: batch.length,
             clusterCount: state.clusterCount,
+            stageResults,
             ...state.stats,
             selectedCount: batch.length,
             seedCount: state.seedCount,

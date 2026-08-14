@@ -210,19 +210,13 @@ it('runs one global HDBSCAN pass over all first-pass noise', async () => {
     const worker = createDreamWorker(async (input, onProgress) => {
         assert.equal(input.dimension, 2)
         assert.equal(input.vectors.length, input.entryCount * 2)
-        assert.equal(typeof onProgress, 'function')
+        assert.equal(onProgress, undefined)
         callSizes.push(input.entryCount)
         if (callSizes.length <= partitions.length) {
             return Int32Array.from({ length: input.entryCount }, (_, index) =>
                 index === 0 ? 0 : -1
             )
         }
-        onProgress?.({
-            phase: 'building-mst',
-            completed: 120,
-            total: 348,
-            elapsedMs: 25
-        })
         return Int32Array.from({ length: input.entryCount }, (_, index) =>
             index < 3 ? 4 : -1
         )
@@ -258,25 +252,52 @@ it('runs one global HDBSCAN pass over all first-pass noise', async () => {
     assert.equal(clusteredIds.length, entries.length)
     assert.equal(new Set(clusteredIds).size, entries.length)
     assert.ok(
-        captured.info.some((message) =>
-            message.includes('event=dream.clustering.partitioned')
+        captured.info.some(
+            (message) =>
+                message.includes('event=dream.clustering.round.started') &&
+                message.includes('round=primary') &&
+                message.includes('batches=2')
         )
     )
-    assert.ok(
-        captured.info.some((message) =>
-            message.includes('event=dream.clustering.partition.completed')
-        )
+    const primaryBatches = captured.info.filter(
+        (message) =>
+            message.includes('event=dream.clustering.batch.completed') &&
+            message.includes('round=primary')
     )
+    assert.equal(primaryBatches.length, 2)
+    assert.ok(primaryBatches.every((message) => message.includes('clusters-1=1')))
+    assert.ok(primaryBatches.some((message) => message.includes('noise=174')))
+    assert.ok(primaryBatches.some((message) => message.includes('noise=175')))
     assert.ok(
-        captured.info.some((message) =>
-            message.includes('event=dream.clustering.global-noise.completed')
+        captured.info.some(
+            (message) =>
+                message.includes('event=dream.clustering.round.completed') &&
+                message.includes('round=primary') &&
+                message.includes('totalNoise=349')
         )
     )
     assert.ok(
         captured.info.some(
             (message) =>
-                message.includes('event=dream.clustering.progress') &&
-                message.includes('pass=global-noise')
+                message.includes('event=dream.clustering.batch.completed') &&
+                message.includes('round=global-noise') &&
+                message.includes('clusters-1=3') &&
+                message.includes('noise=346')
+        )
+    )
+    assert.ok(
+        captured.info.some(
+            (message) =>
+                message.includes('event=dream.clustering.round.completed') &&
+                message.includes('round=global-noise') &&
+                message.includes('totalNoise=346')
+        )
+    )
+    assert.ok(
+        captured.info.every(
+            (message) =>
+                !message.includes('event=dream.clustering.progress') &&
+                !message.includes('event=dream.clustering.partitioned')
         )
     )
 })
@@ -343,9 +364,17 @@ it('skips the global noise pass when the first pass has no noise', async () => {
     assert.ok(
         captured.info.some(
             (message) =>
-                message.includes(
-                    'event=dream.clustering.global-noise.completed'
-                ) && message.includes('hdbscan=skipped')
+                message.includes('event=dream.clustering.round.started') &&
+                message.includes('round=global-noise') &&
+                message.includes('batches=0')
+        )
+    )
+    assert.ok(
+        captured.info.some(
+            (message) =>
+                message.includes('event=dream.clustering.round.completed') &&
+                message.includes('round=global-noise') &&
+                message.includes('totalNoise=0')
         )
     )
 })
@@ -378,9 +407,17 @@ it('logs a single first-pass noise entry without a global HDBSCAN run', async ()
     assert.ok(
         captured.info.some(
             (message) =>
-                message.includes(
-                    'event=dream.clustering.global-noise.completed'
-                ) && message.includes('finalNoise=1')
+                message.includes('event=dream.clustering.round.started') &&
+                message.includes('round=global-noise') &&
+                message.includes('batches=0')
+        )
+    )
+    assert.ok(
+        captured.info.some(
+            (message) =>
+                message.includes('event=dream.clustering.round.completed') &&
+                message.includes('round=global-noise') &&
+                message.includes('totalNoise=1')
         )
     )
 })
@@ -421,7 +458,7 @@ it('propagates asynchronous partition failures before reading vectors', async ()
     assert.deepEqual(vectors.calls, [])
 })
 
-it('enables worker progress and completion logs only for debug logging', async () => {
+it('emits batch summaries without worker progress callbacks', async () => {
     const entries = createEntries(4)
     const vectors = createVectorReader(entries)
     const captured = createCapturedLogger()
@@ -447,20 +484,17 @@ it('enables worker progress and completion logs only for debug logging', async (
         captured.logger
     )
 
-    assert.deepEqual(progressFlags, [true])
-    assert.ok(
-        captured.info.some((message) =>
-            message.includes('event=dream.clustering.progress')
-        )
-    )
-    assert.ok(
-        captured.info.some(
-            (message) =>
-                message.includes(
-                    'event=dream.clustering.partition.completed'
-                ) &&
-                message.includes('clusters=1') &&
-                message.includes('noise=0')
-        )
-    )
+    assert.deepEqual(progressFlags, [false])
+    assert.deepEqual(captured.info, [
+        'event=dream.clustering.round.started ' +
+            'stage=active round=primary batches=1',
+        'event=dream.clustering.batch.completed ' +
+            'stage=active round=primary batch=1 clusters-1=4 noise=0',
+        'event=dream.clustering.round.completed ' +
+            'stage=active round=primary totalNoise=0',
+        'event=dream.clustering.round.started ' +
+            'stage=active round=global-noise batches=0',
+        'event=dream.clustering.round.completed ' +
+            'stage=active round=global-noise totalNoise=0'
+    ])
 })

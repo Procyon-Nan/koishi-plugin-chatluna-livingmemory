@@ -246,6 +246,17 @@ it('runs one batch unit then consolidates every successful seed in order', async
     assert.equal(result.seedCount, 2)
     assert.equal(result.successfulSeedCount, 2)
     assert.equal(result.remainingPendingCount, 0)
+    assert.deepEqual(
+        result.stageResults?.map((stageResult) => ({
+            stage: stageResult.stage,
+            entries: stageResult.entryCount,
+            clusters: stageResult.clusterCount
+        })),
+        [
+            { stage: 'active', entries: 2, clusters: 3 },
+            { stage: 'archived', entries: 0, clusters: 0 }
+        ]
+    )
     assert.equal(harness.model.invocations.length, 3)
     assert.equal(harness.repository.entries.get('seed-1')?.isConsolidated, true)
     assert.equal(harness.repository.entries.get('seed-2')?.isConsolidated, true)

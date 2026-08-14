@@ -69,16 +69,6 @@ interface RecordedAgenticSearchCall {
 
 type AgenticRecallDecision = AgentAction | AgentAction[] | AgentFinish
 
-const countDecisionToolCalls = (decision: AgenticRecallDecision) => {
-    if (Array.isArray(decision)) {
-        return decision.length
-    }
-    if ('returnValues' in decision) {
-        return 0
-    }
-    return 1
-}
-
 type AgenticRecallToolAgentInput = ChainValues & {
     steps: AgentStep[]
     scratchpadEntries?: ScratchpadEntry[]
@@ -262,7 +252,8 @@ class RecordingLivingMemorySearchTool extends StructuredTool {
     constructor(
         private readonly delegate: LivingMemorySearchTool,
         private readonly calls: RecordedAgenticSearchCall[],
-        private readonly agentContext: { requestId: string }
+        private readonly agentContext: { requestId: string },
+        private readonly logger: LivingMemoryLogger
     ) {
         super({ verboseParsingErrors: true })
     }
@@ -289,6 +280,17 @@ class RecordingLivingMemorySearchTool extends StructuredTool {
             input: { ...input },
             output
         })
+        this.logger.diagnosticBlocks(
+            'recall.agentic.search.results',
+            {},
+            () => [
+                {
+                    title: 'memories',
+                    key: 'memories',
+                    value: JSON.parse(output)
+                }
+            ]
+        )
         return output
     }
 }
@@ -347,9 +349,10 @@ export class LivingMemoryAgenticRecallExecutor {
         }
         const recordedSearchCalls: RecordedAgenticSearchCall[] = []
         const searchTool = new RecordingLivingMemorySearchTool(
-            new LivingMemorySearchTool(this.embeddingSearchEngine, runLogger),
+            new LivingMemorySearchTool(this.embeddingSearchEngine),
             recordedSearchCalls,
-            agentContext
+            agentContext,
+            runLogger
         )
         let modelCallCount = 0
         let usedFinalizationCall = false
@@ -357,7 +360,9 @@ export class LivingMemoryAgenticRecallExecutor {
             logger: runLogger,
             stage: 'agentic-decision',
             attempt: () => modelCallCount,
-            fields: () => ({ modelCall: modelCallCount })
+            fields: () => ({ modelCall: modelCallCount }),
+            promptLogging: 'first',
+            logResponseText: false
         })
         const toolAgent = createOpenAIAgent({
             llm: loggedModel,
@@ -390,10 +395,6 @@ export class LivingMemoryAgenticRecallExecutor {
                     )
                 }
 
-                runLogger.diagnostic('recall.agentic.turn.completed', {
-                    modelCall: modelCallCount,
-                    toolCalls: countDecisionToolCalls(decision)
-                })
                 return decision
             }
         )
@@ -506,7 +507,9 @@ export class LivingMemoryAgenticRecallExecutor {
                 : await invokeLoggedModel(model, messages, invokeConfig, {
                       logger,
                       stage: 'agentic-finalization',
-                      attempt
+                      attempt,
+                      promptLogging: 'none',
+                      logResponseText: false
                   })
         const output = stringifyModelContent(response.content).trim()
         const finalOutput =

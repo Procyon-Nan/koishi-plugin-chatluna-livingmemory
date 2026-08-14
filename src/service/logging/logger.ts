@@ -4,6 +4,16 @@ export type LivingMemoryLogFields = Record<string, unknown>
 export type LivingMemoryLogFieldsInput =
     LivingMemoryLogFields | (() => LivingMemoryLogFields)
 
+export interface LivingMemoryLogBlock {
+    title: string
+    value: unknown
+    key?: string
+    fields?: LivingMemoryLogFields
+}
+
+export type LivingMemoryLogBlocksInput =
+    LivingMemoryLogBlock[] | (() => LivingMemoryLogBlock[])
+
 type LivingMemoryLogSink = Pick<Logger, 'info' | 'warn' | 'error'>
 type LivingMemoryLogLevel = keyof LivingMemoryLogSink
 
@@ -18,6 +28,9 @@ const preferredFieldOrder = [
     'jobId',
     'modelCallId',
     'stage',
+    'round',
+    'batch',
+    'batches',
     'attempt',
     'presetId',
     'conversationId',
@@ -106,18 +119,47 @@ const formatValue = (value: unknown, key: string) => {
     return serialized === undefined ? '"[unserializable]"' : serialized
 }
 
+const formatBlockValue = (value: unknown, key: string) => {
+    const normalized = normalizeValue(value, key, new WeakSet())
+    if (typeof normalized === 'string') {
+        return normalized
+    }
+    const serialized = JSON.stringify(normalized, null, 2)
+    return serialized === undefined ? '"[unserializable]"' : serialized
+}
+
 const orderedFieldNames = (fields: LivingMemoryLogFields) => {
     const names = Object.keys(fields).filter(
         (key) => fields[key] !== undefined && !preferredFieldOrder.includes(key)
     )
-    names.sort()
+    names.sort((left, right) => {
+        const leftCluster = /^clusters-(\d+)$/u.exec(left)
+        const rightCluster = /^clusters-(\d+)$/u.exec(right)
+        if (leftCluster && rightCluster) {
+            return Number(leftCluster[1]) - Number(rightCluster[1])
+        }
+        return left < right ? -1 : left > right ? 1 : 0
+    })
     return [
         ...preferredFieldOrder.filter((key) => fields[key] !== undefined),
         ...names
     ]
 }
 
-const emitCompleteLine = (sink: LivingMemoryLogSink, emit: () => void) => {
+const formatBlock = (block: LivingMemoryLogBlock) => {
+    const title = block.title.replace(/\r?\n/gu, ' ')
+    const fields = block.fields ?? {}
+    const detail = orderedFieldNames(fields)
+        .map((key) => `${key}=${formatValue(fields[key], key)}`)
+        .join(' ')
+    const heading = detail.length > 0 ? `${title} ${detail}` : title
+    return `--- ${heading} ---\n${formatBlockValue(
+        block.value,
+        block.key ?? ''
+    )}`
+}
+
+const emitCompleteMessage = (sink: LivingMemoryLogSink, emit: () => void) => {
     if (!(sink instanceof Logger)) {
         emit()
         return
@@ -180,6 +222,17 @@ export class LivingMemoryLogger {
         this.emit('info', event, fields)
     }
 
+    diagnosticBlocks(
+        event: string,
+        fields: LivingMemoryLogFieldsInput,
+        blocks: LivingMemoryLogBlocksInput
+    ) {
+        if (!this.isDebugEnabled()) {
+            return
+        }
+        this.emit('info', event, fields, undefined, blocks)
+    }
+
     info(event: string, fields: LivingMemoryLogFieldsInput = {}) {
         this.emit('info', event, fields)
     }
@@ -204,7 +257,8 @@ export class LivingMemoryLogger {
         level: LivingMemoryLogLevel,
         event: string,
         fieldsInput: LivingMemoryLogFieldsInput,
-        error?: unknown
+        error?: unknown,
+        blocksInput?: LivingMemoryLogBlocksInput
     ) {
         try {
             const fields =
@@ -217,11 +271,24 @@ export class LivingMemoryLogger {
                 detail.length > 0
                     ? `event=${event} ${detail}`
                     : `event=${event}`
-            emitCompleteLine(this.sink, () => {
+            const blocks =
+                typeof blocksInput === 'function' ? blocksInput() : blocksInput
+            if (blocks?.length === 0) {
+                return
+            }
+            const completeMessage =
+                blocks === undefined
+                    ? message
+                    : [
+                          message,
+                          ...blocks.map(formatBlock),
+                          `--- end ${event} ---`
+                      ].join('\n')
+            emitCompleteMessage(this.sink, () => {
                 if (error === undefined) {
-                    this.sink[level](message)
+                    this.sink[level](completeMessage)
                 } else {
-                    this.sink[level](message, toError(error))
+                    this.sink[level](completeMessage, toError(error))
                 }
             })
         } catch (error) {

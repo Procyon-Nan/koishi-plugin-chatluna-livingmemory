@@ -345,13 +345,6 @@ export async function invokeStructuredOutput<Schema extends z.AnyZodObject>(
                 )
             }
             if (validated.error == null) {
-                options.logging?.logger.diagnostic('model.parse.completed', {
-                    ...options.logging.fields,
-                    workflow: options.logging.workflow,
-                    modelCallId: activeModelCallId,
-                    stage: options.logging.stage,
-                    attempt
-                })
                 return {
                     value: validated.value,
                     output: outputs.join('\n\n'),

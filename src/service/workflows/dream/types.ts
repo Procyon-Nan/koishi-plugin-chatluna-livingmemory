@@ -27,6 +27,7 @@ export interface DreamExecutionResult extends DreamOperationStats {
 export interface DreamRunResult extends DreamOperationStats {
     entryCount: number
     clusterCount: number
+    stageResults?: DreamStageResult[]
     skippedReason?: string
     detail: string
 }

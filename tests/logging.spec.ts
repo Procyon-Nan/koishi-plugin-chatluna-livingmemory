@@ -43,6 +43,22 @@ it('formats stable event fields and escapes multiline content', () => {
     )
 })
 
+it('orders numbered cluster fields numerically', () => {
+    const captured = createLogger()
+    captured.log.info('dream.clustering.batch.completed', {
+        'clusters-10': 1,
+        'clusters-2': 2,
+        'clusters-1': 3,
+        noise: 4
+    })
+
+    assert.equal(
+        captured.info[0]?.[0],
+        'event=dream.clustering.batch.completed ' +
+            'clusters-1=3 clusters-2=2 clusters-10=1 noise=4'
+    )
+})
+
 it('preserves a complete single-line payload through the Koishi logger target', () => {
     const originalTargets = KoishiLogger.targets
     let recordedContent = ''
@@ -65,6 +81,43 @@ it('preserves a complete single-line payload through the Koishi logger target', 
         assert.equal(
             recordedContent,
             `event=test.complete-payload content=${content}`
+        )
+        assert.equal('maxLength' in target, false)
+    } finally {
+        KoishiLogger.targets = originalTargets
+    }
+})
+
+it('preserves multiline diagnostic blocks through the Koishi logger target', () => {
+    const originalTargets = KoishiLogger.targets
+    let recordedContent = ''
+    const target = {
+        colors: 0,
+        record: (record: { content: string }) => {
+            recordedContent = record.content
+        }
+    }
+    KoishiLogger.targets = [target]
+    try {
+        const logger = new LivingMemoryLogger(
+            new KoishiLogger('chatluna-livingmemory'),
+            () => true
+        )
+        const longLine = 'x'.repeat(12_000)
+
+        logger.diagnosticBlocks('test.multiline', { runId: 'run-1' }, [
+            {
+                title: 'payload',
+                key: 'content',
+                value: `first line\n${longLine}`
+            }
+        ])
+
+        assert.equal(
+            recordedContent,
+            'event=test.multiline runId=run-1\n' +
+                `--- payload ---\nfirst line\n${longLine}\n` +
+                '--- end test.multiline ---'
         )
         assert.equal('maxLength' in target, false)
     } finally {
@@ -113,7 +166,7 @@ it('isolates sink failures from callers', () => {
     assert.equal(warnings[0]?.[0], 'event=logging.failure operation=emit')
 })
 
-it('logs one complete prompt and response with the same model call id', async () => {
+it('logs readable complete prompt and response blocks with one model call id', async () => {
     const captured = createLogger(true)
     const model = {
         modelName: 'test-model',
@@ -134,10 +187,101 @@ it('logs one complete prompt and response with the same model call id', async ()
     const callId = /modelCallId=([^ ]+)/u.exec(prompt)?.[1]
     assert.ok(callId)
     assert.match(prompt, /event=model\.prompt/u)
-    assert.match(prompt, /line one\\nline two/u)
+    assert.match(prompt, /--- message\[0\] role=human ---/u)
+    assert.match(prompt, /line one\nline two/u)
+    assert.doesNotMatch(prompt, /line one\\nline two/u)
+    assert.match(prompt, /--- end model\.prompt ---$/u)
     assert.match(output, /event=model\.response/u)
     assert.match(output, new RegExp(`modelCallId=${callId}`, 'u'))
-    assert.match(output, /complete response/u)
+    assert.match(output, /--- response\.text ---\ncomplete response/u)
+    assert.doesNotMatch(output, /response\.raw|lc_kwargs|response_metadata/u)
+    assert.match(output, /--- end model\.response ---$/u)
+})
+
+it('logs only projected tool calls for a tool-calling model response', async () => {
+    const captured = createLogger(true)
+    const model = {
+        modelName: 'test-model',
+        invoke: async () =>
+            new AIMessage({
+                content: '',
+                tool_calls: [
+                    {
+                        name: 'living_memory_search',
+                        args: {
+                            memoryTypes: ['all'],
+                            searchTexts: ['query']
+                        },
+                        id: 'call-1',
+                        type: 'tool_call'
+                    }
+                ],
+                response_metadata: {
+                    usage_metadata: { input_tokens: 100 }
+                }
+            })
+    } as unknown as ChatLunaChatModel
+
+    await invokeLoggedModel(model, [new HumanMessage('prompt')], undefined, {
+        logger: captured.log,
+        stage: 'test-stage',
+        attempt: 1,
+        logResponseText: false
+    })
+
+    const output = String(captured.info[1]?.[0])
+    assert.match(output, /--- response\.tool_calls ---\n\[/u)
+    assert.match(output, /"name": "living_memory_search"/u)
+    assert.match(output, /"memoryTypes": \[\n\s+"all"\n\s+\]/u)
+    assert.doesNotMatch(
+        output,
+        /response\.text|response\.raw|"(?:additional_kwargs|content|invalid_tool_calls|lc_kwargs|response_metadata|tool_call_chunks|usage_metadata)"/u
+    )
+    assert.match(output, /--- end model\.response ---$/u)
+})
+
+it('omits a text-only model response when its workflow owns the final text log', async () => {
+    const captured = createLogger(true)
+    const model = {
+        modelName: 'test-model',
+        invoke: async () => new AIMessage('snapshot content')
+    } as unknown as ChatLunaChatModel
+
+    const response = await invokeLoggedModel(
+        model,
+        [new HumanMessage('prompt')],
+        undefined,
+        {
+            logger: captured.log,
+            stage: 'agentic-decision',
+            attempt: 1,
+            logResponseText: false
+        }
+    )
+
+    assert.equal(response.content, 'snapshot content')
+    assert.equal(captured.info.length, 1)
+    assert.match(String(captured.info[0]?.[0]), /event=model\.prompt/u)
+})
+
+it('pretty-prints and redacts structured diagnostic block values', () => {
+    const captured = createLogger(true)
+    captured.log.diagnosticBlocks('test.blocks', {}, [
+        {
+            title: 'payload\ninjected',
+            key: 'payload',
+            value: {
+                nested: { apiKey: 'secret' },
+                values: [1, 2]
+            }
+        }
+    ])
+
+    const message = String(captured.info[0]?.[0])
+    assert.match(message, /--- payload injected ---/u)
+    assert.match(message, /"apiKey": "\[REDACTED\]"/u)
+    assert.match(message, /"values": \[\n\s+1,\n\s+2\n\s+\]/u)
+    assert.doesNotMatch(message, /secret/u)
 })
 
 it('preserves withConfig invocation semantics in the logged model adapter', async () => {

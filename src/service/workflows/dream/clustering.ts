@@ -1,22 +1,21 @@
 import type { ManualDreamVectorReader } from '../../../contracts/vector_index'
 import type { DreamMemoryEntryRecord } from '../../../contracts/workflows'
 import { groupEntriesByLabel } from './hdbscan/labels'
-import type {
-    DreamHdbscanProgress,
-    DreamHdbscanProgressHandler,
-    DreamWorkerRunner
-} from './worker/protocol'
+import type { DreamWorkerRunner } from './worker/protocol'
 import { DREAM_PARTITION_MAX_SIZE } from './partitioning'
 import type { DreamCluster, DreamStage } from './types'
 import type { LivingMemoryLogger } from '../../logging/logger'
 
-type DreamHdbscanPass =
-    | {
-          type: 'primary'
-          partition: number
-          partitionCount: number
-      }
-    | { type: 'global-noise' }
+const toClusterSizeFields = (
+    clusters: [number, DreamMemoryEntryRecord[]][]
+) => {
+    return Object.fromEntries(
+        clusters.map(([, entries], index) => [
+            `clusters-${index + 1}`,
+            entries.length
+        ])
+    )
+}
 
 export class DreamClusterer {
     constructor(
@@ -34,30 +33,18 @@ export class DreamClusterer {
             return []
         }
 
-        const startedAt = Date.now()
         const partitions = await this.worker.partition(entries)
         const clusters: DreamCluster[] = []
         const firstPassNoise: DreamMemoryEntryRecord[] = []
-        logger?.diagnostic('dream.clustering.partitioned', {
+        logger?.diagnostic('dream.clustering.round.started', {
             stage,
-            entries: entries.length,
-            partitions: partitions.length,
-            partitionSizes: partitions.map((partition) => partition.length)
+            round: 'primary',
+            batches: partitions.length
         })
 
         for (let index = 0; index < partitions.length; index++) {
             const partition = partitions[index]
-            const result = await this.clusterEntries(
-                presetId,
-                stage,
-                {
-                    type: 'primary',
-                    partition: index + 1,
-                    partitionCount: partitions.length
-                },
-                partition,
-                logger
-            )
+            const result = await this.clusterEntries(presetId, partition)
             firstPassNoise.push(...result.noise)
 
             for (const [label, groupedEntries] of result.clusters) {
@@ -68,21 +55,20 @@ export class DreamClusterer {
                 )
             }
 
-            logger?.diagnostic('dream.clustering.partition.completed', {
+            logger?.diagnostic('dream.clustering.batch.completed', {
                 stage,
-                partition: index + 1,
-                partitionCount: partitions.length,
-                entries: partition.length,
-                clusters: result.clusters.length,
-                clusterSizes: result.clusters.map(([label, items]) => ({
-                    label,
-                    size: items.length
-                })),
-                noise: result.noise.length,
-                dimension: result.dimension,
-                elapsedMs: result.elapsedMs
+                round: 'primary',
+                batch: index + 1,
+                ...toClusterSizeFields(result.clusters),
+                noise: result.noise.length
             })
         }
+
+        logger?.diagnostic('dream.clustering.round.completed', {
+            stage,
+            round: 'primary',
+            totalNoise: firstPassNoise.length
+        })
 
         await this.appendNoiseClusters(
             presetId,
@@ -91,12 +77,6 @@ export class DreamClusterer {
             clusters,
             logger
         )
-        logger?.diagnostic('dream.clustering.completed', {
-            stage,
-            entries: entries.length,
-            units: clusters.length,
-            elapsedMs: Date.now() - startedAt
-        })
         return clusters
     }
 
@@ -107,31 +87,25 @@ export class DreamClusterer {
         clusters: DreamCluster[],
         logger?: LivingMemoryLogger
     ) {
+        const batches = entries.length < 2 ? 0 : 1
+        logger?.diagnostic('dream.clustering.round.started', {
+            stage,
+            round: 'global-noise',
+            batches
+        })
         if (entries.length < 2) {
             if (entries.length === 1) {
                 this.appendCluster(clusters, 'hdbscan:final-noise', entries)
             }
-            logger?.diagnostic('dream.clustering.global-noise.completed', {
+            logger?.diagnostic('dream.clustering.round.completed', {
                 stage,
-                entries: entries.length,
-                hdbscan: 'skipped',
-                clusters: 0,
-                finalNoise: entries.length
+                round: 'global-noise',
+                totalNoise: entries.length
             })
             return
         }
 
-        logger?.diagnostic('dream.clustering.global-noise.started', {
-            stage,
-            entries: entries.length
-        })
-        const result = await this.clusterEntries(
-            presetId,
-            stage,
-            { type: 'global-noise' },
-            entries,
-            logger
-        )
+        const result = await this.clusterEntries(presetId, entries)
         for (const [label, groupedEntries] of result.clusters) {
             this.appendCluster(
                 clusters,
@@ -142,28 +116,24 @@ export class DreamClusterer {
         if (result.noise.length > 0) {
             this.appendCluster(clusters, 'hdbscan:final-noise', result.noise)
         }
-        logger?.diagnostic('dream.clustering.global-noise.completed', {
+        logger?.diagnostic('dream.clustering.batch.completed', {
             stage,
-            entries: entries.length,
-            clusters: result.clusters.length,
-            clusterSizes: result.clusters.map(([label, items]) => ({
-                label,
-                size: items.length
-            })),
-            finalNoise: result.noise.length,
-            dimension: result.dimension,
-            elapsedMs: result.elapsedMs
+            round: 'global-noise',
+            batch: 1,
+            ...toClusterSizeFields(result.clusters),
+            noise: result.noise.length
+        })
+        logger?.diagnostic('dream.clustering.round.completed', {
+            stage,
+            round: 'global-noise',
+            totalNoise: result.noise.length
         })
     }
 
     private async clusterEntries(
         presetId: string,
-        stage: DreamStage,
-        pass: DreamHdbscanPass,
-        entries: DreamMemoryEntryRecord[],
-        logger?: LivingMemoryLogger
+        entries: DreamMemoryEntryRecord[]
     ) {
-        const startedAt = Date.now()
         const firstBatch = entries.slice(0, DREAM_PARTITION_MAX_SIZE)
         const firstVectors = await this.vectorReader.readVectors(
             presetId,
@@ -189,28 +159,15 @@ export class DreamClusterer {
             this.writeVectors(vectors, dimension, offset, batch, vectorById)
         }
 
-        let onProgress: DreamHdbscanProgressHandler | undefined
-        if (logger?.isDiagnosticEnabled()) {
-            onProgress = (progress) =>
-                this.traceHdbscanProgress(
-                    presetId,
-                    stage,
-                    pass,
-                    entries.length,
-                    progress,
-                    logger
-                )
-        }
-        const labels = await this.worker.runHdbscan(
-            { entryCount: entries.length, dimension, vectors },
-            onProgress
-        )
+        const labels = await this.worker.runHdbscan({
+            entryCount: entries.length,
+            dimension,
+            vectors
+        })
         const groups = groupEntriesByLabel(entries, labels)
         return {
             clusters: [...groups].filter(([label]) => label !== -1),
-            noise: groups.get(-1) ?? [],
-            dimension,
-            elapsedMs: Date.now() - startedAt
+            noise: groups.get(-1) ?? []
         }
     }
 
@@ -235,31 +192,6 @@ export class DreamClusterer {
             id: `cluster-${clusters.length + 1}`,
             reason,
             entries
-        })
-    }
-
-    private traceHdbscanProgress(
-        presetId: string,
-        stage: DreamStage,
-        pass: DreamHdbscanPass,
-        entryCount: number,
-        progress: DreamHdbscanProgress,
-        logger: LivingMemoryLogger
-    ) {
-        const percent = Math.round((progress.completed / progress.total) * 100)
-        logger.diagnostic('dream.clustering.progress', {
-            presetId,
-            stage,
-            pass: pass.type,
-            partition: pass.type === 'primary' ? pass.partition : undefined,
-            partitionCount:
-                pass.type === 'primary' ? pass.partitionCount : undefined,
-            entries: entryCount,
-            phase: progress.phase,
-            completed: progress.completed,
-            total: progress.total,
-            percent,
-            elapsedMs: Math.round(progress.elapsedMs)
         })
     }
 }
