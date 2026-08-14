@@ -162,9 +162,6 @@ export class LivingMemoryVectorIndexOwnershipLock {
             }
             throw error
         }
-        if (Date.now() - lockStat.mtimeMs < LOCK_STALE_AFTER) {
-            return false
-        }
 
         let record: VectorIndexLockRecord | null = null
         try {
@@ -175,7 +172,14 @@ export class LivingMemoryVectorIndexOwnershipLock {
             }
             return true
         }
-        if (record !== null && isProcessAlive(record.pid)) {
+
+        // 属主 pid 已死时锁必然失效，可立即接管；仅当属主存活或记录无法
+        // 解析时，才依据 mtime 新鲜度判断属主是否仍在续约。
+        if (
+            (record !== null && isProcessAlive(record.pid)) ||
+            (record === null &&
+                Date.now() - lockStat.mtimeMs < LOCK_STALE_AFTER)
+        ) {
             return false
         }
 

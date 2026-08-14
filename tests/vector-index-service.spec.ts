@@ -871,3 +871,31 @@ it('rejects a second owner and takes over a stale lock', async () => {
         await second.release()
     })
 })
+
+it('takes over a lock with a dead owner despite fresh mtime', async () => {
+    await withTemporaryDirectory(async (baseDir) => {
+        const lockPath = resolve(baseDir, 'vector-index.lock')
+        await writeFile(
+            lockPath,
+            JSON.stringify({ pid: 2_147_483_647, token: 'dead-owner' })
+        )
+        const lock = new LivingMemoryVectorIndexOwnershipLock(
+            lockPath,
+            () => {}
+        )
+        await lock.acquire()
+        await lock.release()
+    })
+})
+
+it('rejects a lock with an unreadable record while fresh', async () => {
+    await withTemporaryDirectory(async (baseDir) => {
+        const lockPath = resolve(baseDir, 'vector-index.lock')
+        await writeFile(lockPath, 'not json')
+        const lock = new LivingMemoryVectorIndexOwnershipLock(
+            lockPath,
+            () => {}
+        )
+        await assert.rejects(lock.acquire(), /held by another process/u)
+    })
+})
