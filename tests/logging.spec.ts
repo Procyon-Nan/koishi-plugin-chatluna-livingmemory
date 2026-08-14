@@ -1,5 +1,6 @@
 import { strict as assert } from 'node:assert'
 import { AIMessage, HumanMessage } from '@langchain/core/messages'
+import { Logger as KoishiLogger } from 'koishi'
 import { LivingMemoryLogger } from '../src/service/logging/logger'
 import {
     createLoggedModel,
@@ -40,6 +41,35 @@ it('formats stable event fields and escapes multiline content', () => {
         'event=recall.snapshot.updated workflow=recall runId=run-1 ' +
             'presetId="克子（Character）" content="第一行\\n第二行"'
     )
+})
+
+it('preserves a complete single-line payload through the Koishi logger target', () => {
+    const originalTargets = KoishiLogger.targets
+    let recordedContent = ''
+    const target = {
+        colors: 0,
+        record: (record: { content: string }) => {
+            recordedContent = record.content
+        }
+    }
+    KoishiLogger.targets = [target]
+    try {
+        const logger = new LivingMemoryLogger(
+            new KoishiLogger('chatluna-livingmemory'),
+            () => false
+        )
+        const content = 'x'.repeat(12_000)
+
+        logger.info('test.complete-payload', { content })
+
+        assert.equal(
+            recordedContent,
+            `event=test.complete-payload content=${content}`
+        )
+        assert.equal('maxLength' in target, false)
+    } finally {
+        KoishiLogger.targets = originalTargets
+    }
 })
 
 it('does not build diagnostic fields when debug logging is disabled', () => {

@@ -1,4 +1,4 @@
-import type { Logger } from 'koishi'
+import { Logger } from 'koishi'
 
 export type LivingMemoryLogFields = Record<string, unknown>
 export type LivingMemoryLogFieldsInput =
@@ -117,6 +117,38 @@ const orderedFieldNames = (fields: LivingMemoryLogFields) => {
     ]
 }
 
+const emitCompleteLine = (sink: LivingMemoryLogSink, emit: () => void) => {
+    if (!(sink instanceof Logger)) {
+        emit()
+        return
+    }
+
+    // reggol 默认把每个物理行截断到 10240 字符；输出调用是同步的，
+    // 因此只在当前 Living Memory 日志写入期间解除限制并立即恢复 target 配置。
+    const targets = Logger.targets as (Logger.Target & {
+        maxLength?: number
+    })[]
+    const originalLimits = targets.map((target) => ({
+        target,
+        hasOwnLimit: Object.prototype.hasOwnProperty.call(target, 'maxLength'),
+        maxLength: target.maxLength
+    }))
+    try {
+        for (const target of targets) {
+            target.maxLength = Number.POSITIVE_INFINITY
+        }
+        emit()
+    } finally {
+        for (const original of originalLimits) {
+            if (original.hasOwnLimit) {
+                original.target.maxLength = original.maxLength
+            } else {
+                delete original.target.maxLength
+            }
+        }
+    }
+}
+
 export class LivingMemoryLogger {
     constructor(
         private readonly sink: LivingMemoryLogSink,
@@ -185,11 +217,13 @@ export class LivingMemoryLogger {
                 detail.length > 0
                     ? `event=${event} ${detail}`
                     : `event=${event}`
-            if (error === undefined) {
-                this.sink[level](message)
-            } else {
-                this.sink[level](message, toError(error))
-            }
+            emitCompleteLine(this.sink, () => {
+                if (error === undefined) {
+                    this.sink[level](message)
+                } else {
+                    this.sink[level](message, toError(error))
+                }
+            })
         } catch (error) {
             this.reportFailure(error)
         }

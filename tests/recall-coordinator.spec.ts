@@ -40,9 +40,16 @@ it('completes embedding-rerank recall without persisting a successful job', asyn
         repository,
         { resolve: async () => createRecallQueryResult() },
         {
-            retrieve: async () => [
-                { id: 'memory-1', content: 'matched content', score: 0.9 }
-            ]
+            retrieve: async (_presetId, _input, _limit, runLogger) => {
+                runLogger.diagnostic('test.retriever.context')
+                return [
+                    {
+                        id: 'memory-1',
+                        content: 'matched content',
+                        score: 0.9
+                    }
+                ]
+            }
         },
         { run: async () => createAgenticTrace('unused') },
         {
@@ -68,6 +75,13 @@ it('completes embedding-rerank recall without persisting a successful job', asyn
     assert.ok(
         captured.info.some((message) =>
             message.includes('event=recall.retrieval.completed')
+        )
+    )
+    assert.ok(
+        captured.info.some((message) =>
+            /event=test.retriever.context workflow=recall runId=[^ ]+ presetId=preset-1 conversationId=conversation-1/u.test(
+                message
+            )
         )
     )
     assert.ok(

@@ -98,13 +98,15 @@ const createHarness = (
         savedProfiles,
         debugMessages,
         run: async (
-            responses: Parameters<typeof createToolCallingModel>[0]
+            responses: Parameters<typeof createToolCallingModel>[0],
+            logger?: LivingMemoryLogger
         ) => {
             const model = createToolCallingModel(responses)
             const result = await service.regenerate(
                 options.presetId ?? 'preset-1',
                 [memory],
-                model.model
+                model.model,
+                logger
             )
             return { model, result }
         }
@@ -222,6 +224,41 @@ it('keeps user profile payloads out of ordinary debug logs', async () => {
             (message) =>
                 !message.includes(memory.content) &&
                 !message.includes(baseProfileOutput.content)
+        )
+    )
+})
+
+it('keeps user profile failures correlated with the Dream job', async () => {
+    const harness = createHarness()
+    const messages: string[] = []
+    const jobLogger = new LivingMemoryLogger(
+        {
+            info: (message: unknown) => messages.push(String(message)),
+            warn: () => {},
+            error: () => {}
+        } as never,
+        () => true
+    ).with({
+        workflow: 'dream',
+        jobId: 'dream-job-1',
+        presetId: 'preset-1',
+        trigger: 'manual'
+    })
+
+    await harness.run(
+        [
+            new AIMessage('invalid profile result'),
+            new AIMessage('invalid profile result'),
+            new AIMessage('invalid profile result')
+        ],
+        jobLogger
+    )
+
+    assert.ok(
+        messages.some((message) =>
+            /event=user-profile.skipped workflow=dream jobId=dream-job-1 .*presetId=preset-1.*trigger=manual/u.test(
+                message
+            )
         )
     )
 })

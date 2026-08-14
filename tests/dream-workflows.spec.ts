@@ -623,6 +623,56 @@ it('records partial incremental Dream failures in the job detail', async () => {
     assert.equal(jobStore.jobs[0]?.error, 'automatic incremental dream failed')
 })
 
+it('preserves the automatic Dream failure when failed-state persistence is retried', async () => {
+    const jobStore = createJobStore()
+    const stateError = new Error('first mark failed attempt failed')
+    const captured = createCapturedLogger()
+    let markFailedCalls = 0
+    let persistedFailure: unknown
+    const coordinator = createDreamCoordinator(
+        {
+            enableAutoDream: true,
+            autoDreamMemoryGrowthThreshold: 3
+        },
+        { run: async () => createDreamRunResult() },
+        {
+            run: async () => ({
+                ...createIncrementalDreamRunResult(),
+                failed: true,
+                detail: 'incremental Dream failed'
+            })
+        },
+        createDreamCoordinatorRepository(jobStore, async () => 3),
+        { clearByPreset: () => {} },
+        {
+            markRunning: async () => {},
+            markCompleted: async () => {},
+            markFailed: async (_jobId, error) => {
+                markFailedCalls += 1
+                if (markFailedCalls === 1) {
+                    throw stateError
+                }
+                persistedFailure = error
+            }
+        },
+        captured.logger
+    )
+
+    await coordinator.queueAutoIfThresholdReached(scope.presetId)
+    await waitFor(
+        () => captured.warnings.length === 1,
+        'automatic Dream failed-state retry'
+    )
+
+    assert.equal(markFailedCalls, 2)
+    assert.equal(persistedFailure, 'automatic incremental dream failed')
+    assert.match(
+        String(captured.warnings[0]?.[0]),
+        /workflowError="automatic incremental dream failed"/u
+    )
+    assert.equal(captured.warnings[0]?.[1], stateError)
+})
+
 it('logs Dream job context and preserves the original background error', async () => {
     const jobStore = createJobStore()
     const backgroundError = new Error('manual Dream failed')
@@ -655,6 +705,119 @@ it('logs Dream job context and preserves the original background error', async (
         /event=dream.failed workflow=dream jobId=job-1 .*presetId=preset-1.*trigger=manual/u
     )
     assert.equal(captured.warnings.at(-1)?.[1], backgroundError)
+})
+
+it('logs a Dream failure when marking the job as running fails', async () => {
+    const jobStore = createJobStore()
+    const stateError = new Error('mark running failed')
+    const captured = createCapturedLogger()
+    const coordinator = createDreamCoordinator(
+        {
+            enableAutoDream: false,
+            autoDreamMemoryGrowthThreshold: 3
+        },
+        { run: async () => createDreamRunResult() },
+        incrementalDream,
+        createDreamCoordinatorRepository(jobStore),
+        { clearByPreset: () => {} },
+        {
+            markRunning: async () => {
+                throw stateError
+            },
+            markCompleted: async () => {},
+            markFailed: async () => {}
+        },
+        captured.logger
+    )
+
+    await coordinator.runManual(scope.presetId)
+    await waitFor(
+        () => captured.warnings.length === 1,
+        'Dream mark-running failure'
+    )
+
+    assert.match(
+        String(captured.warnings[0]?.[0]),
+        /event=dream.failed workflow=dream jobId=job-1/u
+    )
+    assert.equal(captured.warnings[0]?.[1], stateError)
+})
+
+it('logs and persists a Dream failure when completion persistence fails', async () => {
+    const jobStore = createJobStore()
+    const stateError = new Error('mark completed failed')
+    const captured = createCapturedLogger()
+    let persistedFailure: unknown
+    const coordinator = createDreamCoordinator(
+        {
+            enableAutoDream: false,
+            autoDreamMemoryGrowthThreshold: 3
+        },
+        { run: async () => createDreamRunResult() },
+        incrementalDream,
+        createDreamCoordinatorRepository(jobStore),
+        { clearByPreset: () => {} },
+        {
+            markRunning: async () => {},
+            markCompleted: async () => {
+                throw stateError
+            },
+            markFailed: async (_jobId, error) => {
+                persistedFailure = error
+            }
+        },
+        captured.logger
+    )
+
+    await coordinator.runManual(scope.presetId)
+    await waitFor(
+        () => captured.warnings.length === 1,
+        'Dream mark-completed failure'
+    )
+
+    assert.equal(persistedFailure, stateError)
+    assert.equal(captured.warnings[0]?.[1], stateError)
+})
+
+it('logs the original Dream error when failed-state persistence also fails', async () => {
+    const jobStore = createJobStore()
+    const workflowError = new Error('Dream workflow failed')
+    const stateError = new Error('mark failed failed')
+    const captured = createCapturedLogger()
+    const coordinator = createDreamCoordinator(
+        {
+            enableAutoDream: false,
+            autoDreamMemoryGrowthThreshold: 3
+        },
+        {
+            run: async () => {
+                throw workflowError
+            }
+        },
+        incrementalDream,
+        createDreamCoordinatorRepository(jobStore),
+        { clearByPreset: () => {} },
+        {
+            markRunning: async () => {},
+            markCompleted: async () => {},
+            markFailed: async () => {
+                throw stateError
+            }
+        },
+        captured.logger
+    )
+
+    await coordinator.runManual(scope.presetId)
+    await waitFor(
+        () => captured.warnings.length === 1,
+        'Dream mark-failed failure'
+    )
+
+    assert.match(
+        String(captured.warnings[0]?.[0]),
+        /jobStateUpdateError="Error: mark failed failed/u
+    )
+    assert.equal(captured.warnings[0]?.[1], workflowError)
 })
 
 it('clears snapshot cache only when successful Dream changes memories', async () => {

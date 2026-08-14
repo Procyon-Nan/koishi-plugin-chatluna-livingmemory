@@ -23,7 +23,8 @@ export class LivingMemoryRetriever {
     async retrieve(
         presetId: string,
         input: string,
-        limit: number
+        limit: number,
+        logger: LivingMemoryLogger = this.logger
     ): Promise<RetrievedMemoryItem[]> {
         let candidateCount = limit
         if (isModelConfigured(this.config.rerankModel)) {
@@ -52,7 +53,7 @@ export class LivingMemoryRetriever {
         }
 
         if (!isModelConfigured(this.config.rerankModel)) {
-            this.logger.diagnostic('recall.rerank.skipped', {
+            logger.diagnostic('recall.rerank.skipped', {
                 workflow: 'recall',
                 reason: 'model-not-configured'
             })
@@ -93,7 +94,7 @@ export class LivingMemoryRetriever {
                 }
             })
         } catch (error) {
-            this.logger.warn(
+            logger.warn(
                 'recall.rerank.failed',
                 { workflow: 'recall', operation: 'rerank' },
                 error

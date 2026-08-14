@@ -155,7 +155,8 @@ export class LivingMemoryRecallCoordinator {
             const items = await this.retriever.retrieve(
                 scope.presetId,
                 input,
-                this.config.recallTopK
+                this.config.recallTopK,
+                logger
             )
             logger.diagnostic('recall.retrieval.completed', {
                 queryLength: input.length,

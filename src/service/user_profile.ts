@@ -102,6 +102,7 @@ export class LivingMemoryUserProfileService {
         model: ChatLunaChatModel,
         logger?: LivingMemoryLogger
     ): Promise<UserProfileGenerationResult> {
+        const runLogger = logger ?? this.logger
         if (!this.config.enableUserProfileInjection) {
             return {
                 generated: 0,
@@ -194,7 +195,7 @@ export class LivingMemoryUserProfileService {
                 })
             } catch (error) {
                 failed++
-                this.logger.diagnostic('user-profile.skipped', {
+                runLogger.diagnostic('user-profile.skipped', {
                     workflow: 'dream',
                     presetId,
                     speaker: group.speakerLabel,
@@ -207,7 +208,7 @@ export class LivingMemoryUserProfileService {
             if (structuredResult.parseError !== null) {
                 failed++
                 const parseError = structuredResult.parseError
-                this.logger.diagnostic('user-profile.skipped', {
+                runLogger.diagnostic('user-profile.skipped', {
                     workflow: 'dream',
                     presetId,
                     speaker: group.speakerLabel,
@@ -221,7 +222,7 @@ export class LivingMemoryUserProfileService {
             const parsed = parsedProfiles[0]
             if (parsed === undefined) {
                 empty++
-                this.logger.diagnostic('user-profile.skipped', {
+                runLogger.diagnostic('user-profile.skipped', {
                     workflow: 'dream',
                     presetId,
                     speaker: group.speakerLabel,
@@ -236,7 +237,7 @@ export class LivingMemoryUserProfileService {
             )
             if (content.length === 0) {
                 empty++
-                this.logger.diagnostic('user-profile.skipped', {
+                runLogger.diagnostic('user-profile.skipped', {
                     workflow: 'dream',
                     presetId,
                     speaker: group.speakerLabel,

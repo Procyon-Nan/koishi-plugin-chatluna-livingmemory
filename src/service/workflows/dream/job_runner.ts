@@ -62,46 +62,42 @@ export class LivingMemoryDreamJobRunner {
         trigger: 'manual' | 'automatic',
         workflow: (logger?: LivingMemoryLogger) => Promise<DreamJobOutcome>
     ) {
-        await this.jobTracker.markRunning(jobId)
         const jobLogger = this.logger.with({
             workflow: 'dream',
             jobId,
             presetId: scope.presetId,
             trigger
         })
-        jobLogger.info('dream.started')
-
-        let outcome: DreamJobOutcome
+        let workflowStarted = false
+        let failureDetail: string | null = null
+        let workflowFailure: unknown
         try {
-            outcome = await workflow(jobLogger)
-        } catch (error) {
-            this.clearSnapshotCache(scope.presetId, jobId)
-            let detail: string | null = null
-            if (trigger === 'automatic') {
-                detail = `dream automatic incremental failed: ${summarizeError(error)}`
-            }
-            await this.jobTracker.markFailed(jobId, error, detail)
-            jobLogger.warn('dream.failed', { detail }, error)
-            throw error
-        }
+            await this.jobTracker.markRunning(jobId)
+            jobLogger.info('dream.started')
+            workflowStarted = true
 
-        const { result } = outcome
-        if (hasMemoryChanges(result)) {
-            this.clearSnapshotCache(scope.presetId, jobId)
-        }
-        if (outcome.success === true) {
-            await this.jobTracker.markCompleted(jobId, result.detail)
-            jobLogger.info('dream.completed', {
-                entries: result.entryCount,
-                clusters: result.clusterCount,
-                kept: result.kept,
-                merged: result.merged,
-                updated: result.updated,
-                archived: result.archived,
-                deleted: result.deleted,
-                skipped: result.skipped
-            })
-        } else {
+            const outcome = await workflow(jobLogger)
+            const { result } = outcome
+            if (hasMemoryChanges(result)) {
+                this.clearSnapshotCache(scope.presetId, jobId)
+            }
+            if (outcome.success === true) {
+                await this.jobTracker.markCompleted(jobId, result.detail)
+                jobLogger.info('dream.completed', {
+                    entries: result.entryCount,
+                    clusters: result.clusterCount,
+                    kept: result.kept,
+                    merged: result.merged,
+                    updated: result.updated,
+                    archived: result.archived,
+                    deleted: result.deleted,
+                    skipped: result.skipped
+                })
+                return
+            }
+
+            failureDetail = result.detail
+            workflowFailure = outcome.error
             await this.jobTracker.markFailed(
                 jobId,
                 outcome.error,
@@ -111,6 +107,34 @@ export class LivingMemoryDreamJobRunner {
                 error: outcome.error,
                 detail: result.detail
             })
+        } catch (error) {
+            if (workflowStarted) {
+                this.clearSnapshotCache(scope.presetId, jobId)
+            }
+            if (failureDetail == null && trigger === 'automatic') {
+                failureDetail = `dream automatic incremental failed: ${summarizeError(error)}`
+            }
+
+            let jobStateUpdateError: string | undefined
+            try {
+                await this.jobTracker.markFailed(
+                    jobId,
+                    workflowFailure ?? error,
+                    failureDetail
+                )
+            } catch (updateError) {
+                jobStateUpdateError = summarizeError(updateError)
+            }
+            jobLogger.warn(
+                'dream.failed',
+                {
+                    detail: failureDetail,
+                    jobStateUpdateError,
+                    workflowError: workflowFailure
+                },
+                error
+            )
+            throw error
         }
     }
 
