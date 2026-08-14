@@ -11,10 +11,10 @@ import {
 import type { RecallQueryResult } from '../src/service/workflows/recall/query_builder'
 import {
     createAgenticTrace,
+    createCapturedLogger,
     createJobStore,
     createRecallQueryResult,
     currentMessage,
-    debug,
     logger,
     scope,
     waitFor
@@ -28,7 +28,7 @@ it('completes embedding-rerank recall without persisting a successful job', asyn
         items: MemorySnapshotItem[]
     }[] = []
     let hydrated = 0
-    const debugMessages: string[] = []
+    const captured = createCapturedLogger()
     const repository: RecallWorkflowRepository = {
         createFailedJob: jobStore.createFailedJob,
         upsertSnapshot: async (_scope, strategy, query, items) => {
@@ -51,8 +51,7 @@ it('completes embedding-rerank recall without persisting a successful job', asyn
                 return ''
             }
         },
-        logger,
-        (buildMessage) => debugMessages.push(buildMessage())
+        captured.logger
     )
 
     await coordinator.queue(scope, currentMessage, async () => [])
@@ -66,9 +65,13 @@ it('completes embedding-rerank recall without persisting a successful job', asyn
             items: [{ memoryId: 'memory-1', score: 0.9 }]
         }
     ])
-    assert.ok(debugMessages.some((message) => message.includes('count=1')))
     assert.ok(
-        debugMessages.every(
+        captured.info.some((message) =>
+            message.includes('event=recall.retrieval.completed')
+        )
+    )
+    assert.ok(
+        captured.info.some(
             (message) =>
                 !message.includes('记忆查询') &&
                 !message.includes('matched content')
@@ -105,8 +108,7 @@ it('does not read recalled memory content for logging', async () => {
                 return ''
             }
         },
-        logger,
-        () => {}
+        logger
     )
 
     await coordinator.queue(scope, currentMessage, async () => [])
@@ -119,7 +121,7 @@ it('keeps the previous snapshot when embedding recall returns no results', async
     const jobStore = createJobStore()
     let snapshotWrites = 0
     let hydrateCalls = 0
-    let noMemoryLogged = false
+    const captured = createCapturedLogger()
     const coordinator = new LivingMemoryRecallCoordinator(
         { recallStrategy: 'embedding-rerank', recallTopK: 3 },
         {
@@ -137,14 +139,17 @@ it('keeps the previous snapshot when embedding recall returns no results', async
                 return ''
             }
         },
-        logger,
-        (buildMessage) => {
-            noMemoryLogged ||= buildMessage().includes('count=0')
-        }
+        captured.logger
     )
 
     await coordinator.queue(scope, currentMessage, async () => [])
-    await waitFor(() => noMemoryLogged, 'empty embedding recall')
+    await waitFor(
+        () =>
+            captured.info.some((message) =>
+                message.includes('event=recall.snapshot.unchanged')
+            ),
+        'empty embedding recall'
+    )
 
     assert.equal(snapshotWrites, 0)
     assert.equal(hydrateCalls, 0)
@@ -167,8 +172,7 @@ it('completes agentic recall without persisting a successful job', async () => {
         { retrieve: async () => [] },
         { run: async () => createAgenticTrace('remembered context') },
         { hydrate: async () => '' },
-        logger,
-        debug
+        logger
     )
 
     await coordinator.queue(scope, currentMessage, async () => [])
@@ -184,7 +188,7 @@ it('completes agentic recall without persisting a successful job', async () => {
 it('keeps the previous snapshot without persisting a job for <NO_MEMORY>', async () => {
     const jobStore = createJobStore()
     let snapshotWrites = 0
-    let noMemoryLogged = false
+    const captured = createCapturedLogger()
     const repository: RecallWorkflowRepository = {
         createFailedJob: jobStore.createFailedJob,
         upsertSnapshot: async () => {
@@ -198,14 +202,17 @@ it('keeps the previous snapshot without persisting a job for <NO_MEMORY>', async
         { retrieve: async () => [] },
         { run: async () => createAgenticTrace('') },
         { hydrate: async () => '' },
-        logger,
-        (buildMessage) => {
-            noMemoryLogged ||= buildMessage().includes('no memory selected')
-        }
+        captured.logger
     )
 
     await coordinator.queue(scope, currentMessage, async () => [])
-    await waitFor(() => noMemoryLogged, 'agentic no-memory result')
+    await waitFor(
+        () =>
+            captured.info.some((message) =>
+                message.includes('event=recall.snapshot.unchanged')
+            ),
+        'agentic no-memory result'
+    )
 
     assert.equal(snapshotWrites, 0)
     assert.equal(jobStore.jobs.length, 0)
@@ -215,7 +222,7 @@ it('serializes recall runs for the same scope without persisted running state', 
     const jobStore = createJobStore()
     let resolveQuery!: (result: RecallQueryResult) => void
     let queryCalls = 0
-    let noMemoryLogged = false
+    const captured = createCapturedLogger()
     const queryResult = new Promise<RecallQueryResult>((resolve) => {
         resolveQuery = resolve
     })
@@ -234,10 +241,7 @@ it('serializes recall runs for the same scope without persisted running state', 
         { retrieve: async () => [] },
         { run: async () => createAgenticTrace('unused') },
         { hydrate: async () => '' },
-        logger,
-        (buildMessage) => {
-            noMemoryLogged ||= buildMessage().includes('count=0')
-        }
+        captured.logger
     )
 
     await coordinator.queue(scope, currentMessage, async () => [])
@@ -245,7 +249,13 @@ it('serializes recall runs for the same scope without persisted running state', 
     assert.equal(queryCalls, 1)
 
     resolveQuery(createRecallQueryResult())
-    await waitFor(() => noMemoryLogged, 'serialized recall completion')
+    await waitFor(
+        () =>
+            captured.info.some((message) =>
+                message.includes('event=recall.snapshot.unchanged')
+            ),
+        'serialized recall completion'
+    )
 
     assert.equal(jobStore.jobs.length, 0)
 })
@@ -266,8 +276,7 @@ it('persists one failed recall job when query construction throws', async () => 
         { retrieve: async () => [] },
         { run: async () => createAgenticTrace('unused') },
         { hydrate: async () => '' },
-        logger,
-        debug
+        logger
     )
 
     await coordinator.queue(scope, currentMessage, async () => [])
@@ -281,7 +290,7 @@ it('persists one failed recall job when query construction throws', async () => 
 
 it('logs recall scope and preserves the original background error', async () => {
     const backgroundError = new Error('failed to persist recall failure')
-    const warnings: unknown[][] = []
+    const captured = createCapturedLogger()
     const coordinator = new LivingMemoryRecallCoordinator(
         { recallStrategy: 'embedding-rerank', recallTopK: 3 },
         {
@@ -298,18 +307,20 @@ it('logs recall scope and preserves the original background error', async () => 
         { retrieve: async () => [] },
         { run: async () => createAgenticTrace('unused') },
         { hydrate: async () => '' },
-        { warn: (...args) => warnings.push(args) },
-        debug
+        captured.logger
     )
 
     await coordinator.queue(scope, currentMessage, async () => [])
-    await waitFor(() => warnings.length === 1, 'recall background warning')
+    await waitFor(
+        () => captured.warnings.length === 1,
+        'recall background warning'
+    )
 
     assert.match(
-        String(warnings[0]?.[0]),
-        /workflow=recall operation=run conversationId=conversation-1 presetId=preset-1/u
+        String(captured.warnings[0]?.[0]),
+        /event=recall.failed workflow=recall .*presetId=preset-1.*conversationId=conversation-1/u
     )
-    assert.equal(warnings[0]?.[1], backgroundError)
+    assert.equal(captured.warnings[0]?.[1], backgroundError)
 })
 
 it('persists one failed recall job when retrieval throws', async () => {
@@ -328,8 +339,7 @@ it('persists one failed recall job when retrieval throws', async () => {
         },
         { run: async () => createAgenticTrace('unused') },
         { hydrate: async () => '' },
-        logger,
-        debug
+        logger
     )
 
     await coordinator.queue(scope, currentMessage, async () => [])
@@ -363,8 +373,7 @@ it('persists one failed recall job when snapshot hydration throws', async () => 
                 throw new Error('hydrate failure')
             }
         },
-        logger,
-        debug
+        logger
     )
 
     await coordinator.queue(scope, currentMessage, async () => [])
@@ -401,8 +410,7 @@ it('does not persist a recall job when the query is skipped', async () => {
         },
         { run: async () => createAgenticTrace('unused') },
         { hydrate: async () => '' },
-        logger,
-        debug
+        logger
     )
 
     await coordinator.queue(scope, currentMessage, async () => [])
@@ -436,8 +444,7 @@ it('does not persist a recall job when the final query is empty', async () => {
         },
         { run: async () => createAgenticTrace('unused') },
         { hydrate: async () => '' },
-        logger,
-        debug
+        logger
     )
 
     await coordinator.queue(scope, currentMessage, async () => [])
@@ -451,7 +458,7 @@ it('continues recall with empty history without persisting a job', async () => {
     const jobStore = createJobStore()
     let receivedHistory: LivingMemoryTranscriptMessage[] | undefined
     let hydrated = 0
-    const debugMessages: string[] = []
+    const captured = createCapturedLogger()
     const coordinator = new LivingMemoryRecallCoordinator(
         { recallStrategy: 'embedding-rerank', recallTopK: 3 },
         {
@@ -476,8 +483,7 @@ it('continues recall with empty history without persisting a job', async () => {
                 return ''
             }
         },
-        logger,
-        (buildMessage) => debugMessages.push(buildMessage())
+        captured.logger
     )
 
     await coordinator.queue(scope, currentMessage, async () => {
@@ -488,7 +494,7 @@ it('continues recall with empty history without persisting a job', async () => {
     assert.deepEqual(receivedHistory, [])
     assert.equal(jobStore.jobs.length, 0)
     assert.ok(
-        debugMessages.every(
+        captured.info.some(
             (message) => !message.includes('private history failure detail')
         )
     )
@@ -510,8 +516,7 @@ it('persists one failed agentic recall job when its executor throws', async () =
             }
         },
         { hydrate: async () => '' },
-        logger,
-        debug
+        logger
     )
 
     await coordinator.queue(scope, currentMessage, async () => [])

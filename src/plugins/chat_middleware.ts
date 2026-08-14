@@ -79,14 +79,13 @@ const isSubagentPrompt = (agentContext: unknown) => {
 }
 
 export async function apply(ctx: Context, config: LivingMemoryConfig) {
-    const logger = ctx.logger('chatluna-livingmemory')
+    const logger = ctx.chatluna_living_memory.memoryLogger.with({
+        workflow: 'chat'
+    })
     const activeUserProfileInjections = new Map<string, string>()
     const activeSnapshotInjections = new Map<string, string>()
-    const debug = (message: string) => {
-        if (config.debug) {
-            logger.info(message)
-        }
-    }
+    const diagnostic = (event: string, fields: Record<string, unknown>) =>
+        logger.diagnostic(event, fields)
     const clearActiveInjections = (conversationId: string) => {
         activeUserProfileInjections.delete(conversationId)
         activeSnapshotInjections.delete(conversationId)
@@ -152,18 +151,21 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
             session
         ) => {
             clearActiveInjections(conversationId)
-            debug(
-                `before-chat: conversationId=${conversationId}, isDirect=${session.isDirect}`
-            )
+            diagnostic('chat.before.received', {
+                conversationId,
+                isDirect: session.isDirect
+            })
 
             if (
                 !ctx.chatluna_living_memory.shouldHandleSession(
                     session.isDirect
                 )
             ) {
-                debug(
-                    `before-chat skipped: unsupported session, conversationId=${conversationId}, isDirect=${session.isDirect}`
-                )
+                diagnostic('chat.before.skipped', {
+                    conversationId,
+                    isDirect: session.isDirect,
+                    reason: 'unsupported-session'
+                })
                 return
             }
 
@@ -175,17 +177,21 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
             )
 
             if (presetId == null) {
-                debug(
-                    `before-chat skipped: preset unresolved, conversationId=${conversationId}, fallbackPresetId=${fallbackPresetId ?? ''}`
-                )
+                diagnostic('chat.before.skipped', {
+                    conversationId,
+                    fallbackPresetId,
+                    reason: 'preset-unresolved'
+                })
                 return
             }
             const speakerName = prepareSpeakerName(session, message)
             writeRawUserContent(message, promptVariables)
 
-            debug(
-                `before-chat resolved: conversationId=${conversationId}, presetId=${presetId}, fallbackPresetId=${fallbackPresetId ?? ''}`
-            )
+            diagnostic('chat.before.resolved', {
+                conversationId,
+                presetId,
+                fallbackPresetId
+            })
 
             const scope = ctx.chatluna_living_memory.createScope(
                 conversationId,
@@ -208,14 +214,11 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 }
             )
             if (currentTranscript.message == null) {
-                debug(
-                    [
-                        'before-chat recall skipped:',
-                        `conversationId=${conversationId}`,
-                        `presetId=${presetId}`,
-                        `reason=${currentTranscript.reason}`
-                    ].join(' ')
-                )
+                diagnostic('chat.recall.skipped', {
+                    conversationId,
+                    presetId,
+                    reason: currentTranscript.reason
+                })
                 return
             }
             ctx.chatluna_living_memory
@@ -225,13 +228,12 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 )
                 .catch((error) => {
                     logger.warn(
-                        [
-                            'memory background operation failed:',
-                            'workflow=chat',
-                            'operation=record-preset-speaker',
-                            `conversationId=${scope.conversationId}`,
-                            `presetId=${scope.presetId}`
-                        ].join(' '),
+                        'chat.speaker.record.failed',
+                        {
+                            conversationId: scope.conversationId,
+                            presetId: scope.presetId,
+                            operation: 'record-preset-speaker'
+                        },
                         error
                     )
                 })
@@ -283,16 +285,14 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                             conversationId,
                             userProfileInjection
                         )
-                        debug(
-                            [
-                                'before-chat user profile injection activated:',
-                                `conversationId=${conversationId}`,
-                                `presetId=${presetId}`,
-                                'stage=after_system_prompts',
-                                'role=system',
-                                `injectionLength=${userProfileInjection.length}`
-                            ].join(' ')
-                        )
+                        diagnostic('chat.injection.activated', {
+                            conversationId,
+                            presetId,
+                            stage: 'after_system_prompts',
+                            role: 'system',
+                            type: 'user-profile',
+                            injectionLength: userProfileInjection.length
+                        })
                     }
 
                     const snapshotInjection = formatSnapshotInjection(
@@ -303,26 +303,23 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                             conversationId,
                             snapshotInjection
                         )
-                        debug(
-                            [
-                                'before-chat snapshot injection activated:',
-                                `conversationId=${conversationId}`,
-                                `presetId=${presetId}`,
-                                'stage=injections',
-                                'role=assistant',
-                                `injectionLength=${snapshotInjection.length}`
-                            ].join(' ')
-                        )
+                        diagnostic('chat.injection.activated', {
+                            conversationId,
+                            presetId,
+                            stage: 'injections',
+                            role: 'assistant',
+                            type: 'snapshot',
+                            injectionLength: snapshotInjection.length
+                        })
                     }
                 } catch (error) {
                     logger.warn(
-                        [
-                            'memory background operation failed:',
-                            'workflow=chat',
-                            'operation=hydrate-prompt-sections',
-                            `conversationId=${scope.conversationId}`,
-                            `presetId=${scope.presetId}`
-                        ].join(' '),
+                        'chat.injection.failed',
+                        {
+                            conversationId: scope.conversationId,
+                            presetId: scope.presetId,
+                            operation: 'hydrate-prompt-sections'
+                        },
                         error
                     )
                 }
@@ -335,17 +332,14 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 ? 'enabled'
                 : 'disabled'
 
-            debug(
-                [
-                    'before-chat recall queued:',
-                    `conversationId=${conversationId}`,
-                    `presetId=${presetId}`,
-                    `snapshotInjection=${snapshotInjectionStatus}`,
-                    `snapshotLength=${sections.snapshot.length}`,
-                    `userProfileInjection=${userProfileInjectionStatus}`,
-                    `userProfilesLength=${sections.userProfiles.length}`
-                ].join(' ')
-            )
+            diagnostic('chat.recall.queued', {
+                conversationId,
+                presetId,
+                snapshotInjection: snapshotInjectionStatus,
+                snapshotLength: sections.snapshot.length,
+                userProfileInjection: userProfileInjectionStatus,
+                userProfilesLength: sections.userProfiles.length
+            })
 
             await ctx.chatluna_living_memory.queueRecall(
                 scope,
@@ -366,18 +360,21 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
             session
         ) => {
             clearActiveInjections(conversationId)
-            debug(
-                `after-chat: conversationId=${conversationId}, isDirect=${session.isDirect}`
-            )
+            diagnostic('chat.after.received', {
+                conversationId,
+                isDirect: session.isDirect
+            })
 
             if (
                 !ctx.chatluna_living_memory.shouldHandleSession(
                     session.isDirect
                 )
             ) {
-                debug(
-                    `after-chat skipped: unsupported session, conversationId=${conversationId}, isDirect=${session.isDirect}`
-                )
+                diagnostic('chat.after.skipped', {
+                    conversationId,
+                    isDirect: session.isDirect,
+                    reason: 'unsupported-session'
+                })
                 return
             }
 
@@ -389,16 +386,20 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
             )
 
             if (presetId == null) {
-                debug(
-                    `after-chat skipped: preset unresolved, conversationId=${conversationId}, fallbackPresetId=${fallbackPresetId ?? ''}`
-                )
+                diagnostic('chat.after.skipped', {
+                    conversationId,
+                    fallbackPresetId,
+                    reason: 'preset-unresolved'
+                })
                 return
             }
             const speakerName = prepareSpeakerName(session, sourceMessage)
 
-            debug(
-                `after-chat resolved: conversationId=${conversationId}, presetId=${presetId}, fallbackPresetId=${fallbackPresetId ?? ''}`
-            )
+            diagnostic('chat.after.resolved', {
+                conversationId,
+                presetId,
+                fallbackPresetId
+            })
 
             const scope = ctx.chatluna_living_memory.createScope(
                 conversationId,
@@ -429,15 +430,13 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 sourceTranscript.message == null ||
                 responseTranscript.message == null
             ) {
-                debug(
-                    [
-                        'after-chat extraction skipped: invalid completed round,',
-                        `conversationId=${conversationId}`,
-                        `presetId=${presetId}`,
-                        `sourceReason=${sourceTranscript.reason ?? 'none'}`,
-                        `responseReason=${responseTranscript.reason ?? 'none'}`
-                    ].join(' ')
-                )
+                diagnostic('chat.extraction.skipped', {
+                    conversationId,
+                    presetId,
+                    reason: 'invalid-completed-round',
+                    sourceReason: sourceTranscript.reason,
+                    responseReason: responseTranscript.reason
+                })
                 return
             }
 
@@ -445,14 +444,11 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 messages: [sourceTranscript.message, responseTranscript.message]
             }
 
-            debug(
-                [
-                    'after-chat completed round queued:',
-                    `conversationId=${conversationId}`,
-                    `presetId=${presetId}`,
-                    `roundMessagesLength=${completedRound.messages.length}`
-                ].join(' ')
-            )
+            diagnostic('chat.extraction.queued', {
+                conversationId,
+                presetId,
+                roundMessages: completedRound.messages.length
+            })
             const presetTemplate = chatInterface.preset.value
 
             await ctx.chatluna_living_memory.queueExtraction(

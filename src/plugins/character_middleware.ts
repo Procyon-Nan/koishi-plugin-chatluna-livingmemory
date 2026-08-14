@@ -187,15 +187,12 @@ const formatPromptVariable = (sections: PromptSections) => {
 }
 
 export async function apply(ctx: Context, config: LivingMemoryConfig) {
-    const logger = ctx.logger('chatluna-livingmemory')
+    const logger = ctx.chatluna_living_memory.memoryLogger.with({
+        workflow: 'character'
+    })
     const events = ctx as unknown as CharacterEventRegistrar
     const livingMemory = ctx.chatluna_living_memory
     const profileSpeakerLabelsByScope = new Map<string, string[]>()
-    const debug = (message: string) => {
-        if (config.debug) {
-            logger.info(message)
-        }
-    }
 
     ctx.on('dispose', () => {
         livingMemory.clearExtractionState()
@@ -232,27 +229,25 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                         )
                     const rendered = formatPromptVariable(sections)
 
-                    debug(
-                        [
-                            'character living_memory rendered:',
-                            `conversationId=${scope.conversationId}`,
-                            `presetId=${scope.presetId}`,
-                            `snapshotLength=${sections.snapshot.length}`,
-                            `userProfileInjection=${userProfileInjectionEnabled ? 'enabled' : 'disabled'}`,
-                            `userProfilesLength=${sections.userProfiles.length}`
-                        ].join(' ')
-                    )
+                    logger.diagnostic('character.injection.rendered', {
+                        conversationId: scope.conversationId,
+                        presetId: scope.presetId,
+                        snapshotLength: sections.snapshot.length,
+                        userProfileInjection: userProfileInjectionEnabled
+                            ? 'enabled'
+                            : 'disabled',
+                        userProfilesLength: sections.userProfiles.length
+                    })
 
                     return rendered
                 } catch (error) {
                     logger.warn(
-                        [
-                            'memory background operation failed:',
-                            'workflow=character',
-                            'operation=render-prompt-variable',
-                            `conversationId=${scope.conversationId}`,
-                            `presetId=${scope.presetId}`
-                        ].join(' '),
+                        'character.injection.failed',
+                        {
+                            conversationId: scope.conversationId,
+                            presetId: scope.presetId,
+                            operation: 'render-prompt-variable'
+                        },
                         error
                     )
                     return ''
@@ -266,13 +261,10 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
         async (payload: CharacterBeforeChatEventPayload) => {
             const scope = await createCharacterScope(ctx, payload)
 
-            debug(
-                [
-                    'character before-chat:',
-                    `conversationId=${scope.conversationId}`,
-                    `presetId=${scope.presetId}`
-                ].join(' ')
-            )
+            logger.diagnostic('character.before.received', {
+                conversationId: scope.conversationId,
+                presetId: scope.presetId
+            })
 
             if (
                 payload.focusMessage == null ||
@@ -287,14 +279,11 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 payload.focusMessage
             )
             if (currentTranscript.message == null) {
-                debug(
-                    [
-                        'character before-chat skipped:',
-                        `conversationId=${scope.conversationId}`,
-                        `presetId=${scope.presetId}`,
-                        `reason=${currentTranscript.reason}`
-                    ].join(' ')
-                )
+                logger.diagnostic('character.before.skipped', {
+                    conversationId: scope.conversationId,
+                    presetId: scope.presetId,
+                    reason: currentTranscript.reason
+                })
                 return
             }
             ctx.chatluna_living_memory
@@ -304,13 +293,12 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 )
                 .catch((error) => {
                     logger.warn(
-                        [
-                            'memory background operation failed:',
-                            'workflow=character',
-                            'operation=record-preset-speaker',
-                            `conversationId=${scope.conversationId}`,
-                            `presetId=${scope.presetId}`
-                        ].join(' '),
+                        'character.speaker.record.failed',
+                        {
+                            conversationId: scope.conversationId,
+                            presetId: scope.presetId,
+                            operation: 'record-preset-speaker'
+                        },
                         error
                     )
                 })
@@ -368,17 +356,15 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                           payload.focusMessage
                       )
 
-            debug(
-                [
-                    'character after-chat:',
-                    `conversationId=${scope.conversationId}`,
-                    `presetId=${scope.presetId}`,
-                    `messagesLength=${payload.messages.length}`,
-                    `transcriptMessagesLength=${messages.length}`,
-                    `completedRoundMessagesLength=${completedRound.round?.messages.length ?? 0}`,
-                    `completedRoundReason=${completedRound.reason ?? 'none'}`
-                ].join(' ')
-            )
+            logger.diagnostic('character.after.received', {
+                conversationId: scope.conversationId,
+                presetId: scope.presetId,
+                messages: payload.messages.length,
+                transcriptMessages: messages.length,
+                completedRoundMessages:
+                    completedRound.round?.messages.length ?? 0,
+                completedRoundReason: completedRound.reason
+            })
 
             if (completedRound.round == null) {
                 return
@@ -400,14 +386,11 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
     events.on(
         'chatluna_character/clear-chat-history',
         async (payload: CharacterClearChatHistoryEventPayload) => {
-            debug(
-                [
-                    'character clear-chat-history:',
-                    `conversationId=${payload.sessionKey}`,
-                    `rawConversationId=${payload.conversationId}`,
-                    `isDirect=${payload.isDirect}`
-                ].join(' ')
-            )
+            logger.diagnostic('character.history.cleared', {
+                conversationId: payload.sessionKey,
+                rawConversationId: payload.conversationId,
+                isDirect: payload.isDirect
+            })
 
             await ctx.chatluna_living_memory.cleanupConversation(
                 payload.sessionKey

@@ -1,5 +1,5 @@
 import type { ToolRunnableConfig } from '@langchain/core/tools'
-import type { Logger } from 'koishi'
+import type { LivingMemoryLogger } from '../../logging/logger'
 
 export type LivingMemoryToolConfigurable = {
     preset?: unknown
@@ -19,8 +19,7 @@ export const getLivingMemoryToolConfigurable = (
 
 interface LivingMemoryToolRuntimeOptions {
     toolName: string
-    logger: Pick<Logger, 'info'>
-    isDebugEnabled: () => boolean
+    logger: LivingMemoryLogger
 }
 
 export class LivingMemoryToolRuntime {
@@ -30,43 +29,33 @@ export class LivingMemoryToolRuntime {
         configurable: LivingMemoryToolConfigurable | undefined,
         input: unknown
     ) {
-        this.debug(() =>
-            [
-                `${this.options.toolName} input:`,
-                ...this.logContext(configurable),
-                `inputLength=${JSON.stringify(input).length}`
-            ].join(' ')
-        )
+        this.options.logger.diagnostic('tool.input', () => ({
+            ...this.logContext(configurable),
+            tool: this.options.toolName,
+            inputLength: JSON.stringify(input).length
+        }))
     }
 
     logOutput(
         configurable: LivingMemoryToolConfigurable | undefined,
         output: string,
-        details: string[] = []
+        details: Record<string, unknown> = {}
     ) {
-        this.debug(() =>
-            [
-                `${this.options.toolName} output:`,
-                ...this.logContext(configurable),
-                ...details,
-                `outputLength=${output.length}`
-            ].join(' ')
-        )
+        this.options.logger.diagnostic('tool.output', {
+            ...this.logContext(configurable),
+            ...details,
+            tool: this.options.toolName,
+            outputLength: output.length
+        })
     }
 
     private logContext(configurable: LivingMemoryToolConfigurable | undefined) {
-        return [
-            `presetId=${configurable?.preset ?? ''}`,
-            `conversationId=${configurable?.conversationId ?? ''}`,
-            `userId=${configurable?.userId ?? ''}`,
-            `source=${configurable?.source ?? ''}`,
-            `requestId=${configurable?.agentContext?.requestId ?? ''}`
-        ]
-    }
-
-    private debug(buildMessage: () => string) {
-        if (this.options.isDebugEnabled()) {
-            this.options.logger.info(buildMessage())
+        return {
+            presetId: configurable?.preset,
+            conversationId: configurable?.conversationId,
+            userId: configurable?.userId,
+            source: configurable?.source,
+            requestId: configurable?.agentContext?.requestId
         }
     }
 }

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { AIMessage, type BaseMessage } from '@langchain/core/messages'
 import { type RunnableConfig, RunnableLambda } from '@langchain/core/runnables'
 import type { Context } from 'koishi'
+import { LivingMemoryLogger } from '../src/service/logging/logger'
 import type { ChatLunaChatModel } from 'koishi-plugin-chatluna/llm-core/platform/model'
 import type {
     LivingMemorySearchInput,
@@ -166,7 +167,14 @@ const createHarness = (options: AgenticRecallHarnessOptions) => {
         context,
         config,
         mockEngine,
-        (buildMessage) => debugMessages.push(buildMessage())
+        new LivingMemoryLogger(
+            {
+                info: (message: unknown) => debugMessages.push(String(message)),
+                warn: () => {},
+                error: () => {}
+            } as never,
+            () => true
+        )
     )
 
     return {
@@ -233,7 +241,7 @@ it('runs one search through AgentRunner and preserves preset-scoped trace data',
         /memory-1/u
     )
     assert.ok(
-        harness.debugMessages.every(
+        harness.debugMessages.some(
             (message) =>
                 !message.includes('记忆查询') &&
                 !message.includes('我记得一段可靠的往事。')

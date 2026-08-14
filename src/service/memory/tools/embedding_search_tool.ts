@@ -1,11 +1,8 @@
 import { StructuredTool } from '@langchain/core/tools'
 import type { ToolRunnableConfig } from '@langchain/core/tools'
-import type { Context } from 'koishi'
 import type { LivingMemorySearchInput } from '../../../contracts/memory'
-import type {
-    LivingMemoryConfig,
-    LivingMemorySearchProvider
-} from '../../../contracts/workflows'
+import type { LivingMemorySearchProvider } from '../../../contracts/workflows'
+import type { LivingMemoryLogger } from '../../logging/logger'
 import {
     formatSearchTextLengthRange,
     livingMemorySearchInputSchema,
@@ -19,8 +16,6 @@ import {
     getLivingMemoryToolConfigurable,
     LivingMemoryToolRuntime
 } from './tool_runtime'
-type LivingMemorySearchToolConfig = Pick<LivingMemoryConfig, 'debug'>
-
 export const livingMemorySearchToolDescription = [
     '在你的记忆库中搜索记忆。',
     '',
@@ -47,14 +42,12 @@ export class LivingMemorySearchTool extends StructuredTool {
 
     constructor(
         private readonly searchProvider: LivingMemorySearchProvider,
-        ctx: Context,
-        private readonly config: LivingMemorySearchToolConfig
+        logger: LivingMemoryLogger
     ) {
         super({ verboseParsingErrors: true })
         this.runtime = new LivingMemoryToolRuntime({
             toolName: livingMemorySearchToolName,
-            logger: ctx.logger('chatluna-livingmemory'),
-            isDebugEnabled: () => this.config.debug
+            logger
         })
     }
 
@@ -79,9 +72,9 @@ export class LivingMemorySearchTool extends StructuredTool {
 
         const output = JSON.stringify(results, null, 2)
 
-        this.runtime.logOutput(configurable, output, [
-            `resultCount=${results.length}`
-        ])
+        this.runtime.logOutput(configurable, output, {
+            resultCount: results.length
+        })
 
         return output
     }

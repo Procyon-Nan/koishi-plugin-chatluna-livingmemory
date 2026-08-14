@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { AIMessage } from '@langchain/core/messages'
 import type { Context } from 'koishi'
+import { LivingMemoryLogger } from '../src/service/logging/logger'
 import type { UserProfileInput } from '../src/contracts/memory'
 import type {
     DreamMemoryEntryRecord,
@@ -83,7 +84,14 @@ const createHarness = (
             userProfileMemoryLimit: 20
         },
         repository,
-        (buildMessage) => debugMessages.push(buildMessage())
+        new LivingMemoryLogger(
+            {
+                info: (message: unknown) => debugMessages.push(String(message)),
+                warn: () => {},
+                error: () => {}
+            } as never,
+            () => true
+        )
     )
 
     return {

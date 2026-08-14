@@ -83,7 +83,9 @@ export const Config: Schema<Config> = Schema.intersect([
             )
             .default(3),
         debug: Schema.boolean()
-            .description('输出记忆召回、记忆总结和触发诊断日志。')
+            .description(
+                '输出 Recall、Extraction、Dream 的完整模型 Prompt、原始响应与诊断事件；包含对话、预设提示词和记忆正文，仅应在访问受控环境启用。'
+            )
             .default(false)
     }).description('基础配置'),
     Schema.object({

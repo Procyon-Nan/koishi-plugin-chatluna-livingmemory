@@ -13,6 +13,7 @@ import {
     normalizeMemoryText
 } from '../../memory/entry_fields'
 import { invokeStructuredOutput } from '../structured_output'
+import type { LivingMemoryLogger } from '../../logging/logger'
 
 export type LivingMemoryExtractionSkipReason =
     'model-not-configured' | 'model-unavailable'
@@ -42,7 +43,8 @@ export class LivingMemoryExtractor {
 
     async extractWithTrace(
         input: string,
-        context: LivingMemoryExtractionContext
+        context: LivingMemoryExtractionContext,
+        logger?: LivingMemoryLogger
     ): Promise<LivingMemoryExtractionTrace> {
         if (!isModelConfigured(this.mainModel)) {
             return {
@@ -76,7 +78,15 @@ export class LivingMemoryExtractor {
             context: {
                 presetId: context.presetId,
                 conversationId: context.conversationId
-            }
+            },
+            logging:
+                logger == null
+                    ? undefined
+                    : {
+                          logger,
+                          workflow: 'extraction',
+                          stage: 'memory-extraction'
+                      }
         })
         const extracted =
             result.value?.memories.map((item): ExtractedMemoryItem => {

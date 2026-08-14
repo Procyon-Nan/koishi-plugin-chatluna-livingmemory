@@ -15,6 +15,7 @@ import {
 } from '../src/service/workflows/extraction/coordinator'
 import type { LivingMemoryExtractionTrace } from '../src/service/workflows/extraction/extractor'
 import {
+    createCapturedLogger,
     createJobStore,
     scope,
     waitFor
@@ -78,8 +79,9 @@ const createExtractionCoordinator = (
         sourceOriginMessages: MemorySourceMessage[]
         extracted: ExtractedMemoryItem[]
     }[] = []
-    const debugMessages: string[] = []
-    const warnings: unknown[][] = []
+    const captured = createCapturedLogger()
+    const debugMessages = captured.info
+    const warnings = captured.warnings
     let extractorCalls = 0
     const formatter = {
         toExtractionPayload:
@@ -98,7 +100,8 @@ const createExtractionCoordinator = (
     const extractor = {
         extractWithTrace: async () => {
             extractorCalls += 1
-            return await (options.extractWithTrace?.() ?? Promise.resolve(trace))
+            return await (options.extractWithTrace?.() ??
+                Promise.resolve(trace))
         }
     }
     const repository: ExtractionJobRepository & ExtractionMemoryWriter = {
@@ -124,8 +127,7 @@ const createExtractionCoordinator = (
         formatter,
         extractor,
         options.queueAutoDream ?? (() => {}),
-        { warn: (...args) => warnings.push(args) },
-        (buildMessage) => debugMessages.push(buildMessage())
+        captured.logger
     )
     return {
         coordinator,
@@ -140,8 +142,7 @@ const createExtractionCoordinator = (
 const queueExtraction = async (
     coordinator: LivingMemoryExtractionCoordinator,
     completedRoundCount = 1,
-    resolvePresetPrompt: () => Promise<string> = async () =>
-        '你是测试助手。'
+    resolvePresetPrompt: () => Promise<string> = async () => '你是测试助手。'
 ) => {
     const options = { resolvePresetPrompt }
     for (let index = 0; index < completedRoundCount; index++) {
@@ -156,9 +157,13 @@ const queueExtraction = async (
 it('counts the first completed round and extracts immediately at interval one', async () => {
     const { coordinator, getExtractorCalls } = createExtractionCoordinator()
 
-    await coordinator.queue(scope, { messages: createExtractionMessages() }, {
-        resolvePresetPrompt: async () => '你是测试助手。'
-    })
+    await coordinator.queue(
+        scope,
+        { messages: createExtractionMessages() },
+        {
+            resolvePresetPrompt: async () => '你是测试助手。'
+        }
+    )
     await waitFor(() => getExtractorCalls() === 1, 'first extraction')
 
     assert.equal(getExtractorCalls(), 1)
@@ -217,21 +222,17 @@ it('preserves completed rounds while an extraction is in flight', async () => {
         resolveTrace = resolve
     })
     let firstCall = true
-    const {
-        coordinator,
-        jobStore,
-        appended,
-        getExtractorCalls
-    } = createExtractionCoordinator({
-        trace: extractionTrace,
-        extractWithTrace: async () => {
-            if (firstCall) {
-                firstCall = false
-                return await tracePromise
+    const { coordinator, jobStore, appended, getExtractorCalls } =
+        createExtractionCoordinator({
+            trace: extractionTrace,
+            extractWithTrace: async () => {
+                if (firstCall) {
+                    firstCall = false
+                    return await tracePromise
+                }
+                return extractionTrace
             }
-            return extractionTrace
-        }
-    })
+        })
     const options = {
         resolvePresetPrompt: async () => '你是测试助手。'
     }
@@ -252,7 +253,10 @@ it('preserves completed rounds while an extraction is in flight', async () => {
     assert.equal(jobStore.jobs.length, 0)
 
     resolveTrace(extractionTrace)
-    await waitFor(() => getExtractorCalls() === 2, 'queued extraction model call')
+    await waitFor(
+        () => getExtractorCalls() === 2,
+        'queued extraction model call'
+    )
     await waitFor(() => appended.length === 2, 'queued extraction completion')
     assert.equal(jobStore.jobs.length, 0)
 })
@@ -276,9 +280,13 @@ it('uses only the configured number of recent completed rounds', async () => {
             ...message,
             contentLines: [`round-${index}-${message.role}`]
         }))
-        await coordinator.queue(scope, { messages: round }, {
-            resolvePresetPrompt: async () => '你是测试助手。'
-        })
+        await coordinator.queue(
+            scope,
+            { messages: round },
+            {
+                resolvePresetPrompt: async () => '你是测试助手。'
+            }
+        )
     }
     await waitFor(() => getExtractorCalls() === 1, 'buffered extraction')
 
@@ -374,9 +382,9 @@ it('writes extracted memories and queues auto Dream without persisting a job', a
     const autoDreamPresets: string[] = []
     const { coordinator, jobStore, appended, debugMessages } =
         createExtractionCoordinator({
-        trace: createExtractionTrace({ extracted }),
-        queueAutoDream: (presetId) => autoDreamPresets.push(presetId)
-    })
+            trace: createExtractionTrace({ extracted }),
+            queueAutoDream: (presetId) => autoDreamPresets.push(presetId)
+        })
 
     await queueExtraction(coordinator)
     await waitFor(() => appended.length === 1, 'successful extraction')
@@ -385,8 +393,10 @@ it('writes extracted memories and queues auto Dream without persisting a job', a
     assert.deepEqual(appended[0]?.extracted, extracted)
     assert.deepEqual(autoDreamPresets, [scope.presetId])
     assert.ok(
-        debugMessages.includes(
-            'memory extraction completed: conversationId=conversation-1 presetId=preset-1 extracted=1'
+        debugMessages.some(
+            (message) =>
+                message.includes('event=extraction.completed') &&
+                message.includes('extracted=1')
         )
     )
     assert.ok(
@@ -440,7 +450,7 @@ it('logs extraction scope and preserves the original background error', async ()
 
     assert.match(
         String(warnings[0]?.[0]),
-        /workflow=extraction operation=run conversationId=conversation-1 presetId=preset-1 triggerSequence=1/u
+        /event=extraction.failed workflow=extraction .*presetId=preset-1.*conversationId=conversation-1.*operation=run.*triggerSequence=1/u
     )
     assert.equal(warnings[0]?.[1], backgroundError)
 })
@@ -485,7 +495,7 @@ it('consumes a failed boundary and processes the next completed round once', asy
     await waitFor(
         () =>
             debugMessages.some((message) =>
-                message.includes('memory extraction completed')
+                message.includes('event=extraction.completed')
             ),
         'next extraction completion'
     )
@@ -556,14 +566,10 @@ it('persists one failed extraction job when memory persistence throws', async ()
 })
 
 it('does not persist a job for valid empty extraction output', async () => {
-    const {
-        coordinator,
-        jobStore,
-        appended,
-        debugMessages
-    } = createExtractionCoordinator({
-        trace: createExtractionTrace({ extracted: [] })
-    })
+    const { coordinator, jobStore, appended, debugMessages } =
+        createExtractionCoordinator({
+            trace: createExtractionTrace({ extracted: [] })
+        })
 
     await queueExtraction(coordinator)
     await waitFor(

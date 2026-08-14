@@ -11,6 +11,7 @@ import {
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import type { Context, Logger } from 'koishi'
+import { LivingMemoryLogger } from '../src/service/logging/logger'
 import type {
     MemoryJobKind,
     MemoryJobRecord,
@@ -239,7 +240,14 @@ const createService = (options: {
             debug: options.debug ?? false
         },
         options.repository,
-        logger,
+        new LivingMemoryLogger(
+            {
+                info: (message: unknown) => logger.info(message),
+                warn: (...args: unknown[]) => logger.warn(...args),
+                error: (...args: unknown[]) => logger.warn(...args)
+            } as never,
+            () => options.debug ?? false
+        ),
         {
             schemaVersion: options.schemaVersion,
             workerFactory:
@@ -458,7 +466,7 @@ it('warns without failing initialization when legacy cleanup fails', async () =>
         assert.equal(captured.warnings.length, 1)
         assert.equal(
             captured.warnings[0][0],
-            'memory background operation failed: workflow=vector-index operation=legacy-index-cleanup'
+            'event=vector-index.legacy-cleanup.failed workflow=vector-index operation=legacy-index-cleanup'
         )
         await access(legacyDirectory)
         await service.stop()
@@ -568,10 +576,7 @@ it('rolls back to the previous index when the candidate worker cannot open', asy
             indexFiles.some((file) => file.startsWith('vector-index.rebuild-')),
             false
         )
-        assert.equal(
-            indexFiles.includes('vector-index.previous.pglite'),
-            false
-        )
+        assert.equal(indexFiles.includes('vector-index.previous.pglite'), false)
 
         const recovered = createService({
             baseDir,
@@ -773,21 +778,21 @@ it('logs rebuild batch progress only when debug is enabled', async () => {
         await service.waitForInitialization()
         assert.ok(
             captured.info.some((message) =>
-                /vector index rebuild progress: jobId=job-1 presetId=\* completed=50 total=51 batchElapsedMs=\d+\.\d elapsedMs=\d+\.\d/u.test(
+                /event=vector-index.rebuild.progress workflow=vector-index jobId=job-1 presetId=\* .*completed=50.*total=51/u.test(
                     message
                 )
             )
         )
         assert.ok(
             captured.info.some((message) =>
-                /vector index rebuild progress: jobId=job-1 presetId=\* completed=51 total=51 batchElapsedMs=\d+\.\d elapsedMs=\d+\.\d/u.test(
+                /event=vector-index.rebuild.progress workflow=vector-index jobId=job-1 presetId=\* .*completed=51.*total=51/u.test(
                     message
                 )
             )
         )
         assert.ok(
             captured.info.some((message) =>
-                /vector index reconcile progress: jobId=job-1 presetId=preset-a completed=51 total=51/u.test(
+                /event=vector-index.reconcile.progress workflow=vector-index jobId=job-1 presetId=preset-a .*completed=51.*total=51/u.test(
                     message
                 )
             )
@@ -830,7 +835,11 @@ it('restores the active worker when rebuild worker shutdown reports failure', as
         assert.equal(captured.warnings.length, 1)
         assert.match(
             String(captured.warnings[0][0]),
-            /vector index rebuild failed: Error: injected worker disposal failure/u
+            /event=vector-index.unavailable workflow=vector-index state=unavailable/u
+        )
+        assert.match(
+            String((captured.warnings[0][1] as Error).message),
+            /injected worker disposal failure/u
         )
         await service.stop()
         assert.equal(captured.warnings.length, 1)

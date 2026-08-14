@@ -24,6 +24,7 @@ import type {
 import { LivingMemoryJobTracker } from '../src/service/workflows/job_tracker'
 import {
     createDreamRunResult,
+    createCapturedLogger,
     createJobStore,
     createMemoryEntry,
     debug,
@@ -75,8 +76,7 @@ const createDreamCoordinator = (
     repository: DreamCoordinatorArgs[2],
     snapshotCache: DreamJobRunnerArgs[2],
     jobTracker: DreamJobRunnerArgs[3],
-    targetLogger: DreamCoordinatorArgs[3],
-    targetDebug: DreamCoordinatorArgs[4]
+    targetLogger: DreamCoordinatorArgs[3]
 ) =>
     new LivingMemoryDreamCoordinator(
         config,
@@ -85,16 +85,15 @@ const createDreamCoordinator = (
             incremental,
             snapshotCache,
             jobTracker,
-            targetDebug
+            targetLogger
         ),
         repository,
-        targetLogger,
-        targetDebug
+        targetLogger
     )
 
 const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
     const events: string[] = []
-    const debugMessages: string[] = []
+    const captured = createCapturedLogger()
     const consolidatedIds: string[] = []
     const activeEntry = {
         ...createMemoryEntry('active-memory'),
@@ -183,10 +182,10 @@ const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
             readVectors: async () => new Map()
         },
         dreamWorker,
-        (message) => debugMessages.push(message)
+        captured.logger
     )
 
-    return { consolidatedIds, debugMessages, events, service }
+    return { consolidatedIds, debugMessages: captured.info, events, service }
 }
 
 it('keeps Dream successful when post-Dream user profile generation fails', async () => {
@@ -210,7 +209,7 @@ it('keeps Dream successful when post-Dream user profile generation fails', async
     ])
     assert.ok(
         harness.debugMessages.some((message) =>
-            message.includes('user profile generation failed after dream')
+            message.includes('event=dream.user-profile.failed')
         )
     )
     assert.ok(
@@ -261,7 +260,7 @@ it('marks a single-memory manual Dream as consolidated', async () => {
             readVectors: async () => new Map()
         },
         dreamWorker,
-        () => {}
+        logger
     )
 
     const result = await service.run(scope.presetId)
@@ -277,7 +276,7 @@ it('locks a Dream preset while its job is running', async () => {
     const dreamResult = new Promise<DreamRunResult>((resolve) => {
         resolveDream = resolve
     })
-    const debugMessages: string[] = []
+    const captured = createCapturedLogger()
     const coordinator = createDreamCoordinator(
         {
             enableAutoDream: false,
@@ -293,8 +292,7 @@ it('locks a Dream preset while its job is running', async () => {
         createDreamCoordinatorRepository(jobStore),
         { clearByPreset: () => {} },
         new LivingMemoryJobTracker(jobStore),
-        logger,
-        (buildMessage) => debugMessages.push(buildMessage())
+        captured.logger
     )
 
     const first = await coordinator.runManual(scope.presetId)
@@ -312,8 +310,8 @@ it('locks a Dream preset while its job is running', async () => {
     )
     assert.equal(dreamCalls, 1)
     assert.equal(
-        debugMessages.filter((message) =>
-            message.includes('memory dream finished:')
+        captured.info.filter((message) =>
+            message.includes('event=dream.completed')
         ).length,
         1
     )
@@ -363,10 +361,8 @@ it('enforces Dream touched-memory guards', async () => {
         setMemoryConsolidation: async () => {},
         applyDreamMerge: async () => {}
     } as unknown as DreamExecutorRepository
-    const debugMessages: string[] = []
-    const executor = new DreamExecutor(repository, (message) =>
-        debugMessages.push(message)
-    )
+    const captured = createCapturedLogger()
+    const executor = new DreamExecutor(repository)
     const entry = createMemoryEntry('memory-1')
     const cluster = { id: 'cluster-1', reason: 'test', entries: [entry] }
 
@@ -377,15 +373,16 @@ it('enforces Dream touched-memory guards', async () => {
         cluster,
         [completeDreamUpdateOperation(), completeDreamUpdateOperation()],
         touchedMemoryIds,
-        'manual'
+        'manual',
+        captured.logger
     )
 
     assert.equal(repeatedUpdate.updated, 1)
     assert.equal(repeatedUpdate.skipped, 1)
     assert.equal(updates.length, 1)
-    assert.deepEqual(debugMessages, [
-        'memory dream operation skipped: presetId=preset-1 stage=active clusterId=cluster-1 action=update reason=already-touched'
-    ])
+    assert.equal(captured.info.length, 1)
+    assert.match(captured.info[0], /event=dream.operation.skipped/u)
+    assert.match(captured.info[0], /reason=already-touched/u)
 })
 
 it('delegates each Dream merge to one atomic repository operation', async () => {
@@ -399,7 +396,7 @@ it('delegates each Dream merge to one atomic repository operation', async () => 
             mergeInputs.push(input)
         }
     } as unknown as DreamExecutorRepository
-    const executor = new DreamExecutor(repository, () => {})
+    const executor = new DreamExecutor(repository)
     const activeEntries = [
         createMemoryEntry('target-active'),
         createMemoryEntry('source-active-1'),
@@ -498,7 +495,7 @@ it('does not touch merge state when the atomic repository write fails', async ()
             throw new Error('merge write failed')
         }
     } as unknown as DreamExecutorRepository
-    const executor = new DreamExecutor(repository, () => {})
+    const executor = new DreamExecutor(repository)
     const touchedMemoryIds = new Set(['already-touched'])
 
     await assert.rejects(
@@ -540,8 +537,7 @@ it('skips auto Dream when pending memories are below the threshold', async () =>
         createDreamCoordinatorRepository(jobStore, async () => 2),
         { clearByPreset: () => {} },
         new LivingMemoryJobTracker(jobStore),
-        logger,
-        debug
+        logger
     )
 
     await coordinator.queueAutoIfThresholdReached(scope.presetId)
@@ -553,7 +549,7 @@ it('skips auto Dream when pending memories are below the threshold', async () =>
 it('runs one incremental Dream batch when pending memories reach the threshold', async () => {
     const jobStore = createJobStore()
     let incrementalCalls = 0
-    const debugMessages: string[] = []
+    const captured = createCapturedLogger()
     const coordinator = createDreamCoordinator(
         {
             enableAutoDream: true,
@@ -573,8 +569,7 @@ it('runs one incremental Dream batch when pending memories reach the threshold',
         createDreamCoordinatorRepository(jobStore, async () => 3),
         { clearByPreset: () => {} },
         new LivingMemoryJobTracker(jobStore),
-        logger,
-        (buildMessage) => debugMessages.push(buildMessage())
+        captured.logger
     )
 
     await coordinator.queueAutoIfThresholdReached(scope.presetId)
@@ -586,8 +581,8 @@ it('runs one incremental Dream batch when pending memories reach the threshold',
     assert.equal(incrementalCalls, 1)
     assert.equal(jobStore.jobs.length, 1)
     assert.ok(
-        debugMessages.some((message) =>
-            message.includes('memory auto dream threshold reached')
+        captured.info.some((message) =>
+            message.includes('event=dream.automatic.threshold-reached')
         )
     )
 })
@@ -612,8 +607,7 @@ it('records partial incremental Dream failures in the job detail', async () => {
         createDreamCoordinatorRepository(jobStore, async () => 3),
         { clearByPreset: () => {} },
         new LivingMemoryJobTracker(jobStore),
-        logger,
-        debug
+        logger
     )
 
     await coordinator.queueAutoIfThresholdReached(scope.presetId)
@@ -632,7 +626,7 @@ it('records partial incremental Dream failures in the job detail', async () => {
 it('logs Dream job context and preserves the original background error', async () => {
     const jobStore = createJobStore()
     const backgroundError = new Error('manual Dream failed')
-    const warnings: unknown[][] = []
+    const captured = createCapturedLogger()
     const coordinator = createDreamCoordinator(
         {
             enableAutoDream: false,
@@ -647,18 +641,20 @@ it('logs Dream job context and preserves the original background error', async (
         createDreamCoordinatorRepository(jobStore),
         { clearByPreset: () => {} },
         new LivingMemoryJobTracker(jobStore),
-        { warn: (...args) => warnings.push(args) },
-        debug
+        captured.logger
     )
 
     await coordinator.runManual(scope.presetId)
-    await waitFor(() => warnings.length === 1, 'Dream background warning')
+    await waitFor(
+        () => captured.warnings.length >= 1,
+        'Dream background warning'
+    )
 
     assert.match(
-        String(warnings[0]?.[0]),
-        /workflow=dream operation=run-job conversationId=dream:manual:preset-1 presetId=preset-1 jobId=job-1 trigger=manual/u
+        String(captured.warnings.at(-1)?.[0]),
+        /event=dream.failed workflow=dream jobId=job-1 .*presetId=preset-1.*trigger=manual/u
     )
-    assert.equal(warnings[0]?.[1], backgroundError)
+    assert.equal(captured.warnings.at(-1)?.[1], backgroundError)
 })
 
 it('clears snapshot cache only when successful Dream changes memories', async () => {
@@ -679,8 +675,7 @@ it('clears snapshot cache only when successful Dream changes memories', async ()
                 }
             },
             new LivingMemoryJobTracker(jobStore),
-            logger,
-            debug
+            logger
         )
 
         await coordinator.runManual(scope.presetId)
@@ -722,8 +717,7 @@ it('clears snapshot cache when Dream fails after possible writes', async () => {
             }
         },
         new LivingMemoryJobTracker(jobStore),
-        logger,
-        debug
+        logger
     )
 
     await coordinator.runManual(scope.presetId)

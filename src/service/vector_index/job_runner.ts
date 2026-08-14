@@ -1,6 +1,7 @@
 import type { MemoryJobRecord } from '../../contracts/memory'
 import type { JobRepository } from '../../contracts/workflows'
 import { LivingMemoryJobTracker } from '../workflows/job_tracker'
+import type { LivingMemoryLogger } from '../logging/logger'
 
 const INDEX_JOB_CONVERSATION = 'vector-index'
 
@@ -14,7 +15,8 @@ export class LivingMemoryVectorIndexJobRunner {
 
     constructor(
         private readonly repository: VectorIndexJobRepository,
-        private readonly onCurrentJobChanged: (jobId: string | null) => void
+        private readonly onCurrentJobChanged: (jobId: string | null) => void,
+        private readonly logger: LivingMemoryLogger
     ) {
         this.tracker = new LivingMemoryJobTracker(repository)
     }
@@ -51,6 +53,13 @@ export class LivingMemoryVectorIndexJobRunner {
             running = true
             const detail = await operation(job)
             await this.tracker.markCompleted(job.id, detail)
+            const operationName = input.split(':', 1)[0]
+            this.logger.info(`vector-index.${operationName}.completed`, {
+                workflow: 'vector-index',
+                jobId: job.id,
+                presetId: job.presetId,
+                detail
+            })
         } catch (error) {
             if (running) {
                 await this.tracker.markFailed(

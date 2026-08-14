@@ -9,9 +9,32 @@ import type { LivingMemoryAgenticRecallTrace } from '../src/service/workflows/re
 import type { RecallQueryResult } from '../src/service/workflows/recall/query_builder'
 import type { DreamRunResult } from '../src/service/workflows/dream/types'
 import { summarizeError } from '../src/service/shared/utils'
+import { LivingMemoryLogger } from '../src/service/logging/logger'
 
-export const logger = { warn: () => {} }
+export const logger = new LivingMemoryLogger(
+    { info: () => {}, warn: () => {}, error: () => {} } as never,
+    () => true
+)
 export const debug = () => {}
+
+export const createCapturedLogger = (debugEnabled = true) => {
+    const info: string[] = []
+    const warnings: unknown[][] = []
+    const errors: unknown[][] = []
+    return {
+        logger: new LivingMemoryLogger(
+            {
+                info: (message: unknown) => info.push(String(message)),
+                warn: (...args: unknown[]) => warnings.push(args),
+                error: (...args: unknown[]) => errors.push(args)
+            } as never,
+            () => debugEnabled
+        ),
+        info,
+        warnings,
+        errors
+    }
+}
 
 export const scope: MemoryScope = {
     conversationId: 'conversation-1',

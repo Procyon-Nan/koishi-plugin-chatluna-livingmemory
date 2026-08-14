@@ -1,4 +1,4 @@
-import { Context, type Logger } from 'koishi'
+import { Context } from 'koishi'
 import type {
     LivingMemoryConfig,
     RecallRepository,
@@ -7,23 +7,18 @@ import type {
 import type { MemoryVectorSearch } from '../../../contracts/vector_index'
 import { isModelConfigured } from '../../shared/utils'
 import { loadIndexedMemoryEntries } from './indexed_entries'
+import type { LivingMemoryLogger } from '../../logging/logger'
 
-type LivingMemoryRetrieverConfig = Pick<
-    LivingMemoryConfig,
-    'debug' | 'rerankModel'
->
+type LivingMemoryRetrieverConfig = Pick<LivingMemoryConfig, 'rerankModel'>
 
 export class LivingMemoryRetriever {
-    private readonly logger: Logger
-
     constructor(
         private readonly ctx: Context,
         private readonly config: LivingMemoryRetrieverConfig,
         private readonly repository: RecallRepository,
-        private readonly vectorSearch: MemoryVectorSearch
-    ) {
-        this.logger = ctx.logger('chatluna-livingmemory')
-    }
+        private readonly vectorSearch: MemoryVectorSearch,
+        private readonly logger: LivingMemoryLogger
+    ) {}
 
     async retrieve(
         presetId: string,
@@ -57,9 +52,10 @@ export class LivingMemoryRetriever {
         }
 
         if (!isModelConfigured(this.config.rerankModel)) {
-            this.debugLog(
-                'memory recall rerank model not configured, fallback to embedding-only top-K'
-            )
+            this.logger.diagnostic('recall.rerank.skipped', {
+                workflow: 'recall',
+                reason: 'model-not-configured'
+            })
             return this.embeddingOnlyTopK(candidates, limit)
         }
 
@@ -97,14 +93,12 @@ export class LivingMemoryRetriever {
                 }
             })
         } catch (error) {
-            this.logger.warn(error)
+            this.logger.warn(
+                'recall.rerank.failed',
+                { workflow: 'recall', operation: 'rerank' },
+                error
+            )
             return this.embeddingOnlyTopK(candidates, limit)
-        }
-    }
-
-    private debugLog(message: string) {
-        if (this.config.debug) {
-            this.logger.info(message)
         }
     }
 

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { ToolInputParsingException } from '@langchain/core/tools'
 import type { Context } from 'koishi'
+import { LivingMemoryLogger } from '../src/service/logging/logger'
 import {
     LivingMemoryGetMessagesTool,
     livingMemoryGetMessagesToolDescription
@@ -24,12 +25,12 @@ const mockEngine = {
     searchMemories: async () => []
 } as unknown as LivingMemoryEmbeddingSearchEngine
 
-const searchTool = new LivingMemorySearchTool(mockEngine, context, {
-    debug: false
-})
-const getMessagesTool = new LivingMemoryGetMessagesTool(context, {
-    debug: false
-})
+const silentLogger = new LivingMemoryLogger(
+    { info: () => {}, warn: () => {}, error: () => {} } as never,
+    () => false
+)
+const searchTool = new LivingMemorySearchTool(mockEngine, silentLogger)
+const getMessagesTool = new LivingMemoryGetMessagesTool(context, silentLogger)
 
 const rejectsStringifiedArray = async (promise: Promise<unknown>) => {
     await assert.rejects(promise, (error: unknown) => {
@@ -72,8 +73,7 @@ it('does not serialize tool payloads when debug logging is disabled', () => {
     let serialized = false
     const runtime = new LivingMemoryToolRuntime({
         toolName: 'test_tool',
-        logger: context.logger('chatluna-livingmemory'),
-        isDebugEnabled: () => false
+        logger: silentLogger
     })
 
     runtime.logInput(undefined, {
@@ -90,8 +90,14 @@ it('keeps ordinary tool debug logs free of payload content', () => {
     const messages: string[] = []
     const runtime = new LivingMemoryToolRuntime({
         toolName: 'test_tool',
-        logger: { info: (message) => messages.push(String(message)) },
-        isDebugEnabled: () => true
+        logger: new LivingMemoryLogger(
+            {
+                info: (message: unknown) => messages.push(String(message)),
+                warn: () => {},
+                error: () => {}
+            } as never,
+            () => true
+        )
     })
 
     runtime.logInput({ preset: 'preset-1' }, { query: 'private conversation' })

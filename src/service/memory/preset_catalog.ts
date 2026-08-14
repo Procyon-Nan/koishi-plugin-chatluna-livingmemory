@@ -3,10 +3,10 @@ import { summarizeError } from '../shared/utils'
 import {
     type CharacterPresetProvider,
     characterPresetSuffix,
-    type DebugLogger,
     mergePresetIds,
     toPresetIdList
 } from './helpers'
+import type { LivingMemoryLogger } from '../logging/logger'
 
 interface StoredPresetCatalogRepository {
     listDistinctPresetIds(): Promise<string[]>
@@ -16,7 +16,7 @@ export class LivingMemoryPresetCatalog {
     constructor(
         private readonly ctx: Context,
         private readonly repository: StoredPresetCatalogRepository,
-        private readonly debug: DebugLogger
+        private readonly logger: LivingMemoryLogger
     ) {}
 
     async list(): Promise<string[]> {
@@ -40,10 +40,11 @@ export class LivingMemoryPresetCatalog {
                 this.ctx.chatluna.preset.getAllPreset(false).value
             )
         } catch (error) {
-            this.debug(
-                () =>
-                    `webui preset list skipped chatluna presets: ${summarizeError(error)}`
-            )
+            this.logger.diagnostic('preset.catalog.skipped', {
+                workflow: 'webui',
+                source: 'chatluna',
+                error: summarizeError(error)
+            })
             return []
         }
     }
@@ -65,10 +66,11 @@ export class LivingMemoryPresetCatalog {
                 (presetId) => `${presetId}${characterPresetSuffix}`
             )
         } catch (error) {
-            this.debug(
-                () =>
-                    `webui preset list skipped character presets: ${summarizeError(error)}`
-            )
+            this.logger.diagnostic('preset.catalog.skipped', {
+                workflow: 'webui',
+                source: 'character',
+                error: summarizeError(error)
+            })
             return []
         }
     }

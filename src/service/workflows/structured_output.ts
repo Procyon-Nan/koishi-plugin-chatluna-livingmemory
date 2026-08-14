@@ -17,6 +17,8 @@ import {
 import type { ChatLunaChatModel } from 'koishi-plugin-chatluna/llm-core/platform/model'
 import type { PromptMessages } from '../prompts/prompt_format'
 import { summarizeError } from '../shared/utils'
+import type { LivingMemoryLogger } from '../logging/logger'
+import { createLoggedModel } from '../logging/model_calls'
 
 const structuredOutputMaxModelCalls = 3
 const outputParsingFailureCode = 'OUTPUT_PARSING_FAILURE'
@@ -51,6 +53,12 @@ interface StructuredOutputOptions<Schema extends z.AnyZodObject> {
     schema: Schema
     stringifiedArrayField: Extract<keyof z.input<Schema>, string>
     context: StructuredOutputContext
+    logging?: {
+        logger: LivingMemoryLogger
+        workflow: string
+        stage: string
+        fields?: Record<string, unknown>
+    }
 }
 
 type StructuredOutputValidation<T> =
@@ -242,10 +250,25 @@ export const isStructuredOutputModelInvocationError = (error: unknown) => {
     )
 }
 
-const guardModelInvocations = (model: ChatLunaChatModel) => {
+const guardModelInvocations = (
+    model: ChatLunaChatModel,
+    logging: StructuredOutputOptions<z.AnyZodObject>['logging'],
+    currentAttempt: () => number,
+    onCallId: (modelCallId: string) => void
+) => {
+    const loggedModel =
+        logging == null
+            ? model
+            : createLoggedModel(model, {
+                  logger: logging.logger,
+                  stage: logging.stage,
+                  attempt: currentAttempt,
+                  fields: logging.fields,
+                  onCallId
+              })
     return {
         withConfig: (config: RunnableConfig) => {
-            const boundModel = model.withConfig(config)
+            const boundModel = loggedModel.withConfig(config)
             type BoundModelInput = Parameters<typeof boundModel.invoke>[0]
 
             return RunnableLambda.from(
@@ -269,8 +292,17 @@ export async function invokeStructuredOutput<Schema extends z.AnyZodObject>(
         description: options.toolDescription,
         schema: options.schema
     })
+    let activeAttempt = 0
+    let activeModelCallId: string | undefined
     const agent = createOpenAIAgent({
-        llm: guardModelInvocations(options.model),
+        llm: guardModelInvocations(
+            options.model,
+            options.logging,
+            () => activeAttempt,
+            (modelCallId) => {
+                activeModelCallId = modelCallId
+            }
+        ),
         tools: [resultTool],
         prompt: structuredOutputPromptTemplate
     })
@@ -279,6 +311,8 @@ export async function invokeStructuredOutput<Schema extends z.AnyZodObject>(
     let lastError = 'structured output failed'
 
     for (let attempt = 1; attempt <= structuredOutputMaxModelCalls; attempt++) {
+        activeAttempt = attempt
+        activeModelCallId = undefined
         let decision: StructuredOutputDecision | null = null
 
         try {
@@ -311,6 +345,13 @@ export async function invokeStructuredOutput<Schema extends z.AnyZodObject>(
                 )
             }
             if (validated.error == null) {
+                options.logging?.logger.diagnostic('model.parse.completed', {
+                    ...options.logging.fields,
+                    workflow: options.logging.workflow,
+                    modelCallId: activeModelCallId,
+                    stage: options.logging.stage,
+                    attempt
+                })
                 return {
                     value: validated.value,
                     output: outputs.join('\n\n'),
@@ -319,6 +360,14 @@ export async function invokeStructuredOutput<Schema extends z.AnyZodObject>(
             }
 
             lastError = validated.error
+            options.logging?.logger.diagnostic('model.parse.failed', {
+                ...options.logging.fields,
+                workflow: options.logging.workflow,
+                modelCallId: activeModelCallId,
+                stage: options.logging.stage,
+                attempt,
+                error: lastError
+            })
         } catch (error) {
             if (isStructuredOutputModelInvocationError(error)) {
                 throw error
@@ -332,6 +381,14 @@ export async function invokeStructuredOutput<Schema extends z.AnyZodObject>(
                     ? error.llmOutput
                     : lastError
             outputs.push(`[attempt ${attempt}]\n${rawOutput}`)
+            options.logging?.logger.diagnostic('model.parse.failed', {
+                ...options.logging.fields,
+                workflow: options.logging.workflow,
+                modelCallId: activeModelCallId,
+                stage: options.logging.stage,
+                attempt,
+                error: lastError
+            })
         }
 
         scratchpadEntries = createRetryEntries(

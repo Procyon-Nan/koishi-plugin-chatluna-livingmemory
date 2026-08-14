@@ -26,6 +26,7 @@ import {
 } from './rebuild'
 import type { LivingMemoryVectorIndexWorkerClient } from './worker_client'
 import type { VectorIndexInspection } from './worker_protocol'
+import type { LivingMemoryLogger } from '../logging/logger'
 
 const VECTOR_STORAGE_ENGINE = 'pglite-pgvector' as const
 const GLOBAL_INDEX_JOB_PRESET = '*'
@@ -62,7 +63,7 @@ interface VectorIndexMaintenanceOptions {
     onCurrentJobChanged: (jobId: string | null) => void
     onInspection: (inspection: VectorIndexInspection) => void
     onEmbeddingContext: (context: VectorIndexEmbeddingContext) => void
-    debug: (message: string) => void
+    logger: LivingMemoryLogger
 }
 
 export class LivingMemoryVectorIndexMaintenance {
@@ -71,7 +72,8 @@ export class LivingMemoryVectorIndexMaintenance {
     constructor(private readonly options: VectorIndexMaintenanceOptions) {
         this.jobRunner = new LivingMemoryVectorIndexJobRunner(
             options.repository,
-            options.onCurrentJobChanged
+            options.onCurrentJobChanged,
+            options.logger
         )
     }
 
@@ -286,12 +288,21 @@ export class LivingMemoryVectorIndexMaintenance {
                             detail,
                             updatedAt: new Date()
                         })
-                        this.options.debug(
-                            [
-                                detail,
-                                `batchElapsedMs=${progress.batchDuration.toFixed(1)}`,
-                                `elapsedMs=${progress.totalDuration.toFixed(1)}`
-                            ].join(' ')
+                        this.options.logger.diagnostic(
+                            'vector-index.rebuild.progress',
+                            {
+                                workflow: 'vector-index',
+                                jobId: job.id,
+                                presetId: job.presetId,
+                                completed: progress.completed,
+                                total: progress.total,
+                                batchElapsedMs: Number(
+                                    progress.batchDuration.toFixed(1)
+                                ),
+                                elapsedMs: Number(
+                                    progress.totalDuration.toFixed(1)
+                                )
+                            }
                         )
                     },
                     finalize: (transferCleanupOwnership) =>
@@ -391,6 +402,12 @@ export class LivingMemoryVectorIndexMaintenance {
             detail,
             updatedAt: new Date()
         })
-        this.options.debug(detail)
+        this.options.logger.diagnostic('vector-index.reconcile.progress', {
+            workflow: 'vector-index',
+            jobId: job.id,
+            presetId: progress.presetId,
+            completed: progress.completed,
+            total: progress.total
+        })
     }
 }

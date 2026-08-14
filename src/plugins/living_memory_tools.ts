@@ -50,8 +50,7 @@ export function apply(ctx: Context, config: LivingMemoryConfig) {
                     return toChatLunaStructuredTool(
                         new LivingMemorySearchTool(
                             ctx.chatluna_living_memory,
-                            ctx,
-                            config
+                            ctx.chatluna_living_memory.memoryLogger
                         )
                     )
                 }
@@ -70,7 +69,10 @@ export function apply(ctx: Context, config: LivingMemoryConfig) {
                 },
                 createTool() {
                     return toChatLunaStructuredTool(
-                        new LivingMemoryGetMessagesTool(ctx, config)
+                        new LivingMemoryGetMessagesTool(
+                            ctx,
+                            ctx.chatluna_living_memory.memoryLogger
+                        )
                     )
                 }
             }

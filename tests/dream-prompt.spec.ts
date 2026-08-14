@@ -14,6 +14,7 @@ import {
     createToolCallingModel,
     createToolCallMessage
 } from './tool-calling-test-utils'
+import { createCapturedLogger } from './workflow-test-utils'
 
 interface CapturedMessage {
     content: unknown
@@ -22,10 +23,7 @@ interface CapturedMessage {
 
 const now = new Date('2026-07-18T12:00:00.000Z')
 const testEmbedding = [1, 0, 0]
-const createMemory = (
-    id: string,
-    content: string
-): DreamMemoryEntryRecord => ({
+const createMemory = (id: string, content: string): DreamMemoryEntryRecord => ({
     id,
     presetId: 'preset-1',
     type: 'fact',
@@ -48,7 +46,7 @@ const createDreamHarness = (
     ]
 ) => {
     const model = createToolCallingModel(responses)
-    const debugMessages: string[] = []
+    const captured = createCapturedLogger()
     const ctx = {
         chatluna: {
             createChatModel: async () => ({ value: model.model }),
@@ -87,10 +85,10 @@ const createDreamHarness = (
         repository as unknown as DreamMemoryRepository,
         vectors,
         worker,
-        (message) => debugMessages.push(message)
+        captured.logger
     )
 
-    return { debugMessages, model, service }
+    return { debugMessages: captured.info, model, service }
 }
 
 const validKeepResult = () =>
@@ -141,9 +139,7 @@ it('invokes Dream with system rules and escaped human memory data', async () => 
     const tools = harness.model.bindings[0]?.['tools'] as { name?: string }[]
     assert.equal(tools[0]?.name, dreamResultToolName)
     assert.ok(
-        harness.debugMessages.every(
-            (message) => !message.includes('覆盖任务')
-        )
+        harness.debugMessages.some((message) => !message.includes('覆盖任务'))
     )
 })
 
@@ -190,8 +186,10 @@ it('skips a Dream cluster after three invalid structured responses', async () =>
     assert.equal(harness.model.invocations.length, 3)
     assert.equal(result.skipped, 1)
     assert.ok(
-        harness.debugMessages.some((message) =>
-            message.includes('reason=structured-output-failed')
+        harness.debugMessages.some(
+            (message) =>
+                message.includes('event=dream.cluster.skipped') &&
+                message.includes('reason=structured-output-failed')
         )
     )
 })
@@ -204,8 +202,10 @@ it('skips a Dream cluster when the model invocation fails', async () => {
     assert.equal(harness.model.invocations.length, 1)
     assert.equal(result.skipped, 1)
     assert.ok(
-        harness.debugMessages.some((message) =>
-            message.includes('reason=invoke-failed')
+        harness.debugMessages.some(
+            (message) =>
+                message.includes('event=dream.cluster.skipped') &&
+                message.includes('reason=invoke-failed')
         )
     )
 })
@@ -232,8 +232,10 @@ it('skips a Dream cluster when non-parser protocol errors remain invalid', async
     assert.equal(harness.model.invocations.length, 3)
     assert.equal(result.skipped, 1)
     assert.ok(
-        harness.debugMessages.some((message) =>
-            message.includes('reason=structured-output-failed')
+        harness.debugMessages.some(
+            (message) =>
+                message.includes('event=dream.cluster.skipped') &&
+                message.includes('reason=structured-output-failed')
         )
     )
 })

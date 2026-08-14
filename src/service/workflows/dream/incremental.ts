@@ -14,6 +14,7 @@ import { isModelConfigured } from '../../shared/utils'
 import { addStats, createEmptyStats } from './stats'
 import type { DreamOperationStats, DreamRunResult, DreamStage } from './types'
 import { DreamUnitProcessor } from './unit_processor'
+import type { LivingMemoryLogger } from '../../logging/logger'
 
 type IncrementalDreamConfig = Pick<LivingMemoryConfig, 'mainModel' | 'debug'>
 
@@ -62,19 +63,15 @@ export class LivingMemoryIncrementalDreamService {
         private readonly config: IncrementalDreamConfig,
         private readonly repository: IncrementalDreamRepository,
         private readonly mutations: DreamMemoryRepository,
-        private readonly neighborSearch: IncrementalDreamNeighborSearch,
-        debug: (message: string) => void
+        private readonly neighborSearch: IncrementalDreamNeighborSearch
     ) {
-        this.unitProcessor = new DreamUnitProcessor(
-            mutations,
-            debug,
-            config.debug
-        )
+        this.unitProcessor = new DreamUnitProcessor(mutations)
     }
 
     async run(
         presetId: string,
-        batchSize: number
+        batchSize: number,
+        logger?: LivingMemoryLogger
     ): Promise<IncrementalDreamRunResult> {
         this.neighborSearch.assertPresetReady(presetId)
         const batch = await this.repository.listPendingEntries(
@@ -123,7 +120,8 @@ export class LivingMemoryIncrementalDreamService {
                 },
                 model,
                 touchedMemoryIds: new Set(),
-                consolidationMode: 'incremental-batch'
+                consolidationMode: 'incremental-batch',
+                logger
             })
             addStats(state.stats, result)
             addStats(state.firstRoundStats, result)
@@ -172,7 +170,8 @@ export class LivingMemoryIncrementalDreamService {
                 model,
                 touchedMemoryIds: new Set(),
                 consolidationMode: 'incremental-seed',
-                focusMemoryId: seed.id
+                focusMemoryId: seed.id,
+                logger
             })
             addStats(state.stats, result)
             addStats(state.secondRoundStats, result)

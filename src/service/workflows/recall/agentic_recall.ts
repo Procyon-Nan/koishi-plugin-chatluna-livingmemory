@@ -41,7 +41,8 @@ import {
 } from '../../prompts'
 import type { AgenticRecallPromptMessages } from '../../prompts'
 import { isModelConfigured, stringifyModelContent } from '../../shared/utils'
-import type { DebugLogger } from '../../memory/helpers'
+import type { LivingMemoryLogger } from '../../logging/logger'
+import { createLoggedModel, invokeLoggedModel } from '../../logging/model_calls'
 import {
     livingMemorySearchInputSchema,
     livingMemorySearchToolName
@@ -299,13 +300,14 @@ export class LivingMemoryAgenticRecallExecutor {
         private readonly ctx: Context,
         private readonly config: LivingMemoryAgenticRecallConfig,
         private readonly embeddingSearchEngine: LivingMemoryEmbeddingSearchEngine,
-        private readonly debug: DebugLogger
+        private readonly logger: LivingMemoryLogger
     ) {}
 
     async run(
         scope: MemoryScope,
         currentMessage: LivingMemoryTranscriptMessage,
-        historyMessages: LivingMemoryTranscriptMessage[]
+        historyMessages: LivingMemoryTranscriptMessage[],
+        runLogger: LivingMemoryLogger = this.logger
     ): Promise<LivingMemoryAgenticRecallTrace> {
         if (!isModelConfigured(this.config.subModel)) {
             throw new Error('subModel is not configured.')
@@ -345,21 +347,23 @@ export class LivingMemoryAgenticRecallExecutor {
         }
         const recordedSearchCalls: RecordedAgenticSearchCall[] = []
         const searchTool = new RecordingLivingMemorySearchTool(
-            new LivingMemorySearchTool(
-                this.embeddingSearchEngine,
-                this.ctx,
-                this.config
-            ),
+            new LivingMemorySearchTool(this.embeddingSearchEngine, runLogger),
             recordedSearchCalls,
             agentContext
         )
+        let modelCallCount = 0
+        let usedFinalizationCall = false
+        const loggedModel = createLoggedModel(chatModel, {
+            logger: runLogger,
+            stage: 'agentic-decision',
+            attempt: () => modelCallCount,
+            fields: () => ({ modelCall: modelCallCount })
+        })
         const toolAgent = createOpenAIAgent({
-            llm: chatModel,
+            llm: loggedModel,
             tools: [searchTool],
             prompt: agenticRecallPromptTemplate
         })
-        let modelCallCount = 0
-        let usedFinalizationCall = false
 
         const boundedAgent = RunnableLambda.from(
             async (
@@ -375,7 +379,9 @@ export class LivingMemoryAgenticRecallExecutor {
                         chatModel,
                         prompt,
                         input,
-                        runConfig
+                        runConfig,
+                        runLogger,
+                        modelCallCount
                     )
                 } else {
                     decision = await toolAgent.invoke(
@@ -384,14 +390,10 @@ export class LivingMemoryAgenticRecallExecutor {
                     )
                 }
 
-                this.debug(() =>
-                    [
-                        `memory agentic recall turn: conversationId=${scope.conversationId}`,
-                        `presetId=${scope.presetId}`,
-                        `modelCall=${modelCallCount}`,
-                        `toolCalls=${countDecisionToolCalls(decision)}`
-                    ].join(' ')
-                )
+                runLogger.diagnostic('recall.agentic.turn.completed', {
+                    modelCall: modelCallCount,
+                    toolCalls: countDecisionToolCalls(decision)
+                })
                 return decision
             }
         )
@@ -411,14 +413,6 @@ export class LivingMemoryAgenticRecallExecutor {
             }
         })
 
-        this.debug(() =>
-            [
-                `memory agentic recall prompt prepared: conversationId=${scope.conversationId}`,
-                `presetId=${scope.presetId}`,
-                `systemPromptLength=${prompt.systemPrompt.length}`,
-                `inputPromptLength=${prompt.inputPrompt.length}`
-            ].join(' ')
-        )
         const result = await runner.invoke(
             {
                 systemPrompt: prompt.systemPrompt,
@@ -474,14 +468,10 @@ export class LivingMemoryAgenticRecallExecutor {
             usedFinalizationCall &&
             trace.finalOutput === agenticRecallNoMemoryOutput
         ) {
-            this.debug(() =>
-                [
-                    `memory agentic recall exhausted: conversationId=${scope.conversationId}`,
-                    `presetId=${scope.presetId}`,
-                    `modelCalls=${modelCallCount}`,
-                    'reason=max-model-calls'
-                ].join(' ')
-            )
+            runLogger.diagnostic('recall.agentic.exhausted', {
+                modelCalls: modelCallCount,
+                reason: 'max-model-calls'
+            })
         }
 
         return trace
@@ -491,25 +481,33 @@ export class LivingMemoryAgenticRecallExecutor {
         model: ChatLunaChatModel,
         prompt: AgenticRecallPromptMessages,
         input: ChainValues,
-        runConfig?: RunnableConfig
+        runConfig?: RunnableConfig,
+        logger?: LivingMemoryLogger,
+        attempt = 1
     ): Promise<AgentFinish> {
         const scratchpad = _formatIntermediateSteps(
             (input['scratchpadEntries'] ??
                 input['steps'] ??
                 []) as ScratchpadEntry[]
         )
-        const response = await model.invoke(
-            [
-                new SystemMessage(prompt.systemPrompt),
-                new HumanMessage(prompt.inputPrompt),
-                ...scratchpad,
-                new HumanMessage(buildAgenticRecallFinalizationPrompt())
-            ],
-            {
-                ...(runConfig ?? {}),
-                tools: []
-            } as Parameters<ChatLunaChatModel['invoke']>[1]
-        )
+        const messages = [
+            new SystemMessage(prompt.systemPrompt),
+            new HumanMessage(prompt.inputPrompt),
+            ...scratchpad,
+            new HumanMessage(buildAgenticRecallFinalizationPrompt())
+        ]
+        const invokeConfig = {
+            ...(runConfig ?? {}),
+            tools: []
+        } as Parameters<ChatLunaChatModel['invoke']>[1]
+        const response =
+            logger == null
+                ? await model.invoke(messages, invokeConfig)
+                : await invokeLoggedModel(model, messages, invokeConfig, {
+                      logger,
+                      stage: 'agentic-finalization',
+                      attempt
+                  })
         const output = stringifyModelContent(response.content).trim()
         const finalOutput =
             output.length === 0 || hasToolCalls(response)

@@ -40,12 +40,12 @@ yarn build chatluna-livingmemory
 
 2. 配置模型：
 
-| 配置项 | 模型用途 | 是否必需 |
-| --- | --- | --- |
-| `mainModel` | 提取长期记忆，并在 Dream 中整理记忆和生成用户画像 | 启用自动提取或 Dream 时必需 |
-| `subModel` | 改写 `embedding-rerank` 查询，或执行 `agentic-recall` | 查询改写或 `agentic-recall` 启用时必需 |
-| `embeddingModel` | 为记忆检索、模型工具、手动 Dream 聚类和自动增量 Dream 检索生成向量 | 两种召回策略和 Dream 均必需 |
-| `rerankModel` | 对 `embedding-rerank` 的候选记忆重排序 | 可选；未配置或调用失败时使用 embedding 排序 |
+| 配置项           | 模型用途                                                           | 是否必需                                    |
+| ---------------- | ------------------------------------------------------------------ | ------------------------------------------- |
+| `mainModel`      | 提取长期记忆，并在 Dream 中整理记忆和生成用户画像                  | 启用自动提取或 Dream 时必需                 |
+| `subModel`       | 改写 `embedding-rerank` 查询，或执行 `agentic-recall`              | 查询改写或 `agentic-recall` 启用时必需      |
+| `embeddingModel` | 为记忆检索、模型工具、手动 Dream 聚类和自动增量 Dream 检索生成向量 | 两种召回策略和 Dream 均必需                 |
+| `rerankModel`    | 对 `embedding-rerank` 的候选记忆重排序                             | 可选；未配置或调用失败时使用 embedding 排序 |
 
 如果你不知道应该如何配置 Embedding 嵌入模型和 Reranker 重排序模型，请参考[此文档](https://github.com/Procyon-Nan/koishi-plugin-chatluna-livingmemory/blob/main/docs/embedding-reranker-guide.md)进行配置。
 
@@ -57,9 +57,9 @@ yarn build chatluna-livingmemory
 
 3. 在插件配置中选择记忆召回策略：
 
-   - `embedding-rerank`：可选使用 `subModel` 改写查询，使用 embedding 检索候选记忆，并在 reranker 可用时重排序，最后将 top-K 记忆引用写入快照。
+    - `embedding-rerank`：可选使用 `subModel` 改写查询，使用 embedding 检索候选记忆，并在 reranker 可用时重排序，最后将 top-K 记忆引用写入快照。
 
-   - `agentic-recall（实验性）`：由 `subModel` 结合近期对话和当前消息，调用 `living_memory_search` 查询记忆，再将最终记忆文本和搜索轨迹写入快照。
+    - `agentic-recall（实验性）`：由 `subModel` 结合近期对话和当前消息，调用 `living_memory_search` 查询记忆，再将最终记忆文本和搜索轨迹写入快照。
 
 4. 对于 ChatLuna 主插件，在插件配置中开启 `开启记忆快照注入`。开启后，会在历史上下文之后、当前用户输入之前自动注入最近一次成功召回的记忆快照；同一次主插件请求内如果发生工具调用，后续模型调用会继续使用同一份记忆快照注入。开启用户画像注入后，相关用户画像会以 system 语义插入在系统提示词之后，并同样在同一次主插件请求内保持可用。
 
@@ -87,9 +87,9 @@ input: |
 
 预设召回使用的记忆快照依照会话隔离：
 
-| 接入方式 | 长期记忆分区 | 快照隔离方式 |
-| --- | --- | --- |
-| ChatLuna 主插件 | 原始 preset 名 | `conversationId` |
+| 接入方式          | 长期记忆分区          | 快照隔离方式                                                |
+| ----------------- | --------------------- | ----------------------------------------------------------- |
+| ChatLuna 主插件   | 原始 preset 名        | `conversationId`                                            |
 | Character（伪装） | `预设名（Character）` | `private:{userId}` 或 `group:{guildId}` 形式的 `sessionKey` |
 
 这意味着同一预设在不同会话中会共享长期记忆，但每个会话会使用各自的记忆快照，避免召回结果直接串到其他会话。
@@ -100,14 +100,16 @@ input: |
 
 模型可填写的工具参数包括：
 
-| 字段 | 说明 |
-| --- | --- |
-| `searchTexts` | 必填，1 到 3 个语义查询短语，每个 2 到 100 个字符，须为第一人称的完整句子描述 |
-| `searchKeywords` | 选填，最多 3 个精确关键词，每个 2 到 10 个字符，用于关键词匹配 |
-| `memoryTypes` | 必填，记忆类别，可选 `identity`、`preference`、`fact`、`plan`、`context`、`other`，或单独使用 `all` |
+| 字段             | 说明                                                                                                |
+| ---------------- | --------------------------------------------------------------------------------------------------- |
+| `searchTexts`    | 必填，1 到 3 个语义查询短语，每个 2 到 100 个字符，须为第一人称的完整句子描述                       |
+| `searchKeywords` | 选填，最多 3 个精确关键词，每个 2 到 10 个字符，用于关键词匹配                                      |
+| `memoryTypes`    | 必填，记忆类别，可选 `identity`、`preference`、`fact`、`plan`、`context`、`other`，或单独使用 `all` |
 
 工具返回结果包含记忆 `id`、记忆类别、记忆内容、摘要、关键词、重要度、创建时间、更新时间。返回结果不会包含 `status` 或来源消息。
 
 `living_memory_get_messages` 用于在当前预设内按记忆 `id` 批量查看来源消息。它只接受 `living_memory_search` 返回的记忆 `id`，每次最多查询 10 条记忆。返回结果包含目标记忆的基本信息、按 `originIndex` 编号的 `sourceOrigins`，以及未找到或不属于当前预设的 `notFoundMemoryIds`。
 
-启用 `debug` 后，插件只输出调用标识符、数量、长度、状态和进度等诊断信息，不记录对话、预设提示词、记忆正文或模型载荷。
+默认日志会记录 Recall 快照更新后的完整最终注入文本、Recall 无结果时的快照保留事件、Dream 的启动/完成/失败，以及低频运维和索引事件。
+
+启用 `debug` 后，还会记录 Recall、Extraction、Dream（含用户画像）的每一次真实模型调用，包括完整 Prompt、完整原始响应、解析状态和关联标识。此类日志包含对话、预设提示词和记忆正文，仅应在访问受控的环境启用。API Key、Authorization、访问令牌、密码等基础设施凭证字段会统一掩码。

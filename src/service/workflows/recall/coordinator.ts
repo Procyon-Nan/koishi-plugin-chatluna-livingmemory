@@ -1,8 +1,9 @@
-import type { Logger } from 'koishi'
+import { randomUUID } from 'node:crypto'
 import type { LivingMemoryRetriever } from './retriever'
 import type { LivingMemoryRecallQueryBuilder } from './query_builder'
 import { summarizeError } from '../../shared/utils'
-import { type DebugLogger, normalizeText, scopeKey } from '../../memory/helpers'
+import { normalizeText, scopeKey } from '../../memory/helpers'
+import type { LivingMemoryLogger } from '../../logging/logger'
 import type { LivingMemorySnapshotCache } from '../../memory/snapshot/snapshot_cache'
 import type { LivingMemoryAgenticRecallExecutor } from './agentic_recall'
 import type {
@@ -24,8 +25,6 @@ type RecallQueryBuilder = Pick<LivingMemoryRecallQueryBuilder, 'resolve'>
 type RecallRetriever = Pick<LivingMemoryRetriever, 'retrieve'>
 type RecallAgenticExecutor = Pick<LivingMemoryAgenticRecallExecutor, 'run'>
 type RecallSnapshotCache = Pick<LivingMemorySnapshotCache, 'hydrate'>
-type RecallLogger = Pick<Logger, 'warn'>
-
 export type RecallWorkflowRepository = Pick<JobRepository, 'createFailedJob'> &
     Pick<SnapshotRepository, 'upsertSnapshot'>
 
@@ -39,8 +38,7 @@ export class LivingMemoryRecallCoordinator {
         private readonly retriever: RecallRetriever,
         private readonly agenticRecall: RecallAgenticExecutor,
         private readonly snapshotCache: RecallSnapshotCache,
-        private readonly logger: RecallLogger,
-        private readonly debug: DebugLogger
+        private readonly logger: LivingMemoryLogger
     ) {}
 
     async queue(
@@ -52,30 +50,26 @@ export class LivingMemoryRecallCoordinator {
         if (this.recallLockByConversation.has(lockKey)) {
             // 同一会话同一预设已有召回在跑，本次请求直接丢弃，不做 coalescing。
             // snapshot 由后续请求基于最新历史消息重新触发追上，最多滞后一轮。
-            this.debug(() =>
-                [
-                    `memory recall skipped: conversationId=${scope.conversationId}`,
-                    `presetId=${scope.presetId}`,
-                    'reason=recall-in-progress'
-                ].join(' ')
-            )
+            this.logger.diagnostic('recall.skipped', {
+                workflow: 'recall',
+                conversationId: scope.conversationId,
+                presetId: scope.presetId,
+                reason: 'recall-in-progress'
+            })
             return
         }
 
         this.recallLockByConversation.add(lockKey)
 
-        this.run(scope, currentMessage, loadHistoryMessages)
+        const runLogger = this.logger.with({
+            workflow: 'recall',
+            runId: randomUUID(),
+            conversationId: scope.conversationId,
+            presetId: scope.presetId
+        })
+        this.run(scope, currentMessage, loadHistoryMessages, runLogger)
             .catch((error) => {
-                this.logger.warn(
-                    [
-                        'memory background operation failed:',
-                        'workflow=recall',
-                        'operation=run',
-                        `conversationId=${scope.conversationId}`,
-                        `presetId=${scope.presetId}`
-                    ].join(' '),
-                    error
-                )
+                runLogger.warn('recall.failed', { operation: 'run' }, error)
             })
             .finally(() => {
                 this.recallLockByConversation.delete(lockKey)
@@ -85,33 +79,41 @@ export class LivingMemoryRecallCoordinator {
     private async run(
         scope: MemoryScope,
         currentMessage: LivingMemoryTranscriptMessage,
-        loadHistoryMessages: () => Promise<LivingMemoryTranscriptMessage[]>
+        loadHistoryMessages: () => Promise<LivingMemoryTranscriptMessage[]>,
+        logger: LivingMemoryLogger
     ) {
         let historyMessages: LivingMemoryTranscriptMessage[] = []
         try {
             historyMessages = await loadHistoryMessages()
         } catch (error) {
-            this.debug(() =>
-                [
-                    `memory recall history unavailable: conversationId=${scope.conversationId}`,
-                    `presetId=${scope.presetId}`,
-                    `errorLength=${summarizeError(error).length}`
-                ].join(' ')
-            )
+            logger.diagnostic('recall.history.unavailable', {
+                error: summarizeError(error)
+            })
         }
 
         if (this.config.recallStrategy === 'agentic-recall') {
-            await this.runAgentic(scope, currentMessage, historyMessages)
+            await this.runAgentic(
+                scope,
+                currentMessage,
+                historyMessages,
+                logger
+            )
             return
         }
 
-        await this.runEmbeddingRerank(scope, currentMessage, historyMessages)
+        await this.runEmbeddingRerank(
+            scope,
+            currentMessage,
+            historyMessages,
+            logger
+        )
     }
 
     private async runEmbeddingRerank(
         scope: MemoryScope,
         currentMessage: LivingMemoryTranscriptMessage,
-        historyMessages: LivingMemoryTranscriptMessage[]
+        historyMessages: LivingMemoryTranscriptMessage[],
+        logger: LivingMemoryLogger
     ) {
         const startedAt = new Date()
         let input = normalizeText(currentMessage.contentLines.join('\n'))
@@ -120,65 +122,28 @@ export class LivingMemoryRecallCoordinator {
             const query = await this.recallQuery.resolve(
                 scope,
                 currentMessage,
-                historyMessages
+                historyMessages,
+                logger
             )
 
-            this.debug(() =>
-                [
-                    `memory recall query prepared: conversationId=${scope.conversationId}`,
-                    `presetId=${scope.presetId}`,
-                    `rawInputLength=${query.rawInputLength}`,
-                    `cleanedQueryLength=${query.cleanedQuery.length}`,
-                    `finalQueryLength=${query.finalQuery.length}`
-                ].join(' ')
-            )
+            logger.diagnostic('recall.query.prepared', {
+                rawInputLength: query.rawInputLength,
+                cleanedQueryLength: query.cleanedQuery.length,
+                finalQueryLength: query.finalQuery.length
+            })
             if (query.skippedReason != null) {
-                this.debug(() =>
-                    [
-                        `memory recall skipped: conversationId=${scope.conversationId}`,
-                        `presetId=${scope.presetId}`,
-                        `reason=${query.skippedReason}`
-                    ].join(' ')
-                )
+                logger.diagnostic('recall.skipped', {
+                    reason: query.skippedReason
+                })
                 return
-            }
-
-            const rewritePrompt = query.rewritePrompt
-            if (rewritePrompt != null) {
-                this.debug(() =>
-                    [
-                        `memory recall rewrite input prepared: conversationId=${scope.conversationId}`,
-                        `presetId=${scope.presetId}`,
-                        `systemPromptLength=${rewritePrompt.systemPrompt.length}`,
-                        `inputPromptLength=${rewritePrompt.inputPrompt.length}`
-                    ].join(' ')
-                )
-            }
-
-            const rewriteOutput = query.rewriteOutput
-            if (rewriteOutput != null) {
-                this.debug(() =>
-                    [
-                        `memory recall rewrite output received: conversationId=${scope.conversationId}`,
-                        `presetId=${scope.presetId}`,
-                        `outputLength=${rewriteOutput.length}`
-                    ].join(' ')
-                )
             }
 
             if (query.fallbackReason != null) {
                 const fallbackError = query.error
-                this.debug(() => {
-                    const details = [
-                        `memory recall rewrite fallback: conversationId=${scope.conversationId}`,
-                        `presetId=${scope.presetId}`,
-                        `reason=${query.fallbackReason}`
-                    ]
-                    if (fallbackError != null) {
-                        details.push(`errorLength=${fallbackError.length}`)
-                    }
-                    details.push(`finalQueryLength=${query.finalQuery.length}`)
-                    return details.join(' ')
+                logger.diagnostic('recall.query.fallback', {
+                    reason: query.fallbackReason,
+                    error: fallbackError,
+                    finalQueryLength: query.finalQuery.length
                 })
             }
 
@@ -192,15 +157,15 @@ export class LivingMemoryRecallCoordinator {
                 input,
                 this.config.recallTopK
             )
-            this.debug(() =>
-                [
-                    `memory recall: conversationId=${scope.conversationId}`,
-                    `presetId=${scope.presetId}`,
-                    `queryLength=${input.length}`,
-                    `count=${items.length}`
-                ].join(' ')
-            )
+            logger.diagnostic('recall.retrieval.completed', {
+                queryLength: input.length,
+                count: items.length
+            })
             if (items.length === 0) {
+                logger.info('recall.snapshot.unchanged', {
+                    strategy: 'embedding-rerank',
+                    reason: 'no-memory-selected'
+                })
                 return
             }
             await this.repository.upsertSnapshot(
@@ -212,7 +177,11 @@ export class LivingMemoryRecallCoordinator {
                     score: item.score
                 }))
             )
-            await this.snapshotCache.hydrate(scope)
+            const content = await this.snapshotCache.hydrate(scope)
+            logger.info('recall.snapshot.updated', {
+                strategy: 'embedding-rerank',
+                content
+            })
         } catch (error) {
             await this.repository.createFailedJob(
                 scope,
@@ -229,7 +198,8 @@ export class LivingMemoryRecallCoordinator {
     private async runAgentic(
         scope: MemoryScope,
         currentMessage: LivingMemoryTranscriptMessage,
-        historyMessages: LivingMemoryTranscriptMessage[]
+        historyMessages: LivingMemoryTranscriptMessage[],
+        logger: LivingMemoryLogger
     ) {
         const startedAt = new Date()
         const input = normalizeText(currentMessage.contentLines.join('\n'))
@@ -241,19 +211,17 @@ export class LivingMemoryRecallCoordinator {
             const trace = await this.agenticRecall.run(
                 scope,
                 currentMessage,
-                historyMessages
+                historyMessages,
+                logger
             )
             const matchedCount = trace.item.matchedMemories.length
 
             if (trace.item.finalText.trim().length === 0) {
-                this.debug(() =>
-                    [
-                        `memory agentic recall no memory selected: conversationId=${scope.conversationId}`,
-                        `presetId=${scope.presetId}`,
-                        `matched=${matchedCount}`,
-                        'snapshot=unchanged'
-                    ].join(' ')
-                )
+                logger.info('recall.snapshot.unchanged', {
+                    strategy: 'agentic-recall',
+                    reason: 'no-memory-selected',
+                    matched: matchedCount
+                })
                 return
             }
 
@@ -264,7 +232,12 @@ export class LivingMemoryRecallCoordinator {
                 query,
                 [trace.item]
             )
-            await this.snapshotCache.hydrate(scope)
+            const content = await this.snapshotCache.hydrate(scope)
+            logger.info('recall.snapshot.updated', {
+                strategy: 'agentic-recall',
+                content,
+                matched: matchedCount
+            })
         } catch (error) {
             await this.repository.createFailedJob(
                 scope,

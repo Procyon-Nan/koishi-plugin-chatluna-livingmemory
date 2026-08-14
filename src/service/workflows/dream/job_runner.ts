@@ -1,5 +1,5 @@
 import type { MemoryScope } from '../../../contracts/memory'
-import type { DebugLogger } from '../../memory/helpers'
+import type { LivingMemoryLogger } from '../../logging/logger'
 import { summarizeError } from '../../shared/utils'
 import type { LivingMemorySnapshotCache } from '../../memory/snapshot/snapshot_cache'
 import type { LivingMemoryJobTracker } from '../job_tracker'
@@ -25,21 +25,22 @@ export class LivingMemoryDreamJobRunner {
         private readonly incrementalDream: IncrementalDreamService,
         private readonly snapshotCache: DreamSnapshotCache,
         private readonly jobTracker: DreamJobTracker,
-        private readonly debug: DebugLogger
+        private readonly logger: LivingMemoryLogger
     ) {}
 
     runManual(scope: MemoryScope, jobId: string) {
-        return this.run(scope, jobId, 'manual', async () => ({
+        return this.run(scope, jobId, 'manual', async (logger) => ({
             success: true,
-            result: await this.dream.run(scope.presetId)
+            result: await this.dream.run(scope.presetId, logger)
         }))
     }
 
     runAutomatic(scope: MemoryScope, jobId: string, batchSize: number) {
-        return this.run(scope, jobId, 'automatic', async () => {
+        return this.run(scope, jobId, 'automatic', async (logger) => {
             const result = await this.incrementalDream.run(
                 scope.presetId,
-                batchSize
+                batchSize,
+                logger
             )
             if (result.failed) {
                 return {
@@ -59,13 +60,20 @@ export class LivingMemoryDreamJobRunner {
         scope: MemoryScope,
         jobId: string,
         trigger: 'manual' | 'automatic',
-        workflow: () => Promise<DreamJobOutcome>
+        workflow: (logger?: LivingMemoryLogger) => Promise<DreamJobOutcome>
     ) {
         await this.jobTracker.markRunning(jobId)
+        const jobLogger = this.logger.with({
+            workflow: 'dream',
+            jobId,
+            presetId: scope.presetId,
+            trigger
+        })
+        jobLogger.info('dream.started')
 
         let outcome: DreamJobOutcome
         try {
-            outcome = await workflow()
+            outcome = await workflow(jobLogger)
         } catch (error) {
             this.clearSnapshotCache(scope.presetId, jobId)
             let detail: string | null = null
@@ -73,48 +81,46 @@ export class LivingMemoryDreamJobRunner {
                 detail = `dream automatic incremental failed: ${summarizeError(error)}`
             }
             await this.jobTracker.markFailed(jobId, error, detail)
+            jobLogger.warn('dream.failed', { detail }, error)
             throw error
         }
 
         const { result } = outcome
-        this.debug(() =>
-            [
-                `memory dream finished: jobId=${jobId}`,
-                `presetId=${scope.presetId}`,
-                `trigger=${trigger}`,
-                `entries=${result.entryCount}`,
-                `clusters=${result.clusterCount}`,
-                `kept=${result.kept}`,
-                `merged=${result.merged}`,
-                `updated=${result.updated}`,
-                `archived=${result.archived}`,
-                `deleted=${result.deleted}`,
-                `skipped=${result.skipped}`
-            ].join(' ')
-        )
-
         if (hasMemoryChanges(result)) {
             this.clearSnapshotCache(scope.presetId, jobId)
         }
         if (outcome.success === true) {
             await this.jobTracker.markCompleted(jobId, result.detail)
+            jobLogger.info('dream.completed', {
+                entries: result.entryCount,
+                clusters: result.clusterCount,
+                kept: result.kept,
+                merged: result.merged,
+                updated: result.updated,
+                archived: result.archived,
+                deleted: result.deleted,
+                skipped: result.skipped
+            })
         } else {
             await this.jobTracker.markFailed(
                 jobId,
                 outcome.error,
                 result.detail
             )
+            jobLogger.warn('dream.failed', {
+                error: outcome.error,
+                detail: result.detail
+            })
         }
     }
 
     private clearSnapshotCache(presetId: string, jobId: string) {
         this.snapshotCache.clearByPreset(presetId)
-        this.debug(() =>
-            [
-                `memory dream cache cleared: jobId=${jobId}`,
-                `presetId=${presetId}`
-            ].join(' ')
-        )
+        this.logger.diagnostic('dream.snapshot-cache.cleared', {
+            workflow: 'dream',
+            jobId,
+            presetId
+        })
     }
 }
 

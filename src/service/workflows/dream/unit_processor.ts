@@ -20,6 +20,7 @@ import type {
     DreamStage,
     DreamUnitResult
 } from './types'
+import type { LivingMemoryLogger } from '../../logging/logger'
 
 interface DreamUnitBaseInput {
     presetId: string
@@ -29,6 +30,7 @@ interface DreamUnitBaseInput {
     cluster: DreamCluster
     model: ChatLunaChatModel
     touchedMemoryIds: Set<string>
+    logger?: LivingMemoryLogger
 }
 
 export type DreamUnitInput =
@@ -42,12 +44,8 @@ export type DreamUnitInput =
 export class DreamUnitProcessor {
     private readonly executor: DreamExecutor
 
-    constructor(
-        private readonly repository: DreamMemoryRepository,
-        private readonly debug: (message: string) => void,
-        private readonly enableTrace: boolean
-    ) {
-        this.executor = new DreamExecutor(repository, this.debug)
+    constructor(private readonly repository: DreamMemoryRepository) {
+        this.executor = new DreamExecutor(repository)
     }
 
     async process(input: DreamUnitInput): Promise<DreamUnitResult> {
@@ -58,16 +56,6 @@ export class DreamUnitProcessor {
             cluster: input.cluster,
             stage: input.stage
         })
-        this.trace(() =>
-            [
-                `memory dream llm input prepared: presetId=${input.presetId}`,
-                `stage=${input.stage}`,
-                `clusterId=${input.cluster.id}`,
-                `entries=${input.cluster.entries.length}`,
-                `systemPromptLength=${prompt.systemPrompt.length}`,
-                `inputPromptLength=${prompt.inputPrompt.length}`
-            ].join(' ')
-        )
         let structuredResult
         let schema:
             typeof dreamActiveResultSchema | typeof dreamArchivedResultSchema =
@@ -91,44 +79,36 @@ export class DreamUnitProcessor {
                         input.stage,
                         input.cluster.id
                     ].join(':')
-                }
+                },
+                logging:
+                    input.logger == null
+                        ? undefined
+                        : {
+                              logger: input.logger,
+                              workflow: 'dream',
+                              stage: `dream-${input.stage}`,
+                              fields: {
+                                  clusterId: input.cluster.id,
+                                  consolidationMode: input.consolidationMode
+                              }
+                          }
             })
         } catch (error) {
             if (!isStructuredOutputModelInvocationError(error)) {
                 throw error
             }
             const errorSummary = summarizeError(error)
-            this.trace(() =>
-                [
-                    `memory dream llm failed: presetId=${input.presetId}`,
-                    `stage=${input.stage}`,
-                    `clusterId=${input.cluster.id}`,
-                    'reason=invoke-failed',
-                    `errorLength=${errorSummary.length}`
-                ].join(' ')
-            )
+            input.logger?.diagnostic('dream.model.failed', {
+                stage: input.stage,
+                clusterId: input.cluster.id,
+                reason: 'invoke-failed',
+                error: errorSummary
+            })
             return this.failure(`invoke-failed: ${errorSummary}`)
         }
 
-        this.trace(() =>
-            [
-                `memory dream llm output received: presetId=${input.presetId}`,
-                `stage=${input.stage}`,
-                `clusterId=${input.cluster.id}`,
-                `outputLength=${structuredResult.output.length}`
-            ].join(' ')
-        )
         if (structuredResult.parseError !== null) {
             const parseError = structuredResult.parseError
-            this.trace(() =>
-                [
-                    `memory dream llm failed: presetId=${input.presetId}`,
-                    `stage=${input.stage}`,
-                    `clusterId=${input.cluster.id}`,
-                    'reason=structured-output-failed',
-                    `errorLength=${parseError.length}`
-                ].join(' ')
-            )
             return this.failure(`structured-output-failed: ${parseError}`)
         }
 
@@ -150,7 +130,8 @@ export class DreamUnitProcessor {
             input.cluster,
             operations,
             input.touchedMemoryIds,
-            input.consolidationMode
+            input.consolidationMode,
+            input.logger
         )
         if (result.skipped > 0) {
             return {
@@ -196,12 +177,6 @@ export class DreamUnitProcessor {
             ...createEmptyStats(),
             consolidatedMemoryIds: new Set(),
             mutatedMemoryIds: new Set()
-        }
-    }
-
-    private trace(buildMessage: () => string) {
-        if (this.enableTrace) {
-            this.debug(buildMessage())
         }
     }
 }

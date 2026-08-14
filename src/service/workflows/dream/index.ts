@@ -24,6 +24,7 @@ import {
 } from './stats'
 import type { DreamRunResult, DreamStage, DreamStageResult } from './types'
 import { DreamUnitProcessor } from './unit_processor'
+import type { LivingMemoryLogger } from '../../logging/logger'
 
 export type { DreamRunResult } from './types'
 
@@ -53,28 +54,28 @@ export class LivingMemoryDreamService {
         private readonly mutations: DreamMemoryRepository,
         vectors: ManualDreamVectorReader,
         worker: DreamWorkerRunner,
-        private readonly debug: (message: string) => void
+        private readonly logger: LivingMemoryLogger
     ) {
-        this.clusterer = new DreamClusterer(
-            vectors,
-            debug,
-            config.debug,
-            worker
-        )
-        this.unitProcessor = new DreamUnitProcessor(
-            mutations,
-            debug,
-            config.debug
-        )
+        this.clusterer = new DreamClusterer(vectors, worker)
+        this.unitProcessor = new DreamUnitProcessor(mutations)
         this.userProfiles = new LivingMemoryUserProfileService(
             ctx,
             config,
             repository,
-            (buildMessage) => this.trace(buildMessage)
+            logger
         )
     }
 
-    async run(presetId: string): Promise<DreamRunResult> {
+    async run(
+        presetId: string,
+        logger?: LivingMemoryLogger
+    ): Promise<DreamRunResult> {
+        const runLogger =
+            logger ??
+            this.logger.with({
+                workflow: 'dream',
+                presetId
+            })
         const entries = await this.repository.listDreamEntriesByPreset(presetId)
         if (entries.length < 2) {
             if (entries.length === 1) {
@@ -119,7 +120,8 @@ export class LivingMemoryDreamService {
             presetPrompt,
             'active',
             activeEntries,
-            chatModel
+            chatModel,
+            runLogger
         )
         const refreshedEntries =
             await this.repository.listDreamEntriesByPreset(presetId)
@@ -132,11 +134,13 @@ export class LivingMemoryDreamService {
             presetPrompt,
             'archived',
             archivedEntries,
-            chatModel
+            chatModel,
+            runLogger
         )
         const profileDetail = await this.regenerateUserProfilesAfterDream(
             presetId,
-            chatModel
+            chatModel,
+            runLogger
         )
         const stats = sumStats([activeResult, archivedResult])
         const detail = [
@@ -156,7 +160,8 @@ export class LivingMemoryDreamService {
 
     private async regenerateUserProfilesAfterDream(
         presetId: string,
-        model: ChatLunaChatModel
+        model: ChatLunaChatModel,
+        logger?: LivingMemoryLogger
     ) {
         if (!this.config.enableUserProfileInjection) {
             return 'user profiles skipped: disabled'
@@ -168,7 +173,8 @@ export class LivingMemoryDreamService {
             const result = await this.userProfiles.regenerate(
                 presetId,
                 finalEntries.filter((entry) => entry.status === 'active'),
-                model
+                model,
+                logger
             )
             return result.detail
         } catch (error) {
@@ -176,12 +182,9 @@ export class LivingMemoryDreamService {
             const errorMessage =
                 error instanceof Error ? error.message : errorSummary
             const detail = `user profiles failed: ${errorMessage}`
-            this.debug(
-                [
-                    `memory user profile generation failed after dream: presetId=${presetId}`,
-                    `errorLength=${errorSummary.length}`
-                ].join(' ')
-            )
+            logger?.diagnostic('dream.user-profile.failed', {
+                error: errorSummary
+            })
             return detail
         }
     }
@@ -192,13 +195,13 @@ export class LivingMemoryDreamService {
         presetPrompt: string,
         stage: DreamStage,
         entries: DreamMemoryEntryRecord[],
-        model: ChatLunaChatModel
+        model: ChatLunaChatModel,
+        logger?: LivingMemoryLogger
     ): Promise<DreamStageResult> {
-        this.trace(
-            () =>
-                `memory dream stage started: presetId=${presetId} ` +
-                `stage=${stage} entries=${entries.length}`
-        )
+        logger?.diagnostic('dream.stage.started', {
+            stage,
+            entries: entries.length
+        })
         if (entries.length < 2) {
             if (entries.length === 1) {
                 await this.mutations.setMemoryConsolidation(
@@ -213,7 +216,8 @@ export class LivingMemoryDreamService {
         const clusters = await this.clusterer.buildClusters(
             presetId,
             stage,
-            entries
+            entries,
+            logger
         )
 
         const stats = createEmptyStats()
@@ -228,7 +232,8 @@ export class LivingMemoryDreamService {
                 stage,
                 model,
                 touchedMemoryIds,
-                consolidationMode: 'manual'
+                consolidationMode: 'manual',
+                logger
             })
             addStats(stats, result)
             if (result.success === false) {
@@ -236,15 +241,12 @@ export class LivingMemoryDreamService {
                     stats.skipped++
                 }
                 const reason = result.error.split(':', 1)[0]
-                this.debug(
-                    [
-                        `memory dream cluster skipped: presetId=${presetId}`,
-                        `stage=${stage}`,
-                        `clusterId=${cluster.id}`,
-                        `reason=${reason}`,
-                        `errorLength=${result.error.length}`
-                    ].join(' ')
-                )
+                logger?.diagnostic('dream.cluster.skipped', {
+                    stage,
+                    clusterId: cluster.id,
+                    reason,
+                    error: result.error
+                })
             }
         }
 
@@ -281,12 +283,6 @@ export class LivingMemoryDreamService {
             skipped: 0,
             skippedReason: options.skippedReason,
             detail: options.detail
-        }
-    }
-
-    private trace(buildMessage: () => string) {
-        if (this.config.debug) {
-            this.debug(buildMessage())
         }
     }
 }

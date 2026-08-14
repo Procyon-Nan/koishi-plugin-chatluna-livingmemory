@@ -4,6 +4,7 @@ import type {
     DreamMergeMutation
 } from '../../../contracts/workflows'
 import { normalizeMemoryKeywords } from '../../memory/entry_fields'
+import type { LivingMemoryLogger } from '../../logging/logger'
 import { createEmptyStats } from './stats'
 import type {
     DreamCluster,
@@ -50,10 +51,7 @@ export const getDreamOperationMemoryIds = (operation: DreamOperation) => {
 }
 
 export class DreamExecutor {
-    constructor(
-        private readonly repository: DreamExecutorRepository,
-        private readonly debug: (message: string) => void
-    ) {}
+    constructor(private readonly repository: DreamExecutorRepository) {}
 
     async executeOperations(
         presetId: string,
@@ -61,7 +59,8 @@ export class DreamExecutor {
         cluster: DreamCluster,
         operations: DreamOperation[],
         touchedMemoryIds: Set<string>,
-        consolidationMode: DreamConsolidationMode
+        consolidationMode: DreamConsolidationMode,
+        logger?: LivingMemoryLogger
     ): Promise<DreamExecutionResult> {
         const stats = createEmptyStats()
         const consolidatedMemoryIds = new Set<string>()
@@ -83,27 +82,25 @@ export class DreamExecutor {
         for (const operation of operations) {
             if (!this.operationIdsWithinCluster(operation, entryById)) {
                 stats.skipped++
-                this.debug(
-                    this.formatSkipLog(
-                        presetId,
-                        stage,
-                        cluster.id,
-                        operation.action,
-                        'ids-not-in-cluster'
-                    )
+                this.logSkip(
+                    logger,
+                    presetId,
+                    stage,
+                    cluster.id,
+                    operation.action,
+                    'ids-not-in-cluster'
                 )
                 continue
             }
 
             const logSkip = (reason: string) => {
-                this.debug(
-                    this.formatSkipLog(
-                        presetId,
-                        stage,
-                        cluster.id,
-                        operation.action,
-                        reason
-                    )
+                this.logSkip(
+                    logger,
+                    presetId,
+                    stage,
+                    cluster.id,
+                    operation.action,
+                    reason
                 )
             }
 
@@ -309,20 +306,20 @@ export class DreamExecutor {
         }
     }
 
-    private formatSkipLog(
+    private logSkip(
+        logger: LivingMemoryLogger | undefined,
         presetId: string,
         stage: DreamStage,
         clusterId: string,
         action: string,
         reason: string
-    ): string {
-        return [
-            'memory dream operation skipped:',
-            `presetId=${presetId}`,
-            `stage=${stage}`,
-            `clusterId=${clusterId}`,
-            `action=${action}`,
-            `reason=${reason}`
-        ].join(' ')
+    ) {
+        logger?.diagnostic('dream.operation.skipped', {
+            presetId,
+            stage,
+            clusterId,
+            action,
+            reason
+        })
     }
 }

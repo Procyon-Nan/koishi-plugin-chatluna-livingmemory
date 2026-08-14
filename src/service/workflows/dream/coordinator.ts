@@ -1,6 +1,5 @@
-import type { Logger } from 'koishi'
 import type { LivingMemoryDreamJobRunner } from './job_runner'
-import type { DebugLogger } from '../../memory/helpers'
+import type { LivingMemoryLogger } from '../../logging/logger'
 import type {
     DreamTriggerResult,
     JobRepository,
@@ -17,7 +16,6 @@ type DreamJobRunner = Pick<
     LivingMemoryDreamJobRunner,
     'runManual' | 'runAutomatic'
 >
-type DreamLogger = Pick<Logger, 'warn'>
 type DreamTrigger = 'manual' | 'automatic'
 
 type DreamRunLock = { phase: 'starting' } | { phase: 'running'; jobId: string }
@@ -36,8 +34,7 @@ export class LivingMemoryDreamCoordinator {
         private readonly config: LivingMemoryDreamCoordinatorConfig,
         private readonly jobRunner: DreamJobRunner,
         private readonly repository: DreamCoordinatorRepository,
-        private readonly logger: DreamLogger,
-        private readonly debug: DebugLogger
+        private readonly logger: LivingMemoryLogger
     ) {}
 
     async queueAutoIfThresholdReached(presetId: string) {
@@ -52,25 +49,22 @@ export class LivingMemoryDreamCoordinator {
         const threshold = this.config.autoDreamMemoryGrowthThreshold
 
         if (pendingCount < threshold) {
-            this.debug(() =>
-                [
-                    'memory auto dream skipped:',
-                    `presetId=${presetId}`,
-                    `pending=${pendingCount}`,
-                    `threshold=${threshold}`
-                ].join(' ')
-            )
+            this.logger.diagnostic('dream.automatic.skipped', {
+                workflow: 'dream',
+                presetId,
+                pending: pendingCount,
+                threshold,
+                reason: 'threshold-not-reached'
+            })
             return
         }
 
-        this.debug(() =>
-            [
-                'memory auto dream threshold reached:',
-                `presetId=${presetId}`,
-                `pending=${pendingCount}`,
-                `threshold=${threshold}`
-            ].join(' ')
-        )
+        this.logger.diagnostic('dream.automatic.threshold-reached', {
+            workflow: 'dream',
+            presetId,
+            pending: pendingCount,
+            threshold
+        })
         await this.startJob(presetId, 'automatic')
     }
 
@@ -123,20 +117,7 @@ export class LivingMemoryDreamCoordinator {
                 jobId: job.id
             })
             this.runJob(scope, job.id, trigger)
-                .catch((error) => {
-                    this.logger.warn(
-                        [
-                            'memory background operation failed:',
-                            'workflow=dream',
-                            'operation=run-job',
-                            `conversationId=${scope.conversationId}`,
-                            `presetId=${scope.presetId}`,
-                            `jobId=${job.id}`,
-                            `trigger=${trigger}`
-                        ].join(' '),
-                        error
-                    )
-                })
+                .catch(() => {})
                 .finally(() => {
                     this.lockByPreset.delete(presetId)
                 })
@@ -168,10 +149,11 @@ export class LivingMemoryDreamCoordinator {
             'dream recovered: stale running job'
         )
         if (recovered.length > 0) {
-            this.debug(
-                () =>
-                    `memory dream stale jobs recovered: presetId=${presetId}, count=${recovered.length}`
-            )
+            this.logger.diagnostic('dream.stale-jobs.recovered', {
+                workflow: 'dream',
+                presetId,
+                count: recovered.length
+            })
         }
     }
 }

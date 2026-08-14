@@ -9,11 +9,7 @@ import type {
     LivingMemoryConfig,
     UserProfileRepository
 } from '../contracts/workflows'
-import {
-    type DebugLogger,
-    resolveAssistantLabel,
-    resolvePresetPrompt
-} from './memory/helpers'
+import { resolveAssistantLabel, resolvePresetPrompt } from './memory/helpers'
 import {
     buildUserProfilePrompt,
     createUserProfileResultSchema,
@@ -22,6 +18,7 @@ import {
 } from './prompts'
 import { summarizeError } from './shared/utils'
 import { invokeStructuredOutput } from './workflows/structured_output'
+import type { LivingMemoryLogger } from './logging/logger'
 
 const maxProfileLength = 220
 
@@ -96,13 +93,14 @@ export class LivingMemoryUserProfileService {
         private readonly ctx: Context,
         private readonly config: LivingMemoryUserProfileConfig,
         private readonly repository: UserProfileRepository,
-        private readonly debug: DebugLogger
+        private readonly logger: LivingMemoryLogger
     ) {}
 
     async regenerate(
         presetId: string,
         activeEntries: DreamMemoryEntryRecord[],
-        model: ChatLunaChatModel
+        model: ChatLunaChatModel,
+        logger?: LivingMemoryLogger
     ): Promise<UserProfileGenerationResult> {
         if (!this.config.enableUserProfileInjection) {
             return {
@@ -160,14 +158,6 @@ export class LivingMemoryUserProfileService {
                 group,
                 maxProfileLength
             })
-            this.debug(() =>
-                [
-                    `memory user profile llm prompt prepared: presetId=${presetId}`,
-                    `speaker=${group.speakerLabel}`,
-                    `systemPromptLength=${prompt.systemPrompt.length}`,
-                    `inputPromptLength=${prompt.inputPrompt.length}`
-                ].join(' ')
-            )
             let structuredResult
             try {
                 structuredResult = await invokeStructuredOutput({
@@ -188,39 +178,42 @@ export class LivingMemoryUserProfileService {
                             presetId,
                             group.speakerKey
                         ].join(':')
-                    }
+                    },
+                    logging:
+                        logger == null
+                            ? undefined
+                            : {
+                                  logger,
+                                  workflow: 'dream',
+                                  stage: 'user-profile',
+                                  fields: {
+                                      speaker: group.speakerLabel,
+                                      speakerKey: group.speakerKey
+                                  }
+                              }
                 })
             } catch (error) {
                 failed++
-                this.debug(() =>
-                    [
-                        `memory user profile skipped: presetId=${presetId}`,
-                        `speaker=${group.speakerLabel}`,
-                        'reason=invoke-failed',
-                        `errorLength=${summarizeError(error).length}`
-                    ].join(' ')
-                )
+                this.logger.diagnostic('user-profile.skipped', {
+                    workflow: 'dream',
+                    presetId,
+                    speaker: group.speakerLabel,
+                    reason: 'invoke-failed',
+                    error: summarizeError(error)
+                })
                 continue
             }
 
-            this.debug(() =>
-                [
-                    `memory user profile llm output received: presetId=${presetId}`,
-                    `speaker=${group.speakerLabel}`,
-                    `outputLength=${structuredResult.output.length}`
-                ].join(' ')
-            )
             if (structuredResult.parseError !== null) {
                 failed++
                 const parseError = structuredResult.parseError
-                this.debug(() =>
-                    [
-                        `memory user profile skipped: presetId=${presetId}`,
-                        `speaker=${group.speakerLabel}`,
-                        'reason=structured-output-failed',
-                        `errorLength=${parseError.length}`
-                    ].join(' ')
-                )
+                this.logger.diagnostic('user-profile.skipped', {
+                    workflow: 'dream',
+                    presetId,
+                    speaker: group.speakerLabel,
+                    reason: 'structured-output-failed',
+                    error: parseError
+                })
                 continue
             }
 
@@ -228,13 +221,12 @@ export class LivingMemoryUserProfileService {
             const parsed = parsedProfiles[0]
             if (parsed === undefined) {
                 empty++
-                this.debug(() =>
-                    [
-                        `memory user profile skipped: presetId=${presetId}`,
-                        `speaker=${group.speakerLabel}`,
-                        'reason=empty-profiles'
-                    ].join(' ')
-                )
+                this.logger.diagnostic('user-profile.skipped', {
+                    workflow: 'dream',
+                    presetId,
+                    speaker: group.speakerLabel,
+                    reason: 'empty-profiles'
+                })
                 continue
             }
 
@@ -244,13 +236,12 @@ export class LivingMemoryUserProfileService {
             )
             if (content.length === 0) {
                 empty++
-                this.debug(() =>
-                    [
-                        `memory user profile skipped: presetId=${presetId}`,
-                        `speaker=${group.speakerLabel}`,
-                        'reason=empty-content'
-                    ].join(' ')
-                )
+                this.logger.diagnostic('user-profile.skipped', {
+                    workflow: 'dream',
+                    presetId,
+                    speaker: group.speakerLabel,
+                    reason: 'empty-content'
+                })
                 continue
             }
 

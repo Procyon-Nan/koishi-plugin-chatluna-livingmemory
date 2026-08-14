@@ -1,5 +1,5 @@
 import type { HumanMessage } from '@langchain/core/messages'
-import { Context, Logger, Service, Time } from 'koishi'
+import { Context, Service, Time } from 'koishi'
 import { LivingMemoryDreamService } from '../workflows/dream'
 import { LivingMemoryDreamWorkerClient } from '../workflows/dream/worker/client'
 import { LivingMemoryIncrementalDreamService } from '../workflows/dream/incremental'
@@ -45,7 +45,7 @@ import { LivingMemoryDreamCoordinator } from '../workflows/dream/coordinator'
 import { LivingMemoryExtractionCoordinator } from '../workflows/extraction/coordinator'
 import { LivingMemoryJobTracker } from '../workflows/job_tracker'
 import { LivingMemoryPresetCatalog } from '../memory/preset_catalog'
-import type { DebugLogger, QueueExtractionOptions } from '../memory/helpers'
+import type { QueueExtractionOptions } from '../memory/helpers'
 import { LivingMemoryRecallCoordinator } from '../workflows/recall/coordinator'
 import { LivingMemorySnapshotCache } from '../memory/snapshot/snapshot_cache'
 import { LivingMemoryVectorIndexService } from '../vector_index/service'
@@ -69,11 +69,12 @@ import {
     listResolvedMemorySnapshots,
     loadMemorySourceMessages
 } from './query_projections'
+import { LivingMemoryLogger } from '../logging/logger'
 
 export type { QueueExtractionOptions } from '../memory/helpers'
 
 export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
-    private readonly serviceLogger: Logger
+    readonly memoryLogger: LivingMemoryLogger
     private readonly repository: LivingMemoryRepository
     private readonly snapshotCache: LivingMemorySnapshotCache
     private readonly recallCoordinator: LivingMemoryRecallCoordinator
@@ -91,25 +92,23 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         public config: LivingMemoryConfig
     ) {
         super(ctx, 'chatluna_living_memory', true)
-        this.serviceLogger = ctx.logger('chatluna-livingmemory')
-        const debug = (message: string) => this.debug(message)
-        const trace: DebugLogger = (buildMessage) => this.trace(buildMessage)
+        this.memoryLogger = new LivingMemoryLogger(
+            ctx.logger('chatluna-livingmemory'),
+            () => this.config.debug
+        )
 
         this.repository = new LivingMemoryRepository(ctx)
         this.vectorIndex = new LivingMemoryVectorIndexService(
             ctx,
             config,
             this.repository,
-            this.serviceLogger
+            this.memoryLogger
         )
         this.dreamWorker = new LivingMemoryDreamWorkerClient({
             onFailure: (error) =>
-                this.serviceLogger.warn(
-                    [
-                        'memory background operation failed:',
-                        'workflow=dream',
-                        'operation=dream-worker'
-                    ].join(' '),
+                this.memoryLogger.error(
+                    'dream.worker.failed',
+                    { workflow: 'dream', operation: 'dream-worker' },
                     error
                 )
         })
@@ -121,7 +120,8 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             ctx,
             config,
             this.repository,
-            this.vectorIndex
+            this.vectorIndex,
+            this.memoryLogger
         )
         const extractor = new LivingMemoryExtractor(ctx, config.mainModel)
         const formatter = new LivingMemoryMessageFormatter()
@@ -135,13 +135,13 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             ctx,
             config,
             this.searchEngine,
-            trace
+            this.memoryLogger
         )
         this.userProfiles = new LivingMemoryUserProfileService(
             ctx,
             config,
             this.repository,
-            trace
+            this.memoryLogger
         )
         const dream = new LivingMemoryDreamService(
             ctx,
@@ -150,15 +150,14 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             this.mutations,
             this.vectorIndex,
             this.dreamWorker,
-            debug
+            this.memoryLogger
         )
         const incrementalDream = new LivingMemoryIncrementalDreamService(
             ctx,
             config,
             this.repository,
             this.mutations,
-            this.vectorIndex,
-            debug
+            this.vectorIndex
         )
 
         const jobTracker = new LivingMemoryJobTracker(this.repository)
@@ -168,7 +167,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             incrementalDream,
             this.snapshotCache,
             jobTracker,
-            trace
+            this.memoryLogger
         )
         this.recallCoordinator = new LivingMemoryRecallCoordinator(
             config,
@@ -177,15 +176,13 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             retriever,
             agenticRecall,
             this.snapshotCache,
-            this.serviceLogger,
-            trace
+            this.memoryLogger
         )
         this.dreamCoordinator = new LivingMemoryDreamCoordinator(
             config,
             dreamJobRunner,
             this.repository,
-            this.serviceLogger,
-            trace
+            this.memoryLogger
         )
         this.extractionCoordinator = new LivingMemoryExtractionCoordinator(
             config,
@@ -194,25 +191,24 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             formatter,
             extractor,
             (presetId) => this.queueAutoDreamIfThresholdReached(presetId),
-            this.serviceLogger,
-            trace
+            this.memoryLogger
         )
         this.presetCatalog = new LivingMemoryPresetCatalog(
             ctx,
             this.repository,
-            trace
+            this.memoryLogger
         )
 
         this.repository.defineTables()
         ctx.setInterval(() => {
             this.cleanupStaleJobs().catch((error) => {
-                this.serviceLogger.warn(
-                    [
-                        'memory background operation failed:',
-                        'workflow=maintenance',
-                        'operation=cleanup-stale-jobs',
-                        'trigger=scheduled'
-                    ].join(' '),
+                this.memoryLogger.warn(
+                    'maintenance.cleanup.failed',
+                    {
+                        workflow: 'maintenance',
+                        operation: 'cleanup-stale-jobs',
+                        trigger: 'scheduled'
+                    },
                     error
                 )
             })
@@ -222,9 +218,11 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     protected async start() {
         const repaired = await this.repository.migrateMemorySourceOriginsArray()
         if (repaired > 0) {
-            this.serviceLogger.info(
-                `memory startup migration: repaired ${repaired} invalid sourceOrigins record(s)`
-            )
+            this.memoryLogger.info('startup.migration.completed', {
+                workflow: 'maintenance',
+                operation: 'repair-source-origins',
+                repaired
+            })
         }
 
         try {
@@ -234,26 +232,30 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
                     'recovered: service restarted while job was running'
                 )
             if (recovered.length > 0) {
-                this.serviceLogger.info(
-                    `memory startup recovery: marked ${recovered.length} stale running job(s) as failed`
-                )
+                this.memoryLogger.info('startup.recovery.completed', {
+                    workflow: 'maintenance',
+                    operation: 'recover-stale-jobs',
+                    recovered: recovered.length
+                })
             }
         } catch (error) {
-            this.serviceLogger.warn(
-                [
-                    'memory background operation failed:',
-                    'workflow=maintenance',
-                    'operation=recover-stale-jobs',
-                    'trigger=startup'
-                ].join(' '),
+            this.memoryLogger.warn(
+                'startup.recovery.failed',
+                {
+                    workflow: 'maintenance',
+                    operation: 'recover-stale-jobs',
+                    trigger: 'startup'
+                },
                 error
             )
         }
 
         for (const warning of this.validateConfig()) {
-            this.serviceLogger.warn(
-                `memory config warning [${warning.code}] ${warning.message}`
-            )
+            this.memoryLogger.warn('config.warning', {
+                workflow: 'startup',
+                code: warning.code,
+                message: warning.message
+            })
         }
 
         await this.vectorIndex.start()
@@ -288,30 +290,18 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         )
     }
 
-    private debug(message: string) {
-        if (this.config.debug) {
-            this.serviceLogger.info(message)
-        }
-    }
-
-    private trace(buildMessage: () => string) {
-        if (this.config.debug) {
-            this.serviceLogger.info(buildMessage())
-        }
-    }
-
     private queueAutoDreamIfThresholdReached(presetId: string) {
         this.dreamCoordinator
             .queueAutoIfThresholdReached(presetId)
             .catch((error) => {
-                this.serviceLogger.warn(
-                    [
-                        'memory background operation failed:',
-                        'workflow=dream',
-                        'operation=queue-automatic',
-                        `presetId=${presetId}`,
-                        'trigger=memory-threshold'
-                    ].join(' '),
+                this.memoryLogger.warn(
+                    'dream.queue.failed',
+                    {
+                        workflow: 'dream',
+                        operation: 'queue-automatic',
+                        presetId,
+                        trigger: 'memory-threshold'
+                    },
                     error
                 )
             })

@@ -1,6 +1,6 @@
 import { readdir, unlink } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import type { Context, Logger } from 'koishi'
+import type { Context } from 'koishi'
 import type {
     IncrementalDreamNeighborInput,
     IncrementalDreamNeighborSearch,
@@ -37,6 +37,7 @@ import { VectorIndexStatusStore } from './status_store'
 import { VECTOR_INDEX_SCHEMA_VERSION } from './worker/schema'
 import { LivingMemoryVectorIndexWorkerClient } from './worker_client'
 import type { VectorIndexInspection } from './worker_protocol'
+import type { LivingMemoryLogger } from '../logging/logger'
 
 export type VectorIndexWorkerFactory = (
     onFailure: (error: Error) => void
@@ -88,14 +89,18 @@ export class LivingMemoryVectorIndexService
         ctx: Context,
         private readonly config: { embeddingModel: string; debug: boolean },
         private readonly repository: LivingMemoryVectorIndexRepository,
-        private readonly logger: Logger,
+        private readonly logger: LivingMemoryLogger,
         options: VectorIndexServiceOptions = {}
     ) {
         const schemaVersion =
             options.schemaVersion ?? VECTOR_INDEX_SCHEMA_VERSION
         this.workerFactory = options.workerFactory ?? createDefaultWorker
         this.directorySwitch = new VectorIndexDirectorySwitch({
-            reportWarning: (warning) => this.logger.warn(warning)
+            reportWarning: (warning) =>
+                this.logger.warn('vector-index.directory.warning', {
+                    workflow: 'vector-index',
+                    warning
+                })
         })
 
         this.indexDirectory = resolve(
@@ -135,7 +140,7 @@ export class LivingMemoryVectorIndexService
             onEmbeddingContext: (context) => {
                 this.embeddingContext = context
             },
-            debug: (message) => this.debug(message)
+            logger: this.logger
         })
     }
 
@@ -145,7 +150,11 @@ export class LivingMemoryVectorIndexService
         } catch (error) {
             const failure = toError(error)
             this.status.markFailure('unavailable', failure.message)
-            this.logger.warn(failure)
+            this.logger.error(
+                'vector-index.start.failed',
+                { workflow: 'vector-index', state: 'unavailable' },
+                failure
+            )
             throw error
         }
         try {
@@ -446,7 +455,11 @@ export class LivingMemoryVectorIndexService
             await this.removeLegacyIndexFiles()
         } catch (error) {
             this.logger.warn(
-                'memory background operation failed: workflow=vector-index operation=legacy-index-cleanup',
+                'vector-index.legacy-cleanup.failed',
+                {
+                    workflow: 'vector-index',
+                    operation: 'legacy-index-cleanup'
+                },
                 error
             )
         }
@@ -670,10 +683,11 @@ export class LivingMemoryVectorIndexService
             try {
                 await worker.dispose()
             } catch (disposeError) {
-                this.debug(
-                    `vector index candidate worker cleanup: ` +
-                        summarizeError(disposeError)
-                )
+                this.logger.diagnostic('vector-index.worker.cleanup.failed', {
+                    workflow: 'vector-index',
+                    operation: 'candidate-cleanup',
+                    error: summarizeError(disposeError)
+                })
             } finally {
                 if (this.worker === worker) {
                     this.worker = null
@@ -713,9 +727,11 @@ export class LivingMemoryVectorIndexService
         try {
             await worker.dispose()
         } catch (error) {
-            this.debug(
-                `vector index switch worker cleanup: ${summarizeError(error)}`
-            )
+            this.logger.diagnostic('vector-index.worker.cleanup.failed', {
+                workflow: 'vector-index',
+                operation: 'switch-cleanup',
+                error: summarizeError(error)
+            })
         }
     }
 
@@ -724,11 +740,11 @@ export class LivingMemoryVectorIndexService
             await worker.dispose()
         } catch (error) {
             this.logger.warn(
-                [
-                    'memory background operation failed:',
-                    'workflow=vector-index',
-                    'operation=vector-index-worker-dispose'
-                ].join(' '),
+                'vector-index.worker.dispose.failed',
+                {
+                    workflow: 'vector-index',
+                    operation: 'vector-index-worker-dispose'
+                },
                 error
             )
         }
@@ -763,7 +779,23 @@ export class LivingMemoryVectorIndexService
         await this.inspectAfterFailure()
         this.status.markMaintenanceFailure(state, failure.message)
         if (this.workerFailure === null) {
-            this.logger.warn(failure)
+            const event =
+                state === 'unavailable'
+                    ? 'vector-index.unavailable'
+                    : 'vector-index.maintenance.failed'
+            if (state === 'unavailable') {
+                this.logger.error(
+                    event,
+                    { workflow: 'vector-index', state },
+                    failure
+                )
+            } else {
+                this.logger.warn(
+                    event,
+                    { workflow: 'vector-index', state },
+                    failure
+                )
+            }
         }
     }
 
@@ -775,9 +807,10 @@ export class LivingMemoryVectorIndexService
             const inspection = await this.worker.inspect()
             this.status.applyInspection(inspection)
         } catch (error) {
-            this.debug(
-                `vector index failure inspection: ${summarizeError(error)}`
-            )
+            this.logger.diagnostic('vector-index.failure.inspection.failed', {
+                workflow: 'vector-index',
+                error: summarizeError(error)
+            })
         }
     }
 
@@ -785,7 +818,11 @@ export class LivingMemoryVectorIndexService
         this.stopping = true
         this.workerFailure = error
         this.status.markWorkerFailure(error)
-        this.logger.warn(error)
+        this.logger.error(
+            'vector-index.worker.failed',
+            { workflow: 'vector-index', state: 'unavailable' },
+            error
+        )
     }
 
     private async waitForMaintenanceDuringStop() {
@@ -821,11 +858,5 @@ export class LivingMemoryVectorIndexService
             () => undefined
         )
         return operation
-    }
-
-    private debug(message: string) {
-        if (this.config.debug) {
-            this.logger.info(message)
-        }
     }
 }

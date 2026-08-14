@@ -13,6 +13,8 @@ import {
 } from '../../shared/utils'
 import { buildRecallRewritePrompt } from '../../prompts'
 import type { PromptMessages } from '../../prompts/prompt_format'
+import { invokeLoggedModel } from '../../logging/model_calls'
+import type { LivingMemoryLogger } from '../../logging/logger'
 
 const semanticTextPattern = /[\p{L}\p{N}]/u
 const queryLineTerminatorPattern = /[。！？!?；;，,、：:]$/u
@@ -108,7 +110,8 @@ export class LivingMemoryRecallQueryBuilder {
     async resolve(
         scope: MemoryScope,
         currentMessage: LivingMemoryTranscriptMessage,
-        historyMessages: LivingMemoryTranscriptMessage[]
+        historyMessages: LivingMemoryTranscriptMessage[],
+        logger?: LivingMemoryLogger
     ): Promise<RecallQueryResult> {
         const rawInput = currentMessage.contentLines.join('\n')
         const cleanedQuery = normalizeQueryLines(currentMessage.contentLines)
@@ -188,10 +191,23 @@ export class LivingMemoryRecallQueryBuilder {
             historyMessages
         )
         try {
-            const result = await model.value.invoke([
+            const messages = [
                 new SystemMessage(rewritePromptMessages.systemPrompt),
                 new HumanMessage(rewritePromptMessages.inputPrompt)
-            ])
+            ]
+            const result =
+                logger == null
+                    ? await model.value.invoke(messages)
+                    : await invokeLoggedModel(
+                          model.value,
+                          messages,
+                          undefined,
+                          {
+                              logger,
+                              stage: 'query-rewrite',
+                              attempt: 1
+                          }
+                      )
             const rewriteOutput = stringifyModelContent(result.content).trim()
             const rewrittenQuery = normalizeRewriteOutput(rewriteOutput)
 

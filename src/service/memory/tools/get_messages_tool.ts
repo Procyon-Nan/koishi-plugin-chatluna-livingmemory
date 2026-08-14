@@ -2,7 +2,7 @@ import { StructuredTool } from '@langchain/core/tools'
 import type { ToolRunnableConfig } from '@langchain/core/tools'
 import type { Context } from 'koishi'
 import type { z } from 'zod'
-import type { LivingMemoryConfig } from '../../../contracts/workflows'
+import type { LivingMemoryLogger } from '../../logging/logger'
 import {
     livingMemoryGetMessagesInputSchema,
     livingMemoryGetMessagesToolName,
@@ -12,8 +12,6 @@ import {
     getLivingMemoryToolConfigurable,
     LivingMemoryToolRuntime
 } from './tool_runtime'
-
-type LivingMemoryGetMessagesToolConfig = Pick<LivingMemoryConfig, 'debug'>
 
 export const livingMemoryGetMessagesToolDescription = [
     '按记忆 ID 获取当前预设中记忆的来源对话消息。',
@@ -40,13 +38,12 @@ export class LivingMemoryGetMessagesTool extends StructuredTool {
 
     constructor(
         private readonly ctx: Context,
-        private readonly config: LivingMemoryGetMessagesToolConfig
+        logger: LivingMemoryLogger
     ) {
         super({ verboseParsingErrors: true })
         this.runtime = new LivingMemoryToolRuntime({
             toolName: livingMemoryGetMessagesToolName,
-            logger: ctx.logger('chatluna-livingmemory'),
-            isDebugEnabled: () => this.config.debug
+            logger
         })
     }
 
@@ -75,10 +72,10 @@ export class LivingMemoryGetMessagesTool extends StructuredTool {
 
         const output = JSON.stringify(result, null, 2)
 
-        this.runtime.logOutput(configurable, output, [
-            `resultCount=${result.memories.length}`,
-            `notFoundCount=${result.notFoundMemoryIds.length}`
-        ])
+        this.runtime.logOutput(configurable, output, {
+            resultCount: result.memories.length,
+            notFoundCount: result.notFoundMemoryIds.length
+        })
 
         return output
     }
