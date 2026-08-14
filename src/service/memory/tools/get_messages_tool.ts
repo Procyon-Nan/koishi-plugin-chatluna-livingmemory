@@ -7,7 +7,11 @@ import {
     livingMemoryGetMessagesToolName,
     memoryGetMessagesMaxIdCount
 } from './search_contract'
-import { getLivingMemoryToolConfigurable } from './tool_runtime'
+import {
+    describeLivingMemoryToolScopeFailure,
+    getLivingMemoryToolConfigurable,
+    resolveToolMemoryPresetId
+} from './tool_runtime'
 
 export const livingMemoryGetMessagesToolDescription = [
     '按记忆 ID 获取当前预设中记忆的来源对话消息。',
@@ -41,10 +45,11 @@ export class LivingMemoryGetMessagesTool extends StructuredTool {
         runConfig?: ToolRunnableConfig
     ) {
         const configurable = getLivingMemoryToolConfigurable(runConfig)
-        const presetId = configurable?.preset
-
-        if (typeof presetId !== 'string' || presetId.length === 0) {
-            throw new Error('Missing preset in the current tool call.')
+        const presetIdResolution = resolveToolMemoryPresetId(configurable)
+        if (presetIdResolution.ok === false) {
+            throw new Error(
+                describeLivingMemoryToolScopeFailure(presetIdResolution.reason)
+            )
         }
 
         const livingMemory = this.ctx.get('chatluna_living_memory')
@@ -52,7 +57,7 @@ export class LivingMemoryGetMessagesTool extends StructuredTool {
             throw new Error('Living Memory service not available')
         }
         const result = await livingMemory.getMemorySourceMessages(
-            presetId,
+            presetIdResolution.presetId,
             input.memoryIds
         )
 

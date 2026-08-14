@@ -11,7 +11,11 @@ import {
     searchKeywordRule,
     searchTextRule
 } from './search_contract'
-import { getLivingMemoryToolConfigurable } from './tool_runtime'
+import {
+    describeLivingMemoryToolScopeFailure,
+    getLivingMemoryToolConfigurable,
+    resolveToolMemoryPresetId
+} from './tool_runtime'
 export const livingMemorySearchToolDescription = [
     '在你的记忆库中搜索记忆。',
     '',
@@ -45,14 +49,15 @@ export class LivingMemorySearchTool extends StructuredTool {
         runConfig?: ToolRunnableConfig
     ) {
         const configurable = getLivingMemoryToolConfigurable(runConfig)
-        const presetId = configurable?.preset
-
-        if (typeof presetId !== 'string' || presetId.length === 0) {
-            throw new Error('Missing preset in the current tool call.')
+        const presetIdResolution = resolveToolMemoryPresetId(configurable)
+        if (presetIdResolution.ok === false) {
+            throw new Error(
+                describeLivingMemoryToolScopeFailure(presetIdResolution.reason)
+            )
         }
 
         const results = await this.searchProvider.searchMemories(
-            presetId,
+            presetIdResolution.presetId,
             input
         )
 

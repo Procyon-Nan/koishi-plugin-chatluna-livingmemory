@@ -12,8 +12,9 @@ import {
 import { collectUserProfileSpeakerLabels } from '../service/user_profile'
 import {
     type CharacterPresetPromptSource,
-    characterPresetSuffix,
-    renderCharacterPresetPrompt
+    renderCharacterPresetPrompt,
+    toCharacterMemoryConversationId,
+    toCharacterMemoryPresetId
 } from '../service/memory/helpers'
 import type { MemoryScope } from '../contracts/memory'
 
@@ -91,18 +92,6 @@ const isSession = (value: unknown): value is Session => {
     return isRecord(value) && typeof value.isDirect === 'boolean'
 }
 
-const toCharacterSessionKey = (session: Session) => {
-    const id = toNonEmptyString(
-        session.isDirect ? session.userId : session.guildId
-    )
-
-    if (id == null) {
-        return undefined
-    }
-
-    return `${session.isDirect ? 'private' : 'group'}:${id}`
-}
-
 const createCharacterScope = async (
     ctx: Context,
     payload: {
@@ -119,7 +108,7 @@ const createCharacterScope = async (
         payload.session,
         payload.focusMessage
     )
-    const characterPresetId = `${payload.presetName}${characterPresetSuffix}`
+    const characterPresetId = toCharacterMemoryPresetId(payload.presetName)
 
     return ctx.chatluna_living_memory.createScope(
         payload.sessionKey,
@@ -153,15 +142,18 @@ const createCharacterPromptScope = (
     }
 
     const presetName = toNonEmptyString(built.preset)
-    const sessionKey = toCharacterSessionKey(session)
+    if (presetName == null) {
+        return undefined
+    }
 
-    if (presetName == null || sessionKey == null) {
+    const conversationId = toCharacterMemoryConversationId(session)
+    if (conversationId == null) {
         return undefined
     }
 
     return ctx.chatluna_living_memory.createScope(
-        sessionKey,
-        `${presetName}${characterPresetSuffix}`
+        conversationId,
+        toCharacterMemoryPresetId(presetName)
     )
 }
 

@@ -14,6 +14,11 @@ import {
     LivingMemorySearchTool
 } from '../src/service/memory/tools/embedding_search_tool'
 import type { LivingMemoryEmbeddingSearchEngine } from '../src/service/workflows/recall/embedding_search_engine'
+import {
+    describeLivingMemoryToolScopeFailure,
+    resolveToolMemoryPresetId,
+    resolveToolMemoryScopeConfigurable
+} from '../src/service/memory/tools/tool_runtime'
 
 const context = {
     logger: () => ({ info: () => {}, warn: () => {} })
@@ -25,6 +30,17 @@ const mockEngine = {
 
 const searchTool = new LivingMemorySearchTool(mockEngine)
 const getMessagesTool = new LivingMemoryGetMessagesTool(context)
+
+const createRecordingSearchProvider = () => {
+    const presetIds: string[] = []
+    const provider = {
+        searchMemories: async (presetId: string) => {
+            presetIds.push(presetId)
+            return []
+        }
+    } as unknown as LivingMemoryEmbeddingSearchEngine
+    return { presetIds, provider }
+}
 
 const rejectsStringifiedArray = async (promise: Promise<unknown>) => {
     await assert.rejects(promise, (error: unknown) => {
@@ -61,4 +77,164 @@ it('exposes the strict source-message schema and rejects stringified ids', async
     await rejectsStringifiedArray(
         getMessagesTool.invoke({ memoryIds: '["memory-1"]' } as never)
     )
+})
+
+it('resolves the raw preset for ChatLuna tool calls', () => {
+    assert.deepEqual(
+        resolveToolMemoryPresetId({
+            preset: 'default',
+            source: undefined
+        }),
+        { ok: true, presetId: 'default' }
+    )
+})
+
+it('appends the Character suffix to the preset for Character tool calls', () => {
+    assert.deepEqual(
+        resolveToolMemoryPresetId({
+            preset: '史尔特里',
+            source: 'character'
+        }),
+        { ok: true, presetId: '史尔特里（Character）' }
+    )
+})
+
+it('rejects tool calls without a preset', () => {
+    assert.deepEqual(resolveToolMemoryPresetId({}), {
+        ok: false,
+        reason: 'missing-preset'
+    })
+    assert.match(
+        describeLivingMemoryToolScopeFailure('missing-preset'),
+        /Missing preset/u
+    )
+})
+
+it('rebuilds the ChatLuna scope from the tool configurable', () => {
+    assert.deepEqual(
+        resolveToolMemoryScopeConfigurable({
+            preset: 'default',
+            conversationId: 'conversation-1',
+            session: {
+                userId: 'user-1',
+                channelId: 'channel-1',
+                guildId: 'guild-1',
+                isDirect: false
+            }
+        }),
+        {
+            ok: true,
+            scope: {
+                conversationId: 'conversation-1',
+                presetId: 'default',
+                userId: 'user-1',
+                channelId: 'channel-1',
+                guildId: 'guild-1',
+                isDirect: false,
+                speakerId: 'user-1'
+            }
+        }
+    )
+})
+
+it('rebuilds the Character group and private scope from the session', () => {
+    assert.deepEqual(
+        resolveToolMemoryScopeConfigurable({
+            preset: '史尔特里',
+            source: 'character',
+            session: { userId: 'user-1', guildId: 'guild-1', isDirect: false }
+        }),
+        {
+            ok: true,
+            scope: {
+                conversationId: 'group:guild-1',
+                presetId: '史尔特里（Character）',
+                userId: 'user-1',
+                channelId: undefined,
+                guildId: 'guild-1',
+                isDirect: false,
+                speakerId: 'user-1'
+            }
+        }
+    )
+
+    assert.deepEqual(
+        resolveToolMemoryScopeConfigurable({
+            preset: '史尔特里',
+            source: 'character',
+            session: { userId: 'user-1', isDirect: true }
+        }),
+        {
+            ok: true,
+            scope: {
+                conversationId: 'private:user-1',
+                presetId: '史尔特里（Character）',
+                userId: 'user-1',
+                channelId: undefined,
+                guildId: undefined,
+                isDirect: true,
+                speakerId: 'user-1'
+            }
+        }
+    )
+})
+
+it('rejects Character tool calls without a session or session key', () => {
+    assert.deepEqual(
+        resolveToolMemoryScopeConfigurable({
+            preset: '史尔特里',
+            source: 'character'
+        }),
+        { ok: false, reason: 'missing-session' }
+    )
+
+    assert.deepEqual(
+        resolveToolMemoryScopeConfigurable({
+            preset: '史尔特里',
+            source: 'character',
+            session: { userId: 'user-1', isDirect: false }
+        }),
+        { ok: false, reason: 'missing-session-key' }
+    )
+})
+
+it('rejects ChatLuna tool calls without a conversation id', () => {
+    assert.deepEqual(
+        resolveToolMemoryScopeConfigurable({ preset: 'default' }),
+        { ok: false, reason: 'missing-conversation-id' }
+    )
+    assert.match(
+        describeLivingMemoryToolScopeFailure('missing-conversation-id'),
+        /Missing conversationId/u
+    )
+})
+
+it('queries the suffixed preset from the search tool in Character sessions', async () => {
+    const chatluna = createRecordingSearchProvider()
+    const character = createRecordingSearchProvider()
+
+    await new LivingMemorySearchTool(chatluna.provider).invoke(
+        { searchTexts: ['我们一起聊过的事情'], memoryTypes: ['all'] },
+        {
+            configurable: {
+                preset: 'default',
+                conversationId: 'conversation-1',
+                source: 'chatluna',
+                session: { userId: 'user-1', isDirect: true }
+            }
+        }
+    )
+    await new LivingMemorySearchTool(character.provider).invoke(
+        { searchTexts: ['我们一起聊过的事情'], memoryTypes: ['all'] },
+        {
+            configurable: {
+                preset: '史尔特里',
+                source: 'character',
+                session: { userId: 'user-1', guildId: 'guild-1', isDirect: false }
+            }
+        }
+    )
+
+    assert.deepEqual(chatluna.presetIds, ['default'])
+    assert.deepEqual(character.presetIds, ['史尔特里（Character）'])
 })

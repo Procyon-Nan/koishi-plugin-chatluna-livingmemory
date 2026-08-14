@@ -26,6 +26,43 @@ export interface CharacterPresetProvider {
 
 export const characterPresetSuffix = '（Character）'
 
+export interface CharacterMemoryScopeSession {
+    isDirect?: boolean
+    userId?: string
+    guildId?: string
+}
+
+const toCharacterSessionId = (value: unknown) => {
+    return typeof value === 'string' && value.trim().length > 0
+        ? value.trim()
+        : undefined
+}
+
+/**
+ * Character 集成约定的会话键规则：私聊为 private:{userId}，群聊为 group:{guildId}。
+ * 与 chatluna_character 事件 payload 中的 sessionKey 同格式；推导规则唯一实现于此，
+ * character 中间件与工具 runtime 共用，避免多处拷贝漂移。
+ */
+export const toCharacterMemoryConversationId = (
+    session: CharacterMemoryScopeSession
+) => {
+    const id = session.isDirect
+        ? toCharacterSessionId(session.userId)
+        : toCharacterSessionId(session.guildId)
+    if (id == null) {
+        return undefined
+    }
+
+    return `${session.isDirect ? 'private' : 'group'}:${id}`
+}
+
+/**
+ * Character 集成约定的预设命名规则：在原始 presetName 上追加 characterPresetSuffix。
+ */
+export const toCharacterMemoryPresetId = (presetName: string) => {
+    return `${presetName}${characterPresetSuffix}`
+}
+
 export const normalizeText = (value: string) => value.trim()
 
 export const scopeKey = (
