@@ -32,11 +32,19 @@ const isFileMissingError = (error: unknown) => {
     return error instanceof Error && 'code' in error && error.code === 'ENOENT'
 }
 
-const createLockConflictError = (lockPath: string, cause: unknown) => {
+const createLockConflictError = (
+    lockPath: string,
+    cause: unknown,
+    handoffTimedOut: boolean
+) => {
+    const detail = handoffTimedOut
+        ? `previous owner in this process did not release the vector ` +
+          `index lock within ${LOCK_HANDOFF_TIMEOUT}ms: ${lockPath}`
+        : `vector index lock is held by another process: ${lockPath}`
     return new LivingMemoryVectorIndexError(
         'lock-conflict',
         'unavailable',
-        `vector index lock is held by another process: ${lockPath}`,
+        detail,
         { cause }
     )
 }
@@ -94,8 +102,8 @@ export class LivingMemoryVectorIndexOwnershipLock {
 
     async acquire() {
         await mkdir(dirname(this.lockPath), { recursive: true })
-        await this.awaitInProcessHandoff()
-        await this.claimLock()
+        const handoffTimedOut = await this.awaitInProcessHandoff()
+        await this.claimLock(handoffTimedOut)
         this.registerHolder()
         this.acquired = true
         this.startRefresh()
@@ -148,21 +156,24 @@ export class LivingMemoryVectorIndexOwnershipLock {
     private async awaitInProcessHandoff() {
         const holder = lockHolders.get(this.lockPath)
         if (holder === undefined || !holder.releasing) {
-            return
+            return false
         }
         let timer: NodeJS.Timeout | undefined
-        const timeout = new Promise<void>((resolve) => {
-            timer = setTimeout(resolve, LOCK_HANDOFF_TIMEOUT)
+        const timedOut = new Promise<boolean>((resolve) => {
+            timer = setTimeout(() => resolve(true), LOCK_HANDOFF_TIMEOUT)
         })
         timer?.unref()
         try {
-            await Promise.race([holder.released, timeout])
+            return await Promise.race([
+                holder.released.then(() => false),
+                timedOut
+            ])
         } finally {
             clearTimeout(timer)
         }
     }
 
-    private async claimLock() {
+    private async claimLock(handoffTimedOut: boolean) {
         try {
             await this.createLockFile()
             return
@@ -171,7 +182,11 @@ export class LivingMemoryVectorIndexOwnershipLock {
                 throw error
             }
             if (!(await this.removeStaleLock())) {
-                throw createLockConflictError(this.lockPath, error)
+                throw createLockConflictError(
+                    this.lockPath,
+                    error,
+                    handoffTimedOut
+                )
             }
         }
 
@@ -179,7 +194,11 @@ export class LivingMemoryVectorIndexOwnershipLock {
             await this.createLockFile()
         } catch (error) {
             if (isFileExistsError(error)) {
-                throw createLockConflictError(this.lockPath, error)
+                throw createLockConflictError(
+                    this.lockPath,
+                    error,
+                    handoffTimedOut
+                )
             }
             throw error
         }
