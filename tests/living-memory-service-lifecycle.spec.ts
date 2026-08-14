@@ -22,14 +22,15 @@ const createService = (options: {
                 markStaleRunningJobsAsFailed: async () => []
             }
         },
-        serviceLogger: {
-            value: { info: () => {}, warn: () => {} }
-        },
         validateConfig: {
             value: () => []
         },
         vectorIndex: {
-            value: { start: options.vectorStart, stop: options.vectorStop }
+            value: {
+                start: options.vectorStart,
+                stop: options.vectorStop,
+                prepareLockRelease: () => {}
+            }
         },
         dreamWorker: {
             value: { start: options.dreamStart, stop: options.dreamStop }
