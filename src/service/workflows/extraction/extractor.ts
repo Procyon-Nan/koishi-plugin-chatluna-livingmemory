@@ -13,6 +13,7 @@ import {
     normalizeMemoryText
 } from '../../memory/entry_fields'
 import { invokeStructuredOutput } from '../structured_output'
+import { resolveScopeAssistantLabel } from '../../memory/helpers'
 import type { LivingMemoryLogger } from '../../logging/logger'
 
 export type LivingMemoryExtractionSkipReason =
@@ -110,7 +111,7 @@ export class LivingMemoryExtractor {
     }
 
     private buildPrompt(input: string, context: LivingMemoryExtractionContext) {
-        const assistantLabel = context.presetLabel?.trim() || context.presetId
+        const assistantLabel = resolveScopeAssistantLabel(context)
 
         return buildExtractionPrompt({
             input,

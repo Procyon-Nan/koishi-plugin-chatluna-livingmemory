@@ -13,10 +13,11 @@ import { collectUserProfileSpeakerLabels } from '../service/user_profile'
 import {
     type CharacterPresetPromptSource,
     renderCharacterPresetPrompt,
+    scopeKey,
     toCharacterMemoryConversationId,
     toCharacterMemoryPresetId
 } from '../service/memory/helpers'
-import type { MemoryScope } from '../contracts/memory'
+import { toNonEmptyString } from '../service/shared/utils'
 
 type CharacterMessage = CharacterTranscriptSourceMessage
 
@@ -76,12 +77,6 @@ interface CharacterEventRegistrar {
             payload: CharacterClearChatHistoryEventPayload
         ) => void | Promise<void>
     ): () => boolean
-}
-
-const toNonEmptyString = (value: unknown) => {
-    return typeof value === 'string' && value.trim().length > 0
-        ? value.trim()
-        : undefined
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
@@ -153,12 +148,6 @@ const createCharacterPromptScope = (
     )
 }
 
-const toScopeKey = (
-    scope: Pick<MemoryScope, 'presetId' | 'conversationId'>
-) => {
-    return `${scope.presetId}\n${scope.conversationId}`
-}
-
 const formatPromptVariable = (sections: PromptSections) => {
     const snapshot = sections.snapshot.trim()
     const userProfiles = sections.userProfiles.trim()
@@ -205,7 +194,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                         config.enableUserProfileInjection === true
                     let speakerLabels: string[] = []
                     if (userProfileInjectionEnabled) {
-                        const profileScopeKey = toScopeKey(scope)
+                        const profileScopeKey = scopeKey(scope)
                         speakerLabels =
                             profileSpeakerLabelsByScope.get(profileScopeKey) ??
                             []
@@ -301,7 +290,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 historyMessages
             )
             profileSpeakerLabelsByScope.set(
-                toScopeKey(scope),
+                scopeKey(scope),
                 collectUserProfileSpeakerLabels([
                     ...history,
                     currentTranscript.message
@@ -325,9 +314,9 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 payload.session,
                 payload.messages
             )
-            const scopeKey = toScopeKey(scope)
+            const key = scopeKey(scope)
             profileSpeakerLabelsByScope.set(
-                scopeKey,
+                key,
                 collectUserProfileSpeakerLabels(messages)
             )
 

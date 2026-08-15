@@ -183,6 +183,14 @@ export const resolveAssistantLabel = (presetId: string): string => {
 }
 
 /**
+ * 解析面向 LLM 的助手标签：优先使用 preset 展示名（presetLabel），
+ * 缺省或为空白时回退 presetId。
+ */
+export const resolveScopeAssistantLabel = (
+    scope: Pick<MemoryScope, 'presetLabel' | 'presetId'>
+): string => scope.presetLabel?.trim() || scope.presetId
+
+/**
  * 解析预设的系统提示词文本，用于向 LLM 提供角色人设上下文。
  * Character 预设通过 chatluna_character 获取，ChatLuna 预设通过 chatluna.preset 获取。
  */

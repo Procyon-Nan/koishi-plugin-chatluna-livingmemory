@@ -10,6 +10,12 @@ export interface EmbeddingsLike {
 
 const VECTOR_INDEX_PROBE_TEXT = 'living memory vector index dimension probe'
 
+/** 无旧版向量可复用时的空映射，供增量同步与重建路径共用。 */
+export const NO_LEGACY_EMBEDDINGS = new Map<
+    string,
+    LegacyMemoryEmbeddingRecord
+>()
+
 export interface VectorIndexEmbeddingContext {
     embeddings: EmbeddingsLike
     embeddingModelId: string

@@ -1,6 +1,7 @@
 import { Context } from 'koishi'
 import { HumanMessage, SystemMessage } from '@langchain/core/messages'
 import { LivingMemoryMessageFormatter } from '../../transcript/message_formatter'
+import { resolveScopeAssistantLabel } from '../../memory/helpers'
 import type {
     LivingMemoryTranscriptMessage,
     MemoryScope
@@ -73,10 +74,6 @@ const buildFallbackQuery = (
     }
 
     return `${currentMessage.speakerLabel}说：${cleanedQuery}`.trim()
-}
-
-const toAssistantLabel = (scope: MemoryScope) => {
-    return scope.presetLabel?.trim() || scope.presetId
 }
 
 export type RecallQueryFallbackReason =
@@ -285,7 +282,7 @@ export class LivingMemoryRecallQueryBuilder {
         currentTranscript: string,
         historyMessages: LivingMemoryTranscriptMessage[]
     ) {
-        const assistantLabel = toAssistantLabel(scope)
+        const assistantLabel = resolveScopeAssistantLabel(scope)
         const recentMessages = this.formatter.takeRecentRounds(
             historyMessages,
             this.config.recallHistoryWindowRounds

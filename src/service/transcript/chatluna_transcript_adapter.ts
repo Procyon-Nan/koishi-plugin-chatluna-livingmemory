@@ -1,10 +1,11 @@
 import type { BaseMessage } from '@langchain/core/messages'
 import type { MemoryScope } from '../../contracts/memory'
+import { resolveScopeAssistantLabel } from '../memory/helpers'
+import { toNonEmptyString } from '../shared/utils'
 import {
     createLivingMemoryTranscriptMessageResult,
     parseLivingMemorySpeakerLine,
-    toLivingMemoryDate,
-    toNonEmptyString
+    toLivingMemoryDate
 } from './transcript_message'
 
 export const livingMemoryRawContentKey = 'living_memory_raw_content'
@@ -118,10 +119,6 @@ const getUserSpeakerLabel = (scope: MemoryScope, message: BaseMessage) => {
     )
 }
 
-const getAssistantSpeakerLabel = (scope: MemoryScope) => {
-    return toNonEmptyString(scope.presetLabel) ?? scope.presetId
-}
-
 export const setLivingMemoryRawContent = (
     message: BaseMessage,
     rawContent: string
@@ -157,7 +154,7 @@ export const toChatLunaTranscriptMessageResult = (
         speakerLabel:
             type === 'human'
                 ? getUserSpeakerLabel(scope, message)
-                : getAssistantSpeakerLabel(scope),
+                : resolveScopeAssistantLabel(scope),
         content: resolved.parts,
         createdAt:
             getChatLunaMessageCreatedAt(message) ?? options.fallbackCreatedAt,

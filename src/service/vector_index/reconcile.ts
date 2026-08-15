@@ -1,7 +1,4 @@
-import type {
-    LegacyMemoryEmbeddingRecord,
-    MemoryIndexSourceRecord
-} from '../../contracts/vector_index'
+import type { MemoryIndexSourceRecord } from '../../contracts/vector_index'
 import { summarizeError } from '../shared/utils'
 import type { LivingMemoryVectorIndexWorkerClient } from './worker_client'
 import type {
@@ -10,12 +7,15 @@ import type {
     VectorIndexUpsert
 } from './worker_protocol'
 import { createVectorIndexDocument } from './documents'
-import { type EmbeddingsLike, embedMemoryIndexSources } from './embedding'
+import {
+    type EmbeddingsLike,
+    embedMemoryIndexSources,
+    NO_LEGACY_EMBEDDINGS
+} from './embedding'
 import { LivingMemoryVectorIndexError } from './errors'
 
 const RECONCILE_PAGE_SIZE = 50
 const INVENTORY_PAGE_SIZE = 500
-const NO_LEGACY_EMBEDDINGS = new Map<string, LegacyMemoryEmbeddingRecord>()
 
 export interface VectorIndexReconcileRepository {
     listEntryIndexSourcePageByPreset(

@@ -4,6 +4,7 @@ import {
     toCharacterMemoryConversationId,
     toCharacterMemoryPresetId
 } from '../helpers'
+import { toNonEmptyString } from '../../shared/utils'
 
 export type LivingMemoryToolConfigurable = {
     preset?: unknown
@@ -16,12 +17,6 @@ export const getLivingMemoryToolConfigurable = (
     runConfig?: ToolRunnableConfig
 ) => {
     return runConfig?.configurable as LivingMemoryToolConfigurable | undefined
-}
-
-const toNonEmptyString = (value: unknown) => {
-    return typeof value === 'string' && value.trim().length > 0
-        ? value.trim()
-        : undefined
 }
 
 interface LivingMemoryToolSessionFields {

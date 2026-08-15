@@ -51,6 +51,7 @@ import {
     LivingMemorySearchTool,
     livingMemorySearchToolDescription
 } from '../../memory/tools/embedding_search_tool'
+import { resolveScopeAssistantLabel } from '../../memory/helpers'
 import type { LivingMemoryEmbeddingSearchEngine } from './embedding_search_engine'
 
 type LivingMemoryAgenticRecallConfig = Pick<
@@ -86,10 +87,6 @@ export interface LivingMemoryAgenticRecallTrace {
     prompt: AgenticRecallPromptMessages
     finalOutput: string
     item: AgenticMemorySnapshotItem
-}
-
-const toAssistantLabel = (scope: MemoryScope) => {
-    return scope.presetLabel?.trim() || scope.presetId
 }
 
 const uniqueTexts = (groups: (readonly string[] | undefined)[]) => {
@@ -323,7 +320,7 @@ export class LivingMemoryAgenticRecallExecutor {
             throw new Error('subModel is unavailable.')
         }
 
-        const assistantLabel = toAssistantLabel(scope)
+        const assistantLabel = resolveScopeAssistantLabel(scope)
         const currentTranscript = this.formatter.toExtractionPayload([
             currentMessage
         ]).input

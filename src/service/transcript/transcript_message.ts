@@ -1,4 +1,5 @@
 import type { LivingMemoryTranscriptMessage } from '../../contracts/memory'
+import { toNonEmptyString } from '../shared/utils'
 
 export type LivingMemoryMessageTimeValue = Date | number | string
 
@@ -30,12 +31,6 @@ export type LivingMemoryTranscriptMessageResult =
 const bracketSpeakerLinePattern = /^\[([^\]]+)\]\s*说\s*[:：]\s*(.*)$/u
 const bareSpeakerLinePattern =
     /^([^\s:：\[\]，。！？,.!?]{1,64})\s*说\s*[:：]\s*(.*)$/u
-
-export const toNonEmptyString = (value: unknown) => {
-    return typeof value === 'string' && value.trim().length > 0
-        ? value.trim()
-        : null
-}
 
 const normalizeBracketSpeaker = (speaker: string) => {
     const parts = speaker

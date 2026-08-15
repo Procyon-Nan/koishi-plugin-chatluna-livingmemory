@@ -1,15 +1,11 @@
-import type {
-    LegacyMemoryEmbeddingRecord,
-    MemoryIndexMutationBatch
-} from '../../contracts/vector_index'
+import type { MemoryIndexMutationBatch } from '../../contracts/vector_index'
 import { createVectorIndexDocument } from './documents'
 import {
     embedMemoryIndexSources,
+    NO_LEGACY_EMBEDDINGS,
     type VectorIndexEmbeddingContext
 } from './embedding'
 import type { VectorIndexMutation, VectorIndexUpsert } from './worker_protocol'
-
-const NO_LEGACY_EMBEDDINGS = new Map<string, LegacyMemoryEmbeddingRecord>()
 
 export const buildVectorIndexWorkerMutation = async (
     batch: MemoryIndexMutationBatch,

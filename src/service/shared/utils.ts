@@ -6,6 +6,15 @@ export const isModelConfigured = (model: unknown): model is string => {
     return trimmed.length > 0 && trimmed !== '无'
 }
 
+/**
+ * 读取非空字符串：去除首尾空白；空白字符串或非字符串输入返回 undefined。
+ */
+export const toNonEmptyString = (value: unknown) => {
+    return typeof value === 'string' && value.trim().length > 0
+        ? value.trim()
+        : undefined
+}
+
 export const summarizeError = (error: unknown) => {
     if (error instanceof Error) {
         return error.stack ?? error.message

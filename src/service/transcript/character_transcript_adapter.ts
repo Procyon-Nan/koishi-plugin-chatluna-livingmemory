@@ -3,6 +3,8 @@ import type {
     LivingMemoryCompletedRound,
     MemoryScope
 } from '../../contracts/memory'
+import { resolveScopeAssistantLabel } from '../memory/helpers'
+import { toNonEmptyString } from '../shared/utils'
 import { createLivingMemoryTranscriptMessageResult } from './transcript_message'
 
 export interface CharacterTranscriptSourceMessage {
@@ -11,12 +13,6 @@ export interface CharacterTranscriptSourceMessage {
     id?: string
     messageId?: string
     timestamp?: number
-}
-
-const toNonEmptyString = (value: unknown) => {
-    return typeof value === 'string' && value.trim().length > 0
-        ? value.trim()
-        : undefined
 }
 
 type CharacterGlobalNameCache = Map<string, Promise<string | undefined>>
@@ -163,7 +159,7 @@ const resolveCharacterSpeakerLabel = async (
     cache?: CharacterGlobalNameCache
 ) => {
     if (isCharacterBotMessage(session, message)) {
-        return toNonEmptyString(scope.presetLabel) ?? scope.presetId
+        return resolveScopeAssistantLabel(scope)
     }
 
     return resolveCharacterUserGlobalName(session, message, cache)

@@ -13,12 +13,7 @@ import {
 import { collectUserProfileSpeakerLabels } from '../service/user_profile'
 import type { LivingMemoryTranscriptMessage } from '../contracts/memory'
 import { renderChatLunaPresetPrompt } from '../service/memory/helpers'
-
-const toNonEmptyString = (value: unknown) => {
-    return typeof value === 'string' && value.trim().length > 0
-        ? value.trim()
-        : undefined
-}
+import { toNonEmptyString } from '../service/shared/utils'
 
 const resolveSpeakerName = (session: Session, message: HumanMessage) => {
     const messageName = toNonEmptyString((message as { name?: unknown }).name)
