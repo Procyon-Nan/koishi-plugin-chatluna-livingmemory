@@ -114,7 +114,8 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         })
         this.mutations = new LivingMemoryMutationService(
             this.repository,
-            this.vectorIndex
+            this.vectorIndex,
+            this.memoryLogger
         )
         const retriever = new LivingMemoryRetriever(
             ctx,

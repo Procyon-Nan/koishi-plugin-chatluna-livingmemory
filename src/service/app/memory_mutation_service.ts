@@ -22,6 +22,7 @@ import type { LivingMemoryRepository } from '../persistence/repository'
 import { PresetTaskQueue } from '../shared/preset_task_queue'
 import { summarizeError } from '../shared/utils'
 import { LivingMemoryFactsCommittedError } from '../vector_index/errors'
+import type { LivingMemoryLogger } from '../logging/logger'
 
 type MemoryFactRepository = Pick<
     LivingMemoryRepository,
@@ -44,7 +45,8 @@ export class LivingMemoryMutationService
 
     constructor(
         private readonly repository: MemoryFactRepository,
-        private readonly vectorIndex: MemoryIndexMutationSink
+        private readonly vectorIndex: MemoryIndexMutationSink,
+        private readonly logger: LivingMemoryLogger
     ) {}
 
     async appendMemories(
@@ -74,6 +76,10 @@ export class LivingMemoryMutationService
 
     async createMemory(scope: MemoryScope, input: MemoryMutationInput) {
         return this.runPresetMutation(scope.presetId, async () => {
+            // 落库前预检索引就绪状态：未就绪时立即失败且零副作用。
+            // 仅 createMemory 预检；appendMemories 的提取窗口过期即失，
+            // 宁可落库后进入 dirty 由对账修复，也不能丢轮次。
+            this.vectorIndex.assertPresetReady(scope.presetId)
             const record = await this.repository.createMemory(scope, input)
             await this.applyCommittedMutation({
                 presetId: record.presetId,
@@ -238,8 +244,27 @@ export class LivingMemoryMutationService
         try {
             await this.vectorIndex.applyMutation(batch)
         } catch (error) {
+            // 事实已提交而索引同步失败：调度一次后台对账自愈，
+            // 把 preset 从 dirty 恢复到 ready，避免召回持续失败直到重启。
+            this.scheduleIndexReconcile(batch.presetId)
             throw this.factsCommittedError(batch.presetId, error)
         }
+    }
+
+    private scheduleIndexReconcile(presetId: string) {
+        this.vectorIndex
+            .reconcilePreset(presetId, 'mutation index sync failure')
+            .catch((error: unknown) => {
+                this.logger.warn(
+                    'memory.index.reconcile.failed',
+                    {
+                        workflow: 'memory',
+                        operation: 'schedule-index-reconcile',
+                        presetId
+                    },
+                    error
+                )
+            })
     }
 
     private runPresetMutation<T>(presetId: string, task: () => Promise<T>) {

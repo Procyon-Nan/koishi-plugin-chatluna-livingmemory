@@ -142,6 +142,7 @@ export interface ManualDreamVectorReader {
 
 export interface MemoryIndexMutationSink {
     waitForMaintenance(): Promise<void>
+    assertPresetReady(presetId: string): void
     applyMutation(batch: MemoryIndexMutationBatch): Promise<void>
     clearPreset(presetId: string): Promise<void>
     reconcilePreset(presetId: string, reason: string): Promise<MemoryJobRecord>
