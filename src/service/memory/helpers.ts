@@ -65,6 +65,10 @@ export const toCharacterMemoryPresetId = (presetName: string) => {
 
 export const normalizeText = (value: string) => value.trim()
 
+/**
+ * 作用域唯一键：presetId 与 conversationId 以换行符拼接。
+ * 提取缓冲、召回锁与说话人标签缓存均以该键隔离数据。
+ */
 export const scopeKey = (
     scope: Pick<MemoryScope, 'presetId' | 'conversationId'>
 ) => `${scope.presetId}\n${scope.conversationId}`
@@ -122,6 +126,10 @@ const stringifyMessageContent = (content: unknown) => {
         .join('\n')
 }
 
+/**
+ * 将渲染后的 preset 系统提示词整理为带说明头的纯文本块，
+ * 供提取与召回提示词内嵌角色人设上下文。
+ */
 export const formatRenderedPresetPrompt = (messages: BaseMessage[]) => {
     const formattedMessages = messages
         .filter((message) => message.getType() === 'system')

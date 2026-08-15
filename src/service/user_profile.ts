@@ -41,9 +41,9 @@ interface UserProfileGroup {
     existingProfile?: UserProfileRecord
 }
 
-const normalizeText = (value: string) => value.replace(/\s+/gu, ' ').trim()
+const collapseWhitespace = (value: string) => value.replace(/\s+/gu, ' ').trim()
 const normalizeSearchText = (value: string) =>
-    normalizeText(value).toLowerCase()
+    collapseWhitespace(value).toLowerCase()
 
 const unique = <T>(items: T[]) => Array.from(new Set(items))
 
@@ -59,10 +59,10 @@ const truncateText = (value: string, maxLength: number) => {
 }
 
 export const normalizeUserProfileSpeakerKey = (speakerLabel: string) => {
-    return normalizeText(speakerLabel).toLowerCase()
+    return collapseWhitespace(speakerLabel).toLowerCase()
 }
 
-export const normalizeUserProfileSpeakerLabel = normalizeText
+export const normalizeUserProfileSpeakerLabel = collapseWhitespace
 
 export const collectUserProfileSpeakerLabels = (
     messages: LivingMemoryTranscriptMessage[]
@@ -75,7 +75,7 @@ export const collectUserProfileSpeakerLabels = (
             continue
         }
 
-        const label = normalizeText(message.speakerLabel)
+        const label = collapseWhitespace(message.speakerLabel)
         const key = normalizeUserProfileSpeakerKey(label)
         if (label.length === 0 || key.length === 0 || seen.has(key)) {
             continue
@@ -417,7 +417,7 @@ export class LivingMemoryUserProfileService {
 
     private normalizeProfileContent(speakerLabel: string, content: string) {
         return truncateText(
-            this.stripGeneratedTitle(speakerLabel, normalizeText(content)),
+            this.stripGeneratedTitle(speakerLabel, collapseWhitespace(content)),
             maxProfileLength
         )
     }

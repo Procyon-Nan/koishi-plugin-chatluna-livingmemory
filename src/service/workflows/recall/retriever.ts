@@ -11,6 +11,9 @@ import type { LivingMemoryLogger } from '../../logging/logger'
 
 type LivingMemoryRetrieverConfig = Pick<LivingMemoryConfig, 'rerankModel'>
 
+/** 配置了 Reranker 时，语义检索候选量按 topK 扩大该倍数后再重排。 */
+const RERANK_CANDIDATE_MULTIPLIER = 3
+
 export class LivingMemoryRetriever {
     constructor(
         private readonly ctx: Context,
@@ -26,10 +29,10 @@ export class LivingMemoryRetriever {
         limit: number,
         logger: LivingMemoryLogger = this.logger
     ): Promise<RetrievedMemoryItem[]> {
-        let candidateCount = limit
-        if (isModelConfigured(this.config.rerankModel)) {
-            candidateCount = limit * 3
-        }
+        const hasReranker = isModelConfigured(this.config.rerankModel)
+        const candidateCount = hasReranker
+            ? limit * RERANK_CANDIDATE_MULTIPLIER
+            : limit
         const hits = await this.vectorSearch.searchSemantic({
             presetId,
             searchTexts: [input],
@@ -52,7 +55,7 @@ export class LivingMemoryRetriever {
             return []
         }
 
-        if (!isModelConfigured(this.config.rerankModel)) {
+        if (!hasReranker) {
             logger.diagnostic('recall.rerank.skipped', {
                 workflow: 'recall',
                 reason: 'model-not-configured'

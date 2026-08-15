@@ -1,3 +1,6 @@
+/**
+ * 判断模型配置是否有效：空字符串与配置界面的占位值「无」均视为未配置。
+ */
 export const isModelConfigured = (model: unknown): model is string => {
     if (typeof model !== 'string') {
         return false
@@ -15,6 +18,9 @@ export const toNonEmptyString = (value: unknown) => {
         : undefined
 }
 
+/**
+ * 将任意抛出值转为可记录的文本；Error 优先保留堆栈以便定位。
+ */
 export const summarizeError = (error: unknown) => {
     if (error instanceof Error) {
         return error.stack ?? error.message
@@ -27,6 +33,7 @@ export const summarizeError = (error: unknown) => {
     return JSON.stringify(error)
 }
 
+/** 将任意抛出值规范为 Error，非 Error 值包装为消息。 */
 export const toError = (error: unknown) => {
     if (error instanceof Error) {
         return error
@@ -34,6 +41,9 @@ export const toError = (error: unknown) => {
     return new Error(String(error))
 }
 
+/**
+ * 提取模型消息正文的纯文本：多分片内容仅拼接 text 分片，其余形式序列化为 JSON。
+ */
 export const stringifyModelContent = (content: unknown) => {
     if (typeof content === 'string') {
         return content

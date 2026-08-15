@@ -40,6 +40,10 @@ const normalizeBracketSpeaker = (speaker: string) => {
     return parts[parts.length - 1] ?? speaker.trim()
 }
 
+/**
+ * 解析「昵称说：内容」格式的话前行（含方括号变体），
+ * 用于从转写文本中识别并剥离说话者前缀；不匹配时返回 null。
+ */
 export const parseLivingMemorySpeakerLine = (line: string) => {
     const bracketMatched = line.match(bracketSpeakerLinePattern)
     if (bracketMatched != null) {

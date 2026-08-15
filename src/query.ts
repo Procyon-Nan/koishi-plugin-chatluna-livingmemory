@@ -85,6 +85,10 @@ const paginate = <T>(
     }
 }
 
+/**
+ * 按查询条件过滤、排序并分页记忆列表；facet 统计基于过滤前的全集，
+ * 供前端在切换筛选时展示各选项条数。
+ */
 export const filterMemoryList = (
     items: MemoryEntryRecord[],
     query: MemoryListQuery
