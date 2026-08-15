@@ -13,9 +13,17 @@ import {
     livingMemoryGetMessagesToolName,
     livingMemorySearchToolName
 } from '../service/memory/tools/search_contract'
+import { LivingMemoryCreateMemoryTool } from '../service/memory/tools/create_memory_tool'
+import {
+    livingMemoryCreateMemoryToolDescription,
+    livingMemoryCreateMemoryToolName
+} from '../service/memory/tools/create_contract'
 
 const toChatLunaStructuredTool = (
-    tool: LivingMemorySearchTool | LivingMemoryGetMessagesTool
+    tool:
+        | LivingMemorySearchTool
+        | LivingMemoryGetMessagesTool
+        | LivingMemoryCreateMemoryTool
 ): ReturnType<ChatLunaTool['createTool']> => {
     // ChatLuna and this package can resolve different @langchain/core copies in
     // local workspaces, so keep the cast at the registration boundary.
@@ -71,11 +79,36 @@ export function apply(ctx: Context, config: LivingMemoryConfig) {
                 }
             }
         )
+        // 写入型工具默认不注册，由 enableMemoryCreationTool 显式开启。
+        const disposeCreateMemory = config.enableMemoryCreationTool
+            ? ctx.chatluna.platform.registerTool(
+                  livingMemoryCreateMemoryToolName,
+                  {
+                      description: livingMemoryCreateMemoryToolDescription,
+                      selector(_history: unknown[]) {
+                          return true
+                      },
+                      meta: {
+                          ...livingMemoryToolMeta,
+                          tags: ['living-memory', 'create', 'write']
+                      },
+                      createTool() {
+                          return toChatLunaStructuredTool(
+                              new LivingMemoryCreateMemoryTool(
+                                  ctx.chatluna_living_memory,
+                                  config.memoryCreateToolMaxMemories
+                              )
+                          )
+                      }
+                  }
+              )
+            : null
 
         ctx.effect(() => {
             return () => {
                 disposeSearch()
                 disposeGetMessages()
+                disposeCreateMemory?.()
             }
         })
     })

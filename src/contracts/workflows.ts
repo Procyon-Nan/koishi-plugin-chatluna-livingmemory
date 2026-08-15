@@ -156,6 +156,8 @@ export interface LivingMemoryConfig {
     recallTopK: number
     memorySearchToolMaxResults: number
     memorySearchMinSimilarity: number
+    enableMemoryCreationTool: boolean
+    memoryCreateToolMaxMemories: number
     debug: boolean
 }
 
@@ -171,6 +173,13 @@ export interface LivingMemorySearchProvider {
         presetId: string,
         input: LivingMemorySearchInput
     ): Promise<LivingMemorySearchResult[]>
+}
+
+export interface LivingMemoryCreationProvider {
+    createMemory(
+        scope: MemoryScope,
+        input: MemoryMutationInput
+    ): Promise<MemoryEntryRecord>
 }
 
 export interface SnapshotRepository {

@@ -117,7 +117,20 @@ export const Config: Schema<Config> = Schema.intersect([
                 'living_memory_search 的最低余弦相似度阈值。低于此分数的语义命中将被过滤；' +
                     '设为 0 表示不设阈值。关键词命中的条目不受此限制。'
             )
-            .default(0)
+            .default(0),
+        enableMemoryCreationTool: Schema.boolean()
+            .description(
+                '注册 living_memory_create_memory 工具，允许模型在对话中主动创建长期记忆。'
+            )
+            .default(false),
+        memoryCreateToolMaxMemories: Schema.number()
+            .min(1)
+            .max(60)
+            .step(1)
+            .description(
+                'living_memory_create_memory 单次调用允许提交的记忆条数上限。'
+            )
+            .default(10)
     }).description('工具配置'),
     Schema.object({
         enableAutoDream: Schema.boolean()
