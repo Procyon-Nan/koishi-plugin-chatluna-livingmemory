@@ -6,6 +6,11 @@ import { DREAM_PARTITION_MAX_SIZE } from './partitioning'
 import type { DreamCluster, DreamStage } from './types'
 import type { LivingMemoryLogger } from '../../logging/logger'
 
+// 密度聚类的簇规模由数据几何决定，无法约束单次送入 LLM 的记忆数量。
+// 超过该上限的簇按关键词共现做平衡切分，与增量 Dream 的
+// INCREMENTAL_DREAM_TOP_K = 30 保持同一量级。
+const DREAM_CLUSTER_UNIT_MAX_SIZE = 30
+
 const toClusterSizeFields = (
     clusters: [number, DreamMemoryEntryRecord[]][]
 ) => {
@@ -77,7 +82,31 @@ export class DreamClusterer {
             clusters,
             logger
         )
-        return clusters
+        return this.splitOversizedClusters(clusters)
+    }
+
+    private async splitOversizedClusters(
+        clusters: DreamCluster[]
+    ): Promise<DreamCluster[]> {
+        const result: DreamCluster[] = []
+        for (const cluster of clusters) {
+            if (cluster.entries.length <= DREAM_CLUSTER_UNIT_MAX_SIZE) {
+                result.push(cluster)
+                continue
+            }
+            const chunks = await this.worker.partition(
+                cluster.entries,
+                DREAM_CLUSTER_UNIT_MAX_SIZE
+            )
+            chunks.forEach((entries, index) => {
+                result.push({
+                    id: `${cluster.id}:chunk-${index + 1}`,
+                    reason: `${cluster.reason}:chunk-${index + 1}`,
+                    entries
+                })
+            })
+        }
+        return result
     }
 
     private async appendNoiseClusters(
