@@ -153,102 +153,22 @@ export class LivingMemoryUserProfileService {
         let empty = 0
 
         for (const group of profileGroups) {
-            const prompt = buildUserProfilePrompt({
+            const outcome = await this.generateProfileForGroup(
+                presetId,
+                group,
+                model,
                 assistantLabel,
                 presetPrompt,
-                group,
-                maxProfileLength
-            })
-            let structuredResult
-            try {
-                structuredResult = await invokeStructuredOutput({
-                    model,
-                    prompt,
-                    toolName: userProfileResultToolName,
-                    toolDescription: userProfileResultToolDescription,
-                    schema: createUserProfileResultSchema({
-                        speakerLabel: group.speakerLabel,
-                        allowedSourceMemoryIds:
-                            this.getProfileFallbackSourceMemoryIds(group)
-                    }),
-                    stringifiedArrayField: 'profiles',
-                    context: {
-                        presetId,
-                        conversationId: [
-                            'user-profile',
-                            presetId,
-                            group.speakerKey
-                        ].join(':')
-                    },
-                    logging:
-                        logger == null
-                            ? undefined
-                            : {
-                                  logger,
-                                  workflow: 'dream',
-                                  stage: 'user-profile',
-                                  fields: {
-                                      speaker: group.speakerLabel,
-                                      speakerKey: group.speakerKey
-                                  }
-                              }
-                })
-            } catch (error) {
-                failed++
-                this.logProfileSkipped(runLogger, {
-                    presetId,
-                    speaker: group.speakerLabel,
-                    reason: 'invoke-failed',
-                    error: summarizeError(error)
-                })
-                continue
-            }
-
-            if (structuredResult.parseError !== null) {
-                failed++
-                const parseError = structuredResult.parseError
-                this.logProfileSkipped(runLogger, {
-                    presetId,
-                    speaker: group.speakerLabel,
-                    reason: 'structured-output-failed',
-                    error: parseError
-                })
-                continue
-            }
-
-            const parsedProfiles = structuredResult.value.profiles
-            const parsed = parsedProfiles[0]
-            if (parsed === undefined) {
-                empty++
-                this.logProfileSkipped(runLogger, {
-                    presetId,
-                    speaker: group.speakerLabel,
-                    reason: 'empty-profiles'
-                })
-                continue
-            }
-
-            const content = this.normalizeProfileContent(
-                group.speakerLabel,
-                parsed.content
+                logger,
+                runLogger
             )
-            if (content.length === 0) {
+            if (outcome === 'generated') {
+                generated++
+            } else if (outcome === 'failed') {
+                failed++
+            } else {
                 empty++
-                this.logProfileSkipped(runLogger, {
-                    presetId,
-                    speaker: group.speakerLabel,
-                    reason: 'empty-content'
-                })
-                continue
             }
-
-            await this.repository.replaceUserProfile(presetId, {
-                speakerKey: group.speakerKey,
-                speakerLabel: group.speakerLabel,
-                content,
-                sourceMemoryIds: unique(parsed.sourceMemoryIds)
-            })
-            generated++
         }
 
         return {
@@ -265,6 +185,112 @@ export class LivingMemoryUserProfileService {
                 `failed=${failed}`
             ].join(' ')
         }
+    }
+
+    /**
+     * 生成并写入单个说话者的画像。返回结果区分：generated 表示已写入，
+     * failed 表示模型调用或结构化校验失败，empty 表示产出为空；
+     * 后两类跳过原因均已通过 logProfileSkipped 记录。
+     */
+    private async generateProfileForGroup(
+        presetId: string,
+        group: UserProfileGroup,
+        model: ChatLunaChatModel,
+        assistantLabel: string,
+        presetPrompt: string,
+        logger: LivingMemoryLogger | undefined,
+        runLogger: LivingMemoryLogger
+    ): Promise<'generated' | 'failed' | 'empty'> {
+        const prompt = buildUserProfilePrompt({
+            assistantLabel,
+            presetPrompt,
+            group,
+            maxProfileLength
+        })
+        let structuredResult
+        try {
+            structuredResult = await invokeStructuredOutput({
+                model,
+                prompt,
+                toolName: userProfileResultToolName,
+                toolDescription: userProfileResultToolDescription,
+                schema: createUserProfileResultSchema({
+                    speakerLabel: group.speakerLabel,
+                    allowedSourceMemoryIds:
+                        this.getProfileFallbackSourceMemoryIds(group)
+                }),
+                stringifiedArrayField: 'profiles',
+                context: {
+                    presetId,
+                    conversationId: [
+                        'user-profile',
+                        presetId,
+                        group.speakerKey
+                    ].join(':')
+                },
+                logging:
+                    logger == null
+                        ? undefined
+                        : {
+                              logger,
+                              workflow: 'dream',
+                              stage: 'user-profile',
+                              fields: {
+                                  speaker: group.speakerLabel,
+                                  speakerKey: group.speakerKey
+                              }
+                          }
+            })
+        } catch (error) {
+            this.logProfileSkipped(runLogger, {
+                presetId,
+                speaker: group.speakerLabel,
+                reason: 'invoke-failed',
+                error: summarizeError(error)
+            })
+            return 'failed'
+        }
+
+        if (structuredResult.parseError !== null) {
+            this.logProfileSkipped(runLogger, {
+                presetId,
+                speaker: group.speakerLabel,
+                reason: 'structured-output-failed',
+                error: structuredResult.parseError
+            })
+            return 'failed'
+        }
+
+        const parsed = structuredResult.value.profiles[0]
+        if (parsed === undefined) {
+            this.logProfileSkipped(runLogger, {
+                presetId,
+                speaker: group.speakerLabel,
+                reason: 'empty-profiles'
+            })
+            return 'empty'
+        }
+
+        const content = this.normalizeProfileContent(
+            group.speakerLabel,
+            parsed.content
+        )
+        if (content.length === 0) {
+            this.logProfileSkipped(runLogger, {
+                presetId,
+                speaker: group.speakerLabel,
+                reason: 'empty-content'
+            })
+            return 'empty'
+        }
+
+        await this.repository.replaceUserProfile(presetId, {
+            speakerKey: group.speakerKey,
+            speakerLabel: group.speakerLabel,
+            content,
+            sourceMemoryIds: unique(parsed.sourceMemoryIds)
+        })
+        return 'generated'
     }
 
     private logProfileSkipped(

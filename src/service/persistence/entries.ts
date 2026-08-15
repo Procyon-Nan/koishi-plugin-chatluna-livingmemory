@@ -83,6 +83,21 @@ const recallEntryFields: (keyof MemoryEntryRecord)[] = [
     'updatedAt'
 ]
 
+type EntryTransaction = Parameters<
+    Parameters<Context['database']['transact']>[0]
+>[0]
+
+interface DreamMergeContext {
+    database: EntryTransaction
+    input: DreamMergeInput
+    sourceIds: string[]
+    expectedStatus: MemoryEntryRecord['status']
+    target: MemoryEntryRecord
+    sources: MemoryEntryRecord[]
+    updatedAt: Date
+    targetContentChanged: boolean
+}
+
 export class LivingMemoryEntryRepository
     implements RecallRepository, ExtractionRepository
 {
@@ -445,6 +460,27 @@ export class LivingMemoryEntryRepository
 
     async applyDreamMerge(input: DreamMergeInput) {
         const sourceIds = input.sources.map((source) => source.id)
+        const expectedStatus = this.validateDreamMergeInput(input, sourceIds)
+
+        return await this.ctx.database.transact(async (database) => {
+            const merge = await this.loadDreamMergeState(
+                database,
+                input,
+                sourceIds,
+                expectedStatus
+            )
+            await this.updateDreamMergeTarget(merge)
+            if (input.sourceDisposition === 'archive') {
+                return this.commitDreamMergeArchive(merge)
+            }
+            return this.commitDreamMergeDelete(merge)
+        })
+    }
+
+    private validateDreamMergeInput(
+        input: DreamMergeInput,
+        sourceIds: string[]
+    ): MemoryEntryRecord['status'] {
         const uniqueSourceIds = [...new Set(sourceIds)]
         if (
             uniqueSourceIds.length === 0 ||
@@ -454,157 +490,180 @@ export class LivingMemoryEntryRepository
             throw new Error('dream merge failed: invalid source ids')
         }
 
-        let expectedStatus: MemoryEntryRecord['status'] = 'active'
-        if (input.sourceDisposition === 'delete') {
-            expectedStatus = 'archived'
-        }
+        const expectedStatus: MemoryEntryRecord['status'] =
+            input.sourceDisposition === 'delete' ? 'archived' : 'active'
         if (input.patch.status !== expectedStatus) {
             throw new Error('dream merge failed: stage disposition mismatch')
         }
+        return expectedStatus
+    }
 
-        return await this.ctx.database.transact(async (database) => {
-            const entries = (
-                await database.get(
-                    'living_memory_entry',
-                    {
-                        id: {
-                            $in: [input.target.id, ...sourceIds]
-                        }
-                    },
-                    memoryEntryFields
-                )
-            ).map(normalizeEntryRecord)
-            const entryById = new Map(entries.map((entry) => [entry.id, entry]))
-            const target = entryById.get(input.target.id)
-            const expectedSourceUpdatedAtById = new Map(
-                input.sources.map((source) => [source.id, +source.updatedAt])
-            )
-            const sources = sourceIds
-                .map((id) => entryById.get(id))
-                .filter((entry): entry is MemoryEntryRecord => entry != null)
-
-            if (
-                target == null ||
-                target.presetId !== input.presetId ||
-                target.status !== expectedStatus ||
-                +target.updatedAt !== +input.target.updatedAt ||
-                sources.length !== sourceIds.length ||
-                sources.some(
-                    (source) =>
-                        source.presetId !== target.presetId ||
-                        source.status !== expectedStatus ||
-                        +source.updatedAt !==
-                            expectedSourceUpdatedAtById.get(source.id)
-                )
-            ) {
-                throw new Error(
-                    'dream merge failed: target or source memories changed'
-                )
-            }
-
-            const updatedAt = new Date()
-            const targetContentChanged = input.patch.content !== target.content
-            const targetResult = await database.set(
+    private async loadDreamMergeState(
+        database: EntryTransaction,
+        input: DreamMergeInput,
+        sourceIds: string[],
+        expectedStatus: MemoryEntryRecord['status']
+    ): Promise<DreamMergeContext> {
+        const entries = (
+            await database.get(
                 'living_memory_entry',
                 {
-                    id: target.id,
-                    status: expectedStatus,
-                    updatedAt: input.target.updatedAt
-                },
-                {
-                    ...this.buildMemoryUpdatePatch(target, input.patch),
-                    sourceOrigins: mergeMemorySourceOrigins([
-                        target,
-                        ...sources
-                    ]),
-                    isConsolidated: input.targetIsConsolidated,
-                    updatedAt
-                }
-            )
-            this.assertAffectedCount(targetResult.matched, 1, 'target update')
-
-            const sourceQuery = {
-                $or: input.sources.map((source) => ({
-                    id: source.id,
-                    status: expectedStatus,
-                    updatedAt: source.updatedAt
-                }))
-            }
-            if (input.sourceDisposition === 'archive') {
-                const sourceResult = await database.set(
-                    'living_memory_entry',
-                    sourceQuery,
-                    {
-                        status: 'archived',
-                        isConsolidated: input.sourceIsConsolidated,
-                        updatedAt
+                    id: {
+                        $in: [input.target.id, ...sourceIds]
                     }
-                )
-                this.assertAffectedCount(
-                    sourceResult.matched,
-                    sourceIds.length,
-                    'source archive'
-                )
-                const committedEntries = (
-                    await database.get(
-                        'living_memory_entry',
-                        { id: { $in: [target.id, ...sourceIds] } },
-                        memoryEntryFields
-                    )
-                ).map(normalizeEntryRecord)
-                const committedById = new Map(
-                    committedEntries.map((entry) => [entry.id, entry])
-                )
-                const committedTarget = committedById.get(target.id)
-                if (committedTarget == null) {
-                    throw new Error(
-                        'dream merge failed: committed target not found'
-                    )
-                }
-                return {
-                    target: committedTarget,
-                    archivedSources: sourceIds.map((id) => {
-                        const source = committedById.get(id)
-                        if (source == null) {
-                            throw new Error(
-                                `dream merge failed: committed source not found: ${id}`
-                            )
-                        }
-                        return source
-                    }),
-                    deletedSourceIds: [],
-                    targetContentChanged
-                }
-            }
+                },
+                memoryEntryFields
+            )
+        ).map(normalizeEntryRecord)
+        const entryById = new Map(entries.map((entry) => [entry.id, entry]))
+        const target = entryById.get(input.target.id)
+        const expectedSourceUpdatedAtById = new Map(
+            input.sources.map((source) => [source.id, +source.updatedAt])
+        )
+        const sources = sourceIds
+            .map((id) => entryById.get(id))
+            .filter((entry): entry is MemoryEntryRecord => entry != null)
 
-            const sourceResult = await database.remove(
+        if (
+            target == null ||
+            target.presetId !== input.presetId ||
+            target.status !== expectedStatus ||
+            +target.updatedAt !== +input.target.updatedAt ||
+            sources.length !== sourceIds.length ||
+            sources.some(
+                (source) =>
+                    source.presetId !== target.presetId ||
+                    source.status !== expectedStatus ||
+                    +source.updatedAt !==
+                        expectedSourceUpdatedAtById.get(source.id)
+            )
+        ) {
+            throw new Error(
+                'dream merge failed: target or source memories changed'
+            )
+        }
+
+        return {
+            database,
+            input,
+            sourceIds,
+            expectedStatus,
+            target,
+            sources,
+            updatedAt: new Date(),
+            targetContentChanged: input.patch.content !== target.content
+        }
+    }
+
+    private async updateDreamMergeTarget(merge: DreamMergeContext) {
+        const { database, input, target, sources } = merge
+        const targetResult = await database.set(
+            'living_memory_entry',
+            {
+                id: target.id,
+                status: merge.expectedStatus,
+                updatedAt: input.target.updatedAt
+            },
+            {
+                ...this.buildMemoryUpdatePatch(target, input.patch),
+                sourceOrigins: mergeMemorySourceOrigins([target, ...sources]),
+                isConsolidated: input.targetIsConsolidated,
+                updatedAt: merge.updatedAt
+            }
+        )
+        this.assertAffectedCount(targetResult.matched, 1, 'target update')
+    }
+
+    private buildDreamMergeSourceQuery(merge: DreamMergeContext) {
+        return {
+            $or: merge.input.sources.map((source) => ({
+                id: source.id,
+                status: merge.expectedStatus,
+                updatedAt: source.updatedAt
+            }))
+        }
+    }
+
+    private async commitDreamMergeArchive(merge: DreamMergeContext) {
+        const { database, input, sourceIds, target } = merge
+        const sourceResult = await database.set(
+            'living_memory_entry',
+            this.buildDreamMergeSourceQuery(merge),
+            {
+                status: 'archived',
+                isConsolidated: input.sourceIsConsolidated,
+                updatedAt: merge.updatedAt
+            }
+        )
+        this.assertAffectedCount(
+            sourceResult.matched,
+            sourceIds.length,
+            'source archive'
+        )
+        const committedEntries = (
+            await database.get(
                 'living_memory_entry',
-                sourceQuery
+                { id: { $in: [target.id, ...sourceIds] } },
+                memoryEntryFields
             )
-            this.assertAffectedCount(
-                sourceResult.removed ?? sourceResult.matched,
-                sourceIds.length,
-                'source delete'
+        ).map(normalizeEntryRecord)
+        const committedById = new Map(
+            committedEntries.map((entry) => [entry.id, entry])
+        )
+        const committedTarget = committedById.get(target.id)
+        if (committedTarget == null) {
+            throw new Error('dream merge failed: committed target not found')
+        }
+        return {
+            target: committedTarget,
+            archivedSources: sourceIds.map((id) =>
+                this.requireCommittedSource(committedById, id)
+            ),
+            deletedSourceIds: [],
+            targetContentChanged: merge.targetContentChanged
+        }
+    }
+
+    private async commitDreamMergeDelete(merge: DreamMergeContext) {
+        const { database, sourceIds, target } = merge
+        const sourceResult = await database.remove(
+            'living_memory_entry',
+            this.buildDreamMergeSourceQuery(merge)
+        )
+        this.assertAffectedCount(
+            sourceResult.removed ?? sourceResult.matched,
+            sourceIds.length,
+            'source delete'
+        )
+        const committedTarget = (
+            await database.get(
+                'living_memory_entry',
+                { id: target.id },
+                memoryEntryFields
             )
-            const committedTarget = (
-                await database.get(
-                    'living_memory_entry',
-                    { id: target.id },
-                    memoryEntryFields
-                )
-            )[0]
-            if (committedTarget == null) {
-                throw new Error(
-                    'dream merge failed: committed target not found'
-                )
-            }
-            return {
-                target: normalizeEntryRecord(committedTarget),
-                archivedSources: [],
-                deletedSourceIds: sourceIds,
-                targetContentChanged
-            }
-        })
+        )[0]
+        if (committedTarget == null) {
+            throw new Error('dream merge failed: committed target not found')
+        }
+        return {
+            target: normalizeEntryRecord(committedTarget),
+            archivedSources: [],
+            deletedSourceIds: sourceIds,
+            targetContentChanged: merge.targetContentChanged
+        }
+    }
+
+    private requireCommittedSource(
+        committedById: Map<string, MemoryEntryRecord>,
+        id: string
+    ) {
+        const source = committedById.get(id)
+        if (source == null) {
+            throw new Error(
+                `dream merge failed: committed source not found: ${id}`
+            )
+        }
+        return source
     }
 
     async deleteMemory(id: string) {

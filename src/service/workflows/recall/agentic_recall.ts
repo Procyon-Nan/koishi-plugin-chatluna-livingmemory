@@ -320,22 +320,11 @@ export class LivingMemoryAgenticRecallExecutor {
             throw new Error('subModel is unavailable.')
         }
 
-        const assistantLabel = resolveScopeAssistantLabel(scope)
-        const currentTranscript = this.formatter.toExtractionPayload([
-            currentMessage
-        ]).input
-        const recentMessages = this.formatter.takeRecentRounds(
-            historyMessages,
-            this.config.recallHistoryWindowRounds
+        const prompt = this.buildRecallPrompt(
+            scope,
+            currentMessage,
+            historyMessages
         )
-        const history = recentMessages.length
-            ? this.formatter.toExtractionPayload(recentMessages).input
-            : '无'
-        const prompt = buildAgenticRecallPrompt({
-            assistantLabel,
-            currentTranscript,
-            history
-        })
         const agentContext = {
             requestId: [
                 'agentic-recall',
@@ -351,6 +340,85 @@ export class LivingMemoryAgenticRecallExecutor {
             agentContext,
             runLogger
         )
+        const { runner, getModelCallCount, hasUsedFinalizationCall } =
+            this.createBoundedAgentRunner(
+                chatModel,
+                prompt,
+                searchTool,
+                runLogger
+            )
+
+        const result = await runner.invoke(
+            {
+                systemPrompt: prompt.systemPrompt,
+                inputPrompt: prompt.inputPrompt
+            },
+            {
+                configurable: {
+                    model: chatModel,
+                    preset: scope.presetId,
+                    conversationId: scope.conversationId,
+                    userId: scope.userId,
+                    source: 'agentic-recall',
+                    agentContext
+                }
+            }
+        )
+        const { toolCallSummaries, matchedMemories } =
+            this.collectSearchResults(
+                recordedSearchCalls,
+                result.intermediateSteps
+            )
+
+        const trace = this.createTrace(
+            prompt,
+            result.output.trim(),
+            matchedMemories,
+            toolCallSummaries
+        )
+
+        if (
+            hasUsedFinalizationCall() &&
+            trace.finalOutput === agenticRecallNoMemoryOutput
+        ) {
+            runLogger.diagnostic('recall.agentic.exhausted', {
+                modelCalls: getModelCallCount(),
+                reason: 'max-model-calls'
+            })
+        }
+
+        return trace
+    }
+
+    private buildRecallPrompt(
+        scope: MemoryScope,
+        currentMessage: LivingMemoryTranscriptMessage,
+        historyMessages: LivingMemoryTranscriptMessage[]
+    ): AgenticRecallPromptMessages {
+        const assistantLabel = resolveScopeAssistantLabel(scope)
+        const currentTranscript = this.formatter.toExtractionPayload([
+            currentMessage
+        ]).input
+        const recentMessages = this.formatter.takeRecentRounds(
+            historyMessages,
+            this.config.recallHistoryWindowRounds
+        )
+        const history = recentMessages.length
+            ? this.formatter.toExtractionPayload(recentMessages).input
+            : '无'
+        return buildAgenticRecallPrompt({
+            assistantLabel,
+            currentTranscript,
+            history
+        })
+    }
+
+    private createBoundedAgentRunner(
+        chatModel: ChatLunaChatModel,
+        prompt: AgenticRecallPromptMessages,
+        searchTool: RecordingLivingMemorySearchTool,
+        runLogger: LivingMemoryLogger
+    ) {
         let modelCallCount = 0
         let usedFinalizationCall = false
         const loggedModel = createLoggedModel(chatModel, {
@@ -374,10 +442,9 @@ export class LivingMemoryAgenticRecallExecutor {
             ): Promise<AgenticRecallDecision> => {
                 modelCallCount += 1
 
-                let decision: AgenticRecallDecision
                 if (modelCallCount === agenticRecallMaxModelCalls) {
                     usedFinalizationCall = true
-                    decision = await this.finalize(
+                    return await this.finalize(
                         chatModel,
                         prompt,
                         input,
@@ -385,14 +452,12 @@ export class LivingMemoryAgenticRecallExecutor {
                         runLogger,
                         modelCallCount
                     )
-                } else {
-                    decision = await toolAgent.invoke(
-                        input as AgenticRecallToolAgentInput,
-                        runConfig
-                    )
                 }
 
-                return decision
+                return await toolAgent.invoke(
+                    input as AgenticRecallToolAgentInput,
+                    runConfig
+                )
             }
         )
         const runner = AgentRunner.fromAgentAndTools({
@@ -410,28 +475,22 @@ export class LivingMemoryAgenticRecallExecutor {
                 throw error
             }
         })
+        return {
+            runner,
+            getModelCallCount: () => modelCallCount,
+            hasUsedFinalizationCall: () => usedFinalizationCall
+        }
+    }
 
-        const result = await runner.invoke(
-            {
-                systemPrompt: prompt.systemPrompt,
-                inputPrompt: prompt.inputPrompt
-            },
-            {
-                configurable: {
-                    model: chatModel,
-                    preset: scope.presetId,
-                    conversationId: scope.conversationId,
-                    userId: scope.userId,
-                    source: 'agentic-recall',
-                    agentContext
-                }
-            }
-        )
+    private collectSearchResults(
+        recordedSearchCalls: RecordedAgenticSearchCall[],
+        intermediateSteps: AgentStep[] | undefined
+    ) {
         const toolCallSummaries: AgenticMemorySearchToolCallSummary[] = []
         const matchedMemories: AgenticMemorySnapshotMemoryItem[] = []
         const orderedSearchCalls = orderRecordedSearchCalls(
             recordedSearchCalls,
-            result.intermediateSteps
+            intermediateSteps
         )
 
         for (const call of orderedSearchCalls) {
@@ -455,24 +514,7 @@ export class LivingMemoryAgenticRecallExecutor {
             matchedMemories.push(...parseMatchedMemories(call.output))
         }
 
-        const trace = this.createTrace(
-            prompt,
-            result.output.trim(),
-            matchedMemories,
-            toolCallSummaries
-        )
-
-        if (
-            usedFinalizationCall &&
-            trace.finalOutput === agenticRecallNoMemoryOutput
-        ) {
-            runLogger.diagnostic('recall.agentic.exhausted', {
-                modelCalls: modelCallCount,
-                reason: 'max-model-calls'
-            })
-        }
-
-        return trace
+        return { toolCallSummaries, matchedMemories }
     }
 
     private async finalize(

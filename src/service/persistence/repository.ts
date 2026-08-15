@@ -410,6 +410,56 @@ export class LivingMemoryRepository
         targetPresetId: string,
         data: LivingMemoryPresetExport
     ): Promise<LivingMemoryPresetImportSummary> {
+        const rows = this.buildPresetImportRows(targetPresetId, data)
+
+        await this.ctx.database.withTransaction(async (database) => {
+            await runPresetImportBatches(
+                'entries',
+                rows.entryRows,
+                async (batch) => {
+                    await database.upsert('living_memory_entry', batch)
+                }
+            )
+
+            // 用户画像按 presetId + speakerKey 去重：导入前先删除目标预设下
+            // 与导入数据 speakerKey 冲突的已有画像，使导入侧完全覆盖目标侧。
+            await runPresetImportBatches(
+                'user profile cleanup',
+                rows.speakerKeys,
+                async (batch) => {
+                    await database.remove('living_memory_user_profile', {
+                        presetId: targetPresetId,
+                        speakerKey: { $in: batch }
+                    })
+                }
+            )
+            await runPresetImportBatches(
+                'user profiles',
+                rows.userProfileRows,
+                async (batch) => {
+                    await database.upsert('living_memory_user_profile', batch)
+                }
+            )
+            await runPresetImportBatches(
+                'preset speakers',
+                rows.presetSpeakerRows,
+                async (batch) => {
+                    await database.upsert('living_memory_preset_speaker', batch)
+                }
+            )
+        })
+
+        return {
+            entries: data.entries.length,
+            userProfiles: data.userProfiles.length,
+            presetSpeakers: data.presetSpeakers.length
+        }
+    }
+
+    private buildPresetImportRows(
+        targetPresetId: string,
+        data: LivingMemoryPresetExport
+    ) {
         const isCrossPresetImport = targetPresetId !== data.sourcePresetId
         const resolveImportId = (
             recordType: 'entry' | 'user-profile',
@@ -446,16 +496,12 @@ export class LivingMemoryRepository
             createdAt: new Date(entry.createdAt),
             updatedAt: new Date(entry.updatedAt)
         })
-        let entryRows: ReturnType<typeof createEntryRow>[]
-        if (data.version === 1 || isCrossPresetImport) {
-            entryRows = data.entries.map((entry) =>
-                createEntryRow(entry, false)
-            )
-        } else {
-            entryRows = data.entries.map((entry) =>
-                createEntryRow(entry, entry.isConsolidated)
-            )
-        }
+        const entryRows =
+            data.version === 1 || isCrossPresetImport
+                ? data.entries.map((entry) => createEntryRow(entry, false))
+                : data.entries.map((entry) =>
+                      createEntryRow(entry, entry.isConsolidated)
+                  )
         const speakerKeys = [
             ...new Set(data.userProfiles.map((profile) => profile.speakerKey))
         ]
@@ -479,48 +525,7 @@ export class LivingMemoryRepository
             updatedAt: new Date(speaker.updatedAt)
         }))
 
-        await this.ctx.database.withTransaction(async (database) => {
-            await runPresetImportBatches(
-                'entries',
-                entryRows,
-                async (batch) => {
-                    await database.upsert('living_memory_entry', batch)
-                }
-            )
-
-            // 用户画像按 presetId + speakerKey 去重：导入前先删除目标预设下
-            // 与导入数据 speakerKey 冲突的已有画像，使导入侧完全覆盖目标侧。
-            await runPresetImportBatches(
-                'user profile cleanup',
-                speakerKeys,
-                async (batch) => {
-                    await database.remove('living_memory_user_profile', {
-                        presetId: targetPresetId,
-                        speakerKey: { $in: batch }
-                    })
-                }
-            )
-            await runPresetImportBatches(
-                'user profiles',
-                userProfileRows,
-                async (batch) => {
-                    await database.upsert('living_memory_user_profile', batch)
-                }
-            )
-            await runPresetImportBatches(
-                'preset speakers',
-                presetSpeakerRows,
-                async (batch) => {
-                    await database.upsert('living_memory_preset_speaker', batch)
-                }
-            )
-        })
-
-        return {
-            entries: data.entries.length,
-            userProfiles: data.userProfiles.length,
-            presetSpeakers: data.presetSpeakers.length
-        }
+        return { entryRows, speakerKeys, userProfileRows, presetSpeakerRows }
     }
 
     async listDistinctPresetIds(): Promise<string[]> {

@@ -78,13 +78,7 @@ export class LivingMemoryDreamService {
             })
         const entries = await this.repository.listDreamEntriesByPreset(presetId)
         if (entries.length < 2) {
-            if (entries.length === 1) {
-                await this.mutations.setMemoryConsolidation(
-                    presetId,
-                    [entries[0].id],
-                    true
-                )
-            }
+            await this.consolidateSingleEntry(presetId, entries)
             return this.createResult(entries.length, 0, {
                 detail: `dream skipped: only ${entries.length} memories`
             })
@@ -159,6 +153,20 @@ export class LivingMemoryDreamService {
         }
     }
 
+    /** 不足聚簇规模时，唯一一条记忆直接标记为已固化。 */
+    private async consolidateSingleEntry(
+        presetId: string,
+        entries: DreamMemoryEntryRecord[]
+    ) {
+        if (entries.length === 1) {
+            await this.mutations.setMemoryConsolidation(
+                presetId,
+                [entries[0].id],
+                true
+            )
+        }
+    }
+
     private async regenerateUserProfilesAfterDream(
         presetId: string,
         model: ChatLunaChatModel,
@@ -204,13 +212,7 @@ export class LivingMemoryDreamService {
             entries: entries.length
         })
         if (entries.length < 2) {
-            if (entries.length === 1) {
-                await this.mutations.setMemoryConsolidation(
-                    presetId,
-                    [entries[0].id],
-                    true
-                )
-            }
+            await this.consolidateSingleEntry(presetId, entries)
             return createEmptyStageResult(stage, entries.length)
         }
 

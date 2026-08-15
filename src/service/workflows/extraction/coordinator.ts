@@ -214,33 +214,43 @@ export class LivingMemoryExtractionCoordinator {
                 runLogger.warn('extraction.failed', { operation: 'run' }, error)
             })
             .finally(() => {
-                this.runningScopeKeys.delete(key)
-                const currentState = this.stateByScope.get(key)
-                if (currentState == null) {
-                    return
-                }
-
-                if (currentState === state) {
-                    state.lastConsumedSequence = triggerSequence
-                    const minimumSequenceToKeep = Math.max(
-                        1,
-                        state.lastConsumedSequence -
-                            this.config.extractionRounds +
-                            2
-                    )
-                    state.rounds = state.rounds.filter(
-                        (item) => item.sequence >= minimumSequenceToKeep
-                    )
-                }
-
-                if (
-                    currentState.lastCompletedSequence -
-                        currentState.lastConsumedSequence >=
-                    this.config.extractionInterval
-                ) {
-                    this.tryStart(key, currentState)
-                }
+                this.consumeRoundsAfterRun(key, state, triggerSequence)
             })
+    }
+
+    /**
+     * 一次提取运行结束后消费触发边界：标记触发轮之前的缓冲已消费、
+     * 清理不再需要的轮次缓冲，并在积压再次达到间隔时续跑。
+     */
+    private consumeRoundsAfterRun(
+        key: string,
+        state: ExtractionScopeState,
+        triggerSequence: number
+    ) {
+        this.runningScopeKeys.delete(key)
+        const currentState = this.stateByScope.get(key)
+        if (currentState == null) {
+            return
+        }
+
+        if (currentState === state) {
+            state.lastConsumedSequence = triggerSequence
+            const minimumSequenceToKeep = Math.max(
+                1,
+                state.lastConsumedSequence - this.config.extractionRounds + 2
+            )
+            state.rounds = state.rounds.filter(
+                (item) => item.sequence >= minimumSequenceToKeep
+            )
+        }
+
+        if (
+            currentState.lastCompletedSequence -
+                currentState.lastConsumedSequence >=
+            this.config.extractionInterval
+        ) {
+            this.tryStart(key, currentState)
+        }
     }
 
     private async run(
