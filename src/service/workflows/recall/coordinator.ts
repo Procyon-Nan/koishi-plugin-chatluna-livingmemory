@@ -13,7 +13,9 @@ import type {
 } from '../../../contracts/workflows'
 import type {
     LivingMemoryTranscriptMessage,
-    MemoryScope
+    MemoryRecallStrategy,
+    MemoryScope,
+    MemorySnapshotItem
 } from '../../../contracts/memory'
 
 type LivingMemoryRecallCoordinatorConfig = Pick<
@@ -169,24 +171,19 @@ export class LivingMemoryRecallCoordinator {
                 })
                 return
             }
-            await this.repository.upsertSnapshot(
+            await this.persistSnapshot(
                 scope,
                 'embedding-rerank',
                 input,
                 items.map((item) => ({
                     memoryId: item.id,
                     score: item.score
-                }))
+                })),
+                logger
             )
-            const content = await this.snapshotCache.hydrate(scope)
-            logger.info('recall.snapshot.updated', {
-                strategy: 'embedding-rerank',
-                content
-            })
         } catch (error) {
-            await this.repository.createFailedJob(
+            await this.recordFailedRecall(
                 scope,
-                'recall',
                 input,
                 error,
                 startedAt,
@@ -227,22 +224,17 @@ export class LivingMemoryRecallCoordinator {
             }
 
             const query = JSON.stringify(trace.item.toolCallSummary)
-            await this.repository.upsertSnapshot(
+            await this.persistSnapshot(
                 scope,
                 'agentic-recall',
                 query,
-                [trace.item]
+                [trace.item],
+                logger,
+                { matched: matchedCount }
             )
-            const content = await this.snapshotCache.hydrate(scope)
-            logger.info('recall.snapshot.updated', {
-                strategy: 'agentic-recall',
-                content,
-                matched: matchedCount
-            })
         } catch (error) {
-            await this.repository.createFailedJob(
+            await this.recordFailedRecall(
                 scope,
-                'recall',
                 input,
                 error,
                 startedAt,
@@ -250,5 +242,39 @@ export class LivingMemoryRecallCoordinator {
             )
             throw error
         }
+    }
+
+    private async persistSnapshot(
+        scope: MemoryScope,
+        strategy: MemoryRecallStrategy,
+        query: string,
+        items: MemorySnapshotItem[],
+        logger: LivingMemoryLogger,
+        extraFields: Record<string, unknown> = {}
+    ) {
+        await this.repository.upsertSnapshot(scope, strategy, query, items)
+        const content = await this.snapshotCache.hydrate(scope)
+        logger.info('recall.snapshot.updated', {
+            strategy,
+            content,
+            ...extraFields
+        })
+    }
+
+    private async recordFailedRecall(
+        scope: MemoryScope,
+        input: string,
+        error: unknown,
+        startedAt: Date,
+        strategy: MemoryRecallStrategy
+    ) {
+        await this.repository.createFailedJob(
+            scope,
+            'recall',
+            input,
+            error,
+            startedAt,
+            strategy
+        )
     }
 }

@@ -320,6 +320,7 @@ import ProfilesTab from './components/profiles-tab.vue'
 import SearchTestTab from './components/search-test-tab.vue'
 import SnapshotsTab from './components/snapshots-tab.vue'
 import { isVectorWorkflowReady } from './utils/vector-index'
+import { toErrorMessage } from './utils/display'
 import type {
     LivingMemoryPresetExport,
     LivingMemoryPresetImportResult,
@@ -462,6 +463,38 @@ const ensurePreset = () => {
     return false
 }
 
+const confirmAndRun = async (options: {
+    confirmMessage: string
+    confirmTitle: string
+    confirmButtonText: string
+    action: () => Promise<string>
+    failurePrefix: string
+    refresh?: () => Promise<unknown>
+}) => {
+    try {
+        await ElMessageBox.confirm(
+            options.confirmMessage,
+            options.confirmTitle,
+            {
+                type: 'warning',
+                confirmButtonText: options.confirmButtonText,
+                cancelButtonText: '取消'
+            }
+        )
+    } catch {
+        return
+    }
+
+    try {
+        ElMessage.success(await options.action())
+        if (options.refresh != null) {
+            await options.refresh()
+        }
+    } catch (error) {
+        ElMessage.error(`${options.failurePrefix}${toErrorMessage(error)}`)
+    }
+}
+
 const fetchConfigStatus = async () => {
     try {
         const status = await api.getStatus()
@@ -579,112 +612,68 @@ const runDreamJob = async () => {
         )
         await fetchConfigStatus()
     } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        ElMessage.error(`Dream 触发失败：${message}`)
+        ElMessage.error(`Dream 触发失败：${toErrorMessage(error)}`)
     } finally {
         dreamPending.value = false
     }
 }
 
-const doReconcileVectorIndex = async () => {
-    try {
-        await ElMessageBox.confirm(
-            `确认重新同步预设 ${presetId.value} 的向量索引？`,
-            '修复当前预设索引',
-            {
-                type: 'warning',
-                confirmButtonText: '确认同步',
-                cancelButtonText: '取消'
-            }
-        )
-    } catch {
-        return
-    }
+const doReconcileVectorIndex = () =>
+    confirmAndRun({
+        confirmMessage: `确认重新同步预设 ${presetId.value} 的向量索引？`,
+        confirmTitle: '修复当前预设索引',
+        confirmButtonText: '确认同步',
+        failurePrefix: '索引同步失败：',
+        action: async () => {
+            const job = await api.reconcileVectorIndex(presetId.value)
+            return `索引同步任务已创建：${job.id}`
+        },
+        refresh: async () => {
+            await Promise.all([
+                fetchConfigStatus(),
+                jobsTab.value?.refresh(true)
+            ])
+        }
+    })
 
-    try {
-        const job = await api.reconcileVectorIndex(presetId.value)
-        ElMessage.success(`索引同步任务已创建：${job.id}`)
-        await Promise.all([fetchConfigStatus(), jobsTab.value?.refresh(true)])
-    } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        ElMessage.error(`索引同步失败：${message}`)
-    }
-}
+const doRebuildVectorIndex = () =>
+    confirmAndRun({
+        confirmMessage: '确认全量重建向量索引？重建期间 Dream 与召回测试不可用。',
+        confirmTitle: '全量重建索引',
+        confirmButtonText: '确认重建',
+        failurePrefix: '启动索引重建失败：',
+        action: async () => {
+            await api.rebuildVectorIndex()
+            return '全量索引重建任务已启动'
+        },
+        refresh: fetchConfigStatus
+    })
 
-const doRebuildVectorIndex = async () => {
-    try {
-        await ElMessageBox.confirm(
-            '确认全量重建向量索引？重建期间 Dream 与召回测试不可用。',
-            '全量重建索引',
-            {
-                type: 'warning',
-                confirmButtonText: '确认重建',
-                cancelButtonText: '取消'
-            }
-        )
-    } catch {
-        return
-    }
+const doRestartVectorIndex = () =>
+    confirmAndRun({
+        confirmMessage: '确认重启向量索引 Worker？重启后会自动检查并同步索引。',
+        confirmTitle: '重启索引 Worker',
+        confirmButtonText: '确认重启',
+        failurePrefix: '重启索引 Worker 失败：',
+        action: async () => {
+            await api.restartVectorIndex()
+            return '向量索引 Worker 已重启，正在检查索引'
+        },
+        refresh: fetchConfigStatus
+    })
 
-    try {
-        await api.rebuildVectorIndex()
-        ElMessage.success('全量索引重建任务已启动')
-        await fetchConfigStatus()
-    } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        ElMessage.error(`启动索引重建失败：${message}`)
-    }
-}
-
-const doRestartVectorIndex = async () => {
-    try {
-        await ElMessageBox.confirm(
-            '确认重启向量索引 Worker？重启后会自动检查并同步索引。',
-            '重启索引 Worker',
-            {
-                type: 'warning',
-                confirmButtonText: '确认重启',
-                cancelButtonText: '取消'
-            }
-        )
-    } catch {
-        return
-    }
-
-    try {
-        await api.restartVectorIndex()
-        ElMessage.success('向量索引 Worker 已重启，正在检查索引')
-        await fetchConfigStatus()
-    } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        ElMessage.error(`重启索引 Worker 失败：${message}`)
-    }
-}
-
-const doClearPresetData = async () => {
-    try {
-        await ElMessageBox.confirm(
-            `该操作会清空预设 ${presetId.value} 的全部记忆、用户画像、快照和任务记录，且不可恢复。是否继续？`,
-            '危险操作',
-            {
-                type: 'warning',
-                confirmButtonText: '确认清空',
-                cancelButtonText: '取消'
-            }
-        )
-    } catch {
-        return
-    }
-
-    try {
-        await api.clearPresetData(presetId.value)
-        ElMessage.success('该预设的数据已清空')
-        await refreshAll(true)
-    } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        ElMessage.error(`清空失败：${message}`)
-    }
-}
+const doClearPresetData = () =>
+    confirmAndRun({
+        confirmMessage: `该操作会清空预设 ${presetId.value} 的全部记忆、用户画像、快照和任务记录，且不可恢复。是否继续？`,
+        confirmTitle: '危险操作',
+        confirmButtonText: '确认清空',
+        failurePrefix: '清空失败：',
+        action: async () => {
+            await api.clearPresetData(presetId.value)
+            return '该预设的数据已清空'
+        },
+        refresh: () => refreshAll(true)
+    })
 
 const formatExportFilename = (presetId: string) => {
     const now = new Date()
@@ -719,8 +708,7 @@ const doExportPreset = async () => {
             `已导出 ${data.entries.length} 条记忆、${data.userProfiles.length} 个用户画像、${data.presetSpeakers.length} 个说话者`
         )
     } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        ElMessage.error(`导出失败：${message}`)
+        ElMessage.error(`导出失败：${toErrorMessage(error)}`)
     }
 }
 
@@ -770,8 +758,7 @@ const onImportFileSelected = async (event: Event) => {
         )
         await refreshAll(true)
     } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        ElMessage.error(`导入失败：${message}`)
+        ElMessage.error(`导入失败：${toErrorMessage(error)}`)
         return
     }
 

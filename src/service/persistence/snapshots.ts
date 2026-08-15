@@ -14,17 +14,8 @@ export class LivingMemorySnapshotRepository implements SnapshotRepository {
     async getLatestSnapshotByScope(
         scope: Pick<MemoryScope, 'presetId' | 'conversationId'>
     ) {
-        const snapshots = await this.ctx.database.get(
-            'living_memory_snapshot',
-            {
-                presetId: scope.presetId,
-                conversationId: scope.conversationId
-            }
-        )
-
-        return snapshots.sort(
-            (left, right) => +right.createdAt - +left.createdAt
-        )[0]
+        const sorted = await this.loadSortedSnapshotsByScope(scope)
+        return sorted[0]
     }
 
     async listSnapshotsByPreset(
@@ -49,13 +40,7 @@ export class LivingMemorySnapshotRepository implements SnapshotRepository {
         items: MemorySnapshotItem[]
     ) {
         const createdAt = new Date()
-        const existing = await this.ctx.database.get('living_memory_snapshot', {
-            presetId: scope.presetId,
-            conversationId: scope.conversationId
-        })
-        const sorted = existing.sort(
-            (left, right) => +right.createdAt - +left.createdAt
-        )
+        const sorted = await this.loadSortedSnapshotsByScope(scope)
         const latest = sorted[0]
 
         if (latest != null) {
@@ -93,6 +78,22 @@ export class LivingMemorySnapshotRepository implements SnapshotRepository {
         }
 
         await this.ctx.database.create('living_memory_snapshot', snapshot)
+    }
+
+    private async loadSortedSnapshotsByScope(
+        scope: Pick<MemoryScope, 'presetId' | 'conversationId'>
+    ): Promise<MemorySnapshotRecord[]> {
+        const snapshots = await this.ctx.database.get(
+            'living_memory_snapshot',
+            {
+                presetId: scope.presetId,
+                conversationId: scope.conversationId
+            }
+        )
+
+        return snapshots.sort(
+            (left, right) => +right.createdAt - +left.createdAt
+        )
     }
 
     async deleteSnapshot(

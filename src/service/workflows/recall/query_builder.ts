@@ -116,6 +116,21 @@ export class LivingMemoryRecallQueryBuilder {
         const currentTranscript = this.formatter.toExtractionPayload([
             currentMessage
         ]).input
+        const fallback = (
+            fallbackReason: RecallQueryFallbackReason,
+            rewritePrompt: PromptMessages | null = null,
+            rewriteOutput: string | null = null,
+            error: string | null = null
+        ): RecallQueryResult =>
+            this.fallbackResult(
+                rawInput,
+                cleanedQuery,
+                fallbackQuery,
+                rewritePrompt,
+                rewriteOutput,
+                fallbackReason,
+                error
+            )
 
         if (cleanedQuery.length === 0) {
             return {
@@ -132,25 +147,11 @@ export class LivingMemoryRecallQueryBuilder {
         }
 
         if (!this.config.enableRecallQueryRewrite) {
-            return this.fallbackResult(
-                rawInput,
-                cleanedQuery,
-                fallbackQuery,
-                null,
-                null,
-                'rewrite-disabled'
-            )
+            return fallback('rewrite-disabled')
         }
 
         if (!isModelConfigured(this.config.subModel)) {
-            return this.fallbackResult(
-                rawInput,
-                cleanedQuery,
-                fallbackQuery,
-                null,
-                null,
-                'model-not-configured'
-            )
+            return fallback('model-not-configured')
         }
 
         let model: Awaited<ReturnType<Context['chatluna']['createChatModel']>>
@@ -159,26 +160,16 @@ export class LivingMemoryRecallQueryBuilder {
                 this.config.subModel
             )
         } catch (error) {
-            return this.fallbackResult(
-                rawInput,
-                cleanedQuery,
-                fallbackQuery,
-                null,
-                null,
+            return fallback(
                 'model-unavailable',
+                null,
+                null,
                 summarizeError(error)
             )
         }
 
         if (model.value == null) {
-            return this.fallbackResult(
-                rawInput,
-                cleanedQuery,
-                fallbackQuery,
-                null,
-                null,
-                'model-unavailable'
-            )
+            return fallback('model-unavailable')
         }
 
         const rewritePromptMessages = this.buildRewritePrompt(
@@ -209,24 +200,18 @@ export class LivingMemoryRecallQueryBuilder {
             const rewrittenQuery = normalizeRewriteOutput(rewriteOutput)
 
             if (rewrittenQuery.length === 0) {
-                return this.fallbackResult(
-                    rawInput,
-                    cleanedQuery,
-                    fallbackQuery,
+                return fallback(
+                    'empty-output',
                     rewritePromptMessages,
-                    rewriteOutput,
-                    'empty-output'
+                    rewriteOutput
                 )
             }
 
             if (!semanticTextPattern.test(rewrittenQuery)) {
-                return this.fallbackResult(
-                    rawInput,
-                    cleanedQuery,
-                    fallbackQuery,
+                return fallback(
+                    'invalid-output',
                     rewritePromptMessages,
-                    rewriteOutput,
-                    'invalid-output'
+                    rewriteOutput
                 )
             }
 
@@ -242,13 +227,10 @@ export class LivingMemoryRecallQueryBuilder {
                 error: null
             }
         } catch (error) {
-            return this.fallbackResult(
-                rawInput,
-                cleanedQuery,
-                fallbackQuery,
+            return fallback(
+                'invoke-failed',
                 rewritePromptMessages,
                 null,
-                'invoke-failed',
                 summarizeError(error)
             )
         }

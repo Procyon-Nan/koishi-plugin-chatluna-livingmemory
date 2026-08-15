@@ -48,6 +48,40 @@ const memoryEntryFields: (keyof MemoryEntryRecord)[] = [
     'createdAt',
     'updatedAt'
 ]
+const indexSourceFields: (keyof MemoryEntryRecord)[] = [
+    'id',
+    'presetId',
+    'status',
+    'type',
+    'isConsolidated',
+    'content',
+    'keywords',
+    'updatedAt'
+]
+const dreamEntryFields: (keyof MemoryEntryRecord)[] = [
+    'id',
+    'presetId',
+    'type',
+    'status',
+    'content',
+    'keywords',
+    'summary',
+    'sentiment',
+    'importance',
+    'isConsolidated',
+    'createdAt',
+    'updatedAt'
+]
+const recallEntryFields: (keyof MemoryEntryRecord)[] = [
+    'id',
+    'type',
+    'content',
+    'keywords',
+    'summary',
+    'importance',
+    'createdAt',
+    'updatedAt'
+]
 
 export class LivingMemoryEntryRepository
     implements RecallRepository, ExtractionRepository
@@ -132,20 +166,7 @@ export class LivingMemoryEntryRepository
         return await this.ctx.database.get(
             'living_memory_entry',
             { presetId },
-            [
-                'id',
-                'presetId',
-                'type',
-                'status',
-                'content',
-                'keywords',
-                'summary',
-                'sentiment',
-                'importance',
-                'isConsolidated',
-                'createdAt',
-                'updatedAt'
-            ]
+            dreamEntryFields
         )
     }
 
@@ -153,23 +174,7 @@ export class LivingMemoryEntryRepository
         afterId: string | null,
         limit: number
     ): Promise<MemoryIndexSourceRecord[]> {
-        const selection = this.ctx.database.select('living_memory_entry')
-        if (afterId !== null) {
-            selection.where({ id: { $gt: afterId } })
-        }
-        return await selection
-            .orderBy('id', 'asc')
-            .limit(limit)
-            .execute([
-                'id',
-                'presetId',
-                'status',
-                'type',
-                'isConsolidated',
-                'content',
-                'keywords',
-                'updatedAt'
-            ])
+        return this.selectEntryIndexSourcePage(null, afterId, limit)
     }
 
     async listEntryIndexSourcePageByPreset(
@@ -177,25 +182,25 @@ export class LivingMemoryEntryRepository
         afterId: string | null,
         limit: number
     ): Promise<MemoryIndexSourceRecord[]> {
-        const selection = this.ctx.database.select('living_memory_entry', {
-            presetId
-        })
+        return this.selectEntryIndexSourcePage(presetId, afterId, limit)
+    }
+
+    private async selectEntryIndexSourcePage(
+        presetId: string | null,
+        afterId: string | null,
+        limit: number
+    ): Promise<MemoryIndexSourceRecord[]> {
+        const selection =
+            presetId === null
+                ? this.ctx.database.select('living_memory_entry')
+                : this.ctx.database.select('living_memory_entry', { presetId })
         if (afterId !== null) {
             selection.where({ id: { $gt: afterId } })
         }
         return await selection
             .orderBy('id', 'asc')
             .limit(limit)
-            .execute([
-                'id',
-                'presetId',
-                'status',
-                'type',
-                'isConsolidated',
-                'content',
-                'keywords',
-                'updatedAt'
-            ])
+            .execute(indexSourceFields)
     }
 
     async listLegacyEmbeddingPage(
@@ -322,16 +327,7 @@ export class LivingMemoryEntryRepository
                 presetId,
                 id: { $in: ids }
             },
-            [
-                'id',
-                'type',
-                'content',
-                'keywords',
-                'summary',
-                'importance',
-                'createdAt',
-                'updatedAt'
-            ]
+            recallEntryFields
         )
     }
 
@@ -347,47 +343,41 @@ export class LivingMemoryEntryRepository
         const now = new Date()
         const sourceOrigins =
             createSourceOriginsFromMessages(sourceOriginMessages)
-        const records = extracted.map((item): MemoryEntryRecord => ({
-            id: randomUUID(),
-            presetId: scope.presetId,
-            type: item.type,
-            status: normalizeMemoryStatus(item.status),
-            content: normalizeMemoryText(item.content),
-            keywords: normalizeMemoryKeywords(item.keywords),
-            summary: normalizeOptionalMemoryText(item.summary),
-            sentiment: normalizeOptionalMemoryText(item.sentiment),
-            importance: normalizeMemoryImportance(item.importance),
-            sourceConversationId: scope.conversationId,
-            sourceOrigins,
-            isConsolidated: false,
-            createdAt: now,
-            updatedAt: now
-        }))
+        const records = extracted.map((item) =>
+            this.buildMemoryEntry(scope, item, sourceOrigins, now)
+        )
         await this.ctx.database.upsert('living_memory_entry', records)
         return records
     }
 
     async createMemory(scope: MemoryScope, input: MemoryMutationInput) {
-        const now = new Date()
-        const record: MemoryEntryRecord = {
-            id: randomUUID(),
-            presetId: scope.presetId,
-            type: input.type,
-            status: normalizeMemoryStatus(input.status),
-            content: normalizeMemoryText(input.content),
-            keywords: normalizeMemoryKeywords(input.keywords),
-            summary: normalizeOptionalMemoryText(input.summary),
-            sentiment: normalizeOptionalMemoryText(input.sentiment),
-            importance: normalizeMemoryImportance(input.importance),
-            sourceConversationId: scope.conversationId,
-            sourceOrigins: [],
-            isConsolidated: false,
-            createdAt: now,
-            updatedAt: now
-        }
-
+        const record = this.buildMemoryEntry(scope, input, [], new Date())
         await this.ctx.database.create('living_memory_entry', record)
         return record
+    }
+
+    private buildMemoryEntry(
+        scope: MemoryScope,
+        fields: ExtractedMemoryItem | MemoryMutationInput,
+        sourceOrigins: MemoryEntryRecord['sourceOrigins'],
+        createdAt: Date
+    ): MemoryEntryRecord {
+        return {
+            id: randomUUID(),
+            presetId: scope.presetId,
+            type: fields.type,
+            status: normalizeMemoryStatus(fields.status),
+            content: normalizeMemoryText(fields.content),
+            keywords: normalizeMemoryKeywords(fields.keywords),
+            summary: normalizeOptionalMemoryText(fields.summary),
+            sentiment: normalizeOptionalMemoryText(fields.sentiment),
+            importance: normalizeMemoryImportance(fields.importance),
+            sourceConversationId: scope.conversationId,
+            sourceOrigins,
+            isConsolidated: false,
+            createdAt,
+            updatedAt: createdAt
+        }
     }
 
     async updateMemory(id: string, patch: Partial<MemoryMutationInput>) {
@@ -395,20 +385,7 @@ export class LivingMemoryEntryRepository
         if (current == null) {
             return null
         }
-
-        await this.ctx.database.set(
-            'living_memory_entry',
-            { id },
-            {
-                ...this.buildMemoryUpdatePatch(current, patch),
-                updatedAt: new Date()
-            }
-        )
-        const record = await this.requireEntryById(id, 'memory update')
-        return {
-            record,
-            contentChanged: record.content !== current.content
-        }
+        return this.writeMemoryUpdate(current, patch)
     }
 
     async updateMemoryForDream(
@@ -420,17 +397,30 @@ export class LivingMemoryEntryRepository
         if (current == null) {
             throw new Error(`dream update failed: memory not found: ${id}`)
         }
+        return this.writeMemoryUpdate(
+            current,
+            patch,
+            isConsolidated,
+            'dream update'
+        )
+    }
 
+    private async writeMemoryUpdate(
+        current: MemoryEntryRecord,
+        patch: Partial<MemoryMutationInput>,
+        isConsolidated?: boolean,
+        operation = 'memory update'
+    ) {
         await this.ctx.database.set(
             'living_memory_entry',
-            { id },
+            { id: current.id },
             {
                 ...this.buildMemoryUpdatePatch(current, patch),
-                isConsolidated,
+                ...(isConsolidated === undefined ? {} : { isConsolidated }),
                 updatedAt: new Date()
             }
         )
-        const record = await this.requireEntryById(id, 'dream update')
+        const record = await this.requireEntryById(current.id, operation)
         return {
             record,
             contentChanged: record.content !== current.content

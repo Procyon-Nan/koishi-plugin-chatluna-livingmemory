@@ -309,6 +309,16 @@ export async function invokeStructuredOutput<Schema extends z.AnyZodObject>(
     const outputs: string[] = []
     let scratchpadEntries: ScratchpadEntry[] = []
     let lastError = 'structured output failed'
+    const logParseFailure = (attempt: number, error: string) => {
+        options.logging?.logger.diagnostic('model.parse.failed', {
+            ...options.logging?.fields,
+            workflow: options.logging?.workflow,
+            modelCallId: activeModelCallId,
+            stage: options.logging?.stage,
+            attempt,
+            error
+        })
+    }
 
     for (let attempt = 1; attempt <= structuredOutputMaxModelCalls; attempt++) {
         activeAttempt = attempt
@@ -353,14 +363,7 @@ export async function invokeStructuredOutput<Schema extends z.AnyZodObject>(
             }
 
             lastError = validated.error
-            options.logging?.logger.diagnostic('model.parse.failed', {
-                ...options.logging.fields,
-                workflow: options.logging.workflow,
-                modelCallId: activeModelCallId,
-                stage: options.logging.stage,
-                attempt,
-                error: lastError
-            })
+            logParseFailure(attempt, lastError)
         } catch (error) {
             if (isStructuredOutputModelInvocationError(error)) {
                 throw error
@@ -374,14 +377,7 @@ export async function invokeStructuredOutput<Schema extends z.AnyZodObject>(
                     ? error.llmOutput
                     : lastError
             outputs.push(`[attempt ${attempt}]\n${rawOutput}`)
-            options.logging?.logger.diagnostic('model.parse.failed', {
-                ...options.logging.fields,
-                workflow: options.logging.workflow,
-                modelCallId: activeModelCallId,
-                stage: options.logging.stage,
-                attempt,
-                error: lastError
-            })
+            logParseFailure(attempt, lastError)
         }
 
         scratchpadEntries = createRetryEntries(

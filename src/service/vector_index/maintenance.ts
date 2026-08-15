@@ -31,6 +31,18 @@ import type { LivingMemoryLogger } from '../logging/logger'
 const VECTOR_STORAGE_ENGINE = 'pglite-pgvector' as const
 const GLOBAL_INDEX_JOB_PRESET = '*'
 
+const formatJobCompletedDetail = (
+    kind: 'rebuild' | 'reconcile',
+    job: Pick<MemoryJobRecord, 'id' | 'presetId'>,
+    indexedCount: number
+) =>
+    [
+        `vector index ${kind} completed:`,
+        `jobId=${job.id}`,
+        `presetId=${job.presetId}`,
+        `indexed=${indexedCount}`
+    ].join(' ')
+
 export interface LivingMemoryVectorIndexRepository
     extends
         VectorIndexRebuildRepository,
@@ -133,12 +145,7 @@ export class LivingMemoryVectorIndexMaintenance {
             )
             const inspection = await this.options.worker().inspect()
             this.options.onInspection(inspection)
-            return [
-                'vector index reconcile completed:',
-                `jobId=${job.id}`,
-                `presetId=${job.presetId}`,
-                `indexed=${indexedCount}`
-            ].join(' ')
+            return formatJobCompletedDetail('reconcile', job, indexedCount)
         })
     }
 
@@ -319,12 +326,11 @@ export class LivingMemoryVectorIndexMaintenance {
                         })
                 })
                 this.options.onInspection(inspection)
-                return [
-                    'vector index rebuild completed:',
-                    `jobId=${job.id}`,
-                    `presetId=${job.presetId}`,
-                    `indexed=${inspection.indexedCount}`
-                ].join(' ')
+                return formatJobCompletedDetail(
+                    'rebuild',
+                    job,
+                    inspection.indexedCount
+                )
             }
         )
     }
@@ -343,12 +349,11 @@ export class LivingMemoryVectorIndexMaintenance {
                 )
                 const inspection = await this.options.worker().inspect()
                 this.options.onInspection(inspection)
-                return [
-                    'vector index reconcile completed:',
-                    `jobId=${job.id}`,
-                    `presetId=${job.presetId}`,
-                    `indexed=${inspection.indexedCount}`
-                ].join(' ')
+                return formatJobCompletedDetail(
+                    'reconcile',
+                    job,
+                    inspection.indexedCount
+                )
             }
         )
     }

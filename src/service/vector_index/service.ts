@@ -238,9 +238,7 @@ export class LivingMemoryVectorIndexService
     async searchSemantic(
         input: MemorySemanticSearchInput
     ): Promise<MemoryVectorSearchHit[]> {
-        this.assertPresetReady(input.presetId)
-        const vectors = await this.embedSearchTexts(input.searchTexts)
-        await this.awaitPresetReadBarrier(input.presetId)
+        const vectors = await this.prepareSearchVectors(input)
 
         const bestScores = new Map<string, number>()
         for (const vector of vectors) {
@@ -275,9 +273,7 @@ export class LivingMemoryVectorIndexService
     async searchHybrid(
         input: MemoryHybridSearchInput
     ): Promise<MemoryHybridSearchHit[]> {
-        this.assertPresetReady(input.presetId)
-        const vectors = await this.embedSearchTexts(input.searchTexts)
-        await this.awaitPresetReadBarrier(input.presetId)
+        const vectors = await this.prepareSearchVectors(input)
 
         const bestHits = new Map<string, MemoryHybridSearchHit>()
         for (const vector of vectors) {
@@ -482,6 +478,15 @@ export class LivingMemoryVectorIndexService
         }
     }
 
+    private async prepareSearchVectors(
+        input: Pick<MemorySemanticSearchInput, 'presetId' | 'searchTexts'>
+    ) {
+        this.assertPresetReady(input.presetId)
+        const vectors = await this.embedSearchTexts(input.searchTexts)
+        await this.awaitPresetReadBarrier(input.presetId)
+        return vectors
+    }
+
     private async embedSearchTexts(searchTexts: string[]) {
         const context = this.requireEmbeddingContext()
         const generated = await Promise.all(
@@ -622,17 +627,10 @@ export class LivingMemoryVectorIndexService
                 }
             }
             try {
-                const restored = await this.startWorkerCandidate(
-                    this.databaseDirectory
+                await this.restoreActiveDatabase(
+                    input,
+                    'failed rebuild cleanup after rollback'
                 )
-                if (
-                    restored.manifest?.generation !== input.manifest.generation
-                ) {
-                    await this.directorySwitch.cleanup(
-                        input.rebuildDatabaseDirectory,
-                        'failed rebuild cleanup after rollback'
-                    )
-                }
             } catch (recoveryError) {
                 throw new Error(
                     `vector index rebuild switch failed: ` +
@@ -658,15 +656,10 @@ export class LivingMemoryVectorIndexService
             `${summarizeError(switchError)}; rollback failed: ` +
             summarizeError(rollbackError)
         try {
-            const inspection = await this.startWorkerCandidate(
-                this.databaseDirectory
+            await this.restoreActiveDatabase(
+                input,
+                'failed rebuild cleanup after rollback failure'
             )
-            if (inspection.manifest?.generation !== input.manifest.generation) {
-                await this.directorySwitch.cleanup(
-                    input.rebuildDatabaseDirectory,
-                    'failed rebuild cleanup after rollback failure'
-                )
-            }
         } catch (recoveryError) {
             throw new Error(
                 `${message}; recovery failed: ${summarizeError(recoveryError)}`,
@@ -674,6 +667,28 @@ export class LivingMemoryVectorIndexService
             )
         }
         throw new Error(message, { cause: switchError })
+    }
+
+    /**
+     * 切换失败后在 active 目录上重建 worker；若恢复出的 generation 与
+     * 重建 manifest 不一致，说明 active 仍是旧库，清理孤立的 rebuild 目录。
+     */
+    private async restoreActiveDatabase(
+        input: {
+            rebuildDatabaseDirectory: string
+            manifest: NonNullable<VectorIndexInspection['manifest']>
+        },
+        cleanupOperation: string
+    ) {
+        const inspection = await this.startWorkerCandidate(
+            this.databaseDirectory
+        )
+        if (inspection.manifest?.generation !== input.manifest.generation) {
+            await this.directorySwitch.cleanup(
+                input.rebuildDatabaseDirectory,
+                cleanupOperation
+            )
+        }
     }
 
     private async startWorkerCandidate(databaseDirectory: string) {

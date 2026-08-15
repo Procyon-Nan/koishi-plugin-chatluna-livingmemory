@@ -110,23 +110,27 @@ const normalizeValue = (
     }
 }
 
-const formatValue = (value: unknown, key: string) => {
+const stringifyNormalized = (
+    value: unknown,
+    key: string,
+    options: { indent?: number; bareStringsOnly: boolean }
+) => {
     const normalized = normalizeValue(value, key, new WeakSet())
-    if (typeof normalized === 'string' && bareValuePattern.test(normalized)) {
+    if (
+        typeof normalized === 'string' &&
+        (!options.bareStringsOnly || bareValuePattern.test(normalized))
+    ) {
         return normalized
     }
-    const serialized = JSON.stringify(normalized)
+    const serialized = JSON.stringify(normalized, null, options.indent)
     return serialized === undefined ? '"[unserializable]"' : serialized
 }
 
-const formatBlockValue = (value: unknown, key: string) => {
-    const normalized = normalizeValue(value, key, new WeakSet())
-    if (typeof normalized === 'string') {
-        return normalized
-    }
-    const serialized = JSON.stringify(normalized, null, 2)
-    return serialized === undefined ? '"[unserializable]"' : serialized
-}
+const formatValue = (value: unknown, key: string) =>
+    stringifyNormalized(value, key, { bareStringsOnly: true })
+
+const formatBlockValue = (value: unknown, key: string) =>
+    stringifyNormalized(value, key, { indent: 2, bareStringsOnly: false })
 
 const orderedFieldNames = (fields: LivingMemoryLogFields) => {
     const names = Object.keys(fields).filter(

@@ -63,6 +63,10 @@ export const formatTime = (value: string | Date | null | undefined): string => {
     return `${year}-${month}-${day} ${hour}:${minute}`
 }
 
+export const toErrorMessage = (error: unknown): string => {
+    return error instanceof Error ? error.message : String(error)
+}
+
 export const formatImportance = (value: number | null | undefined): string => {
     if (value == null) return ''
     return Number.isFinite(value) ? value.toFixed(2) : ''

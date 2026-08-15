@@ -280,13 +280,7 @@ export class LivingMemoryExtractionCoordinator {
                 })
             }
         } catch (error) {
-            await this.jobRepository.createFailedJob(
-                scope,
-                'extract',
-                input,
-                error,
-                startedAt
-            )
+            await this.recordFailedExtraction(scope, input, error, startedAt)
             throw error
         }
 
@@ -297,9 +291,8 @@ export class LivingMemoryExtractionCoordinator {
             logger.diagnostic('extraction.parse.failed', {
                 error: parseError
             })
-            await this.jobRepository.createFailedJob(
+            await this.recordFailedExtraction(
                 scope,
-                'extract',
                 input,
                 `extraction parse failed: ${parseError}`,
                 startedAt
@@ -317,13 +310,7 @@ export class LivingMemoryExtractionCoordinator {
                 )
             }
         } catch (error) {
-            await this.jobRepository.createFailedJob(
-                scope,
-                'extract',
-                input,
-                error,
-                startedAt
-            )
+            await this.recordFailedExtraction(scope, input, error, startedAt)
             throw error
         }
 
@@ -333,5 +320,20 @@ export class LivingMemoryExtractionCoordinator {
         if (extracted.length > 0) {
             this.queueAutoDream(scope.presetId)
         }
+    }
+
+    private async recordFailedExtraction(
+        scope: MemoryScope,
+        input: string,
+        error: unknown,
+        startedAt: Date
+    ) {
+        await this.jobRepository.createFailedJob(
+            scope,
+            'extract',
+            input,
+            error,
+            startedAt
+        )
     }
 }

@@ -195,8 +195,7 @@ export class LivingMemoryUserProfileService {
                 })
             } catch (error) {
                 failed++
-                runLogger.diagnostic('user-profile.skipped', {
-                    workflow: 'dream',
+                this.logProfileSkipped(runLogger, {
                     presetId,
                     speaker: group.speakerLabel,
                     reason: 'invoke-failed',
@@ -208,8 +207,7 @@ export class LivingMemoryUserProfileService {
             if (structuredResult.parseError !== null) {
                 failed++
                 const parseError = structuredResult.parseError
-                runLogger.diagnostic('user-profile.skipped', {
-                    workflow: 'dream',
+                this.logProfileSkipped(runLogger, {
                     presetId,
                     speaker: group.speakerLabel,
                     reason: 'structured-output-failed',
@@ -222,8 +220,7 @@ export class LivingMemoryUserProfileService {
             const parsed = parsedProfiles[0]
             if (parsed === undefined) {
                 empty++
-                runLogger.diagnostic('user-profile.skipped', {
-                    workflow: 'dream',
+                this.logProfileSkipped(runLogger, {
                     presetId,
                     speaker: group.speakerLabel,
                     reason: 'empty-profiles'
@@ -237,8 +234,7 @@ export class LivingMemoryUserProfileService {
             )
             if (content.length === 0) {
                 empty++
-                runLogger.diagnostic('user-profile.skipped', {
-                    workflow: 'dream',
+                this.logProfileSkipped(runLogger, {
                     presetId,
                     speaker: group.speakerLabel,
                     reason: 'empty-content'
@@ -269,6 +265,21 @@ export class LivingMemoryUserProfileService {
                 `failed=${failed}`
             ].join(' ')
         }
+    }
+
+    private logProfileSkipped(
+        logger: LivingMemoryLogger,
+        fields: {
+            presetId: string
+            speaker: string
+            reason: string
+            error?: string
+        }
+    ) {
+        logger.diagnostic('user-profile.skipped', {
+            workflow: 'dream',
+            ...fields
+        })
     }
 
     async renderForSpeakers(presetId: string, speakerLabels: string[]) {

@@ -19,24 +19,14 @@ export class LivingMemoryJobRepository implements JobRepository {
         recallStrategy: MemoryRecallStrategy | null = null
     ): Promise<MemoryJobRecord> {
         const now = new Date()
-        const job: MemoryJobRecord = {
-            id: randomUUID(),
-            presetId: scope.presetId,
-            conversationId: scope.conversationId,
-            kind,
-            recallStrategy,
+        return this.createJobRecord(scope, kind, input, recallStrategy, {
             status: 'pending',
-            input,
-            detail: null,
             error: null,
             createdAt: now,
             startedAt: null,
             finishedAt: null,
             updatedAt: now
-        }
-
-        await this.ctx.database.create('living_memory_job', job)
-        return job
+        })
     }
 
     async createFailedJob(
@@ -48,20 +38,39 @@ export class LivingMemoryJobRepository implements JobRepository {
         recallStrategy: MemoryRecallStrategy | null = null
     ): Promise<MemoryJobRecord> {
         const finishedAt = new Date()
+        return this.createJobRecord(scope, kind, input, recallStrategy, {
+            status: 'failed',
+            error: summarizeError(error),
+            createdAt: startedAt,
+            startedAt,
+            finishedAt,
+            updatedAt: finishedAt
+        })
+    }
+
+    private async createJobRecord(
+        scope: MemoryScope,
+        kind: MemoryJobKind,
+        input: string,
+        recallStrategy: MemoryRecallStrategy | null,
+        state: {
+            status: MemoryJobRecord['status']
+            error: string | null
+            createdAt: Date
+            startedAt: Date | null
+            finishedAt: Date | null
+            updatedAt: Date
+        }
+    ): Promise<MemoryJobRecord> {
         const job: MemoryJobRecord = {
             id: randomUUID(),
             presetId: scope.presetId,
             conversationId: scope.conversationId,
             kind,
             recallStrategy,
-            status: 'failed',
             input,
             detail: null,
-            error: summarizeError(error),
-            createdAt: startedAt,
-            startedAt,
-            finishedAt,
-            updatedAt: finishedAt
+            ...state
         }
 
         await this.ctx.database.create('living_memory_job', job)

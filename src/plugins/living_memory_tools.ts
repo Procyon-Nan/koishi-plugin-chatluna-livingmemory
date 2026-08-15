@@ -43,65 +43,61 @@ const livingMemoryToolMeta = {
 
 export function apply(ctx: Context, config: LivingMemoryConfig) {
     ctx.on('ready', () => {
-        const disposeSearch = ctx.chatluna.platform.registerTool(
+        const registerLivingMemoryTool = (
+            name: string,
+            options: {
+                description: string
+                tags: string[]
+                createTool: () => ReturnType<ChatLunaTool['createTool']>
+            }
+        ) =>
+            ctx.chatluna.platform.registerTool(name, {
+                description: options.description,
+                selector(_history: unknown[]) {
+                    return true
+                },
+                meta: {
+                    ...livingMemoryToolMeta,
+                    tags: options.tags
+                },
+                createTool: options.createTool
+            })
+
+        const disposeSearch = registerLivingMemoryTool(
             livingMemorySearchToolName,
             {
                 description: livingMemorySearchToolDescription,
-                selector(_history: unknown[]) {
-                    return true
-                },
-                meta: {
-                    ...livingMemoryToolMeta,
-                    tags: ['living-memory', 'search']
-                },
-                createTool() {
-                    return toChatLunaStructuredTool(
+                tags: ['living-memory', 'search'],
+                createTool: () =>
+                    toChatLunaStructuredTool(
                         new LivingMemorySearchTool(ctx.chatluna_living_memory)
                     )
-                }
             }
         )
-        const disposeGetMessages = ctx.chatluna.platform.registerTool(
+        const disposeGetMessages = registerLivingMemoryTool(
             livingMemoryGetMessagesToolName,
             {
                 description: livingMemoryGetMessagesToolDescription,
-                selector(_history: unknown[]) {
-                    return true
-                },
-                meta: {
-                    ...livingMemoryToolMeta,
-                    tags: ['living-memory', 'source', 'messages']
-                },
-                createTool() {
-                    return toChatLunaStructuredTool(
+                tags: ['living-memory', 'source', 'messages'],
+                createTool: () =>
+                    toChatLunaStructuredTool(
                         new LivingMemoryGetMessagesTool(ctx)
                     )
-                }
             }
         )
         // 写入型工具默认不注册，由 enableMemoryCreationTool 显式开启。
         const disposeCreateMemory = config.enableMemoryCreationTool
-            ? ctx.chatluna.platform.registerTool(
-                  livingMemoryCreateMemoryToolName,
-                  {
-                      description: livingMemoryCreateMemoryToolDescription,
-                      selector(_history: unknown[]) {
-                          return true
-                      },
-                      meta: {
-                          ...livingMemoryToolMeta,
-                          tags: ['living-memory', 'create', 'write']
-                      },
-                      createTool() {
-                          return toChatLunaStructuredTool(
-                              new LivingMemoryCreateMemoryTool(
-                                  ctx.chatluna_living_memory,
-                                  config.memoryCreateToolMaxMemories
-                              )
+            ? registerLivingMemoryTool(livingMemoryCreateMemoryToolName, {
+                  description: livingMemoryCreateMemoryToolDescription,
+                  tags: ['living-memory', 'create', 'write'],
+                  createTool: () =>
+                      toChatLunaStructuredTool(
+                          new LivingMemoryCreateMemoryTool(
+                              ctx.chatluna_living_memory,
+                              config.memoryCreateToolMaxMemories
                           )
-                      }
-                  }
-              )
+                      )
+              })
             : null
 
         ctx.effect(() => {

@@ -5,13 +5,16 @@ import {
     SystemMessage
 } from '@langchain/core/messages'
 import type { LivingMemoryConfig } from '../contracts/workflows'
+import type {
+    LivingMemoryTranscriptMessage,
+    MemoryScope
+} from '../contracts/memory'
 import {
     setLivingMemoryRawContent,
     toChatLunaTranscriptMessageResult,
     toChatLunaTranscriptMessages
 } from '../service/transcript/chatluna_transcript_adapter'
 import { collectUserProfileSpeakerLabels } from '../service/user_profile'
-import type { LivingMemoryTranscriptMessage } from '../contracts/memory'
 import { renderChatLunaPresetPrompt } from '../service/memory/helpers'
 import { toNonEmptyString } from '../service/shared/utils'
 
@@ -73,6 +76,10 @@ const isSubagentPrompt = (agentContext: unknown) => {
     )
 }
 
+interface ChatPresetSource {
+    preset: { value?: { triggerKeyword?: string[] } | null }
+}
+
 export async function apply(ctx: Context, config: LivingMemoryConfig) {
     const logger = ctx.chatluna_living_memory.memoryLogger.with({
         workflow: 'chat'
@@ -86,54 +93,91 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
         activeSnapshotInjections.delete(conversationId)
     }
 
-    ctx.effect(() =>
-        ctx.chatluna.contextManager.pipeline(
-            'after_system_prompts',
-            async (runtime, next) => {
-                const conversationId = runtime.configurable?.conversationId
-                if (
-                    typeof conversationId === 'string' &&
-                    !isSubagentPrompt(runtime.configurable?.agentContext)
-                ) {
-                    const injection =
-                        activeUserProfileInjections.get(conversationId)
-                    if (injection != null) {
-                        runtime.result.push(new SystemMessage(injection))
-                        runtime.usedTokens +=
-                            (await runtime.tokenCounter(injection)) +
-                            (await runtime.tokenCounter('system'))
-                    }
-                }
-
-                await next()
-            },
-            0
+    const resolveChatScope = (
+        conversationId: string,
+        message: HumanMessage,
+        chatInterface: ChatPresetSource,
+        session: Session,
+        events: { skipped: string; resolved: string }
+    ): MemoryScope | null => {
+        const fallbackPresetId = chatInterface.preset.value?.triggerKeyword?.[0]
+        const presetId = ctx.chatluna_living_memory.resolvePresetId(
+            message,
+            fallbackPresetId
         )
+        if (presetId == null) {
+            diagnostic(events.skipped, {
+                conversationId,
+                fallbackPresetId,
+                reason: 'preset-unresolved'
+            })
+            return null
+        }
+        const speakerName = prepareSpeakerName(session, message)
+        diagnostic(events.resolved, {
+            conversationId,
+            presetId,
+            fallbackPresetId
+        })
+        return ctx.chatluna_living_memory.createScope(
+            conversationId,
+            presetId,
+            session.userId,
+            session.channelId,
+            {
+                guildId: session.guildId ?? session.channelId,
+                isDirect: session.isDirect,
+                speakerId: session.userId,
+                speakerName
+            }
+        )
+    }
+
+    const registerInjectionPipeline = (
+        stage: 'after_system_prompts' | 'injections',
+        injections: Map<string, string>,
+        createMessage: (content: string) => SystemMessage | AIMessage,
+        tokenRole: 'system' | 'assistant',
+        priority: number
+    ) => {
+        ctx.effect(() =>
+            ctx.chatluna.contextManager.pipeline(
+                stage,
+                async (runtime, next) => {
+                    const conversationId = runtime.configurable?.conversationId
+                    if (
+                        typeof conversationId === 'string' &&
+                        !isSubagentPrompt(runtime.configurable?.agentContext)
+                    ) {
+                        const injection = injections.get(conversationId)
+                        if (injection != null) {
+                            runtime.result.push(createMessage(injection))
+                            runtime.usedTokens +=
+                                (await runtime.tokenCounter(injection)) +
+                                (await runtime.tokenCounter(tokenRole))
+                        }
+                    }
+
+                    await next()
+                },
+                priority
+            )
+        )
+    }
+
+    registerInjectionPipeline(
+        'after_system_prompts',
+        activeUserProfileInjections,
+        (content) => new SystemMessage(content),
+        'system',
+        0
     )
-
-    ctx.effect(() =>
-        ctx.chatluna.contextManager.pipeline(
-            'injections',
-            async (runtime, next) => {
-                const conversationId = runtime.configurable?.conversationId
-                if (
-                    typeof conversationId === 'string' &&
-                    !isSubagentPrompt(runtime.configurable?.agentContext)
-                ) {
-                    const injection =
-                        activeSnapshotInjections.get(conversationId)
-                    if (injection != null) {
-                        runtime.result.push(new AIMessage(injection))
-                        runtime.usedTokens +=
-                            (await runtime.tokenCounter(injection)) +
-                            (await runtime.tokenCounter('assistant'))
-                    }
-                }
-
-                await next()
-            },
-            -10
-        )
+    registerInjectionPipeline(
+        'injections',
+        activeSnapshotInjections,
+        (content) => new AIMessage(content),
+        'assistant',
+        -10
     )
 
     ctx.on(
@@ -151,42 +195,20 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 isDirect: session.isDirect
             })
 
-            const fallbackPresetId =
-                chatInterface.preset.value?.triggerKeyword?.[0]
-            const presetId = ctx.chatluna_living_memory.resolvePresetId(
+            const scope = resolveChatScope(
+                conversationId,
                 message,
-                fallbackPresetId
-            )
-
-            if (presetId == null) {
-                diagnostic('chat.before.skipped', {
-                    conversationId,
-                    fallbackPresetId,
-                    reason: 'preset-unresolved'
-                })
-                return
-            }
-            const speakerName = prepareSpeakerName(session, message)
-            writeRawUserContent(message, promptVariables)
-
-            diagnostic('chat.before.resolved', {
-                conversationId,
-                presetId,
-                fallbackPresetId
-            })
-
-            const scope = ctx.chatluna_living_memory.createScope(
-                conversationId,
-                presetId,
-                session.userId,
-                session.channelId,
+                chatInterface,
+                session,
                 {
-                    guildId: session.guildId ?? session.channelId,
-                    isDirect: session.isDirect,
-                    speakerId: session.userId,
-                    speakerName
+                    skipped: 'chat.before.skipped',
+                    resolved: 'chat.before.resolved'
                 }
             )
+            if (scope == null) {
+                return
+            }
+            writeRawUserContent(message, promptVariables)
 
             const currentTranscript = toChatLunaTranscriptMessageResult(
                 scope,
@@ -198,7 +220,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
             if (currentTranscript.message == null) {
                 diagnostic('chat.recall.skipped', {
                     conversationId,
-                    presetId,
+                    presetId: scope.presetId,
                     reason: currentTranscript.reason
                 })
                 return
@@ -269,7 +291,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                         )
                         diagnostic('chat.injection.activated', {
                             conversationId,
-                            presetId,
+                            presetId: scope.presetId,
                             stage: 'after_system_prompts',
                             role: 'system',
                             type: 'user-profile',
@@ -287,7 +309,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                         )
                         diagnostic('chat.injection.activated', {
                             conversationId,
-                            presetId,
+                            presetId: scope.presetId,
                             stage: 'injections',
                             role: 'assistant',
                             type: 'snapshot',
@@ -316,7 +338,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
 
             diagnostic('chat.recall.queued', {
                 conversationId,
-                presetId,
+                presetId: scope.presetId,
                 snapshotInjection: snapshotInjectionStatus,
                 snapshotLength: sections.snapshot.length,
                 userProfileInjection: userProfileInjectionStatus,
@@ -347,41 +369,19 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 isDirect: session.isDirect
             })
 
-            const fallbackPresetId =
-                chatInterface.preset.value?.triggerKeyword?.[0]
-            const presetId = ctx.chatluna_living_memory.resolvePresetId(
+            const scope = resolveChatScope(
+                conversationId,
                 sourceMessage,
-                fallbackPresetId
-            )
-
-            if (presetId == null) {
-                diagnostic('chat.after.skipped', {
-                    conversationId,
-                    fallbackPresetId,
-                    reason: 'preset-unresolved'
-                })
-                return
-            }
-            const speakerName = prepareSpeakerName(session, sourceMessage)
-
-            diagnostic('chat.after.resolved', {
-                conversationId,
-                presetId,
-                fallbackPresetId
-            })
-
-            const scope = ctx.chatluna_living_memory.createScope(
-                conversationId,
-                presetId,
-                session.userId,
-                session.channelId,
+                chatInterface,
+                session,
                 {
-                    guildId: session.guildId ?? session.channelId,
-                    isDirect: session.isDirect,
-                    speakerId: session.userId,
-                    speakerName
+                    skipped: 'chat.after.skipped',
+                    resolved: 'chat.after.resolved'
                 }
             )
+            if (scope == null) {
+                return
+            }
 
             const completedAt = new Date()
             const sourceTranscript = toChatLunaTranscriptMessageResult(
@@ -401,7 +401,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
             ) {
                 diagnostic('chat.extraction.skipped', {
                     conversationId,
-                    presetId,
+                    presetId: scope.presetId,
                     reason: 'invalid-completed-round',
                     sourceReason: sourceTranscript.reason,
                     responseReason: responseTranscript.reason
@@ -415,7 +415,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
 
             diagnostic('chat.extraction.queued', {
                 conversationId,
-                presetId,
+                presetId: scope.presetId,
                 roundMessages: completedRound.messages.length
             })
             const presetTemplate = chatInterface.preset.value
