@@ -6,6 +6,14 @@ import type { DreamPartitionEntry } from './partitioning/types'
 export const DREAM_PARTITION_TARGET_SIZE = 300
 export const DREAM_PARTITION_MAX_SIZE = 350
 
+export interface DreamPartitionOptions {
+    /**
+     * 分区目标规模。提供时分区数直接取 ceil(n / targetSize)，跳过
+     * 就近 300 的候选选择；须为正整数。
+     */
+    targetSize?: number
+}
+
 const PARTITION_ATTEMPTS = 3
 
 export const selectDreamPartitionCount = (entryCount: number) => {
@@ -54,7 +62,8 @@ export const buildDreamPartitionTargetSizes = (
 }
 
 export const partitionDreamEntries = <Entry extends DreamPartitionEntry>(
-    inputEntries: readonly Entry[]
+    inputEntries: readonly Entry[],
+    options?: DreamPartitionOptions
 ): Entry[][] => {
     if (inputEntries.length === 0) {
         return []
@@ -63,7 +72,10 @@ export const partitionDreamEntries = <Entry extends DreamPartitionEntry>(
     const entries = [...inputEntries].sort((left, right) =>
         compareEntryIds(left.id, right.id)
     )
-    const batchCount = selectDreamPartitionCount(entries.length)
+    const batchCount =
+        options?.targetSize !== undefined
+            ? Math.ceil(entries.length / options.targetSize)
+            : selectDreamPartitionCount(entries.length)
     const targetSizes = buildDreamPartitionTargetSizes(
         entries.length,
         batchCount

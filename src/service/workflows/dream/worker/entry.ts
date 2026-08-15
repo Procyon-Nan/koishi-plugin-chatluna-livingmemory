@@ -34,9 +34,9 @@ const partition = (
     request: Extract<DreamWorkerRequest, { type: 'partition' }>
 ): Extract<DreamWorkerResponse, { type: 'partition' }> => {
     const entries = request.entries.map((entry, index) => ({ ...entry, index }))
-    const partitions = partitionDreamEntries(entries).map((items) =>
-        items.map((entry) => entry.index)
-    )
+    const partitions = partitionDreamEntries(entries, {
+        targetSize: request.targetSize
+    }).map((items) => items.map((entry) => entry.index))
     return { id: request.id, type: 'partition', ok: true, partitions }
 }
 

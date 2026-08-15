@@ -74,11 +74,13 @@ export class LivingMemoryDreamWorkerClient implements DreamWorkerRunner {
     }
 
     async partition<Entry extends DreamPartitionEntry>(
-        entries: readonly Entry[]
+        entries: readonly Entry[],
+        targetSize?: number
     ): Promise<Entry[][]> {
         const response = await this.request({
             type: 'partition',
-            entries: entries.map(({ id, keywords }) => ({ id, keywords }))
+            entries: entries.map(({ id, keywords }) => ({ id, keywords })),
+            targetSize
         })
         if (response.type !== 'partition') {
             throw new Error(

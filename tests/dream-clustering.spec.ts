@@ -98,6 +98,50 @@ it('handles one partition, the 350 boundary, and entries without keywords', () =
     )
 })
 
+it('partitions to exact ceil(n / targetSize) batches within the target size', () => {
+    const entries = createEntries(100)
+    const batches = partitionDreamEntries(entries, { targetSize: 30 })
+    const ids = batches.flatMap((batch) => batch.map((entry) => entry.id))
+
+    assert.deepEqual(
+        batches.map((batch) => batch.length),
+        [25, 25, 25, 25]
+    )
+    assert.ok(
+        batches.every((batch) => batch.length <= 30)
+    )
+    assert.equal(ids.length, entries.length)
+    assert.equal(new Set(ids).size, entries.length)
+})
+
+it('hits the target size boundary exactly', () => {
+    // 分区器保证各批规模的差不超过 1，但较大批的顺序不固定，排序后比较。
+    const sizesOf = (count: number) =>
+        partitionDreamEntries(createEntries(count), {
+            targetSize: 30
+        })
+            .map((batch) => batch.length)
+            .sort((left, right) => right - left)
+
+    assert.deepEqual(sizesOf(31), [16, 15])
+    assert.deepEqual(sizesOf(59), [30, 29])
+    assert.deepEqual(sizesOf(60), [30, 30])
+    assert.deepEqual(sizesOf(61), [21, 20, 20])
+})
+
+it('keeps target-size partitions deterministic under shuffled input', () => {
+    const entries = createEntries(100)
+    const first = partitionDreamEntries(entries, { targetSize: 30 })
+    const second = partitionDreamEntries([...entries].reverse(), {
+        targetSize: 30
+    })
+
+    assert.deepEqual(
+        second.map((batch) => batch.map((entry) => entry.id)),
+        first.map((batch) => batch.map((entry) => entry.id))
+    )
+})
+
 it('selects the highest-quality initial partition across all starts', () => {
     const entries = createEntries(720).sort((left, right) =>
         compareEntryIds(left.id, right.id)

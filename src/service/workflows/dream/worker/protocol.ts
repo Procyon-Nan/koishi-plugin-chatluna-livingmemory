@@ -28,6 +28,7 @@ export type DreamWorkerCommand =
     | {
           type: 'partition'
           entries: DreamPartitionEntry[]
+          targetSize?: number
       }
     | {
           type: 'hdbscan'
@@ -74,7 +75,8 @@ export type DreamWorkerResponse =
 
 export interface DreamWorkerRunner {
     partition<Entry extends DreamPartitionEntry>(
-        entries: readonly Entry[]
+        entries: readonly Entry[],
+        targetSize?: number
     ): Promise<Entry[][]>
 
     runHdbscan(

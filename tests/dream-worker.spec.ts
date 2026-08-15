@@ -99,6 +99,35 @@ it('partitions entries without cloning full memory records', async () => {
     await client.stop()
 })
 
+it('partitions with an explicit target size through the worker', async () => {
+    const entries = Array.from({ length: 95 }, (_, index) => ({
+        id: `memory-${index.toString().padStart(4, '0')}`,
+        keywords: [`group-${index % 8}`, `topic-${index % 23}`]
+    }))
+    const expected = partitionDreamEntries(entries, {
+        targetSize: 30
+    }).map((partition) => partition.map((entry) => entry.id))
+    const client = new LivingMemoryDreamWorkerClient({
+        workerPath: dreamWorkerPath
+    })
+    await client.start()
+
+    const partitions = await client.partition(entries, 30)
+
+    assert.deepEqual(
+        partitions.map((partition) => partition.map((entry) => entry.id)),
+        expected
+    )
+    assert.equal(partitions.length, 4)
+    assert.ok(
+        partitions.every(
+            (partition) => partition.length <= 30 && partition.length > 0
+        )
+    )
+    assert.equal(partitions.flat().length, entries.length)
+    await client.stop()
+})
+
 it('keeps the main event loop responsive during partitioning', async () => {
     const entries = Array.from({ length: 5_000 }, (_, index) => ({
         id: `memory-${index.toString().padStart(4, '0')}`,
