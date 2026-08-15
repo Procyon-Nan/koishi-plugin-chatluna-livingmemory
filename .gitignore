@@ -25,6 +25,7 @@ tmp/
 .agents
 .claude/
 .omc/
+.zcode/
 
 # codegraph
 .codegraph/

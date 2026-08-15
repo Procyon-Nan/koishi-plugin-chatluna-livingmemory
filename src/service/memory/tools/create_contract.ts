@@ -25,17 +25,17 @@ export const createLivingMemoryCreateInputSchema = (maxMemories: number) =>
             .min(1)
             .max(maxMemories)
             .describe(
-                `本次要创建的长期记忆。每条完整包含 ${MEMORY_COMPLETE_FIELD_LIST} 六个字段。`
+                `本次要创建的记忆。每条完整包含 ${MEMORY_COMPLETE_FIELD_LIST} 六个字段。`
             )
     })
 
 export const livingMemoryCreateMemoryToolDescription = [
-    '主动将当前对话中的内容写入你的长期记忆。',
+    '主动创建属于你的长期记忆。',
     '',
-    '在以下情形使用此工具：用户明确要求你记住某些信息；或出现显著重要、等待自动提取可能丢失的信息。',
-    '是否调用以及记录什么内容，由你依据当前对话上下文自主判断。',
-    `- memories：必填 JSON 数组，每个元素是一条完整记忆，包含 ${MEMORY_COMPLETE_FIELD_LIST} 六个字段。`,
-    '- memories 必须直接传 JSON 数组：正确 {"memories":[...]}；错误 {"memories":"[...]"}。',
+    '在以下情形使用此工具：用户明确要求你记住某些信息；或你认为存在具有价值，需要记下来的内容。',
+    '你需要依据当前对话上下文自主决定需要创建的记忆主题和内容。',
+    `- memories：是必填项，每个元素是一条完整的记忆，包含 ${MEMORY_COMPLETE_FIELD_LIST} 六个字段。`,
+    '- memories 是严格的 JSON 数组：正确 {"memories":[...]}；错误 {"memories":"[...]"}。',
     '每条记忆遵循以下字段规范：',
     MEMORY_TYPE_GUIDE,
     MEMORY_CONTENT_REQUIREMENT,
@@ -45,6 +45,5 @@ export const livingMemoryCreateMemoryToolDescription = [
     MEMORY_IMPORTANCE_REQUIREMENT,
     MEMORY_SPEAKER_REFERENCE_REQUIREMENT,
     '- 记忆中的相对时间（如"今天"、"明天"、"上周"）必须结合对话上下文转换为具体日期；短期状态、身体状态、临时计划等可能在之后变化的内容，必须在 content 中写明具体日期。',
-    '- 本工具返回创建结果 JSON：createdMemories 列出已写入记忆的 id 与类别；warnings 说明已保存但索引同步延迟等事项。',
-    '- 写入的记忆会进入检索库，供你之后的记忆搜索与召回使用。'
+    '- 本工具返回创建结果 JSON：createdMemories 列出已写入记忆的 id 与类别；warnings 说明已保存但索引同步延迟等事项。'
 ].join('\n')

@@ -85,7 +85,7 @@ it('exposes the extraction-aligned schema directly to the model-facing tool', as
     const tool = new LivingMemoryCreateMemoryTool(provider, 10)
 
     assert.equal(tool.name, livingMemoryCreateMemoryToolName)
-    assert.match(livingMemoryCreateMemoryToolDescription, /必填 JSON 数组/u)
+    assert.match(livingMemoryCreateMemoryToolDescription, /memories：是必填项/u)
     assert.match(
         livingMemoryCreateMemoryToolDescription,
         /禁止把数组编码成 JSON 字符串|错误 \{"memories":"\[\.\.\.\]"\}/u
