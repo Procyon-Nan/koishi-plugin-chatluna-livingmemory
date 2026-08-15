@@ -9,7 +9,7 @@
 - 以预设（preset）为核心，全自动、异步地进行长期记忆的生成与召回
 - 标准 ChatLuna 会话会在系统提示词后注入用户画像，并在历史上下文之后、当前用户输入之前注入记忆快照；Character（伪装）插件通过预设中的 `{living_memory}` 变量注入记忆快照和相关用户画像
 - 提供 `embedding-rerank` 与 `agentic-recall（实验性）` 两种记忆召回策略
-- 提供 `living_memory_search` 与 `living_memory_get_messages` 记忆工具，供模型查询记忆并按记忆 id 查看来源消息
+- 提供 `living_memory_search` 与 `living_memory_get_messages` 记忆工具，供模型查询记忆并按记忆 id 查看来源消息；开启 `enableMemoryCreationTool` 后另提供 `living_memory_create_memory`，允许模型在对话中主动创建长期记忆
 - 通过手动全量 Dream 与自动增量 Dream 执行记忆库的合并、更新与归档
 - 根据记忆内容形成用户画像，并在对话中实时注入
 - 提供 Koishi Console WebUI，方便手动查看、创建、编辑、删除记忆和快照等数据
@@ -109,6 +109,12 @@ input: |
 工具返回结果包含记忆 `id`、记忆类别、记忆内容、摘要、关键词、重要度、创建时间、更新时间。返回结果不会包含 `status` 或来源消息。
 
 `living_memory_get_messages` 用于在当前预设内按记忆 `id` 批量查看来源消息。它只接受 `living_memory_search` 返回的记忆 `id`，每次最多查询 10 条记忆。返回结果包含目标记忆的基本信息、按 `originIndex` 编号的 `sourceOrigins`，以及未找到或不属于当前预设的 `notFoundMemoryIds`。
+
+`living_memory_create_memory` 是默认关闭的主动记忆创建工具，需在插件配置中开启 `enableMemoryCreationTool` 后才会注册。开启后，模型可以在对话中主动将当前内容写入长期记忆：既用于即时响应用户“记住这个”类的显式请求，也用于模型自主决定记录显著重要、不宜等待自动提取的信息。它与自动记忆提取使用同一套字段规范，产出完全同构的记忆；两者同时开启时同一事件可能被记录两次，由 Dream 整理收敛。单次调用允许提交的记忆条数由 `memoryCreateToolMaxMemories` 控制（默认 10）。
+
+工具参数为 `memories`，必填 JSON 数组，每条记忆包含与自动提取完全一致的六个字段：`type`（记忆类别）、`content`（第一人称记忆正文）、`summary`（检索摘要）、`keywords`（关键词）、`sentiment`（情绪色彩）、`importance`（0 到 1 的长期价值）。
+
+返回结果包含 `createdMemories`（已写入记忆的 `id` 与类别）与 `warnings`（如向量索引同步延迟等说明）。经此工具创建的记忆没有来源对话消息，`living_memory_get_messages` 会显示其无来源记录。
 
 默认日志会记录 Recall 快照更新后的完整最终注入文本、Recall 无结果时的快照保留事件、Dream 的启动/完成/失败，以及低频运维和索引事件。
 
