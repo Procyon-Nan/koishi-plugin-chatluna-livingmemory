@@ -166,14 +166,6 @@ export const toChatLunaTranscriptMessageResult = (
     })
 }
 
-export const toChatLunaTranscriptMessage = (
-    scope: MemoryScope,
-    message: BaseMessage,
-    options: { fallbackCreatedAt?: Date } = {}
-) => {
-    return toChatLunaTranscriptMessageResult(scope, message, options).message
-}
-
 export const toChatLunaTranscriptMessages = (
     scope: MemoryScope,
     messages: BaseMessage[]

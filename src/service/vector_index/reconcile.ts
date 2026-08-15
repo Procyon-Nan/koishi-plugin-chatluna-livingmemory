@@ -1,7 +1,6 @@
 import type {
     LegacyMemoryEmbeddingRecord,
-    MemoryIndexSourceRecord,
-    MemoryVectorIndexPresetStatus
+    MemoryIndexSourceRecord
 } from '../../contracts/vector_index'
 import { summarizeError } from '../shared/utils'
 import type { LivingMemoryVectorIndexWorkerClient } from './worker_client'
@@ -71,11 +70,6 @@ const readPresetInventory = async (
     return inventory
 }
 
-const markPresetState = (
-    worker: VectorIndexReconcileWorker,
-    status: MemoryVectorIndexPresetStatus
-) => worker.markPresetState(status)
-
 export const reconcileVectorIndexPreset = async (options: {
     presetId: string
     repository: VectorIndexReconcileRepository
@@ -102,7 +96,7 @@ export const reconcileVectorIndexPreset = async (options: {
         return 0
     }
 
-    await markPresetState(worker, {
+    await worker.markPresetState({
         presetId,
         state: 'building',
         expectedCount: total,
@@ -191,7 +185,7 @@ export const reconcileVectorIndexPreset = async (options: {
                     `actual=${indexedCount}`
             )
         }
-        await markPresetState(worker, {
+        await worker.markPresetState({
             presetId,
             state: 'ready',
             expectedCount: total,
@@ -202,7 +196,7 @@ export const reconcileVectorIndexPreset = async (options: {
         return indexedCount
     } catch (error) {
         const message = summarizeError(error)
-        await markPresetState(worker, {
+        await worker.markPresetState({
             presetId,
             state: 'dirty',
             expectedCount: total,

@@ -482,9 +482,9 @@ export class LivingMemoryAgenticRecallExecutor {
         model: ChatLunaChatModel,
         prompt: AgenticRecallPromptMessages,
         input: ChainValues,
-        runConfig?: RunnableConfig,
-        logger?: LivingMemoryLogger,
-        attempt = 1
+        runConfig: RunnableConfig | undefined,
+        logger: LivingMemoryLogger,
+        attempt: number
     ): Promise<AgentFinish> {
         const scratchpad = _formatIntermediateSteps(
             (input['scratchpadEntries'] ??
@@ -501,16 +501,18 @@ export class LivingMemoryAgenticRecallExecutor {
             ...(runConfig ?? {}),
             tools: []
         } as Parameters<ChatLunaChatModel['invoke']>[1]
-        const response =
-            logger == null
-                ? await model.invoke(messages, invokeConfig)
-                : await invokeLoggedModel(model, messages, invokeConfig, {
-                      logger,
-                      stage: 'agentic-finalization',
-                      attempt,
-                      promptLogging: 'none',
-                      logResponseText: false
-                  })
+        const response = await invokeLoggedModel(
+            model,
+            messages,
+            invokeConfig,
+            {
+                logger,
+                stage: 'agentic-finalization',
+                attempt,
+                promptLogging: 'none',
+                logResponseText: false
+            }
+        )
         const output = stringifyModelContent(response.content).trim()
         const finalOutput =
             output.length === 0 || hasToolCalls(response)

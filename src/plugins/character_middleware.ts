@@ -137,10 +137,6 @@ const createCharacterPromptScope = (
         return undefined
     }
 
-    if (!ctx.chatluna_living_memory.shouldHandleSession(session.isDirect)) {
-        return undefined
-    }
-
     const presetName = toNonEmptyString(built.preset)
     if (presetName == null) {
         return undefined

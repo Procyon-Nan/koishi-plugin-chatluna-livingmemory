@@ -93,15 +93,12 @@ export const filterMemoryList = (
     const keyword = query.keyword?.trim().toLowerCase()
 
     const filtered = items.filter((item) => {
-        if (query.type != null && item.type !== query.type) {
-            return false
-        }
-
-        if (
-            query.status != null &&
-            query.status !== 'all' &&
-            item.status !== query.status
-        ) {
+        const matchesFilters =
+            (query.type == null || item.type === query.type) &&
+            (query.status == null ||
+                query.status === 'all' ||
+                item.status === query.status)
+        if (!matchesFilters) {
             return false
         }
 
@@ -130,16 +127,11 @@ export const filterSnapshotList = (
     items: MemorySnapshotRecord[],
     query: SnapshotListQuery
 ): PageResult<MemorySnapshotRecord> => {
-    const filtered = items.filter((item) => {
-        if (
-            query.conversationId != null &&
-            item.conversationId !== query.conversationId
-        ) {
-            return false
-        }
-
-        return true
-    })
+    const filtered = items.filter(
+        (item) =>
+            query.conversationId == null ||
+            item.conversationId === query.conversationId
+    )
 
     const sorted = filtered.sort(
         (left, right) => +right.createdAt - +left.createdAt
@@ -151,17 +143,11 @@ export const filterJobList = (
     items: MemoryJobRecord[],
     query: JobListQuery
 ): PageResult<MemoryJobRecord> => {
-    const filtered = items.filter((item) => {
-        if (query.kind != null && item.kind !== query.kind) {
-            return false
-        }
-
-        if (query.status != null && item.status !== query.status) {
-            return false
-        }
-
-        return true
-    })
+    const filtered = items.filter(
+        (item) =>
+            (query.kind == null || item.kind === query.kind) &&
+            (query.status == null || item.status === query.status)
+    )
 
     const sorted = filtered.sort(
         (left, right) => +right.createdAt - +left.createdAt

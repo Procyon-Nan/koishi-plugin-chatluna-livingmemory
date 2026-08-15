@@ -108,12 +108,6 @@ const toContentLines = (
         .filter((line) => line.length > 0)
 }
 
-export const createLivingMemoryTranscriptMessage = (
-    input: LivingMemoryTranscriptInput
-): LivingMemoryTranscriptMessage | null => {
-    return createLivingMemoryTranscriptMessageResult(input).message
-}
-
 export const createLivingMemoryTranscriptMessageResult = (
     input: LivingMemoryTranscriptInput
 ): LivingMemoryTranscriptMessageResult => {

@@ -224,12 +224,6 @@ export class LivingMemoryVectorIndexMaintenance {
                 `actual=${manifest.dimension}`
             )
         }
-        if (manifest.storageEngine !== VECTOR_STORAGE_ENGINE) {
-            return (
-                `manifest storage engine changed: expected=${VECTOR_STORAGE_ENGINE}, ` +
-                `actual=${manifest.storageEngine}`
-            )
-        }
         return null
     }
 

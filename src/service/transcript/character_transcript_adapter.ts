@@ -169,15 +169,6 @@ const resolveCharacterSpeakerLabel = async (
     return resolveCharacterUserGlobalName(session, message, cache)
 }
 
-export const toCharacterTranscriptMessage = async (
-    scope: MemoryScope,
-    session: Session,
-    message: CharacterTranscriptSourceMessage
-) => {
-    return (await toCharacterTranscriptMessageResult(scope, session, message))
-        .message
-}
-
 export const toCharacterTranscriptMessageResult = async (
     scope: MemoryScope,
     session: Session,

@@ -315,7 +315,10 @@ export class LivingMemoryUserProfileService {
                 return {
                     speakerKey: speaker.speakerKey,
                     speakerLabel: speaker.speakerLabel,
-                    entries: entries.slice(0, this.getProfileMemoryLimit()),
+                    entries: entries.slice(
+                        0,
+                        this.config.userProfileMemoryLimit
+                    ),
                     matchedEntryCount: entries.length
                 }
             })
@@ -349,15 +352,6 @@ export class LivingMemoryUserProfileService {
 
                 return +right.updatedAt - +left.updatedAt
             })
-    }
-
-    private getProfileMemoryLimit() {
-        const configured = Math.floor(this.config.userProfileMemoryLimit)
-        if (!Number.isFinite(configured)) {
-            return 20
-        }
-
-        return Math.min(100, Math.max(5, configured))
     }
 
     private entryMatchesSpeakerKeyword(

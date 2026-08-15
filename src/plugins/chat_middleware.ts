@@ -156,19 +156,6 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 isDirect: session.isDirect
             })
 
-            if (
-                !ctx.chatluna_living_memory.shouldHandleSession(
-                    session.isDirect
-                )
-            ) {
-                diagnostic('chat.before.skipped', {
-                    conversationId,
-                    isDirect: session.isDirect,
-                    reason: 'unsupported-session'
-                })
-                return
-            }
-
             const fallbackPresetId =
                 chatInterface.preset.value?.triggerKeyword?.[0]
             const presetId = ctx.chatluna_living_memory.resolvePresetId(
@@ -364,19 +351,6 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 conversationId,
                 isDirect: session.isDirect
             })
-
-            if (
-                !ctx.chatluna_living_memory.shouldHandleSession(
-                    session.isDirect
-                )
-            ) {
-                diagnostic('chat.after.skipped', {
-                    conversationId,
-                    isDirect: session.isDirect,
-                    reason: 'unsupported-session'
-                })
-                return
-            }
 
             const fallbackPresetId =
                 chatInterface.preset.value?.triggerKeyword?.[0]

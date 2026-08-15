@@ -309,10 +309,6 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             })
     }
 
-    shouldHandleSession(isDirect: boolean) {
-        return typeof isDirect === 'boolean'
-    }
-
     resolvePresetId(message: HumanMessage, fallbackPresetId?: string) {
         const presetFromMessage = message.additional_kwargs?.preset
         if (

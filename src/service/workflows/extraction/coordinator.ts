@@ -152,8 +152,8 @@ export class LivingMemoryExtractionCoordinator {
         if (this.runningScopeKeys.has(key)) {
             this.logger.diagnostic('extraction.pending', {
                 workflow: 'extraction',
-                conversationId: latestScope?.conversationId,
-                presetId: latestScope?.presetId,
+                conversationId: latestScope.conversationId,
+                presetId: latestScope.presetId,
                 pendingRounds,
                 reason: 'running'
             })
@@ -163,8 +163,8 @@ export class LivingMemoryExtractionCoordinator {
         if (pendingRounds < this.config.extractionInterval) {
             this.logger.diagnostic('extraction.pending', {
                 workflow: 'extraction',
-                conversationId: latestScope?.conversationId,
-                presetId: latestScope?.presetId,
+                conversationId: latestScope.conversationId,
+                presetId: latestScope.presetId,
                 pendingRounds,
                 interval: this.config.extractionInterval,
                 reason: 'interval-not-reached'

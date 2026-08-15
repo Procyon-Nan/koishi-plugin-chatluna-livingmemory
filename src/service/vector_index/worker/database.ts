@@ -236,11 +236,11 @@ export class LivingMemoryVectorIndexDatabase {
     }
 
     applyMutation(mutation: VectorIndexMutation) {
-        return applyVectorIndexMutation(this.requireSchemaDatabase(), mutation)
+        return applyVectorIndexMutation(this.requireDatabase(), mutation)
     }
 
     clearPreset(presetId: string) {
-        return clearVectorIndexPreset(this.requireSchemaDatabase(), presetId)
+        return clearVectorIndexPreset(this.requireDatabase(), presetId)
     }
 
     readInventoryPage(
@@ -249,7 +249,7 @@ export class LivingMemoryVectorIndexDatabase {
         limit: number
     ) {
         return readVectorIndexInventoryPage(
-            this.requireSchemaDatabase(),
+            this.requireDatabase(),
             presetId,
             afterMemoryId,
             limit
@@ -257,7 +257,7 @@ export class LivingMemoryVectorIndexDatabase {
     }
 
     markPresetState(status: MemoryVectorIndexPresetStatus) {
-        return markVectorIndexPresetState(this.requireSchemaDatabase(), status)
+        return markVectorIndexPresetState(this.requireDatabase(), status)
     }
 
     async createRebuildFile(
@@ -415,13 +415,8 @@ export class LivingMemoryVectorIndexDatabase {
         return this.database
     }
 
-    private requireSchemaDatabase() {
-        const database = this.requireDatabase()
-        return database
-    }
-
     private requireActiveDatabase() {
-        const database = this.requireSchemaDatabase()
+        const database = this.requireDatabase()
         if (this.mode !== 'active') {
             throw new Error('vector index database is rebuilding')
         }
@@ -429,7 +424,7 @@ export class LivingMemoryVectorIndexDatabase {
     }
 
     private requireRebuildDatabase() {
-        const database = this.requireSchemaDatabase()
+        const database = this.requireDatabase()
         if (this.mode !== 'rebuild') {
             throw new Error('vector index rebuild is not active')
         }
