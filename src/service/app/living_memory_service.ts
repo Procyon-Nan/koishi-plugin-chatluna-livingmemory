@@ -16,6 +16,7 @@ import {
 } from '../user_profile'
 import {
     filterJobList,
+    filterMemoryIds,
     filterMemoryList,
     filterUserProfileList
 } from '../../query'
@@ -31,6 +32,7 @@ import type {
 } from '../../contracts/memory'
 import type {
     JobListQuery,
+    MemoryListFilter,
     MemoryListQuery,
     SnapshotListQuery,
     UserProfileListQuery
@@ -421,6 +423,11 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         return filterMemoryList(items, query)
     }
 
+    async listMemoryIds(filter: MemoryListFilter) {
+        const items = await this.repository.listEntriesByPreset(filter.presetId)
+        return filterMemoryIds(items, filter)
+    }
+
     async getMemory(memoryId: string) {
         return await this.repository.getEntryById(memoryId)
     }
@@ -456,6 +463,10 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
 
     async deleteMemory(memoryId: string) {
         await this.mutations.deleteMemory(memoryId)
+    }
+
+    async deleteMemories(presetId: string, ids: string[]) {
+        return await this.mutations.deleteMemories(presetId, ids)
     }
 
     async deleteSnapshot(snapshotId: string) {

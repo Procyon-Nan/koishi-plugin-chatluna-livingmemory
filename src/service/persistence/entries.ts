@@ -675,6 +675,16 @@ export class LivingMemoryEntryRepository
         return current
     }
 
+    async deleteEntries(presetId: string, ids: string[]) {
+        if (ids.length === 0) {
+            return
+        }
+        await this.ctx.database.remove('living_memory_entry', {
+            presetId,
+            id: { $in: ids }
+        })
+    }
+
     private async requireEntryById(id: string, operation: string) {
         const record = await this.getEntryById(id)
         if (record == null) {

@@ -7,7 +7,10 @@ import type {
     MemoryIndexMutationBatch,
     MemoryIndexMutationSink
 } from '../src/contracts/vector_index'
-import { LivingMemoryMutationService } from '../src/service/app/memory_mutation_service'
+import {
+    LivingMemoryMutationService,
+    MEMORY_DELETE_BATCH_SIZE
+} from '../src/service/app/memory_mutation_service'
 import type { LivingMemoryLogger } from '../src/service/logging/logger'
 import {
     LivingMemoryFactsCommittedError,
@@ -301,5 +304,116 @@ it('keeps the committed-facts failure when the scheduled reconciliation rejects'
 
         assert.deepEqual(warns, ['memory.index.reconcile.failed'])
         assert.equal((await repository.listEntriesByPreset(presetId)).length, 1)
+    })
+})
+
+it('deletes memories in one batch and synchronizes the vector index', async () => {
+    await withLivingMemoryRepository(async (_ctx, repository) => {
+        const sink = new MemoryIndexSinkStub()
+        const mutations = new LivingMemoryMutationService(
+            repository,
+            sink,
+            createLoggerStub().logger
+        )
+        const created = []
+        for (let index = 0; index < 3; index++) {
+            created.push(
+                await repository.createMemory(scope, {
+                    type: 'fact',
+                    content: `bulk-${index}`
+                })
+            )
+        }
+
+        const result = await mutations.deleteMemories(
+            presetId,
+            created.map((memory) => memory.id)
+        )
+
+        assert.deepEqual(result, { deleted: 3 })
+        assert.equal(sink.mutations.length, 1)
+        assert.deepEqual(
+            sink.mutations[0].deletes,
+            created.map((memory) => ({ id: memory.id, presetId }))
+        )
+        assert.deepEqual(await repository.listEntriesByPreset(presetId), [])
+    })
+})
+
+it('skips duplicate, missing, and cross-preset ids in bulk deletion', async () => {
+    await withLivingMemoryRepository(async (_ctx, repository) => {
+        const sink = new MemoryIndexSinkStub()
+        const mutations = new LivingMemoryMutationService(
+            repository,
+            sink,
+            createLoggerStub().logger
+        )
+        const own = await repository.createMemory(scope, {
+            type: 'fact',
+            content: 'own preset'
+        })
+        const foreign = await repository.createMemory(
+            { presetId: 'preset-other', conversationId: 'conversation-1' },
+            { type: 'fact', content: 'foreign preset' }
+        )
+
+        const result = await mutations.deleteMemories(presetId, [
+            own.id,
+            own.id,
+            'missing-id',
+            foreign.id
+        ])
+
+        assert.deepEqual(result, { deleted: 1 })
+        assert.deepEqual(sink.mutations[0].deletes, [{ id: own.id, presetId }])
+        assert.deepEqual(await repository.listEntriesByPreset(presetId), [])
+        assert.equal(
+            (await repository.listEntriesByPreset('preset-other')).length,
+            1
+        )
+    })
+})
+
+it('returns zero deletions without side effects for an empty id list', async () => {
+    await withLivingMemoryRepository(async (_ctx, repository) => {
+        const sink = new MemoryIndexSinkStub()
+        const mutations = new LivingMemoryMutationService(
+            repository,
+            sink,
+            createLoggerStub().logger
+        )
+
+        const result = await mutations.deleteMemories(presetId, [])
+
+        assert.deepEqual(result, { deleted: 0 })
+        assert.deepEqual(sink.mutations, [])
+    })
+})
+
+it('splits bulk deletions into fixed-size batches', async () => {
+    await withLivingMemoryRepository(async (_ctx, repository) => {
+        const sink = new MemoryIndexSinkStub()
+        const mutations = new LivingMemoryMutationService(
+            repository,
+            sink,
+            createLoggerStub().logger
+        )
+        const total = MEMORY_DELETE_BATCH_SIZE + 3
+        const extracted = Array.from({ length: total }, (_, index) => ({
+            type: 'fact' as const,
+            content: `batched-${index}`
+        }))
+        const created = await repository.appendMemories(scope, [], extracted)
+
+        const result = await mutations.deleteMemories(
+            presetId,
+            created.map((memory) => memory.id)
+        )
+
+        assert.deepEqual(result, { deleted: total })
+        assert.equal(sink.mutations.length, 2)
+        assert.equal(sink.mutations[0].deletes.length, MEMORY_DELETE_BATCH_SIZE)
+        assert.equal(sink.mutations[1].deletes.length, 3)
+        assert.deepEqual(await repository.listEntriesByPreset(presetId), [])
     })
 })

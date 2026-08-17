@@ -10,6 +10,7 @@ import type {
 import type {
     JobListQuery,
     MemoryListFacets,
+    MemoryListFilter,
     MemoryListQuery,
     MemoryListResult,
     PageResult,
@@ -19,6 +20,7 @@ import type {
 
 export type {
     JobListQuery,
+    MemoryListFilter,
     MemoryListQuery,
     MemoryListResult,
     PageRequest,
@@ -85,23 +87,18 @@ const paginate = <T>(
     }
 }
 
-/**
- * 按查询条件过滤、排序并分页记忆列表；facet 统计基于过滤前的全集，
- * 供前端在切换筛选时展示各选项条数。
- */
-export const filterMemoryList = (
+const selectMemoryMatches = (
     items: MemoryEntryRecord[],
-    query: MemoryListQuery
-): MemoryListResult => {
-    const facets = createMemoryListFacets(items)
-    const keyword = query.keyword?.trim().toLowerCase()
+    filter: MemoryListFilter
+): MemoryEntryRecord[] => {
+    const keyword = filter.keyword?.trim().toLowerCase()
 
-    const filtered = items.filter((item) => {
+    return items.filter((item) => {
         const matchesFilters =
-            (query.type == null || item.type === query.type) &&
-            (query.status == null ||
-                query.status === 'all' ||
-                item.status === query.status)
+            (filter.type == null || item.type === filter.type) &&
+            (filter.status == null ||
+                filter.status === 'all' ||
+                item.status === filter.status)
         if (!matchesFilters) {
             return false
         }
@@ -117,14 +114,35 @@ export const filterMemoryList = (
             item.keywords.some((entry) => entry.toLowerCase().includes(keyword))
         )
     })
+}
 
-    const sorted = filtered.sort(
+/**
+ * 按查询条件过滤、排序并分页记忆列表；facet 统计基于过滤前的全集，
+ * 供前端在切换筛选时展示各选项条数。
+ */
+export const filterMemoryList = (
+    items: MemoryEntryRecord[],
+    query: MemoryListQuery
+): MemoryListResult => {
+    const facets = createMemoryListFacets(items)
+    const sorted = selectMemoryMatches(items, query).sort(
         (left, right) => +right.updatedAt - +left.updatedAt
     )
     return {
         ...paginate(sorted, query.page, query.pageSize),
         facets
     }
+}
+
+/**
+ * 按筛选条件返回全部匹配记忆的 id（不分页、不排序），
+ * 供前端“全选筛选结果”后批量删除使用。
+ */
+export const filterMemoryIds = (
+    items: MemoryEntryRecord[],
+    filter: MemoryListFilter
+): string[] => {
+    return selectMemoryMatches(items, filter).map((item) => item.id)
 }
 
 export const filterSnapshotList = (

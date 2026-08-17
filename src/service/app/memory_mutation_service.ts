@@ -28,15 +28,20 @@ type MemoryFactRepository = Pick<
     LivingMemoryRepository,
     | 'appendMemories'
     | 'getEntryById'
+    | 'getEntriesByPresetAndIds'
     | 'createMemory'
     | 'updateMemory'
     | 'updateMemoryForDream'
     | 'setMemoryConsolidation'
     | 'applyDreamMerge'
     | 'deleteMemory'
+    | 'deleteEntries'
     | 'clearAllByPreset'
     | 'importPresetData'
 >
+
+// 批量删除的单批上限：约束 SQL $in 规模与索引同步批次大小。
+export const MEMORY_DELETE_BATCH_SIZE = 500
 
 export class LivingMemoryMutationService
     implements ExtractionRepository, DreamMemoryRepository
@@ -205,6 +210,44 @@ export class LivingMemoryMutationService
                 deletes: [{ id: record.id, presetId: record.presetId }]
             })
             return record
+        })
+    }
+
+    async deleteMemories(presetId: string, ids: string[]) {
+        const uniqueIds = [...new Set(ids)]
+        if (uniqueIds.length === 0) {
+            return { deleted: 0 }
+        }
+        return this.runPresetMutation(presetId, async () => {
+            let deleted = 0
+            for (
+                let start = 0;
+                start < uniqueIds.length;
+                start += MEMORY_DELETE_BATCH_SIZE
+            ) {
+                const batch = uniqueIds.slice(
+                    start,
+                    start + MEMORY_DELETE_BATCH_SIZE
+                )
+                // 先按存在性与 preset 归属过滤：并发已删除或跨 preset
+                // 的 id 幂等跳过，不中断整批。
+                const records = await this.repository.getEntriesByPresetAndIds(
+                    presetId,
+                    batch
+                )
+                if (records.length === 0) {
+                    continue
+                }
+                const validIds = records.map((record) => record.id)
+                await this.repository.deleteEntries(presetId, validIds)
+                await this.applyCommittedMutation({
+                    presetId,
+                    upserts: [],
+                    deletes: validIds.map((id) => ({ id, presetId }))
+                })
+                deleted += validIds.length
+            }
+            return { deleted }
         })
     }
 

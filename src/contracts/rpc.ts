@@ -19,12 +19,14 @@ export interface PageRequest {
     pageSize?: number
 }
 
-export interface MemoryListQuery extends PageRequest {
+export interface MemoryListFilter {
     presetId: string
     type?: MemoryEntryRecord['type']
     status?: MemoryEntryStatus | 'all'
     keyword?: string
 }
+
+export interface MemoryListQuery extends MemoryListFilter, PageRequest {}
 
 export interface SnapshotListQuery extends PageRequest {
     presetId: string
@@ -73,6 +75,9 @@ export interface LivingMemoryConsoleEvents {
     'living-memory/listMemories': (
         query: MemoryListQuery
     ) => Promise<MemoryListResult>
+    'living-memory/listMemoryIds': (
+        filter: MemoryListFilter
+    ) => Promise<string[]>
     'living-memory/getMemory': (
         memoryId: string
     ) => Promise<MemoryEntryRecord | undefined>
@@ -86,6 +91,10 @@ export interface LivingMemoryConsoleEvents {
     'living-memory/deleteMemory': (
         memoryId: string
     ) => Promise<{ success: true }>
+    'living-memory/deleteMemories': (
+        presetId: string,
+        ids: string[]
+    ) => Promise<{ success: true; deleted: number }>
     'living-memory/listSnapshots': (
         query: SnapshotListQuery
     ) => Promise<PageResult<MemorySnapshotWithResolvedItems>>

@@ -4,7 +4,7 @@ import type {
     MemoryEntryStatus,
     MemoryEntryType
 } from '../src/contracts/memory'
-import { filterMemoryList } from '../src/query'
+import { filterMemoryIds, filterMemoryList } from '../src/query'
 
 const createMemory = (
     index: number,
@@ -85,4 +85,59 @@ it('keeps facets preset-wide while filtering the returned memory page', () => {
     assert.equal(result.facets.types.active.fact, 1)
     assert.equal(result.facets.types.active.plan, 1)
     assert.equal(result.facets.types.archived.fact, 1)
+})
+
+it('returns ids of all memories matching type and status filters', () => {
+    const items = [
+        createMemory(1, 'fact', 'active'),
+        createMemory(2, 'plan', 'active'),
+        createMemory(3, 'fact', 'archived'),
+        createMemory(4, 'fact', 'active')
+    ]
+
+    const ids = filterMemoryIds(items, {
+        presetId: 'preset-1',
+        type: 'fact',
+        status: 'active'
+    })
+
+    assert.deepEqual(ids, ['memory-1', 'memory-4'])
+})
+
+it('matches keyword against content and keywords in id filtering', () => {
+    const items = [
+        createMemory(1, 'fact', 'active'),
+        createMemory(2, 'plan', 'active'),
+        createMemory(3, 'fact', 'active')
+    ]
+
+    const byContent = filterMemoryIds(items, {
+        presetId: 'preset-1',
+        keyword: 'content-2'
+    })
+    const byKeyword = filterMemoryIds(items, {
+        presetId: 'preset-1',
+        keyword: 'KEYWORD-3'
+    })
+
+    assert.deepEqual(byContent, ['memory-2'])
+    assert.deepEqual(byKeyword, ['memory-3'])
+})
+
+it('keeps filterMemoryIds consistent with filterMemoryList matches', () => {
+    const items = Array.from({ length: 30 }, (_, index) => {
+        const status = index < 20 ? 'active' : 'archived'
+        const type = index % 2 === 0 ? 'fact' : 'plan'
+        return createMemory(index, type, status)
+    })
+    const filter = {
+        presetId: 'preset-1',
+        status: 'all' as const,
+        keyword: 'content-1'
+    }
+
+    const listed = filterMemoryList(items, { ...filter, page: 1, pageSize: 100 })
+    const ids = filterMemoryIds(items, filter)
+
+    assert.deepEqual([...ids].sort(), listed.items.map((item) => item.id).sort())
 })

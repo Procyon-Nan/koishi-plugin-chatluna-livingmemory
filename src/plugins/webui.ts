@@ -10,6 +10,7 @@ import type {
 import type {
     CreateMemoryRequest,
     JobListQuery,
+    MemoryListFilter,
     MemoryListQuery,
     SnapshotListQuery,
     UserProfileListQuery
@@ -65,6 +66,12 @@ export function apply(ctx: Context, _config?: LivingMemoryConfig) {
     )
 
     ctx.console.addListener(
+        'living-memory/listMemoryIds',
+        async (filter: MemoryListFilter) =>
+            await service(ctx).listMemoryIds(filter)
+    )
+
+    ctx.console.addListener(
         'living-memory/getMemory',
         async (memoryId: string) => await service(ctx).getMemory(memoryId)
     )
@@ -95,6 +102,14 @@ export function apply(ctx: Context, _config?: LivingMemoryConfig) {
         ok(async (memoryId: string) => {
             await service(ctx).deleteMemory(memoryId)
         })
+    )
+
+    ctx.console.addListener(
+        'living-memory/deleteMemories',
+        async (presetId: string, ids: string[]) => {
+            const { deleted } = await service(ctx).deleteMemories(presetId, ids)
+            return { success: true as const, deleted }
+        }
     )
 
     ctx.console.addListener(

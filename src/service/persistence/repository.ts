@@ -235,6 +235,10 @@ export class LivingMemoryRepository
         return this.entries.deleteMemory(id)
     }
 
+    deleteEntries(presetId: string, ids: string[]) {
+        return this.entries.deleteEntries(presetId, ids)
+    }
+
     getLatestSnapshotByScope(
         scope: Pick<MemoryScope, 'presetId' | 'conversationId'>
     ): Promise<MemorySnapshotRecord | undefined> {
