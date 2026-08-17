@@ -332,9 +332,12 @@ it('deletes memories in one batch and synchronizes the vector index', async () =
 
         assert.deepEqual(result, { deleted: 3 })
         assert.equal(sink.mutations.length, 1)
+        // getEntriesByPresetAndIds 的返回顺序不保证与传入一致，按 id 排序后比较。
         assert.deepEqual(
-            sink.mutations[0].deletes,
-            created.map((memory) => ({ id: memory.id, presetId }))
+            [...sink.mutations[0].deletes]
+                .map((entry) => entry.id)
+                .sort(),
+            created.map((memory) => memory.id).sort()
         )
         assert.deepEqual(await repository.listEntriesByPreset(presetId), [])
     })

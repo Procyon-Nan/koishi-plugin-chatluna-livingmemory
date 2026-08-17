@@ -85,6 +85,39 @@
 
         <div class="tab-pane-content">
             <div class="memory-list-panel" v-loading="loading">
+                <div class="memory-batch-toolbar">
+                    <el-checkbox
+                        :model-value="isAllSelected"
+                        :indeterminate="isIndeterminate"
+                        :disabled="total === 0 || selectAllPending"
+                        @change="toggleSelectAll"
+                    >
+                        全选
+                    </el-checkbox>
+                    <span class="memory-batch-count">
+                        已选 {{ selectedCount }} / {{ total }} 条
+                    </span>
+                    <div class="memory-batch-actions">
+                        <el-button
+                            size="small"
+                            type="danger"
+                            plain
+                            :disabled="selectedCount === 0 || batchDeleting"
+                            :loading="batchDeleting"
+                            @click="removeSelectedMemories"
+                        >
+                            批量删除
+                        </el-button>
+                        <el-button
+                            size="small"
+                            :disabled="selectedCount === 0"
+                            @click="clearSelection"
+                        >
+                            清除选择
+                        </el-button>
+                    </div>
+                </div>
+
                 <el-empty
                     v-if="items.length === 0 && !loading"
                     description="没有符合条件的记忆"
@@ -98,13 +131,23 @@
                         :class="[
                             'memory-card',
                             `memory-card--${memory.type}`,
-                            { 'is-archived': memory.status === 'archived' }
+                            {
+                                'is-archived': memory.status === 'archived',
+                                'is-selected': isSelected(memory.id)
+                            }
                         ]"
                     >
                         <div class="memory-card-main">
                             <div class="memory-card-header">
                                 <div class="memory-card-title-block">
                                     <div class="memory-card-kicker">
+                                        <el-checkbox
+                                            :model-value="
+                                                isSelected(memory.id)
+                                            "
+                                            class="memory-card-checkbox"
+                                            @change="toggleSelected(memory.id)"
+                                        />
                                         <span
                                             :class="[
                                                 'type-text-span',
@@ -243,10 +286,11 @@
 </template>
 
 <script setup lang="ts">
-import { toRef } from 'vue'
+import { computed, ref, toRef, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as api from '../api'
 import { useMemoryList } from '../composables/use-memory-list'
+import { useSelection } from '../composables/use-selection'
 import {
     memoryEntryTypes,
     type MemoryEntryRecord,
@@ -259,7 +303,8 @@ import {
     getImportanceTone,
     getMemoryStatusLabel,
     getMemoryTagType,
-    getMemoryTypeLabel
+    getMemoryTypeLabel,
+    toErrorMessage
 } from '../utils/display'
 
 const props = defineProps<{
@@ -296,6 +341,30 @@ const {
     getTypeCount
 } = useMemoryList(toRef(props, 'presetId'))
 
+const {
+    selectedIds,
+    selectedCount,
+    isSelected,
+    toggleSelected,
+    selectAll,
+    clearSelection
+} = useSelection()
+
+const selectAllPending = ref(false)
+const batchDeleting = ref(false)
+
+const isAllSelected = computed(
+    () => total.value > 0 && selectedCount.value >= total.value
+)
+const isIndeterminate = computed(
+    () => selectedCount.value > 0 && selectedCount.value < total.value
+)
+
+watch(
+    () => props.presetId,
+    () => clearSelection()
+)
+
 const refresh = async (resetPage = false): Promise<boolean> => {
     if (props.presetId.length === 0) {
         clear()
@@ -308,13 +377,13 @@ const refresh = async (resetPage = false): Promise<boolean> => {
         emit('total-change', total.value)
         return true
     } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        ElMessage.error(`获取记忆失败：${message}`)
+        ElMessage.error(`获取记忆失败：${toErrorMessage(error)}`)
         return false
     }
 }
 
 const onFilterChange = async () => {
+    clearSelection()
     await refresh(true)
 }
 
@@ -338,8 +407,7 @@ const onPageChange = async (value: number) => {
         await changePage(value)
         emit('total-change', total.value)
     } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        ElMessage.error(`获取记忆失败：${message}`)
+        ElMessage.error(`获取记忆失败：${toErrorMessage(error)}`)
     }
 }
 
@@ -348,8 +416,7 @@ const onPageSizeChange = async (value: number) => {
         await changePageSize(value)
         emit('total-change', total.value)
     } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        ElMessage.error(`获取记忆失败：${message}`)
+        ElMessage.error(`获取记忆失败：${toErrorMessage(error)}`)
     }
 }
 
@@ -372,8 +439,65 @@ const removeMemory = async (memoryId: string) => {
         }
         await refresh()
     } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        ElMessage.error(`删除失败：${message}`)
+        ElMessage.error(`删除失败：${toErrorMessage(error)}`)
+    }
+}
+
+const toggleSelectAll = async (checked: string | number | boolean) => {
+    if (!checked) {
+        clearSelection()
+        return
+    }
+
+    selectAllPending.value = true
+    try {
+        const ids = await api.listMemoryIds({
+            presetId: props.presetId,
+            keyword: keyword.value.trim() || undefined,
+            type: memoryType.value || undefined,
+            status: status.value
+        })
+        selectAll(ids)
+    } catch (error) {
+        ElMessage.error(`获取记忆失败：${toErrorMessage(error)}`)
+    } finally {
+        selectAllPending.value = false
+    }
+}
+
+const removeSelectedMemories = async () => {
+    const count = selectedCount.value
+    try {
+        await ElMessageBox.confirm(
+            `将删除 ${count} 条记忆，删除后不可恢复，是否继续？`,
+            '危险操作',
+            {
+                type: 'warning',
+                confirmButtonText: '确认删除',
+                cancelButtonText: '取消'
+            }
+        )
+    } catch {
+        return
+    }
+
+    batchDeleting.value = true
+    try {
+        const { deleted } = await api.deleteMemories(
+            props.presetId,
+            [...selectedIds.value]
+        )
+        ElMessage.success(`已删除 ${deleted} 条记忆`)
+        clearSelection()
+        await refresh()
+        if (items.value.length === 0 && page.value > 1 && total.value > 0) {
+            page.value = Math.ceil(total.value / pageSize.value)
+            await refresh()
+        }
+    } catch (error) {
+        ElMessage.error(`批量删除失败：${toErrorMessage(error)}`)
+    } finally {
+        batchDeleting.value = false
     }
 }
 

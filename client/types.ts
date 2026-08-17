@@ -224,6 +224,13 @@ export interface MemoryListFacets {
     types: Record<MemoryFacetStatus, Record<MemoryEntryType, number>>
 }
 
+export interface MemoryListFilter {
+    presetId: string
+    type?: MemoryEntryType
+    status?: MemoryEntryStatus | 'all'
+    keyword?: string
+}
+
 export interface MemoryListResult extends PageResult<MemoryEntryRecord> {
     facets: MemoryListFacets
 }
@@ -304,6 +311,7 @@ declare module '@koishijs/client' {
             page?: number
             pageSize?: number
         }) => MemoryListResult
+        'living-memory/listMemoryIds': (filter: MemoryListFilter) => string[]
         'living-memory/getMemory': (
             memoryId: string
         ) => MemoryEntryRecord | undefined
@@ -319,6 +327,10 @@ declare module '@koishijs/client' {
             patch: Partial<MemoryMutationInput>
         ) => { success: true }
         'living-memory/deleteMemory': (memoryId: string) => { success: true }
+        'living-memory/deleteMemories': (
+            presetId: string,
+            ids: string[]
+        ) => { success: true; deleted: number }
         'living-memory/listSnapshots': (query: {
             presetId: string
             conversationId?: string

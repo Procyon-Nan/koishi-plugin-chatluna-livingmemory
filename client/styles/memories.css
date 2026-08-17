@@ -156,6 +156,32 @@
     gap: 12px;
 }
 
+/* Batch selection toolbar */
+.memory-batch-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-bottom: 12px;
+    margin-bottom: 12px;
+    border-bottom: 1px solid var(--lm-border);
+}
+
+.memory-batch-count {
+    color: var(--lm-text-tertiary);
+    font-family: var(--lm-font-mono);
+    font-size: 12px;
+}
+
+.memory-batch-actions {
+    display: flex;
+    gap: 8px;
+    margin-left: auto;
+}
+
+.memory-batch-actions :deep(.el-button + .el-button) {
+    margin-left: 0;
+}
+
 .memory-card {
     --memory-accent: var(--lm-primary);
     position: relative;
@@ -183,6 +209,18 @@
 
 .memory-card:hover {
     border-color: var(--lm-border-hover);
+}
+
+.memory-card.is-selected {
+    border-color: var(--lm-primary);
+    box-shadow:
+        0 0 0 1px var(--lm-primary),
+        var(--lm-shadow);
+}
+
+.memory-card-checkbox {
+    height: auto;
+    margin-right: 2px;
 }
 
 .memory-card.is-archived {

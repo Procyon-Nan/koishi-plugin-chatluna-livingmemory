@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { usePagedResource } from '../client/composables/use-paged-resource'
+import { useSelection } from '../client/composables/use-selection'
 import type {
     MemorySnapshotRecord,
     MemoryVectorIndexStatus
@@ -85,6 +86,34 @@ it('restores paged resource loading state after loader failures', async () => {
 
     await assert.rejects(resource.refresh(), /load failed/)
     assert.equal(resource.loading.value, false)
+})
+
+it('tracks selection state for bulk memory operations', () => {
+    const selection = useSelection()
+
+    assert.equal(selection.selectedCount.value, 0)
+    assert.equal(selection.isSelected('memory-1'), false)
+
+    selection.toggleSelected('memory-1')
+    selection.toggleSelected('memory-2')
+    assert.equal(selection.selectedCount.value, 2)
+    assert.equal(selection.isSelected('memory-1'), true)
+    assert.equal(selection.isSelected('memory-3'), false)
+
+    selection.toggleSelected('memory-1')
+    assert.equal(selection.selectedCount.value, 1)
+    assert.equal(selection.isSelected('memory-1'), false)
+
+    selection.selectAll(['memory-4', 'memory-5', 'memory-6'])
+    assert.deepEqual([...selection.selectedIds.value], [
+        'memory-4',
+        'memory-5',
+        'memory-6'
+    ])
+    assert.equal(selection.isSelected('memory-2'), false)
+
+    selection.clearSelection()
+    assert.equal(selection.selectedCount.value, 0)
 })
 
 it('formats importance values and distinguishes snapshot strategies', () => {

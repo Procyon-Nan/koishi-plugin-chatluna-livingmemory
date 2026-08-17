@@ -9,6 +9,7 @@ import type {
     MemoryEntryStatus,
     MemoryEntryType,
     MemoryJobRecord,
+    MemoryListFilter,
     MemoryListResult,
     MemoryMutationInput,
     MemoryServiceStatus,
@@ -61,6 +62,12 @@ export async function listMemories(
     return await send('living-memory/listMemories', params)
 }
 
+export async function listMemoryIds(
+    filter: MemoryListFilter
+): Promise<string[]> {
+    return await send('living-memory/listMemoryIds', filter)
+}
+
 export async function getMemory(
     memoryId: string
 ): Promise<MemoryEntryRecord | undefined> {
@@ -89,6 +96,13 @@ export async function deleteMemory(
     memoryId: string
 ): Promise<{ success: true }> {
     return await send('living-memory/deleteMemory', memoryId)
+}
+
+export async function deleteMemories(
+    presetId: string,
+    ids: string[]
+): Promise<{ success: true; deleted: number }> {
+    return await send('living-memory/deleteMemories', presetId, ids)
 }
 
 export async function listSnapshots(
