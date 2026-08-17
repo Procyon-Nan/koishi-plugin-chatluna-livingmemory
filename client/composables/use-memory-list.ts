@@ -1,4 +1,4 @@
-import { ref, shallowRef } from 'vue'
+import { computed, ref, shallowRef } from 'vue'
 import type { Ref } from 'vue'
 import * as api from '../api'
 import {
@@ -7,6 +7,7 @@ import {
     type MemoryEntryType,
     memoryEntryTypes,
     type MemoryListFacets,
+    type MemoryListFilter,
     type MemoryListResult
 } from '../types'
 import { usePagedResource } from './use-paged-resource'
@@ -38,13 +39,18 @@ export function useMemoryList(presetId: Readonly<Ref<string>>) {
     const status = ref<MemoryEntryStatus | 'all'>('active')
     const facets = shallowRef<MemoryListFacets>(createEmptyMemoryListFacets())
 
+    // 筛选参数的唯一构造点：列表查询与"全选筛选结果"共用同一口径。
+    const currentFilter = computed<MemoryListFilter>(() => ({
+        presetId: presetId.value,
+        keyword: keyword.value.trim() || undefined,
+        type: memoryType.value || undefined,
+        status: status.value
+    }))
+
     const resource = usePagedResource<MemoryEntryRecord, MemoryListResult>(
         async (page, pageSize) => {
             return await api.listMemories({
-                presetId: presetId.value,
-                keyword: keyword.value.trim() || undefined,
-                type: memoryType.value || undefined,
-                status: status.value,
+                ...currentFilter.value,
                 page,
                 pageSize
             })
@@ -105,6 +111,7 @@ export function useMemoryList(presetId: Readonly<Ref<string>>) {
         keyword,
         memoryType,
         status,
+        currentFilter,
         facets,
         refresh,
         changePage,

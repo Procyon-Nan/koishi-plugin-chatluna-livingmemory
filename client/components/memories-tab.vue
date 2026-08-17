@@ -332,6 +332,7 @@ const {
     keyword,
     memoryType,
     status,
+    currentFilter,
     refresh: refreshList,
     changePage,
     changePageSize,
@@ -451,12 +452,7 @@ const toggleSelectAll = async (checked: string | number | boolean) => {
 
     selectAllPending.value = true
     try {
-        const ids = await api.listMemoryIds({
-            presetId: props.presetId,
-            keyword: keyword.value.trim() || undefined,
-            type: memoryType.value || undefined,
-            status: status.value
-        })
+        const ids = await api.listMemoryIds(currentFilter.value)
         selectAll(ids)
     } catch (error) {
         ElMessage.error(`获取记忆失败：${toErrorMessage(error)}`)
