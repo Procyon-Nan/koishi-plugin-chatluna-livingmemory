@@ -21,17 +21,6 @@ export const validateLivingMemoryConfig = (
             message: '未配置 embeddingModel；记忆召回将失败。'
         })
     }
-    if (
-        config.recallStrategy === 'embedding-rerank' &&
-        !isModelConfigured(config.rerankModel)
-    ) {
-        warnings.push({
-            code: 'rerank-model-missing',
-            field: 'rerankModel',
-            message: '未配置 rerankModel；记忆召回将失败。'
-        })
-    }
-
     if (config.extractionInterval > 0 && !isModelConfigured(config.mainModel)) {
         warnings.push({
             code: 'extract-model-missing',

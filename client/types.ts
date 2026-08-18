@@ -152,7 +152,6 @@ export interface DreamTriggerResult {
 
 export type MemoryConfigWarningCode =
     | 'embedding-model-missing'
-    | 'rerank-model-missing'
     | 'extract-model-missing'
     | 'recall-rewrite-model-missing'
     | 'agentic-recall-model-missing'
