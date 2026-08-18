@@ -15,7 +15,14 @@ import {
 
 const chatlunaConfigurable = {
     preset: 'default',
-    conversationId: 'conversation-1',
+    agentContext: { kind: 'main', conversationId: 'conversation-1' },
+    source: 'chatluna',
+    session: { userId: 'user-1', channelId: 'c-1', isDirect: true }
+}
+
+const subagentConfigurable = {
+    preset: 'default',
+    agentContext: { kind: 'subagent', conversationId: 'subagent:task-1' },
     source: 'chatluna',
     session: { userId: 'user-1', channelId: 'c-1', isDirect: true }
 }
@@ -215,4 +222,18 @@ it('rejects tool calls without a resolvable scope', async () => {
         tool.invoke({ memories: [sampleMemory] }, { configurable: {} }),
         /Missing preset/u
     )
+})
+
+it('rejects tool calls from sub-agent runs', async () => {
+    const { calls, provider } = createRecordingProvider()
+    const tool = new LivingMemoryCreateMemoryTool(provider, 10)
+
+    await assert.rejects(
+        tool.invoke(
+            { memories: [sampleMemory] },
+            { configurable: subagentConfigurable }
+        ),
+        /Sub-agent tool calls/u
+    )
+    assert.equal(calls.length, 0)
 })

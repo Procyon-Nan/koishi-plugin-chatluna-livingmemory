@@ -15,7 +15,10 @@ import {
     toChatLunaTranscriptMessages
 } from '../service/transcript/chatluna_transcript_adapter'
 import { collectUserProfileSpeakerLabels } from '../service/user_profile'
-import { renderChatLunaPresetPrompt } from '../service/memory/helpers'
+import {
+    renderChatLunaPresetPrompt,
+    resolveMainRunConversationId
+} from '../service/memory/helpers'
 import { toNonEmptyString } from '../service/shared/utils'
 
 const resolveSpeakerName = (session: Session, message: HumanMessage) => {
@@ -67,13 +70,6 @@ const formatUserProfileInjection = (userProfiles: string) => {
 const formatSnapshotInjection = (snapshot: string) => {
     const text = snapshot.trim()
     return text.length > 0 ? `【我的记忆】\n${text}` : null
-}
-
-const isSubagentPrompt = (agentContext: unknown) => {
-    return (
-        (agentContext as { kind?: unknown } | null | undefined)?.kind ===
-        'subagent'
-    )
 }
 
 interface ChatPresetSource {
@@ -144,11 +140,10 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
             ctx.chatluna.contextManager.pipeline(
                 stage,
                 async (runtime, next) => {
-                    const conversationId = runtime.configurable?.conversationId
-                    if (
-                        typeof conversationId === 'string' &&
-                        !isSubagentPrompt(runtime.configurable?.agentContext)
-                    ) {
+                    const conversationId = resolveMainRunConversationId(
+                        runtime.configurable?.agentContext
+                    )
+                    if (conversationId != null) {
                         const injection = injections.get(conversationId)
                         if (injection != null) {
                             runtime.result.push(createMessage(injection))

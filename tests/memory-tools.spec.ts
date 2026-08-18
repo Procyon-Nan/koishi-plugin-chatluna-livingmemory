@@ -14,6 +14,7 @@ import {
     LivingMemorySearchTool
 } from '../src/service/memory/tools/embedding_search_tool'
 import type { LivingMemoryEmbeddingSearchEngine } from '../src/service/workflows/recall/embedding_search_engine'
+import { resolveMainRunConversationId } from '../src/service/memory/helpers'
 import {
     describeLivingMemoryToolScopeFailure,
     resolveToolMemoryPresetId,
@@ -110,11 +111,11 @@ it('rejects tool calls without a preset', () => {
     )
 })
 
-it('rebuilds the ChatLuna scope from the tool configurable', () => {
+it('rebuilds the ChatLuna scope from the agent run context', () => {
     assert.deepEqual(
         resolveToolMemoryScopeConfigurable({
             preset: 'default',
-            conversationId: 'conversation-1',
+            agentContext: { kind: 'main', conversationId: 'conversation-1' },
             session: {
                 userId: 'user-1',
                 channelId: 'channel-1',
@@ -203,9 +204,58 @@ it('rejects ChatLuna tool calls without a conversation id', () => {
         resolveToolMemoryScopeConfigurable({ preset: 'default' }),
         { ok: false, reason: 'missing-conversation-id' }
     )
+    // ChatLuna 1.4.0-alpha.44 起扁平 conversationId 已移除，仅认 agentContext。
+    assert.deepEqual(
+        resolveToolMemoryScopeConfigurable({
+            preset: 'default',
+            conversationId: 'conversation-1'
+        }),
+        { ok: false, reason: 'missing-conversation-id' }
+    )
     assert.match(
         describeLivingMemoryToolScopeFailure('missing-conversation-id'),
         /Missing conversationId/u
+    )
+})
+
+it('rejects sub-agent tool calls with a dedicated failure', () => {
+    assert.deepEqual(
+        resolveToolMemoryScopeConfigurable({
+            preset: 'default',
+            agentContext: {
+                kind: 'subagent',
+                conversationId: 'subagent:task-1'
+            },
+            session: { userId: 'user-1', isDirect: true }
+        }),
+        { ok: false, reason: 'subagent-tool-call' }
+    )
+    assert.match(
+        describeLivingMemoryToolScopeFailure('subagent-tool-call'),
+        /Sub-agent tool calls/u
+    )
+})
+
+it('resolves the main run conversation id only for non-subagent run contexts', () => {
+    assert.equal(
+        resolveMainRunConversationId({
+            kind: 'main',
+            conversationId: 'conversation-1'
+        }),
+        'conversation-1'
+    )
+    assert.equal(
+        resolveMainRunConversationId({
+            kind: 'subagent',
+            conversationId: 'subagent:task-1'
+        }),
+        undefined
+    )
+    assert.equal(resolveMainRunConversationId(null), undefined)
+    assert.equal(resolveMainRunConversationId('main'), undefined)
+    assert.equal(
+        resolveMainRunConversationId({ kind: 'main', conversationId: '  ' }),
+        undefined
     )
 })
 
@@ -218,7 +268,7 @@ it('queries the suffixed preset from the search tool in Character sessions', asy
         {
             configurable: {
                 preset: 'default',
-                conversationId: 'conversation-1',
+                agentContext: { kind: 'main', conversationId: 'conversation-1' },
                 source: 'chatluna',
                 session: { userId: 'user-1', isDirect: true }
             }

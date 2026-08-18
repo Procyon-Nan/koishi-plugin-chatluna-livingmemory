@@ -1,6 +1,8 @@
 import type { ToolRunnableConfig } from '@langchain/core/tools'
 import type { MemoryScope } from '../../../contracts/memory'
 import {
+    isSubagentRunContext,
+    toAgentRunContextFields,
     toCharacterMemoryConversationId,
     toCharacterMemoryPresetId
 } from '../helpers'
@@ -8,7 +10,7 @@ import { toNonEmptyString } from '../../shared/utils'
 
 export type LivingMemoryToolConfigurable = {
     preset?: unknown
-    conversationId?: unknown
+    agentContext?: unknown
     source?: unknown
     session?: unknown
 }
@@ -76,6 +78,7 @@ export type LivingMemoryToolScopeResolution =
           ok: false
           reason:
               | 'missing-preset'
+              | 'subagent-tool-call'
               | 'missing-conversation-id'
               | 'missing-session'
               | 'missing-session-key'
@@ -84,10 +87,11 @@ export type LivingMemoryToolScopeResolution =
 /**
  * 从工具 runtime configurable 重建 MemoryScope。
  *
- * ChatLuna 主链路：preset 与 conversationId 直接采用（configurable 由
- * agent_chat_chain 以 preset.triggerKeyword[0] 与会话 id 构造）。
- * Character 链路：conversationId 为平台前缀格式，presetName 无后缀，
- * 因此按 character_middleware 的规则用 session 重算会话键并补后缀。
+ * ChatLuna 主链路：preset 直接采用（configurable 由 agent_chat_chain 以
+ * preset.triggerKeyword[0] 构造）；conversationId 取自 agentContext，其会话
+ * id 为合成值的子代理运行一律拒绝。Character 链路：conversationId 为平台
+ * 前缀格式，presetName 无后缀，因此按 character_middleware 的规则用
+ * session 重算会话键并补后缀。
  */
 export const resolveToolMemoryScopeConfigurable = (
     configurable: LivingMemoryToolConfigurable | undefined
@@ -123,7 +127,12 @@ export const resolveToolMemoryScopeConfigurable = (
         }
     }
 
-    const conversationId = toNonEmptyString(configurable?.conversationId)
+    const agentContext = toAgentRunContextFields(configurable?.agentContext)
+    if (isSubagentRunContext(agentContext)) {
+        return { ok: false, reason: 'subagent-tool-call' }
+    }
+
+    const conversationId = toNonEmptyString(agentContext?.conversationId)
     if (conversationId == null) {
         return { ok: false, reason: 'missing-conversation-id' }
     }
@@ -148,6 +157,8 @@ export const describeLivingMemoryToolScopeFailure = (
     switch (reason) {
         case 'missing-preset':
             return 'Missing preset in the current tool call.'
+        case 'subagent-tool-call':
+            return 'Sub-agent tool calls are not supported by this tool.'
         case 'missing-conversation-id':
             return 'Missing conversationId in the current tool call.'
         case 'missing-session':

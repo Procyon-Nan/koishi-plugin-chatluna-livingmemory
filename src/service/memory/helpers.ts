@@ -2,6 +2,7 @@ import { BaseMessage } from '@langchain/core/messages'
 import type { Context, Session } from 'koishi'
 import type { PresetTemplate } from 'koishi-plugin-chatluna/llm-core/prompt'
 import type { MemoryScope } from '../../contracts/memory'
+import { toNonEmptyString } from '../shared/utils'
 
 export interface QueueExtractionOptions {
     resolvePresetPrompt: () => Promise<string>
@@ -61,6 +62,44 @@ export const toCharacterMemoryConversationId = (
  */
 export const toCharacterMemoryPresetId = (presetName: string) => {
     return `${presetName}${characterPresetSuffix}`
+}
+
+/**
+ * ChatLuna AgentRunContext 中本插件消费的字段。agentContext 自
+ * 1.4.0-alpha.37 起随工具调用与提示渲染 configurable 下发；扁平的
+ * conversationId 字段已在 alpha.44 的 run context 统一重构中移除，
+ * agentContext 是会话 id 的唯一可靠来源。
+ */
+export interface AgentRunContextFields {
+    kind?: unknown
+    conversationId?: unknown
+}
+
+export const toAgentRunContextFields = (
+    value: unknown
+): AgentRunContextFields | null => {
+    if (value == null || typeof value !== 'object') {
+        return null
+    }
+    return value as AgentRunContextFields
+}
+
+/**
+ * 子代理运行的会话 id 为合成值（subagent:${uuid}），不对应真实用户会话；
+ * 记忆工作流（注入、提取、主动创建）均不处理子代理运行。
+ */
+export const isSubagentRunContext = (value: unknown) => {
+    return toAgentRunContextFields(value)?.kind === 'subagent'
+}
+
+/**
+ * 取主链路运行的会话 id：子代理运行与缺失/空白会话 id 均返回 undefined。
+ */
+export const resolveMainRunConversationId = (value: unknown) => {
+    if (isSubagentRunContext(value)) {
+        return undefined
+    }
+    return toNonEmptyString(toAgentRunContextFields(value)?.conversationId)
 }
 
 export const normalizeText = (value: string) => value.trim()
