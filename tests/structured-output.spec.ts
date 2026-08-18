@@ -177,7 +177,10 @@ it('retries malformed legacy tool arguments once', async () => {
     assert.deepEqual(resolved.value, { items: ['corrected'] })
     assert.equal(resolved.parseError, null)
     assert.equal(harness.invocations.length, 2)
-    assert.match(resolved.output, /Failed to parse tool arguments/u)
+    assert.match(
+        resolved.output,
+        /^\[attempt 1\][\s\S]*\n\n\[attempt 2\]/u
+    )
 })
 
 it('propagates model invocation errors without a correction retry', async () => {
