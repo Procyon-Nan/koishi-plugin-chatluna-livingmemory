@@ -226,6 +226,7 @@
                             <profiles-tab
                                 ref="profilesTab"
                                 :preset-id="presetId"
+                                :is-dark="isDark"
                                 @total-change="profileTotal = $event"
                             />
                         </el-tab-pane>

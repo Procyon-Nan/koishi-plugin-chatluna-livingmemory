@@ -1,0 +1,139 @@
+:global(.profile-editor-dialog) {
+    max-width: calc(100vw - 32px);
+}
+
+:global(.profile-editor-dialog .el-dialog__header) {
+    padding: 20px 24px !important;
+}
+
+:global(.el-dialog.profile-editor-dialog .el-dialog__body) {
+    padding: 0 !important;
+}
+
+.profile-editor-heading {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding-right: 32px;
+}
+
+.profile-editor-avatar {
+    display: grid;
+    flex: 0 0 42px;
+    width: 42px;
+    height: 42px;
+    place-items: center;
+    border: 1px solid var(--lm-border);
+    border-radius: 6px;
+    background-color: var(--lm-primary-light);
+    color: var(--lm-primary);
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.profile-editor-kicker {
+    display: block;
+    margin-bottom: 2px;
+    color: var(--lm-text-tertiary);
+    font-family: var(--lm-font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+}
+
+.profile-editor-heading h2 {
+    margin: 0;
+    color: var(--lm-text-primary);
+    font-family: var(--lm-font-sans);
+    font-size: 16px;
+    font-weight: 650;
+    line-height: 1.35;
+    word-break: break-word;
+}
+
+.profile-editor-heading p {
+    margin: 3px 0 0;
+    color: var(--lm-text-tertiary);
+    font-family: var(--lm-font-mono);
+    font-size: 11px;
+    line-height: 1.4;
+}
+
+.profile-editor-heading p span {
+    padding: 0 4px;
+}
+
+.profile-editor-body {
+    padding: 22px 16px 16px;
+}
+
+.profile-editor-field-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 8px;
+}
+
+.profile-editor-field-header label {
+    color: var(--lm-text-primary);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.profile-editor-count {
+    color: var(--lm-text-tertiary);
+    font-family: var(--lm-font-mono);
+    font-size: 11px;
+    transition: color 150ms ease;
+}
+
+.profile-editor-count.is-invalid,
+.profile-editor-error {
+    color: var(--lm-danger);
+}
+
+:global(.profile-editor-dialog .el-textarea__inner) {
+    padding: 14px 16px !important;
+    border-radius: 6px !important;
+    font-size: 14px !important;
+    line-height: 1.7 !important;
+}
+
+:global(.profile-editor-dialog .el-textarea__inner:focus) {
+    border-color: var(--lm-primary) !important;
+    box-shadow: 0 0 0 3px var(--lm-primary-light) !important;
+}
+
+.profile-editor-error {
+    margin: 7px 0 0;
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.profile-editor-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 18px;
+}
+
+@media (max-width: 560px) {
+    :global(.profile-editor-dialog .el-dialog__header) {
+        padding-right: 16px !important;
+        padding-left: 16px !important;
+    }
+
+    .profile-editor-body {
+        padding: 18px 12px 12px;
+    }
+
+    .profile-editor-heading p {
+        display: none;
+    }
+
+    .profile-editor-actions :global(.el-button) {
+        flex: 1;
+    }
+}
