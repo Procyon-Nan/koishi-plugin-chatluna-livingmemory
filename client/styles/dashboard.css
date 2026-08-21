@@ -266,6 +266,38 @@
     white-space: nowrap;
 }
 
+.vector-status-state {
+    --vector-state-color: var(--lm-text-tertiary);
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--lm-text-secondary);
+    font-family: var(--lm-font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.vector-status-state::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: var(--vector-state-color);
+}
+
+.vector-status-state.is-ready {
+    --vector-state-color: var(--lm-success);
+}
+
+.vector-status-state.is-building {
+    --vector-state-color: var(--lm-warning);
+}
+
+.vector-status-state.is-dirty {
+    --vector-state-color: var(--lm-danger);
+}
+
 .vector-status-error {
     margin-top: 12px;
 }

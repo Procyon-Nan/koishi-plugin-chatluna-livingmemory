@@ -28,23 +28,25 @@
                 <div class="vector-status-grid">
                     <div class="vector-status-item">
                         <span class="vector-status-label">全局索引</span>
-                        <el-tag
-                            :type="getVectorStateTagType(globalVectorState)"
-                            size="small"
-                            effect="light"
+                        <span
+                            :class="[
+                                'vector-status-state',
+                                `is-${globalVectorState}`
+                            ]"
                         >
                             {{ getVectorStateLabel(globalVectorState) }}
-                        </el-tag>
+                        </span>
                     </div>
                     <div class="vector-status-item">
                         <span class="vector-status-label">当前预设</span>
-                        <el-tag
-                            :type="getVectorStateTagType(currentPresetVectorState)"
-                            size="small"
-                            effect="light"
+                        <span
+                            :class="[
+                                'vector-status-state',
+                                `is-${currentPresetVectorState}`
+                            ]"
                         >
                             {{ currentPresetVectorLabel }}
-                        </el-tag>
+                        </span>
                     </div>
                     <div class="vector-status-item">
                         <span class="vector-status-label">索引数量</span>
@@ -435,19 +437,6 @@ const getVectorStateLabel = (state: MemoryVectorIndexState) => {
             return '需要修复'
         case 'unavailable':
             return '不可用'
-    }
-}
-
-const getVectorStateTagType = (state: MemoryVectorIndexState) => {
-    switch (state) {
-        case 'ready':
-            return 'success'
-        case 'building':
-            return 'warning'
-        case 'dirty':
-            return 'danger'
-        case 'unavailable':
-            return 'info'
     }
 }
 
