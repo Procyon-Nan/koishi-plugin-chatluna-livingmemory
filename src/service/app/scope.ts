@@ -3,7 +3,12 @@ import type { MemoryScope } from '../../contracts/memory'
 export type CreateLivingMemoryScopeOptions = Partial<
     Pick<
         MemoryScope,
-        'guildId' | 'isDirect' | 'speakerId' | 'speakerName' | 'presetLabel'
+        | 'guildId'
+        | 'isDirect'
+        | 'speakerId'
+        | 'speakerName'
+        | 'presetLabel'
+        | 'platform'
     >
 >
 

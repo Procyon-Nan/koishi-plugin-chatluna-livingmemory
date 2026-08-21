@@ -9,7 +9,7 @@ import {
     toCharacterTranscriptMessageResult,
     toCharacterTranscriptMessages
 } from '../service/transcript/character_transcript_adapter'
-import { collectUserProfileSpeakerLabels } from '../service/user_profile'
+import { collectUserProfileSpeakerKeys } from '../service/user_profile'
 import {
     type CharacterPresetPromptSource,
     renderCharacterPresetPrompt,
@@ -113,6 +113,7 @@ const createCharacterScope = async (
         {
             guildId: payload.session.guildId ?? payload.session.channelId,
             isDirect: payload.session.isDirect,
+            platform: payload.session.platform,
             presetLabel: payload.presetName,
             speakerId,
             speakerName
@@ -169,7 +170,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
     })
     const events = ctx as unknown as CharacterEventRegistrar
     const livingMemory = ctx.chatluna_living_memory
-    const profileSpeakerLabelsByScope = new Map<string, string[]>()
+    const profileSpeakerKeysByScope = new Map<string, string[]>()
 
     ctx.on('dispose', () => {
         livingMemory.clearExtractionState()
@@ -192,17 +193,16 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 try {
                     const userProfileInjectionEnabled =
                         config.enableUserProfileInjection === true
-                    let speakerLabels: string[] = []
+                    let speakerKeys: string[] = []
                     if (userProfileInjectionEnabled) {
                         const profileScopeKey = scopeKey(scope)
-                        speakerLabels =
-                            profileSpeakerLabelsByScope.get(profileScopeKey) ??
-                            []
+                        speakerKeys =
+                            profileSpeakerKeysByScope.get(profileScopeKey) ?? []
                     }
                     const sections =
                         await ctx.chatluna_living_memory.hydratePromptSections(
                             scope,
-                            { speakerLabels }
+                            { speakerKeys }
                         )
                     const rendered = formatPromptVariable(sections)
 
@@ -263,7 +263,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 })
                 return
             }
-            ctx.chatluna_living_memory
+            await ctx.chatluna_living_memory
                 .recordPresetSpeaker(
                     scope,
                     currentTranscript.message.speakerLabel
@@ -289,9 +289,9 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 payload.session,
                 historyMessages
             )
-            profileSpeakerLabelsByScope.set(
+            profileSpeakerKeysByScope.set(
                 scopeKey(scope),
-                collectUserProfileSpeakerLabels([
+                collectUserProfileSpeakerKeys([
                     ...history,
                     currentTranscript.message
                 ])
@@ -315,9 +315,9 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 payload.messages
             )
             const key = scopeKey(scope)
-            profileSpeakerLabelsByScope.set(
+            profileSpeakerKeysByScope.set(
                 key,
-                collectUserProfileSpeakerLabels(messages)
+                collectUserProfileSpeakerKeys(messages)
             )
 
             const completedRound =
@@ -372,9 +372,9 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
             await ctx.chatluna_living_memory.cleanupConversation(
                 payload.sessionKey
             )
-            for (const key of profileSpeakerLabelsByScope.keys()) {
+            for (const key of profileSpeakerKeysByScope.keys()) {
                 if (key.endsWith(`\n${payload.sessionKey}`)) {
-                    profileSpeakerLabelsByScope.delete(key)
+                    profileSpeakerKeysByScope.delete(key)
                 }
             }
         }

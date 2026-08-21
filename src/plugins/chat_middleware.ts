@@ -14,7 +14,7 @@ import {
     toChatLunaTranscriptMessageResult,
     toChatLunaTranscriptMessages
 } from '../service/transcript/chatluna_transcript_adapter'
-import { collectUserProfileSpeakerLabels } from '../service/user_profile'
+import { collectUserProfileSpeakerKeys } from '../service/user_profile'
 import {
     renderChatLunaPresetPrompt,
     resolveMainRunConversationId
@@ -123,6 +123,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
             {
                 guildId: session.guildId ?? session.channelId,
                 isDirect: session.isDirect,
+                platform: session.platform,
                 speakerId: session.userId,
                 speakerName
             }
@@ -220,7 +221,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 })
                 return
             }
-            ctx.chatluna_living_memory
+            await ctx.chatluna_living_memory
                 .recordPresetSpeaker(
                     scope,
                     currentTranscript.message.speakerLabel
@@ -264,7 +265,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                     const historyMessages = enableUserProfileInjection
                         ? await loadHistoryMessages()
                         : []
-                    const speakerLabels = collectUserProfileSpeakerLabels([
+                    const speakerKeys = collectUserProfileSpeakerKeys([
                         ...historyMessages,
                         currentTranscript.message
                     ])
@@ -273,7 +274,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                             scope,
                             {
                                 includeSnapshot: enableSnapshotInjection,
-                                speakerLabels
+                                speakerKeys
                             }
                         )
                     const userProfileInjection = formatUserProfileInjection(

@@ -65,5 +65,18 @@ export const normalizePresetSpeakerRecord = (
     ...record,
     speakerKey: record.speakerKey.trim(),
     speakerLabel: record.speakerLabel.trim(),
-    speakerId: normalizeOptionalString(record.speakerId)
+    speakerAliases: Array.isArray(record.speakerAliases)
+        ? [
+              ...new Set(
+                  record.speakerAliases
+                      .filter(
+                          (alias): alias is string => typeof alias === 'string'
+                      )
+                      .map((alias) => alias.trim())
+                      .filter((alias) => alias.length > 0)
+              )
+          ]
+        : [record.speakerLabel.trim()].filter((alias) => alias.length > 0),
+    speakerId: normalizeOptionalString(record.speakerId),
+    platform: normalizeOptionalString(record.platform)
 })

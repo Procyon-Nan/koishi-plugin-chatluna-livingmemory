@@ -37,6 +37,7 @@ import { createPresetImportId, createPresetSpeakerId } from './normalizers'
 import { LivingMemorySnapshotRepository } from './snapshots'
 import { defineLivingMemoryTables } from './tables'
 import { LivingMemoryUserProfileRepository } from './user_profiles'
+import { reconcilePresetSpeaker } from './speaker_reconciliation'
 
 const PRESET_IMPORT_BATCH_SIZE = 100
 
@@ -324,6 +325,10 @@ export class LivingMemoryRepository
         return this.userProfiles.upsertPresetSpeaker(input)
     }
 
+    reconcilePresetSpeaker(input: PresetSpeakerInput): Promise<void> {
+        return reconcilePresetSpeaker(this.ctx.database, input)
+    }
+
     listUserProfilesByPreset(presetId: string): Promise<UserProfileRecord[]> {
         return this.userProfiles.listUserProfilesByPreset(presetId)
     }
@@ -343,6 +348,13 @@ export class LivingMemoryRepository
         profile: UserProfileInput
     ): Promise<void> {
         return this.userProfiles.replaceUserProfile(presetId, profile)
+    }
+
+    updateUserProfileContent(
+        profileId: string,
+        content: string
+    ): Promise<void> {
+        return this.userProfiles.updateUserProfileContent(profileId, content)
     }
 
     deleteUserProfile(profileId: string): Promise<void> {
@@ -403,7 +415,9 @@ export class LivingMemoryRepository
             presetSpeakers: presetSpeakers.map((speaker) => ({
                 speakerKey: speaker.speakerKey,
                 speakerLabel: speaker.speakerLabel,
+                speakerAliases: [...speaker.speakerAliases],
                 speakerId: speaker.speakerId,
+                platform: speaker.platform,
                 createdAt: speaker.createdAt.toISOString(),
                 updatedAt: speaker.updatedAt.toISOString()
             }))
@@ -524,7 +538,9 @@ export class LivingMemoryRepository
             presetId: targetPresetId,
             speakerKey: speaker.speakerKey,
             speakerLabel: speaker.speakerLabel,
+            speakerAliases: speaker.speakerAliases ?? [speaker.speakerLabel],
             speakerId: speaker.speakerId,
+            platform: speaker.platform ?? null,
             createdAt: new Date(speaker.createdAt),
             updatedAt: new Date(speaker.updatedAt)
         }))

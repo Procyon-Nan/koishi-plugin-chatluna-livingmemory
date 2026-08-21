@@ -11,9 +11,13 @@ import { LivingMemoryRepository } from '../persistence/repository'
 import { LivingMemoryRetriever } from '../workflows/recall/retriever'
 import {
     LivingMemoryUserProfileService,
-    normalizeUserProfileSpeakerKey,
-    normalizeUserProfileSpeakerLabel
+    normalizeManualUserProfileContent
 } from '../user_profile'
+import {
+    createUserProfileSpeakerKey,
+    normalizeUserProfileSpeakerLabel
+} from '../memory/speaker_identity'
+import { toNonEmptyString } from '../shared/utils'
 import {
     filterJobList,
     filterMemoryIds,
@@ -344,20 +348,27 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     }
 
     async recordPresetSpeaker(
-        scope: Pick<MemoryScope, 'presetId' | 'speakerId' | 'userId'>,
+        scope: Pick<
+            MemoryScope,
+            'presetId' | 'speakerId' | 'userId' | 'platform'
+        >,
         speakerLabel: string
     ) {
         const label = normalizeUserProfileSpeakerLabel(speakerLabel)
-        const speakerKey = normalizeUserProfileSpeakerKey(label)
-        if (label.length === 0 || speakerKey.length === 0) {
-            return
+        const speakerId =
+            toNonEmptyString(scope.speakerId) ?? toNonEmptyString(scope.userId)
+        const platform = toNonEmptyString(scope.platform)
+        if (label.length === 0 || speakerId == null || platform == null) {
+            throw new Error('stable user profile identity is missing')
         }
+        const speakerKey = createUserProfileSpeakerKey(platform, speakerId)
 
-        await this.repository.upsertPresetSpeaker({
+        await this.repository.reconcilePresetSpeaker({
             presetId: scope.presetId,
             speakerKey,
             speakerLabel: label,
-            speakerId: scope.speakerId ?? scope.userId ?? null
+            speakerId,
+            platform
         })
     }
 
@@ -494,6 +505,13 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
 
     async deleteUserProfile(profileId: string) {
         await this.repository.deleteUserProfile(profileId)
+    }
+
+    async updateUserProfile(profileId: string, content: string) {
+        await this.repository.updateUserProfileContent(
+            profileId,
+            normalizeManualUserProfileContent(content)
+        )
     }
 
     async runDream(presetId: string): Promise<DreamTriggerResult> {

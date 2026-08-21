@@ -5,6 +5,7 @@ import {
     type CharacterTranscriptSourceMessage,
     toCharacterCompletedRound
 } from '../src/service/transcript/character_transcript_adapter'
+import { createUserProfileSpeakerKey } from '../src/service/memory/speaker_identity'
 
 const scope: MemoryScope = {
     conversationId: 'group:1',
@@ -12,10 +13,12 @@ const scope: MemoryScope = {
     presetLabel: '角色',
     userId: 'user-1',
     speakerId: 'user-1',
-    speakerName: '用户甲'
+    speakerName: '用户甲',
+    platform: 'onebot'
 }
 
 const session = {
+    platform: 'onebot',
     userId: 'user-1',
     selfId: 'bot-1',
     username: '用户甲',
@@ -73,6 +76,10 @@ it('builds one completed Character round from the focus message and response blo
             ['assistant', '本轮回复第一段'],
             ['assistant', '本轮回复第二段']
         ]
+    )
+    assert.equal(
+        result.round?.messages[0].speakerKey,
+        createUserProfileSpeakerKey('onebot', 'user-1')
     )
 })
 

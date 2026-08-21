@@ -9,7 +9,10 @@ import type {
 } from '../src/contracts/workflows'
 import { characterPresetSuffix } from '../src/service/memory/helpers'
 import { userProfileResultToolName } from '../src/service/prompts/schema'
-import { LivingMemoryUserProfileService } from '../src/service/user_profile'
+import {
+    LivingMemoryUserProfileService,
+    normalizeManualUserProfileContent
+} from '../src/service/user_profile'
 import {
     createToolCallingModel,
     createToolCallMessage
@@ -35,6 +38,8 @@ const createHarness = (
     options: {
         ctx?: Context
         presetId?: string
+        speakerLabel?: string
+        speakerAliases?: string[]
     } = {}
 ) => {
     const savedProfiles: UserProfileInput[] = []
@@ -45,8 +50,10 @@ const createHarness = (
                 id: 'speaker-1',
                 presetId: 'preset-1',
                 speakerKey: '张三',
-                speakerLabel: '张三',
+                speakerLabel: options.speakerLabel ?? '张三',
+                speakerAliases: options.speakerAliases ?? ['张三'],
                 speakerId: 'user-1',
+                platform: 'test',
                 createdAt: now,
                 updatedAt: now
             }
@@ -112,6 +119,32 @@ const createHarness = (
         }
     }
 }
+
+it('validates manual user profile content with the generated profile limit', () => {
+    assert.equal(normalizeManualUserProfileContent('  手工画像  '), '手工画像')
+    assert.throws(() => normalizeManualUserProfileContent('  '), /1-220/u)
+    assert.throws(
+        () => normalizeManualUserProfileContent('甲'.repeat(221)),
+        /1-220/u
+    )
+})
+
+it('matches Dream memories through a stable user identity old nickname', async () => {
+    const harness = createHarness({
+        speakerLabel: '新昵称',
+        speakerAliases: ['张三', '新昵称']
+    })
+    const { result } = await harness.run([
+        createProfileCall({
+            speakerLabel: '新昵称',
+            content: '我知道该用户正在准备考试。',
+            sourceMemoryIds: ['memory-1']
+        })
+    ])
+
+    assert.equal(result.generated, 1)
+    assert.equal(harness.savedProfiles[0].speakerLabel, '新昵称')
+})
 
 const baseProfileOutput = {
     speakerLabel: '张三',

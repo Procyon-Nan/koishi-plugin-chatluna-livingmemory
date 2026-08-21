@@ -53,7 +53,9 @@ export class LivingMemoryUserProfileRepository implements UserProfileRepository 
             presetId,
             speakerKey,
             speakerLabel,
+            speakerAliases: [speakerLabel],
             speakerId: normalizeOptionalString(input.speakerId),
+            platform: normalizeOptionalString(input.platform),
             updatedAt: now
         }
         const existing = (
@@ -156,6 +158,14 @@ export class LivingMemoryUserProfileRepository implements UserProfileRepository 
                 }
             })
         }
+    }
+
+    async updateUserProfileContent(profileId: string, content: string) {
+        await this.ctx.database.set(
+            'living_memory_user_profile',
+            { id: profileId },
+            { content, updatedAt: new Date() }
+        )
     }
 
     async deleteUserProfile(profileId: string) {

@@ -1,6 +1,7 @@
 import type { BaseMessage } from '@langchain/core/messages'
 import type { MemoryScope } from '../../contracts/memory'
 import { resolveScopeAssistantLabel } from '../memory/helpers'
+import { createUserProfileSpeakerKey } from '../memory/speaker_identity'
 import { toNonEmptyString } from '../shared/utils'
 import {
     createLivingMemoryTranscriptMessageResult,
@@ -149,8 +150,18 @@ export const toChatLunaTranscriptMessageResult = (
     }
 
     const resolved = getMessageTextParts(message)
+    const speakerId =
+        type === 'human'
+            ? toNonEmptyString((message as { id?: unknown }).id)
+            : null
+    const platform = type === 'human' ? toNonEmptyString(scope.platform) : null
     return createLivingMemoryTranscriptMessageResult({
         role: type === 'human' ? 'user' : 'assistant',
+        ...(speakerId == null || platform == null
+            ? {}
+            : {
+                  speakerKey: createUserProfileSpeakerKey(platform, speakerId)
+              }),
         speakerLabel:
             type === 'human'
                 ? getUserSpeakerLabel(scope, message)

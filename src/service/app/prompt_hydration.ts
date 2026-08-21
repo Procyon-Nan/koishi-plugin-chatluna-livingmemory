@@ -9,7 +9,7 @@ export interface LivingMemoryPromptHydrationDependencies {
 
 export interface LivingMemoryPromptSectionsOptions {
     includeSnapshot?: boolean
-    speakerLabels?: string[]
+    speakerKeys?: string[]
 }
 
 export const hydrateLivingMemoryPromptVariable = async (
@@ -33,7 +33,7 @@ export const hydrateLivingMemoryPromptSections = async (
             : dependencies.snapshotCache.hydrate(scope),
         dependencies.userProfiles.renderForSpeakers(
             scope.presetId,
-            options.speakerLabels ?? []
+            options.speakerKeys ?? []
         )
     ])
 

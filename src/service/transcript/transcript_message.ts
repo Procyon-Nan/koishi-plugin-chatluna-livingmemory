@@ -5,6 +5,7 @@ export type LivingMemoryMessageTimeValue = Date | number | string
 
 export interface LivingMemoryTranscriptInput {
     role: LivingMemoryTranscriptMessage['role']
+    speakerKey?: string
     speakerLabel: string
     content: string | string[]
     createdAt: unknown
@@ -136,10 +137,12 @@ export const createLivingMemoryTranscriptMessageResult = (
             reason: 'empty-content'
         }
     }
+    const speakerKey = toNonEmptyString(input.speakerKey)
 
     return {
         message: {
             role: input.role,
+            ...(speakerKey == null ? {} : { speakerKey }),
             speakerLabel,
             contentLines,
             createdAt

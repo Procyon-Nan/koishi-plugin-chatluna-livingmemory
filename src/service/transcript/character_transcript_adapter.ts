@@ -4,6 +4,7 @@ import type {
     MemoryScope
 } from '../../contracts/memory'
 import { resolveScopeAssistantLabel } from '../memory/helpers'
+import { createUserProfileSpeakerKey } from '../memory/speaker_identity'
 import { toNonEmptyString } from '../shared/utils'
 import { createLivingMemoryTranscriptMessageResult } from './transcript_message'
 
@@ -178,9 +179,16 @@ export const toCharacterTranscriptMessageResult = async (
         message,
         cache
     )
+    const speakerId = isAssistant ? null : toNonEmptyString(message.id)
+    const platform = isAssistant ? null : toNonEmptyString(scope.platform)
 
     return createLivingMemoryTranscriptMessageResult({
         role: isAssistant ? 'assistant' : 'user',
+        ...(speakerId == null || platform == null
+            ? {}
+            : {
+                  speakerKey: createUserProfileSpeakerKey(platform, speakerId)
+              }),
         speakerLabel: speakerLabel ?? '',
         content: message.content,
         createdAt: message.timestamp,

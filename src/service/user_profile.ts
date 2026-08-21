@@ -2,6 +2,7 @@ import { Context } from 'koishi'
 import type { ChatLunaChatModel } from 'koishi-plugin-chatluna/llm-core/platform/model'
 import type {
     LivingMemoryTranscriptMessage,
+    PresetSpeakerRecord,
     UserProfileRecord
 } from '../contracts/memory'
 import type {
@@ -20,7 +21,18 @@ import { summarizeError } from './shared/utils'
 import { invokeStructuredOutput } from './workflows/structured_output'
 import type { LivingMemoryLogger } from './logging/logger'
 
-const maxProfileLength = 220
+export const userProfileMaxLength = 220
+
+export const normalizeManualUserProfileContent = (content: string) => {
+    const normalized = content.trim()
+    const length = Array.from(normalized).length
+    if (length === 0 || length > userProfileMaxLength) {
+        throw new RangeError(
+            `用户画像正文长度必须为 1-${userProfileMaxLength} 个字符。`
+        )
+    }
+    return normalized
+}
 
 type LivingMemoryUserProfileConfig = Pick<
     LivingMemoryConfig,
@@ -58,16 +70,10 @@ const truncateText = (value: string, maxLength: number) => {
     return `${chars.slice(0, contentLength).join('')}${suffix.slice(0, maxLength)}`
 }
 
-export const normalizeUserProfileSpeakerKey = (speakerLabel: string) => {
-    return collapseWhitespace(speakerLabel).toLowerCase()
-}
-
-export const normalizeUserProfileSpeakerLabel = collapseWhitespace
-
-export const collectUserProfileSpeakerLabels = (
+export const collectUserProfileSpeakerKeys = (
     messages: LivingMemoryTranscriptMessage[]
 ) => {
-    const labels: string[] = []
+    const keys: string[] = []
     const seen = new Set<string>()
 
     for (const message of messages) {
@@ -75,17 +81,16 @@ export const collectUserProfileSpeakerLabels = (
             continue
         }
 
-        const label = collapseWhitespace(message.speakerLabel)
-        const key = normalizeUserProfileSpeakerKey(label)
-        if (label.length === 0 || key.length === 0 || seen.has(key)) {
+        const key = message.speakerKey?.trim()
+        if (key == null || key.length === 0 || seen.has(key)) {
             continue
         }
 
         seen.add(key)
-        labels.push(label)
+        keys.push(key)
     }
 
-    return labels
+    return keys
 }
 
 export class LivingMemoryUserProfileService {
@@ -205,7 +210,7 @@ export class LivingMemoryUserProfileService {
             assistantLabel,
             presetPrompt,
             group,
-            maxProfileLength
+            maxProfileLength: userProfileMaxLength
         })
         let structuredResult
         try {
@@ -308,25 +313,25 @@ export class LivingMemoryUserProfileService {
         })
     }
 
-    async renderForSpeakers(presetId: string, speakerLabels: string[]) {
+    async renderForSpeakers(presetId: string, speakerKeys: string[]) {
         if (!this.config.enableUserProfileInjection) {
             return ''
         }
 
-        const speakerKeys = this.toOrderedSpeakerKeys(speakerLabels)
-        if (speakerKeys.length === 0) {
+        const orderedKeys = this.toOrderedSpeakerKeys(speakerKeys)
+        if (orderedKeys.length === 0) {
             return ''
         }
 
         const profiles = await this.repository.listUserProfilesBySpeakerKeys(
             presetId,
-            speakerKeys
+            orderedKeys
         )
         const profileByKey = new Map(
             profiles.map((profile) => [profile.speakerKey, profile])
         )
 
-        return speakerKeys
+        return orderedKeys
             .map((key) => profileByKey.get(key))
             .filter((profile): profile is NonNullable<typeof profile> => {
                 return profile != null && profile.content.trim().length > 0
@@ -340,13 +345,17 @@ export class LivingMemoryUserProfileService {
 
     private buildGroups(
         activeEntries: DreamMemoryEntryRecord[],
-        speakers: { speakerKey: string; speakerLabel: string }[]
+        speakers: PresetSpeakerRecord[]
     ): UserProfileGroup[] {
         return speakers
+            .filter(
+                (speaker) =>
+                    speaker.speakerId != null && speaker.platform != null
+            )
             .map((speaker) => {
                 const entries = this.selectEntriesForSpeaker(
                     activeEntries,
-                    speaker.speakerLabel
+                    speaker.speakerAliases
                 )
 
                 return {
@@ -374,11 +383,13 @@ export class LivingMemoryUserProfileService {
 
     private selectEntriesForSpeaker(
         entries: DreamMemoryEntryRecord[],
-        speakerLabel: string
+        speakerAliases: string[]
     ) {
         return entries
             .filter((entry) =>
-                this.entryMatchesSpeakerKeyword(entry, speakerLabel)
+                speakerAliases.some((alias) =>
+                    this.entryMatchesSpeakerKeyword(entry, alias)
+                )
             )
             .sort((left, right) => {
                 const importanceDelta =
@@ -418,7 +429,7 @@ export class LivingMemoryUserProfileService {
     private normalizeProfileContent(speakerLabel: string, content: string) {
         return truncateText(
             this.stripGeneratedTitle(speakerLabel, collapseWhitespace(content)),
-            maxProfileLength
+            userProfileMaxLength
         )
     }
 
@@ -444,12 +455,12 @@ export class LivingMemoryUserProfileService {
         return content
     }
 
-    private toOrderedSpeakerKeys(speakerLabels: string[]) {
+    private toOrderedSpeakerKeys(speakerKeys: string[]) {
         const keys: string[] = []
         const seen = new Set<string>()
 
-        for (const label of speakerLabels) {
-            const key = normalizeUserProfileSpeakerKey(label)
+        for (const speakerKey of speakerKeys) {
+            const key = speakerKey.trim()
             if (key.length === 0 || seen.has(key)) {
                 continue
             }

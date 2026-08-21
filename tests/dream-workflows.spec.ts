@@ -152,7 +152,9 @@ const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
                     presetId: scope.presetId,
                     speakerKey: '张三',
                     speakerLabel: '张三',
+                    speakerAliases: ['张三'],
                     speakerId: 'user-1',
+                    platform: 'test',
                     createdAt: activeEntry.createdAt,
                     updatedAt: activeEntry.updatedAt
                 }

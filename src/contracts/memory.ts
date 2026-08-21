@@ -107,6 +107,7 @@ export interface MemoryScope {
     isDirect?: boolean
     speakerId?: string
     speakerName?: string
+    platform?: string
 }
 
 export interface MemorySourceMessage {
@@ -143,6 +144,7 @@ export interface LivingMemoryGetMessagesOutput {
 
 export interface LivingMemoryTranscriptMessage {
     role: 'user' | 'assistant'
+    speakerKey?: string
     speakerLabel: string
     contentLines: string[]
     createdAt: Date
@@ -232,7 +234,9 @@ export interface PresetSpeakerRecord {
     presetId: string
     speakerKey: string
     speakerLabel: string
+    speakerAliases: string[]
     speakerId: string | null
+    platform: string | null
     createdAt: Date
     updatedAt: Date
 }
@@ -242,6 +246,7 @@ export interface PresetSpeakerInput {
     speakerKey: string
     speakerLabel: string
     speakerId?: string | null
+    platform?: string | null
 }
 
 export interface MemoryMutationInput {
@@ -286,7 +291,9 @@ export interface LivingMemoryPresetExportUserProfile {
 export interface LivingMemoryPresetExportSpeaker {
     speakerKey: string
     speakerLabel: string
+    speakerAliases?: string[]
     speakerId: string | null
+    platform?: string | null
     createdAt: string
     updatedAt: string
 }
