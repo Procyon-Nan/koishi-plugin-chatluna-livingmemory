@@ -139,14 +139,18 @@ export const createLivingMemoryTranscriptMessageResult = (
     }
     const speakerKey = toNonEmptyString(input.speakerKey)
 
+    const message: LivingMemoryTranscriptMessage = {
+        role: input.role,
+        speakerLabel,
+        contentLines,
+        createdAt
+    }
+    if (speakerKey != null) {
+        message.speakerKey = speakerKey
+    }
+
     return {
-        message: {
-            role: input.role,
-            ...(speakerKey == null ? {} : { speakerKey }),
-            speakerLabel,
-            contentLines,
-            createdAt
-        },
+        message,
         reason: null
     }
 }

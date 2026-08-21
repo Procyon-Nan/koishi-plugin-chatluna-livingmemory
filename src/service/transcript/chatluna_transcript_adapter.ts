@@ -150,27 +150,35 @@ export const toChatLunaTranscriptMessageResult = (
     }
 
     const resolved = getMessageTextParts(message)
-    const speakerId =
-        type === 'human'
-            ? toNonEmptyString((message as { id?: unknown }).id)
-            : null
-    const platform = type === 'human' ? toNonEmptyString(scope.platform) : null
+    const createdAt =
+        getChatLunaMessageCreatedAt(message) ?? options.fallbackCreatedAt
+    if (type === 'ai') {
+        return createLivingMemoryTranscriptMessageResult({
+            role: 'assistant',
+            speakerLabel: resolveScopeAssistantLabel(scope),
+            content: resolved.parts,
+            createdAt,
+            stripSpeakerPrefix: false
+        })
+    }
+
+    const speakerId = toNonEmptyString(message.id)
+    let speakerKey: string | undefined
+    if (speakerId != null) {
+        const platform = toNonEmptyString(scope.platform)
+        if (platform == null) {
+            throw new Error('ChatLuna transcript scope has no platform.')
+        }
+        speakerKey = createUserProfileSpeakerKey(platform, speakerId)
+    }
+
     return createLivingMemoryTranscriptMessageResult({
-        role: type === 'human' ? 'user' : 'assistant',
-        ...(speakerId == null || platform == null
-            ? {}
-            : {
-                  speakerKey: createUserProfileSpeakerKey(platform, speakerId)
-              }),
-        speakerLabel:
-            type === 'human'
-                ? getUserSpeakerLabel(scope, message)
-                : resolveScopeAssistantLabel(scope),
+        role: 'user',
+        speakerKey,
+        speakerLabel: getUserSpeakerLabel(scope, message),
         content: resolved.parts,
-        createdAt:
-            getChatLunaMessageCreatedAt(message) ?? options.fallbackCreatedAt,
-        stripSpeakerPrefix:
-            type === 'human' ? resolved.stripSpeakerPrefix : false
+        createdAt,
+        stripSpeakerPrefix: resolved.stripSpeakerPrefix
     })
 }
 

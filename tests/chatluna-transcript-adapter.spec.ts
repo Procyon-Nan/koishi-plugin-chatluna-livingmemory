@@ -31,7 +31,7 @@ it('derives ChatLuna profile identity from platform and message user id', () => 
     )
 })
 
-it('does not attribute a human message without an id to the current scope user', () => {
+it('does not attribute legacy history without a user id to the current scope user', () => {
     const result = toChatLunaTranscriptMessageResult(
         createScope('onebot'),
         new HumanMessage({

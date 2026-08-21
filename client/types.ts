@@ -286,7 +286,9 @@ export interface LivingMemoryPresetExportUserProfile {
 export interface LivingMemoryPresetExportSpeaker {
     speakerKey: string
     speakerLabel: string
+    speakerAliases?: string[]
     speakerId: string | null
+    platform?: string | null
     createdAt: string
     updatedAt: string
 }
@@ -351,6 +353,10 @@ declare module '@koishijs/client' {
             page?: number
             pageSize?: number
         }) => PageResult<UserProfileRecord>
+        'living-memory/updateUserProfile': (
+            profileId: string,
+            content: string
+        ) => { success: true }
         'living-memory/deleteUserProfile': (profileId: string) => {
             success: true
         }

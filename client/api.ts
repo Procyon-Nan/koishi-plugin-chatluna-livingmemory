@@ -135,6 +135,13 @@ export async function deleteUserProfile(
     return await send('living-memory/deleteUserProfile', profileId)
 }
 
+export async function updateUserProfile(
+    profileId: string,
+    content: string
+): Promise<{ success: true }> {
+    return await send('living-memory/updateUserProfile', profileId, content)
+}
+
 export async function runDream(presetId: string): Promise<DreamTriggerResult> {
     return await send('living-memory/runDream', presetId)
 }

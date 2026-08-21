@@ -107,6 +107,10 @@ export interface LivingMemoryConsoleEvents {
     'living-memory/listUserProfiles': (
         query: UserProfileListQuery
     ) => Promise<PageResult<UserProfileRecord>>
+    'living-memory/updateUserProfile': (
+        profileId: string,
+        content: string
+    ) => Promise<{ success: true }>
     'living-memory/deleteUserProfile': (
         profileId: string
     ) => Promise<{ success: true }>

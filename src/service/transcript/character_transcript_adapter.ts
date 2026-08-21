@@ -26,14 +26,15 @@ const resolveCurrentSessionUserGlobalName = (session: Session) => {
     )
 }
 
-const isCurrentSessionUserMessage = (
-    session: Session,
-    message: CharacterTranscriptSourceMessage
-) => {
-    const messageId = toNonEmptyString(message.id)
-    const userId = toNonEmptyString(session.userId)
+const requireCharacterUserId = (message: CharacterTranscriptSourceMessage) => {
+    const userId = toNonEmptyString(message.id)
+    if (userId == null) {
+        throw new Error(
+            'Character user message has no id for global speaker lookup.'
+        )
+    }
 
-    return messageId != null && userId != null && messageId === userId
+    return userId
 }
 
 const resolveQueriedUserGlobalName = async (
@@ -61,17 +62,10 @@ const resolveQueriedUserGlobalName = async (
 
 const resolveCharacterUserGlobalName = async (
     session: Session,
-    message: CharacterTranscriptSourceMessage,
+    userId: string,
     cache?: CharacterGlobalNameCache
 ) => {
-    const userId = toNonEmptyString(message.id)
-    if (userId == null) {
-        throw new Error(
-            'Character user message has no id for global speaker lookup.'
-        )
-    }
-
-    if (isCurrentSessionUserMessage(session, message)) {
+    if (userId === toNonEmptyString(session.userId)) {
         return (
             resolveCurrentSessionUserGlobalName(session) ??
             (await resolveQueriedUserGlobalName(session, userId, cache))
@@ -134,7 +128,10 @@ export const resolveCharacterScopeSpeakerName = async (
     message?: CharacterTranscriptSourceMessage
 ) => {
     if (message != null && !isCharacterBotMessage(session, message)) {
-        return resolveCharacterUserGlobalName(session, message)
+        return resolveCharacterUserGlobalName(
+            session,
+            requireCharacterUserId(message)
+        )
     }
 
     const userId = toNonEmptyString(session.userId)
@@ -153,19 +150,6 @@ export const resolveCharacterScopeSpeakerName = async (
     )
 }
 
-const resolveCharacterSpeakerLabel = async (
-    scope: MemoryScope,
-    session: Session,
-    message: CharacterTranscriptSourceMessage,
-    cache?: CharacterGlobalNameCache
-) => {
-    if (isCharacterBotMessage(session, message)) {
-        return resolveScopeAssistantLabel(scope)
-    }
-
-    return resolveCharacterUserGlobalName(session, message, cache)
-}
-
 export const toCharacterTranscriptMessageResult = async (
     scope: MemoryScope,
     session: Session,
@@ -173,26 +157,29 @@ export const toCharacterTranscriptMessageResult = async (
     cache?: CharacterGlobalNameCache
 ) => {
     const isAssistant = isCharacterBotMessage(session, message)
-    const speakerLabel = await resolveCharacterSpeakerLabel(
-        scope,
+    if (isAssistant) {
+        return createLivingMemoryTranscriptMessageResult({
+            role: 'assistant',
+            speakerLabel: resolveScopeAssistantLabel(scope),
+            content: message.content,
+            createdAt: message.timestamp,
+            stripSpeakerPrefix: false
+        })
+    }
+
+    const speakerId = requireCharacterUserId(message)
+    const speakerLabel = await resolveCharacterUserGlobalName(
         session,
-        message,
+        speakerId,
         cache
     )
-    const speakerId = isAssistant ? null : toNonEmptyString(message.id)
-    const platform = isAssistant ? null : toNonEmptyString(scope.platform)
-
     return createLivingMemoryTranscriptMessageResult({
-        role: isAssistant ? 'assistant' : 'user',
-        ...(speakerId == null || platform == null
-            ? {}
-            : {
-                  speakerKey: createUserProfileSpeakerKey(platform, speakerId)
-              }),
+        role: 'user',
+        speakerKey: createUserProfileSpeakerKey(session.platform, speakerId),
         speakerLabel: speakerLabel ?? '',
         content: message.content,
         createdAt: message.timestamp,
-        stripSpeakerPrefix: !isAssistant
+        stripSpeakerPrefix: true
     })
 }
 

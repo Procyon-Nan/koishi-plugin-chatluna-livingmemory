@@ -41,16 +41,25 @@
                                 更新 {{ formatTime(profile.updatedAt) }}
                             </span>
                         </div>
-                        <el-button
-                            class="profile-card-delete"
-                            size="small"
-                            type="danger"
-                            plain
-                            :loading="deletingProfileId === profile.id"
-                            @click="removeUserProfile(profile)"
-                        >
-                            删除
-                        </el-button>
+                        <div class="profile-card-actions">
+                            <el-button
+                                size="small"
+                                plain
+                                :loading="editingProfileId === profile.id"
+                                @click="editUserProfile(profile)"
+                            >
+                                编辑
+                            </el-button>
+                            <el-button
+                                size="small"
+                                type="danger"
+                                plain
+                                :loading="deletingProfileId === profile.id"
+                                @click="removeUserProfile(profile)"
+                            >
+                                删除
+                            </el-button>
+                        </div>
                     </div>
                 </article>
             </div>
@@ -87,6 +96,7 @@ const emit = defineEmits<{
 }>()
 
 const deletingProfileId = ref<string | null>(null)
+const editingProfileId = ref<string | null>(null)
 const {
     items,
     page,
@@ -171,6 +181,44 @@ const removeUserProfile = async (profile: UserProfileRecord) => {
         ElMessage.error(`删除失败：${message}`)
     } finally {
         deletingProfileId.value = null
+    }
+}
+
+const editUserProfile = async (profile: UserProfileRecord) => {
+    let content: string
+    try {
+        const result = await ElMessageBox.prompt(
+            '保存后的内容仍可能被后续 Dream 自动更新覆盖。',
+            `编辑 ${profile.speakerLabel} 的用户画像`,
+            {
+                inputType: 'textarea',
+                inputValue: profile.content,
+                inputPlaceholder: '请输入 1-220 个字符',
+                confirmButtonText: '保存',
+                cancelButtonText: '取消',
+                inputValidator: (value) => {
+                    const length = Array.from(value.trim()).length
+                    return length >= 1 && length <= 220
+                        ? true
+                        : '用户画像正文长度必须为 1-220 个字符'
+                }
+            }
+        )
+        content = result.value.trim()
+    } catch {
+        return
+    }
+
+    editingProfileId.value = profile.id
+    try {
+        await api.updateUserProfile(profile.id, content)
+        ElMessage.success('用户画像已更新')
+        await refresh()
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        ElMessage.error(`更新失败：${message}`)
+    } finally {
+        editingProfileId.value = null
     }
 }
 
