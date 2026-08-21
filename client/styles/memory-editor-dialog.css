@@ -1,0 +1,158 @@
+:global(.memory-editor-dialog) {
+    max-width: calc(100vw - 32px);
+}
+
+:global(.memory-editor-dialog .el-dialog__header) {
+    padding: 20px 24px !important;
+}
+
+:global(.el-dialog.memory-editor-dialog .el-dialog__body) {
+    padding: 0 !important;
+}
+
+.memory-editor-heading {
+    padding-right: 32px;
+}
+
+.memory-editor-heading h2 {
+    margin: 0;
+    color: var(--lm-text-primary);
+    font-family: var(--lm-font-sans);
+    font-size: 16px;
+    font-weight: 650;
+    line-height: 1.35;
+}
+
+.memory-editor-heading p {
+    margin: 5px 0 0;
+    color: var(--lm-text-tertiary);
+    font-family: var(--lm-font-mono);
+    font-size: 11px;
+    line-height: 1.4;
+}
+
+.memory-editor-heading p span {
+    padding: 0 4px;
+}
+
+.memory-editor-body {
+    padding: 20px 16px 16px;
+}
+
+.memory-editor-body :deep(.el-form-item) {
+    margin-bottom: 16px !important;
+}
+
+.memory-editor-body :deep(.el-form-item__label) {
+    height: auto;
+    margin-bottom: 7px;
+    padding: 0 !important;
+    color: var(--lm-text-primary) !important;
+    font-size: 12px !important;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.memory-editor-content-field :deep(.el-textarea__inner) {
+    padding: 14px 16px !important;
+    border-radius: 6px !important;
+    font-size: 14px !important;
+    line-height: 1.7 !important;
+}
+
+.memory-editor-body :deep(.el-textarea__inner:focus),
+.memory-editor-body :deep(.el-input__wrapper.is-focus),
+.memory-editor-body :deep(.el-select__wrapper.is-focused) {
+    border-color: var(--lm-primary) !important;
+    box-shadow: 0 0 0 3px var(--lm-primary-light) !important;
+}
+
+.memory-editor-grid {
+    display: grid;
+    gap: 12px;
+}
+
+.memory-editor-core-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.memory-editor-detail-grid {
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+}
+
+.memory-editor-grid :deep(.el-input-number),
+.memory-editor-grid :deep(.el-select) {
+    width: 100% !important;
+}
+
+.memory-editor-grid :deep(.el-input-number) {
+    height: 34px;
+}
+
+.memory-editor-grid :deep(.el-input-number .el-input),
+.memory-editor-grid :deep(.el-input-number .el-input__wrapper) {
+    height: 100%;
+    min-height: 34px !important;
+    box-sizing: border-box;
+}
+
+.memory-editor-detail-grid {
+    margin-top: 2px;
+    padding-top: 16px;
+    border-top: 1px solid var(--lm-border);
+}
+
+.memory-editor-detail-grid :deep(.el-input__wrapper),
+.memory-editor-detail-grid :deep(.el-select__wrapper) {
+    height: 40px !important;
+    min-height: 40px !important;
+    box-sizing: border-box;
+}
+
+.memory-editor-keywords :deep(.el-tag) {
+    border: 0 !important;
+    background-color: var(--lm-primary-light) !important;
+    color: var(--lm-text-secondary) !important;
+}
+
+.memory-editor-keywords :deep(.el-tag__close) {
+    color: var(--lm-text-tertiary) !important;
+}
+
+.memory-editor-keywords :deep(.el-tag__close:hover) {
+    background-color: var(--lm-bg-hover) !important;
+    color: var(--lm-text-primary) !important;
+}
+
+.memory-editor-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 2px;
+}
+
+@media (max-width: 640px) {
+    :global(.memory-editor-dialog .el-dialog__header) {
+        padding-right: 16px !important;
+        padding-left: 16px !important;
+    }
+
+    .memory-editor-body {
+        padding: 18px 12px 12px;
+    }
+
+    .memory-editor-heading p {
+        display: none;
+    }
+
+    .memory-editor-core-grid,
+    .memory-editor-detail-grid {
+        grid-template-columns: 1fr;
+        gap: 0;
+    }
+
+    .memory-editor-actions :deep(.el-button) {
+        flex: 1;
+    }
+}

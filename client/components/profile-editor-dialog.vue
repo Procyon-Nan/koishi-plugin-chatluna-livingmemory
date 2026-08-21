@@ -64,7 +64,6 @@
                     取消
                 </el-button>
                 <el-button
-                    type="primary"
                     :loading="submitPending"
                     :disabled="!canSubmit"
                     @click="submit"

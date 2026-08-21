@@ -1,111 +1,131 @@
 <template>
     <el-dialog
         v-model="visible"
-        :title="dialogTitle"
-        width="720px"
-        :class="['lm-dialog', isDark ? 'lm-theme-dark' : 'lm-theme-light']"
+        width="680px"
+        :close-on-click-modal="false"
+        :class="[
+            'memory-editor-dialog',
+            'lm-dialog',
+            isDark ? 'lm-theme-dark' : 'lm-theme-light'
+        ]"
         modal-class="lm-dialog-overlay"
+        @opened="focusContent"
     >
-        <el-form label-width="96px">
-            <el-form-item label="类型">
-                <el-select
-                    v-model="form.type"
-                    placeholder="请选择类型"
-                    :popper-class="
-                        isDark
-                            ? 'lm-select-popper lm-theme-dark'
-                            : 'lm-select-popper lm-theme-light'
-                    "
-                >
-                    <el-option
-                        v-for="item in memoryTypes"
-                        :key="item"
-                        :label="item"
-                        :value="item"
-                    />
-                </el-select>
-            </el-form-item>
+        <template #header>
+            <div class="memory-editor-heading">
+                <h2>{{ dialogTitle }}</h2>
+                <p v-if="memory != null">
+                    创建于 {{ formatTime(memory.createdAt) }}
+                    <span aria-hidden="true">·</span>
+                    更新于 {{ formatTime(memory.updatedAt) }}
+                </p>
+            </div>
+        </template>
 
-            <el-form-item label="状态">
-                <el-select
-                    v-model="form.status"
-                    placeholder="请选择状态"
-                    :popper-class="
-                        isDark
-                            ? 'lm-select-popper lm-theme-dark'
-                            : 'lm-select-popper lm-theme-light'
-                    "
-                >
-                    <el-option label="活跃记忆" value="active" />
-                    <el-option label="历史记录" value="archived" />
-                </el-select>
-            </el-form-item>
-
-            <el-form-item label="内容">
-                <el-input
-                    v-model="form.content"
-                    type="textarea"
-                    :rows="4"
-                    placeholder="请输入记忆内容"
-                />
-            </el-form-item>
-
+        <el-form class="memory-editor-body" label-position="top">
             <el-form-item label="摘要">
                 <el-input
                     v-model="form.summary"
                     type="textarea"
-                    :rows="2"
+                    resize="none"
+                    :autosize="{ minRows: 2, maxRows: 4 }"
                     placeholder="可选，简要概括该记忆"
                 />
             </el-form-item>
 
-            <el-form-item label="情绪">
+            <el-form-item class="memory-editor-content-field" label="记忆内容">
                 <el-input
-                    v-model="form.sentiment"
-                    placeholder="可选，例如：担心、亲近、愉快、中性"
+                    ref="contentInput"
+                    v-model="form.content"
+                    type="textarea"
+                    resize="none"
+                    :autosize="{ minRows: 5, maxRows: 10 }"
+                    placeholder="请输入记忆内容"
                 />
             </el-form-item>
 
-            <el-form-item label="重要度">
-                <el-input-number
-                    v-model="form.importance"
-                    :min="0"
-                    :max="1"
-                    :step="0.05"
-                    :precision="2"
-                    controls-position="right"
-                    placeholder="可选，0 到 1"
-                />
-            </el-form-item>
+            <div class="memory-editor-grid memory-editor-core-grid">
+                <el-form-item label="类型">
+                    <el-select
+                        v-model="form.type"
+                        placeholder="请选择类型"
+                        :popper-class="selectPopperClass"
+                    >
+                        <el-option
+                            v-for="item in memoryTypes"
+                            :key="item"
+                            :label="getMemoryTypeLabel(item)"
+                            :value="item"
+                        />
+                    </el-select>
+                </el-form-item>
 
-            <el-form-item label="关键词">
-                <el-select
-                    v-model="form.keywords"
-                    multiple
-                    filterable
-                    allow-create
-                    default-first-option
-                    placeholder="可输入多个关键词"
-                    :popper-class="
-                        isDark
-                            ? 'lm-select-popper lm-theme-dark'
-                            : 'lm-select-popper lm-theme-light'
-                    "
-                />
-            </el-form-item>
+                <el-form-item label="状态">
+                    <el-select
+                        v-model="form.status"
+                        placeholder="请选择状态"
+                        :popper-class="selectPopperClass"
+                    >
+                        <el-option label="活跃记忆" value="active" />
+                        <el-option label="历史记录" value="archived" />
+                    </el-select>
+                </el-form-item>
+
+                <el-form-item label="重要度">
+                    <el-input-number
+                        v-model="form.importance"
+                        :min="0"
+                        :max="1"
+                        :step="0.05"
+                        :precision="2"
+                        controls-position="right"
+                        placeholder="0 到 1"
+                    />
+                </el-form-item>
+            </div>
+
+            <div class="memory-editor-grid memory-editor-detail-grid">
+                <el-form-item label="情绪">
+                    <el-input
+                        v-model="form.sentiment"
+                        placeholder="例如：担心、亲近、愉快、中性"
+                    />
+                </el-form-item>
+
+                <el-form-item class="memory-editor-keywords" label="关键词">
+                    <el-select
+                        v-model="form.keywords"
+                        multiple
+                        collapse-tags
+                        collapse-tags-tooltip
+                        :max-collapse-tags="3"
+                        filterable
+                        allow-create
+                        default-first-option
+                        placeholder="输入后按回车添加"
+                        :popper-class="selectPopperClass"
+                    />
+                </el-form-item>
+            </div>
+
+            <div class="memory-editor-actions">
+                <el-button :disabled="submitPending" @click="visible = false">
+                    取消
+                </el-button>
+                <el-button
+                    :loading="submitPending"
+                    :disabled="!canSubmit"
+                    @click="submit"
+                >
+                    {{ memory == null ? '创建记忆' : '保存更改' }}
+                </el-button>
+            </div>
         </el-form>
-
-        <template #footer>
-            <el-button @click="visible = false">取消</el-button>
-            <el-button :loading="submitPending" type="primary" @click="submit">
-                保存
-            </el-button>
-        </template>
     </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import * as api from '../api'
 import {
@@ -115,6 +135,7 @@ import {
     type MemoryEntryType,
     type MemoryMutationInput
 } from '../types'
+import { formatTime, getMemoryTypeLabel } from '../utils/display'
 
 const props = defineProps<{
     modelValue: boolean
@@ -130,6 +151,7 @@ const emit = defineEmits<{
 
 const memoryTypes = memoryEntryTypes
 const submitPending = ref(false)
+const contentInput = ref<{ focus: () => void } | null>(null)
 const form = reactive({
     type: 'fact' as MemoryEntryType,
     status: 'active' as MemoryEntryStatus,
@@ -148,6 +170,22 @@ const visible = computed({
 const dialogTitle = computed(() =>
     props.memory == null ? '新建记忆' : '编辑记忆'
 )
+const selectPopperClass = computed(() =>
+    props.isDark
+        ? 'lm-select-popper lm-theme-dark'
+        : 'lm-select-popper lm-theme-light'
+)
+const canSubmit = computed(
+    () =>
+        props.presetId.trim().length > 0 &&
+        form.content.trim().length > 0 &&
+        !submitPending.value
+)
+
+const focusContent = async () => {
+    await nextTick()
+    contentInput.value?.focus()
+}
 
 const hydrateForm = () => {
     form.type = props.memory?.type ?? 'fact'
@@ -219,3 +257,5 @@ watch(
     { immediate: true }
 )
 </script>
+
+<style scoped src="../styles/memory-editor-dialog.css"></style>
