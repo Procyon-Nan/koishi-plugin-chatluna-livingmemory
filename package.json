@@ -39,6 +39,7 @@
     "@electric-sql/pglite": "^0.5.4",
     "@electric-sql/pglite-pgvector": "^0.0.5",
     "@langchain/core": "^0.3.80",
+    "fs-native-extensions": "^1.5.0",
     "zod": "3.25.76"
   },
   "resolutions": {

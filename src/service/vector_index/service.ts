@@ -118,8 +118,7 @@ export class LivingMemoryVectorIndexService
             'vector-index.previous.pglite'
         )
         this.ownershipLock = new LivingMemoryVectorIndexOwnershipLock(
-            resolve(this.indexDirectory, 'vector-index.lock'),
-            (error) => this.recordWorkerFailure(error)
+            resolve(this.indexDirectory, 'vector-index.lock')
         )
         this.maintenance = new LivingMemoryVectorIndexMaintenance({
             ctx,

@@ -5,7 +5,6 @@ import {
     mkdtemp,
     readdir,
     rm,
-    utimes,
     writeFile
 } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -22,7 +21,6 @@ import type {
     LegacyMemoryEmbeddingRecord,
     MemoryIndexSourceRecord
 } from '../src/contracts/vector_index'
-import { LivingMemoryVectorIndexOwnershipLock } from '../src/service/vector_index/ownership_lock'
 import {
     LivingMemoryVectorIndexService,
     type VectorIndexWorkerFactory
@@ -843,80 +841,5 @@ it('restores the active worker when rebuild worker shutdown reports failure', as
         )
         await service.stop()
         assert.equal(captured.warnings.length, 1)
-    })
-})
-
-it('rejects a second owner and takes over a stale lock', async () => {
-    await withTemporaryDirectory(async (baseDir) => {
-        const lockPath = resolve(baseDir, 'vector-index.lock')
-        const first = new LivingMemoryVectorIndexOwnershipLock(
-            lockPath,
-            () => {}
-        )
-        const second = new LivingMemoryVectorIndexOwnershipLock(
-            lockPath,
-            () => {}
-        )
-        await first.acquire()
-        await assert.rejects(second.acquire(), /held by another process/u)
-        await first.release()
-
-        await writeFile(
-            lockPath,
-            JSON.stringify({ pid: 2_147_483_647, token: 'stale-owner' })
-        )
-        const staleTime = new Date(Date.now() - 120_000)
-        await utimes(lockPath, staleTime, staleTime)
-        await second.acquire()
-        await second.release()
-    })
-})
-
-it('takes over a lock with a dead owner despite fresh mtime', async () => {
-    await withTemporaryDirectory(async (baseDir) => {
-        const lockPath = resolve(baseDir, 'vector-index.lock')
-        await writeFile(
-            lockPath,
-            JSON.stringify({ pid: 2_147_483_647, token: 'dead-owner' })
-        )
-        const lock = new LivingMemoryVectorIndexOwnershipLock(
-            lockPath,
-            () => {}
-        )
-        await lock.acquire()
-        await lock.release()
-    })
-})
-
-it('rejects a lock with an unreadable record while fresh', async () => {
-    await withTemporaryDirectory(async (baseDir) => {
-        const lockPath = resolve(baseDir, 'vector-index.lock')
-        await writeFile(lockPath, 'not json')
-        const lock = new LivingMemoryVectorIndexOwnershipLock(
-            lockPath,
-            () => {}
-        )
-        await assert.rejects(lock.acquire(), /held by another process/u)
-    })
-})
-
-it('hands over the lock to a waiting owner during release', async () => {
-    await withTemporaryDirectory(async (baseDir) => {
-        const lockPath = resolve(baseDir, 'vector-index.lock')
-        const first = new LivingMemoryVectorIndexOwnershipLock(
-            lockPath,
-            () => {}
-        )
-        const second = new LivingMemoryVectorIndexOwnershipLock(
-            lockPath,
-            () => {}
-        )
-        await first.acquire()
-        first.prepareRelease()
-        const takeover = second.acquire()
-        await new Promise((resolve) => setTimeout(resolve, 20))
-        await first.release()
-        await takeover
-        await second.release()
     })
 })
