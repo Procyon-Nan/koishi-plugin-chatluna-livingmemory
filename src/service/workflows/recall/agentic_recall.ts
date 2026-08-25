@@ -277,17 +277,13 @@ class RecordingLivingMemorySearchTool extends StructuredTool {
             input: { ...input },
             output
         })
-        this.logger.diagnosticBlocks(
-            'recall.agentic.search.results',
-            {},
-            () => [
-                {
-                    title: 'memories',
-                    key: 'memories',
-                    value: JSON.parse(output)
-                }
-            ]
-        )
+        this.logger.diagnostic('recall.agentic.search.results', {}, () => [
+            {
+                title: 'memories',
+                key: 'memories',
+                value: JSON.parse(output)
+            }
+        ])
         return output
     }
 }

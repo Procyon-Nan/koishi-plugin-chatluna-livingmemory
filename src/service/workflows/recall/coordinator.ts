@@ -256,11 +256,21 @@ export class LivingMemoryRecallCoordinator {
     ) {
         await this.repository.upsertSnapshot(scope, strategy, query, items)
         const content = await this.snapshotCache.hydrate(scope)
-        logger.info('recall.snapshot.updated', {
-            strategy,
-            content,
-            ...extraFields
-        })
+        logger.info(
+            'recall.snapshot.updated',
+            {
+                strategy,
+                itemCount: items.length,
+                ...extraFields
+            },
+            [
+                {
+                    title: 'snapshot.content',
+                    key: 'content',
+                    value: content
+                }
+            ]
+        )
     }
 
     private async recordFailedRecall(

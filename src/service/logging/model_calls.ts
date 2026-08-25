@@ -176,11 +176,11 @@ const invokeLoggedRunnable = async (
     const logPrompt =
         promptLogging === 'all' || (promptLogging === 'first' && attempt === 1)
     if (logPrompt) {
-        logger.diagnosticBlocks('model.prompt', {}, () => toPromptBlocks(input))
+        logger.diagnostic('model.prompt', {}, () => toPromptBlocks(input))
     }
     try {
         const response = await runnable.invoke(input, runConfig)
-        logger.diagnosticBlocks('model.response', {}, () =>
+        logger.diagnostic('model.response', {}, () =>
             toResponseBlocks(response, context.logResponseText ?? true)
         )
         return response

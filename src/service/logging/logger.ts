@@ -215,17 +215,10 @@ export class LivingMemoryLogger {
         return this.isDebugEnabled()
     }
 
-    diagnostic(event: string, fields: LivingMemoryLogFieldsInput = {}) {
-        if (!this.isDebugEnabled()) {
-            return
-        }
-        this.emit('info', event, fields)
-    }
-
-    diagnosticBlocks(
+    diagnostic(
         event: string,
-        fields: LivingMemoryLogFieldsInput,
-        blocks: LivingMemoryLogBlocksInput
+        fields: LivingMemoryLogFieldsInput = {},
+        blocks?: LivingMemoryLogBlocksInput
     ) {
         if (!this.isDebugEnabled()) {
             return
@@ -233,8 +226,12 @@ export class LivingMemoryLogger {
         this.emit('info', event, fields, undefined, blocks)
     }
 
-    info(event: string, fields: LivingMemoryLogFieldsInput = {}) {
-        this.emit('info', event, fields)
+    info(
+        event: string,
+        fields: LivingMemoryLogFieldsInput = {},
+        blocks?: LivingMemoryLogBlocksInput
+    ) {
+        this.emit('info', event, fields, undefined, blocks)
     }
 
     warn(

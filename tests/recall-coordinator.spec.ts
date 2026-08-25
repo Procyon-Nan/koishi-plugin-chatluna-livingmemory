@@ -56,7 +56,7 @@ it('completes embedding-rerank recall without persisting a successful job', asyn
         {
             hydrate: async () => {
                 hydrated += 1
-                return ''
+                return 'first memory\nsecond memory'
             }
         },
         captured.logger
@@ -78,6 +78,15 @@ it('completes embedding-rerank recall without persisting a successful job', asyn
             message.includes('event=recall.retrieval.completed')
         )
     )
+    const snapshotLog = captured.info.find((message) =>
+        message.includes('event=recall.snapshot.updated')
+    )
+    assert.match(snapshotLog ?? '', /itemCount=1/u)
+    assert.match(
+        snapshotLog ?? '',
+        /--- snapshot\.content ---\nfirst memory\nsecond memory\n--- end recall\.snapshot\.updated ---$/u
+    )
+    assert.doesNotMatch(snapshotLog ?? '', /first memory\\nsecond memory/u)
     assert.ok(
         captured.info.some((message) =>
             /event=test.retriever.context workflow=recall runId=[^ ]+ presetId=preset-1 conversationId=conversation-1/u.test(

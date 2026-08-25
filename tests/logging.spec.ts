@@ -105,7 +105,7 @@ it('preserves multiline diagnostic blocks through the Koishi logger target', () 
         )
         const longLine = 'x'.repeat(12_000)
 
-        logger.diagnosticBlocks('test.multiline', { runId: 'run-1' }, [
+        logger.diagnostic('test.multiline', { runId: 'run-1' }, [
             {
                 title: 'payload',
                 key: 'content',
@@ -266,7 +266,7 @@ it('omits a text-only model response when its workflow owns the final text log',
 
 it('pretty-prints and redacts structured diagnostic block values', () => {
     const captured = createLogger(true)
-    captured.log.diagnosticBlocks('test.blocks', {}, [
+    captured.log.diagnostic('test.blocks', {}, [
         {
             title: 'payload\ninjected',
             key: 'payload',
