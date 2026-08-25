@@ -1,16 +1,16 @@
-import { mkdir, stat, truncate } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
+import { link, mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { LivingMemoryVectorIndexError } from './errors'
-import { LivingMemoryNativeFileLock } from './native_file_lock'
 
 const LOCK_HANDOFF_TIMEOUT = 30_000
-const LEGACY_HANDOFF_POLL_INTERVAL = 50
 const PROCESS_STARTED_AT = Date.now() - process.uptime() * 1_000
+const LOCK_CLEANUP_POLL_INTERVAL = 50
 const LOCK_HOLDERS_KEY = Symbol.for(
     'chatluna-livingmemory.vector-index-lock-holders'
 )
 
-interface LegacyVectorIndexLockRecord {
+interface VectorIndexLockRecord {
     pid: number
     token: string
 }
@@ -21,12 +21,11 @@ interface VectorIndexLockHolder {
     resolveReleased: () => void
 }
 
-interface LegacyLockInspection {
-    record: LegacyVectorIndexLockRecord | null
+interface LockInspection {
+    content: string
     mtimeMs: number
+    record: VectorIndexLockRecord | null
 }
-
-type LegacyLockDisposition = 'ready' | 'migrate' | 'wait-for-same-process'
 
 const globalState = globalThis as unknown as Record<PropertyKey, unknown>
 if (!(globalState[LOCK_HOLDERS_KEY] instanceof Map)) {
@@ -57,7 +56,7 @@ const isProcessAlive = (pid: number) => {
     }
 }
 
-const parseLegacyLockRecord = (content: string) => {
+const parseLockRecord = (content: string) => {
     if (content.trim().length === 0) {
         return null
     }
@@ -70,7 +69,7 @@ const parseLegacyLockRecord = (content: string) => {
     if (parsed === null || typeof parsed !== 'object') {
         return null
     }
-    const record = parsed as Partial<LegacyVectorIndexLockRecord>
+    const record = parsed as Partial<VectorIndexLockRecord>
     if (
         typeof record.pid !== 'number' ||
         !Number.isInteger(record.pid) ||
@@ -80,7 +79,14 @@ const parseLegacyLockRecord = (content: string) => {
     ) {
         return null
     }
-    return record as LegacyVectorIndexLockRecord
+    return record as VectorIndexLockRecord
+}
+
+const isStaleLockRecord = (record: VectorIndexLockRecord, mtimeMs: number) => {
+    if (record.pid === process.pid) {
+        return mtimeMs < PROCESS_STARTED_AT
+    }
+    return !isProcessAlive(record.pid)
 }
 
 const createLockConflictError = (
@@ -103,47 +109,27 @@ const delay = (duration: number) => {
 }
 
 export class LivingMemoryVectorIndexOwnershipLock {
-    private nativeLock: LivingMemoryNativeFileLock | null = null
+    private readonly cleanupLockPath: string
+    private fileLockToken: string | null = null
     private holder: VectorIndexLockHolder | null = null
 
-    constructor(private readonly lockPath: string) {}
+    constructor(private readonly lockPath: string) {
+        this.cleanupLockPath = `${lockPath}.cleanup`
+    }
 
     async acquire() {
         await mkdir(dirname(this.lockPath), { recursive: true })
-        await this.awaitInProcessHandoff()
 
         while (true) {
-            let nativeLock = await this.acquireNativeLock()
-            let disposition: LegacyLockDisposition
-            try {
-                disposition =
-                    await this.inspectLegacyLockDisposition(nativeLock)
-            } catch (error) {
-                await nativeLock.release()
-                throw error
+            await this.awaitInProcessHandoff()
+            const token = await this.tryAcquireFileLock()
+            if (token !== null) {
+                this.fileLockToken = token
+                this.registerHolder()
+                return
             }
-            if (disposition === 'wait-for-same-process') {
-                await nativeLock.release()
-                await this.awaitLegacySameProcessHandoff()
-                continue
-            }
-            if (disposition === 'migrate') {
-                await nativeLock.release()
-                try {
-                    await truncate(this.lockPath, 0)
-                } catch (error) {
-                    throw new LivingMemoryVectorIndexError(
-                        'lock-unavailable',
-                        'unavailable',
-                        `vector index lock migration failed: ${this.lockPath}`,
-                        { cause: error }
-                    )
-                }
-                nativeLock = await this.acquireNativeLock()
-            }
-            this.nativeLock = nativeLock
-            this.registerHolder()
-            return
+
+            await this.removeStaleLock()
         }
     }
 
@@ -154,10 +140,12 @@ export class LivingMemoryVectorIndexOwnershipLock {
     }
 
     async release() {
-        const nativeLock = this.nativeLock
-        this.nativeLock = null
+        const token = this.fileLockToken
+        this.fileLockToken = null
         try {
-            await nativeLock?.release()
+            if (token !== null) {
+                await this.releaseFileLock(token)
+            }
         } finally {
             this.releaseHolder()
         }
@@ -215,71 +203,69 @@ export class LivingMemoryVectorIndexOwnershipLock {
         }
     }
 
-    private async acquireNativeLock() {
-        let nativeLock: LivingMemoryNativeFileLock | null
-        try {
-            nativeLock = await LivingMemoryNativeFileLock.tryAcquire(
-                this.lockPath
-            )
-        } catch (error) {
-            throw new LivingMemoryVectorIndexError(
-                'lock-unavailable',
-                'unavailable',
-                `native vector index lock is unavailable: ${this.lockPath}`,
-                { cause: error }
-            )
-        }
-        if (nativeLock === null) {
-            throw createLockConflictError(
-                this.lockPath,
-                'vector index lock is held by another process'
-            )
-        }
-        return nativeLock
+    private async tryAcquireFileLock(): Promise<string | null> {
+        return this.tryAcquireLockFile(this.lockPath)
     }
 
-    private async inspectLegacyLockDisposition(
-        nativeLock: LivingMemoryNativeFileLock
-    ): Promise<LegacyLockDisposition> {
-        const inspection = await this.inspectLegacyLock(nativeLock)
-        if (inspection === null) {
-            return 'ready'
+    private async tryAcquireLockFile(lockPath: string): Promise<string | null> {
+        const token = randomUUID()
+        const temporaryPath = `${lockPath}.${process.pid}.${token}.tmp`
+        await writeFile(
+            temporaryPath,
+            JSON.stringify({ pid: process.pid, token }),
+            { flag: 'wx' }
+        )
+        try {
+            await link(temporaryPath, lockPath)
+        } catch (error) {
+            if (error instanceof Error && 'code' in error && error.code === 'EEXIST') {
+                return null
+            }
+            throw error
+        } finally {
+            await unlink(temporaryPath).catch(() => undefined)
+        }
+        return token
+    }
+
+    private async inspectExistingLockDisposition(): Promise<void> {
+        const inspection = await this.inspectExistingLock()
+        if (inspection === null || inspection.content.trim().length === 0) {
+            return
         }
         if (inspection.record === null) {
             throw createLockConflictError(
                 this.lockPath,
-                'unrecognized legacy vector index lock'
+                'unrecognized vector index lock'
             )
         }
 
         const { pid } = inspection.record
-        if (pid === process.pid) {
-            if (inspection.mtimeMs < PROCESS_STARTED_AT) {
-                return 'migrate'
-            }
-            return 'wait-for-same-process'
+        if (isStaleLockRecord(inspection.record, inspection.mtimeMs)) {
+            return
         }
-        if (isProcessAlive(pid)) {
+        if (pid === process.pid) {
             throw createLockConflictError(
                 this.lockPath,
-                `legacy vector index lock is held by process ${pid}`
+                'vector index lock is already held in this process'
             )
         }
-        return 'migrate'
+        throw createLockConflictError(
+            this.lockPath,
+            'vector index lock is held by another process'
+        )
     }
 
-    private async inspectLegacyLock(
-        nativeLock: LivingMemoryNativeFileLock
-    ): Promise<LegacyLockInspection | null> {
+    private async inspectExistingLock(): Promise<LockInspection | null> {
         try {
-            const anchor = await nativeLock.inspectAnchor()
-            const { content, mtimeMs } = anchor
-            if (content.trim().length === 0) {
-                return null
-            }
+            const [content, fileStat] = await Promise.all([
+                readFile(this.lockPath, 'utf8'),
+                stat(this.lockPath)
+            ])
             return {
-                record: parseLegacyLockRecord(content),
-                mtimeMs
+                content,
+                mtimeMs: fileStat.mtimeMs,
+                record: parseLockRecord(content)
             }
         } catch (error) {
             if (isFileMissingError(error)) {
@@ -289,23 +275,118 @@ export class LivingMemoryVectorIndexOwnershipLock {
         }
     }
 
-    private async awaitLegacySameProcessHandoff() {
-        const deadline = Date.now() + LOCK_HANDOFF_TIMEOUT
-        while (Date.now() < deadline) {
-            await delay(LEGACY_HANDOFF_POLL_INTERVAL)
+    private async removeStaleLock() {
+        const cleanupToken = await this.acquireCleanupLock()
+        try {
+            await this.inspectExistingLockDisposition()
             try {
-                await stat(this.lockPath)
+                await unlink(this.lockPath)
             } catch (error) {
                 if (isFileMissingError(error)) {
                     return
                 }
-                throw error
+                throw new LivingMemoryVectorIndexError(
+                    'lock-unavailable',
+                    'unavailable',
+                    `stale vector index lock cleanup failed: ${this.lockPath}`,
+                    { cause: error }
+                )
             }
+        } finally {
+            await this.releaseCleanupLock(cleanupToken)
+        }
+    }
+
+    private async acquireCleanupLock() {
+        const deadline = Date.now() + LOCK_HANDOFF_TIMEOUT
+        while (Date.now() < deadline) {
+            const token = await this.tryAcquireLockFile(this.cleanupLockPath)
+            if (token !== null) {
+                return token
+            }
+
+            await this.removeStaleCleanupLock()
+            await delay(LOCK_CLEANUP_POLL_INTERVAL)
         }
         throw createLockConflictError(
             this.lockPath,
-            `legacy owner in this process did not release the vector index ` +
-                `lock within ${LOCK_HANDOFF_TIMEOUT}ms`
+            `stale vector index lock cleanup did not finish within ` +
+                `${LOCK_HANDOFF_TIMEOUT}ms`
         )
     }
+
+    private async releaseCleanupLock(token: string) {
+        try {
+            const inspection = await this.inspectCleanupLock()
+            if (
+                inspection?.record?.pid !== process.pid ||
+                inspection.record.token !== token
+            ) {
+                return
+            }
+            await unlink(this.cleanupLockPath)
+        } catch (error) {
+            if (!isFileMissingError(error)) {
+                throw error
+            }
+        }
+    }
+
+    private async removeStaleCleanupLock() {
+        const inspection = await this.inspectCleanupLock()
+        if (inspection === null) {
+            return
+        }
+        if (inspection.record === null) {
+            throw createLockConflictError(
+                this.lockPath,
+                'unrecognized vector index cleanup lock'
+            )
+        }
+        if (!isStaleLockRecord(inspection.record, inspection.mtimeMs)) {
+            return
+        }
+        await unlink(this.cleanupLockPath).catch((error: unknown) => {
+            if (!isFileMissingError(error)) {
+                throw error
+            }
+        })
+    }
+
+    private async inspectCleanupLock() {
+        try {
+            const [content, fileStat] = await Promise.all([
+                readFile(this.cleanupLockPath, 'utf8'),
+                stat(this.cleanupLockPath)
+            ])
+            return {
+                content,
+                mtimeMs: fileStat.mtimeMs,
+                record: parseLockRecord(content)
+            }
+        } catch (error) {
+            if (isFileMissingError(error)) {
+                return null
+            }
+            throw error
+        }
+    }
+
+    private async releaseFileLock(token: string) {
+        const inspection = await this.inspectExistingLock()
+        if (
+            inspection?.record?.pid !== process.pid ||
+            inspection.record.token !== token
+        ) {
+            return
+        }
+        try {
+            await unlink(this.lockPath)
+        } catch (error) {
+            if (!isFileMissingError(error)) {
+                throw error
+            }
+        }
+    }
+
 }
