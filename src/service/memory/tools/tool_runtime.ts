@@ -16,10 +16,8 @@ export type LivingMemoryToolConfigurable = {
 }
 
 export const getLivingMemoryToolConfigurable = (
-    runConfig?: ToolRunnableConfig
-) => {
-    return runConfig?.configurable as LivingMemoryToolConfigurable | undefined
-}
+    runConfig?: ToolRunnableConfig<Record<string, unknown>>
+): LivingMemoryToolConfigurable | undefined => runConfig?.configurable
 
 interface LivingMemoryToolSessionFields {
     userId?: string
@@ -44,12 +42,15 @@ const toToolSessionFields = (
     }
 }
 
-const isCharacterToolSource = (configurable: LivingMemoryToolConfigurable) => {
-    return configurable.source === 'character'
+const isCharacterToolSource = (
+    configurable: LivingMemoryToolConfigurable | undefined
+) => {
+    return configurable?.source === 'character'
 }
 
 export type LivingMemoryToolPresetIdResolution =
-    { ok: true; presetId: string } | { ok: false; reason: 'missing-preset' }
+    | { ok: true; presetId: string }
+    | { ok: false; reason: 'missing-preset' }
 
 /**
  * 解析工具调用所属的记忆预设。

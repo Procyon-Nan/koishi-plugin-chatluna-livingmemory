@@ -38,9 +38,7 @@ export const createToolCallMessage = (
     })
 }
 
-export const createToolCallingModel = (
-    responses: (BaseMessage | Error)[]
-) => {
+export const createToolCallingModel = (responses: (BaseMessage | Error)[]) => {
     const pending = [...responses]
     const invocations: ToolCallingModelInvocation[] = []
     const bindings: RunnableConfig[] = []

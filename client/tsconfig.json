@@ -1,0 +1,12 @@
+{
+    "extends": "../tsconfig.json",
+    "compilerOptions": {
+        "rootDir": ".",
+        "noEmit": true,
+        "emitDeclarationOnly": false,
+        "declaration": false,
+        "composite": false,
+        "lib": ["ES2022", "DOM"]
+    },
+    "include": ["./**/*.ts", "./**/*.vue", "./**/*.d.ts"]
+}

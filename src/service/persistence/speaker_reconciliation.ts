@@ -73,6 +73,8 @@ export const reconcilePresetSpeaker = async (
     ) {
         return
     }
+    const speakerId = identity.speakerId
+    const platform = identity.platform
 
     await database.withTransaction(async (transaction) => {
         const stableId = createPresetSpeakerId(
@@ -82,7 +84,7 @@ export const reconcilePresetSpeaker = async (
         const rows = [
             ...(await transaction.get('living_memory_preset_speaker', {
                 presetId: identity.presetId,
-                speakerId: identity.speakerId
+                speakerId
             })),
             ...(await transaction.get('living_memory_preset_speaker', {
                 id: stableId
@@ -93,9 +95,9 @@ export const reconcilePresetSpeaker = async (
             .filter(
                 (speaker) =>
                     speaker.speakerKey === identity.speakerKey ||
-                    (speaker.speakerId === identity.speakerId &&
+                    (speaker.speakerId === speakerId &&
                         (speaker.platform == null ||
-                            speaker.platform === identity.platform))
+                            speaker.platform === platform))
             )
         const aliases = uniqueAliases([
             ...speakers.flatMap((speaker) => [

@@ -102,10 +102,7 @@ it('excludes user messages received during the Character response from the compl
 
     assert.equal(result.reason, null)
     assert.deepEqual(
-        result.round?.messages.map((item) => [
-            item.role,
-            item.contentLines[0]
-        ]),
+        result.round?.messages.map((item) => [item.role, item.contentLines[0]]),
         [
             ['user', '开始问题'],
             ['assistant', '综合回复第一段'],

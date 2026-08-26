@@ -105,6 +105,9 @@ export const createJobStore = () => {
         return job
     }
 
+    const listJobsByPreset: JobRepository['listJobsByPreset'] = async (
+        presetId
+    ) => jobs.filter((job) => job.presetId === presetId)
     const updateJob: JobRepository['updateJob'] = async (id, patch) => {
         const job = jobs.find((item) => item.id === id)
         if (job == null) {
@@ -121,6 +124,7 @@ export const createJobStore = () => {
         createJob,
         createFailedJob,
         updateJob,
+        listJobsByPreset,
         markStaleRunningJobsAsFailed
     }
 }
@@ -176,6 +180,7 @@ export const createAgenticTrace = (
         finalText,
         toolCallSummary: {
             searchTexts: ['记忆查询'],
+            searchKeywords: [],
             memoryTypes: ['all'],
             maxCandidates: 3
         },

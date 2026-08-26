@@ -17,7 +17,8 @@ import { resolveScopeAssistantLabel } from '../../memory/helpers'
 import type { LivingMemoryLogger } from '../../logging/logger'
 
 export type LivingMemoryExtractionSkipReason =
-    'model-not-configured' | 'model-unavailable'
+    | 'model-not-configured'
+    | 'model-unavailable'
 
 export interface LivingMemoryExtractionTrace {
     extracted: ExtractedMemoryItem[]

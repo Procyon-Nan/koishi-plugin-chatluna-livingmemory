@@ -410,7 +410,7 @@ export class LivingMemoryVectorIndexService
             reason
         )
         this.markPresetBuilding(presetId, job.id, expectedCount)
-        this.queueMaintenance(async () => {
+        void this.queueMaintenance(async () => {
             try {
                 this.markPresetBuilding(presetId, job.id, expectedCount)
                 await this.maintenance.runPresetReconcileJob(job, reason)
@@ -434,7 +434,7 @@ export class LivingMemoryVectorIndexService
     startRebuild(reason: string) {
         this.status.setCurrentJob(null)
         this.status.markStarting(null)
-        this.rebuild(reason)
+        void this.rebuild(reason)
     }
 
     private async initialize(
@@ -662,7 +662,9 @@ export class LivingMemoryVectorIndexService
         } catch (recoveryError) {
             throw new Error(
                 `${message}; recovery failed: ${summarizeError(recoveryError)}`,
-                { cause: switchError }
+                {
+                    cause: switchError
+                }
             )
         }
         throw new Error(message, { cause: switchError })

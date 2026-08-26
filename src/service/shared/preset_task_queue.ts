@@ -9,7 +9,7 @@ export class PresetTaskQueue {
             () => undefined
         )
         this.tails.set(presetId, settled)
-        settled.then(() => {
+        void settled.then(() => {
             if (this.tails.get(presetId) === settled) {
                 this.tails.delete(presetId)
             }

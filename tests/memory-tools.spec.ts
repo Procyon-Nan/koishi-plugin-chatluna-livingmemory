@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict'
-import { ToolInputParsingException } from '@langchain/core/tools'
+import {
+    ToolInputParsingException,
+    type ToolRunnableConfig
+} from '@langchain/core/tools'
 import type { Context } from 'koishi'
 import {
     LivingMemoryGetMessagesTool,
@@ -18,7 +21,8 @@ import { resolveMainRunConversationId } from '../src/service/memory/helpers'
 import {
     describeLivingMemoryToolScopeFailure,
     resolveToolMemoryPresetId,
-    resolveToolMemoryScopeConfigurable
+    resolveToolMemoryScopeConfigurable,
+    type LivingMemoryToolConfigurable
 } from '../src/service/memory/tools/tool_runtime'
 
 const context = {
@@ -42,6 +46,10 @@ const createRecordingSearchProvider = () => {
     } as unknown as LivingMemoryEmbeddingSearchEngine
     return { presetIds, provider }
 }
+
+const toolConfig = (
+    configurable: LivingMemoryToolConfigurable
+): ToolRunnableConfig<LivingMemoryToolConfigurable> => ({ configurable })
 
 const rejectsStringifiedArray = async (promise: Promise<unknown>) => {
     await assert.rejects(promise, (error: unknown) => {
@@ -202,14 +210,17 @@ it('rejects Character tool calls without a session or session key', () => {
 it('rejects ChatLuna tool calls without a conversation id', () => {
     assert.deepEqual(
         resolveToolMemoryScopeConfigurable({ preset: 'default' }),
-        { ok: false, reason: 'missing-conversation-id' }
+        {
+            ok: false,
+            reason: 'missing-conversation-id'
+        }
     )
     // ChatLuna 1.4.0-alpha.44 起扁平 conversationId 已移除，仅认 agentContext。
     assert.deepEqual(
         resolveToolMemoryScopeConfigurable({
             preset: 'default',
             conversationId: 'conversation-1'
-        }),
+        } as LivingMemoryToolConfigurable & { conversationId: string }),
         { ok: false, reason: 'missing-conversation-id' }
     )
     assert.match(
@@ -265,24 +276,27 @@ it('queries the suffixed preset from the search tool in Character sessions', asy
 
     await new LivingMemorySearchTool(chatluna.provider).invoke(
         { searchTexts: ['我们一起聊过的事情'], memoryTypes: ['all'] },
-        {
-            configurable: {
-                preset: 'default',
-                agentContext: { kind: 'main', conversationId: 'conversation-1' },
-                source: 'chatluna',
-                session: { userId: 'user-1', isDirect: true }
-            }
-        }
+        toolConfig({
+            preset: 'default',
+            agentContext: {
+                kind: 'main',
+                conversationId: 'conversation-1'
+            },
+            source: 'chatluna',
+            session: { userId: 'user-1', isDirect: true }
+        })
     )
     await new LivingMemorySearchTool(character.provider).invoke(
         { searchTexts: ['我们一起聊过的事情'], memoryTypes: ['all'] },
-        {
-            configurable: {
-                preset: '史尔特里',
-                source: 'character',
-                session: { userId: 'user-1', guildId: 'guild-1', isDirect: false }
+        toolConfig({
+            preset: '史尔特里',
+            source: 'character',
+            session: {
+                userId: 'user-1',
+                guildId: 'guild-1',
+                isDirect: false
             }
-        }
+        })
     )
 
     assert.deepEqual(chatluna.presetIds, ['default'])

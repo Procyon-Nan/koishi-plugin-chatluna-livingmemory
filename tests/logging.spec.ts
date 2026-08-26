@@ -365,7 +365,11 @@ it('does not let logging sink failures change model results', async () => {
         model,
         [new HumanMessage('prompt')],
         undefined,
-        { logger: log, stage: 'test', attempt: 1 }
+        {
+            logger: log,
+            stage: 'test',
+            attempt: 1
+        }
     )
 
     assert.equal(response.content, 'business result')

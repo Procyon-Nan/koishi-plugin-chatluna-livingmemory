@@ -5,12 +5,30 @@ import { join } from 'node:path'
 import { Context } from 'koishi'
 import SQLiteDriver from '@koishijs/plugin-database-sqlite'
 import { LivingMemoryRepository } from '../src/service/persistence/repository'
+import type { LivingMemoryEntryTableRecord } from '../src/service/persistence/types'
+import { createTestContext } from './persistence-test-utils'
 
-const createEntry = (id: string, sourceOrigins: unknown) => ({
+interface LegacyEntryInput {
+    id: string
+    presetId: string
+    type: 'other'
+    status: 'active'
+    content: string
+    keywords: string[]
+    summary: null
+    sentiment: null
+    importance: null
+    sourceConversationId: string
+    sourceOrigins?: unknown
+    createdAt: Date
+    updatedAt: Date
+}
+
+const createEntry = (id: string, sourceOrigins: unknown): LegacyEntryInput => ({
     id,
     presetId: 'test-preset',
-    type: 'other' as const,
-    status: 'active' as const,
+    type: 'other',
+    status: 'active',
     content: id,
     keywords: [],
     summary: null,
@@ -21,6 +39,13 @@ const createEntry = (id: string, sourceOrigins: unknown) => ({
     createdAt: new Date(),
     updatedAt: new Date()
 })
+
+const insertLegacyEntry = async (ctx: Context, entry: LegacyEntryInput) => {
+    await ctx.database.create(
+        'living_memory_entry',
+        entry as unknown as Partial<LivingMemoryEntryTableRecord>
+    )
+}
 
 const defineLegacyEntryTable = (ctx: Context) => {
     ctx.model.extend(
@@ -49,24 +74,21 @@ const defineLegacyEntryTable = (ctx: Context) => {
 }
 
 it('migrates legacy sourceOrigins objects once and preserves arrays', async () => {
-    const ctx = new Context({ baseDir: process.cwd() })
+    const ctx = createTestContext()
     ctx.plugin(SQLiteDriver, { path: ':memory:' })
     const repository = new LivingMemoryRepository(ctx)
     repository.defineTables()
     await ctx.start()
 
     try {
-        await ctx.database.create(
-            'living_memory_entry',
-            createEntry('legacy', {}) as never
-        )
-        await ctx.database.create(
-            'living_memory_entry',
+        await insertLegacyEntry(ctx, createEntry('legacy', {}))
+        await insertLegacyEntry(
+            ctx,
             createEntry('current', [
                 {
                     messages: [{ role: 'user', content: 'hello' }]
                 }
-            ]) as never
+            ])
         )
 
         assert.equal(await repository.migrateMemorySourceOriginsArray(), 1)
@@ -97,29 +119,30 @@ it('repairs the legacy SQLite json default after applying current tables', async
     const baseDir = await mkdtemp(join(tmpdir(), 'livingmemory-migration-'))
     const databasePath = join(baseDir, 'legacy.db')
     try {
-        const legacyCtx = new Context({ baseDir })
+        const legacyCtx = createTestContext(baseDir)
         legacyCtx.plugin(SQLiteDriver, { path: databasePath })
         defineLegacyEntryTable(legacyCtx)
         await legacyCtx.start()
 
         try {
-            const legacyEntry = createEntry('legacy-schema', undefined)
-            delete (legacyEntry as { sourceOrigins?: unknown }).sourceOrigins
-            await legacyCtx.database.create(
-                'living_memory_entry',
-                legacyEntry as never
-            )
+            const { sourceOrigins: _sourceOrigins, ...legacyEntry } =
+                createEntry('legacy-schema', undefined)
+            await insertLegacyEntry(legacyCtx, legacyEntry)
             const [storedLegacyEntry] = await legacyCtx.database.get(
                 'living_memory_entry',
-                { id: 'legacy-schema' }
+                {
+                    id: 'legacy-schema'
+                }
             )
             assert.equal(storedLegacyEntry.sourceOrigins, undefined)
         } finally {
-            await (legacyCtx.database.drivers[0] as SQLiteDriver)._export()
+            const [driver] = legacyCtx.database.drivers
+            assert.ok(driver instanceof SQLiteDriver)
+            await driver._export()
             await legacyCtx.stop()
         }
 
-        const currentCtx = new Context({ baseDir })
+        const currentCtx = createTestContext(baseDir)
         currentCtx.plugin(SQLiteDriver, { path: databasePath })
         const repository = new LivingMemoryRepository(currentCtx)
         repository.defineTables()
@@ -137,12 +160,9 @@ it('repairs the legacy SQLite json default after applying current tables', async
                 false
             )
 
-            const currentEntry = createEntry('current-schema', undefined)
-            delete (currentEntry as { sourceOrigins?: unknown }).sourceOrigins
-            await currentCtx.database.create(
-                'living_memory_entry',
-                currentEntry as never
-            )
+            const { sourceOrigins: _sourceOrigins, ...currentEntry } =
+                createEntry('current-schema', undefined)
+            await insertLegacyEntry(currentCtx, currentEntry)
             assert.deepEqual(
                 (await repository.getEntryById('current-schema'))
                     ?.sourceOrigins,

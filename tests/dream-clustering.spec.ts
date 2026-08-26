@@ -108,9 +108,7 @@ it('partitions to exact ceil(n / targetSize) batches within the target size', ()
         batches.map((batch) => batch.length),
         [25, 25, 25, 25]
     )
-    assert.ok(
-        batches.every((batch) => batch.length <= 30)
-    )
+    assert.ok(batches.every((batch) => batch.length <= 30))
     assert.equal(ids.length, entries.length)
     assert.equal(new Set(ids).size, entries.length)
 })
@@ -276,7 +274,10 @@ it('runs one global HDBSCAN pass over all first-pass noise', async () => {
         captured.logger
     )
 
-    assert.deepEqual([...callSizes.slice(0, 2)].sort(), [175, 176])
+    assert.deepEqual(
+        [...callSizes.slice(0, 2)].sort((left, right) => left - right),
+        [175, 176]
+    )
     assert.equal(callSizes[2], 349)
     assert.deepEqual(
         vectors.calls.map((ids) => ids.length),
@@ -296,9 +297,7 @@ it('runs one global HDBSCAN pass over all first-pass noise', async () => {
         )
     )
     assert.ok(
-        clusters
-            .slice(3)
-            .every((cluster) => cluster.entries.length <= 30)
+        clusters.slice(3).every((cluster) => cluster.entries.length <= 30)
     )
     const clusteredIds = clusters.flatMap((cluster) =>
         cluster.entries.map((entry) => entry.id)
@@ -319,7 +318,9 @@ it('runs one global HDBSCAN pass over all first-pass noise', async () => {
             message.includes('round=primary')
     )
     assert.equal(primaryBatches.length, 2)
-    assert.ok(primaryBatches.every((message) => message.includes('clusters-1=1')))
+    assert.ok(
+        primaryBatches.every((message) => message.includes('clusters-1=1'))
+    )
     assert.ok(primaryBatches.some((message) => message.includes('noise=174')))
     assert.ok(primaryBatches.some((message) => message.includes('noise=175')))
     assert.ok(
@@ -460,7 +461,11 @@ it('splits an oversized cluster into units within the size cap', async () => {
         createDreamWorker(async ({ entryCount }) => new Int32Array(entryCount))
     )
 
-    const clusters = await clusterer.buildClusters('preset-1', 'active', entries)
+    const clusters = await clusterer.buildClusters(
+        'preset-1',
+        'active',
+        entries
+    )
 
     assert.deepEqual(
         clusters.map((cluster) => cluster.id),
@@ -491,14 +496,17 @@ it('keeps clusters within the cap intact and splits oversized ones', async () =>
     const clusterer = new DreamClusterer(
         vectors.reader,
         createDreamWorker(async ({ entryCount }) =>
-            Int32Array.from(
-                { length: entryCount },
-                (_, index) => (index < 40 ? 0 : 1)
+            Int32Array.from({ length: entryCount }, (_, index) =>
+                index < 40 ? 0 : 1
             )
         )
     )
 
-    const clusters = await clusterer.buildClusters('preset-1', 'active', entries)
+    const clusters = await clusterer.buildClusters(
+        'preset-1',
+        'active',
+        entries
+    )
 
     assert.deepEqual(
         clusters
@@ -536,9 +544,8 @@ it('passes the unit size cap to partitioning only for oversized clusters', async
             return partitionDreamEntries(clusterEntries, { targetSize })
         },
         runHdbscan: async ({ entryCount }) =>
-            Int32Array.from(
-                { length: entryCount },
-                (_, index) => (index < 40 ? 0 : 1)
+            Int32Array.from({ length: entryCount }, (_, index) =>
+                index < 40 ? 0 : 1
             )
     }
     const clusterer = new DreamClusterer(vectors.reader, worker)

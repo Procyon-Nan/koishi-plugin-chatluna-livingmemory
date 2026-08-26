@@ -147,8 +147,9 @@ it('serializes stale lock cleanup across replacement owners', async () => {
             JSON.stringify({ pid: 2_147_483_647, token: 'dead-owner' })
         )
 
-        const contenders = Array.from({ length: 8 }, () =>
-            new LivingMemoryVectorIndexOwnershipLock(lockPath)
+        const contenders = Array.from(
+            { length: 8 },
+            () => new LivingMemoryVectorIndexOwnershipLock(lockPath)
         )
         const settled = await Promise.allSettled(
             contenders.map((lock) => lock.acquire())

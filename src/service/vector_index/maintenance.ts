@@ -197,8 +197,10 @@ export class LivingMemoryVectorIndexMaintenance {
         }
         if (inspection.manifest.storageEngine !== VECTOR_STORAGE_ENGINE) {
             return (
-                `vector index storage engine changed: expected=${VECTOR_STORAGE_ENGINE}, ` +
-                `actual=${inspection.manifest.storageEngine}`
+                'vector index storage engine changed: expected=' +
+                VECTOR_STORAGE_ENGINE +
+                ', actual=' +
+                inspection.manifest.storageEngine
             )
         }
         if (

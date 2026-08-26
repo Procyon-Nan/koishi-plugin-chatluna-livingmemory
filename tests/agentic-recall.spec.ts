@@ -1,12 +1,20 @@
 import assert from 'node:assert/strict'
-import { AIMessage, type BaseMessage } from '@langchain/core/messages'
+import {
+    AIMessage,
+    isToolMessage,
+    type BaseMessage,
+    type OpenAIToolCall
+} from '@langchain/core/messages'
+import type { ToolCall } from '@langchain/core/messages/tool'
 import { type RunnableConfig, RunnableLambda } from '@langchain/core/runnables'
 import type { Context } from 'koishi'
 import { LivingMemoryLogger } from '../src/service/logging/logger'
-import type { ChatLunaChatModel } from 'koishi-plugin-chatluna/llm-core/platform/model'
+import type {
+    ChatLunaChatModel,
+    ChatLunaModelCallOptions
+} from 'koishi-plugin-chatluna/llm-core/platform/model'
 import type {
     LivingMemorySearchInput,
-    LivingMemorySearchMemoryType,
     LivingMemorySearchResult,
     MemoryScope
 } from '../src/contracts/memory'
@@ -22,8 +30,7 @@ interface ModelInvocation {
 
 interface SearchInvocation {
     presetId: string
-    query: { texts: string[] }
-    memoryTypes: LivingMemorySearchMemoryType[]
+    input: LivingMemorySearchInput
     maxCandidates: number
 }
 
@@ -34,6 +41,15 @@ interface AgenticRecallHarnessOptions {
         invocation: SearchInvocation
     ) => Promise<LivingMemorySearchResult[]>
 }
+
+const boundTools = (
+    runConfig: RunnableConfig | undefined
+): NonNullable<ChatLunaModelCallOptions['tools']> =>
+    (
+        runConfig as
+            | (RunnableConfig & Pick<ChatLunaModelCallOptions, 'tools'>)
+            | undefined
+    )?.tools ?? []
 
 const config = {
     subModel: 'test/model',
@@ -56,7 +72,7 @@ const validSearchInput = (text: string): LivingMemorySearchInput => ({
 
 const createSearchCall = (
     id: string,
-    input: Record<string, unknown> = validSearchInput('记忆')
+    input: ToolCall['args'] = validSearchInput('记忆')
 ) => {
     return new AIMessage({
         content: '',
@@ -148,8 +164,7 @@ const createHarness = (options: AgenticRecallHarnessOptions) => {
         ) => {
             const invocation: SearchInvocation = {
                 presetId,
-                query: { texts: input.searchTexts },
-                memoryTypes: input.memoryTypes,
+                input: { ...input },
                 maxCandidates: config.memorySearchToolMaxResults
             }
             searchInvocations.push(invocation)
@@ -187,11 +202,7 @@ const createHarness = (options: AgenticRecallHarnessOptions) => {
 }
 
 const toolMessages = (invocation: ModelInvocation | undefined) => {
-    return (
-        invocation?.messages.filter(
-            (message) => message.getType() === 'tool'
-        ) ?? []
-    )
+    return invocation?.messages.filter(isToolMessage) ?? []
 }
 
 it('runs one search through AgentRunner and preserves preset-scoped trace data', async () => {
@@ -347,14 +358,14 @@ it('handles every tool call in a multi-call model response', async () => {
             new AIMessage('我记得两段相关内容。')
         ],
         search: async (invocation) => {
-            if (invocation.query.texts[0] === '记忆') {
+            if (invocation.input.searchTexts[0] === '记忆') {
                 await firstSearchCanComplete
             } else {
                 releaseFirstSearch()
             }
             return [
                 createSearchResult(
-                    invocation.query.texts[0] === '记忆'
+                    invocation.input.searchTexts[0] === '记忆'
                         ? 'memory-1'
                         : 'memory-2'
                 )
@@ -379,21 +390,20 @@ it('handles every tool call in a multi-call model response', async () => {
 })
 
 it('recovers from malformed raw tool arguments through parser observation', async () => {
+    const malformedSearchToolCall: OpenAIToolCall = {
+        id: 'malformed-1',
+        type: 'function',
+        function: {
+            name: livingMemorySearchToolName,
+            arguments: '{'
+        }
+    }
     const harness = createHarness({
         responses: [
             new AIMessage({
                 content: '',
                 additional_kwargs: {
-                    tool_calls: [
-                        {
-                            id: 'malformed-1',
-                            type: 'function',
-                            function: {
-                                name: livingMemorySearchToolName,
-                                arguments: '{'
-                            }
-                        }
-                    ]
+                    tool_calls: [malformedSearchToolCall]
                 }
             }),
             createSearchCall('search-2'),
@@ -477,7 +487,7 @@ it('reserves the sixth model call for tool-free finalization and never calls a s
     assert.equal(trace.item.finalText, '')
     assert.equal(harness.boundInvocations.length, 5)
     assert.equal(harness.directInvocations.length, 1)
-    assert.deepEqual(harness.directInvocations[0]?.config?.['tools'], [])
+    assert.deepEqual(boundTools(harness.directInvocations[0]?.config), [])
     assert.equal(harness.searchInvocations.length, 5)
     const finalMessages = harness.directInvocations[0]?.messages ?? []
     assert.deepEqual(
@@ -500,7 +510,7 @@ it('accepts a valid sixth-call finalization when prior searches matched memory',
         ),
         finalResponse: new AIMessage('我记得在多次查询中确认的事实。'),
         search: async (invocation) => [
-            createSearchResult(`memory-${invocation.query.texts[0]}`)
+            createSearchResult(`memory-${invocation.input.searchTexts[0]}`)
         ]
     })
 
@@ -518,8 +528,7 @@ it('accepts a valid sixth-call finalization when prior searches matched memory',
     )
     assert.ok(
         harness.debugMessages.every(
-            (message) =>
-                !message.includes('我记得在多次查询中确认的事实。')
+            (message) => !message.includes('我记得在多次查询中确认的事实。')
         )
     )
 })
@@ -569,7 +578,9 @@ it('allows a second successful search with different arguments', async () => {
         ],
         search: async (invocation) => [
             createSearchResult(
-                invocation.query.texts[0] === '记忆' ? 'memory-1' : 'memory-2'
+                invocation.input.searchTexts[0] === '记忆'
+                    ? 'memory-1'
+                    : 'memory-2'
             )
         ]
     })

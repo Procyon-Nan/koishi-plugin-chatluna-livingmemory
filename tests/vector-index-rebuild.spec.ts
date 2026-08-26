@@ -276,7 +276,7 @@ it('does not abort through the old worker after finalize takes cleanup ownership
                     inventory: [],
                     presets: []
                 }),
-                markPresetState: async () => {},
+                markPresetState: async (status) => status,
                 appendRebuildBatch: async () => ({ indexedCount: 0 }),
                 abortRebuild: async () => {
                     abortCalls += 1
@@ -315,7 +315,7 @@ it('aborts through the worker when finalize fails before taking cleanup ownershi
                     inventory: [],
                     presets: []
                 }),
-                markPresetState: async () => {},
+                markPresetState: async (status) => status,
                 appendRebuildBatch: async () => ({ indexedCount: 0 }),
                 abortRebuild: async () => {
                     abortCalls += 1

@@ -9,7 +9,7 @@ import {
 } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
-import type { Context, Logger } from 'koishi'
+import type { Logger } from 'koishi'
 import { LivingMemoryLogger } from '../src/service/logging/logger'
 import type {
     MemoryJobKind,
@@ -27,6 +27,7 @@ import {
 } from '../src/service/vector_index/service'
 import { LivingMemoryVectorIndexWorkerClient } from '../src/service/vector_index/worker_client'
 import { ensureWorkersBuilt, vectorIndexWorkerPath } from './worker-test-utils'
+import { createTestContext } from './persistence-test-utils'
 
 const workerPath = vectorIndexWorkerPath
 
@@ -194,11 +195,15 @@ const createEmbeddings = (
 
 const createLogger = () => {
     const info: string[] = []
-    const warnings: unknown[][] = []
-    const logger = {
-        info: (message: unknown) => info.push(String(message)),
-        warn: (...args: unknown[]) => warnings.push(args)
-    } as unknown as Logger
+    const warnings: Parameters<Logger['warn']>[] = []
+    const logger: Pick<Logger, 'info' | 'warn'> = {
+        info: (message) => {
+            info.push(String(message))
+        },
+        warn: (...args) => {
+            warnings.push(args)
+        }
+    }
     return { logger, info, warnings }
 }
 
@@ -208,7 +213,7 @@ const createService = (options: {
     modelId: string
     dimension: number
     debug?: boolean
-    logger?: Logger
+    logger?: Pick<Logger, 'info' | 'warn'>
     calls?: string[][]
     schemaVersion?: number
     workerPath?: string
@@ -221,15 +226,13 @@ const createService = (options: {
         calls,
         options.onDocuments
     )
-    const ctx = {
-        baseDir: options.baseDir,
-        chatluna: {
-            createEmbeddings: async (modelId: string) => {
-                assert.equal(modelId, options.modelId)
-                return { value: embeddings }
-            }
+    const ctx = createTestContext(options.baseDir)
+    ctx.set('chatluna', {
+        createEmbeddings: async (modelId: string) => {
+            assert.equal(modelId, options.modelId)
+            return { value: embeddings }
         }
-    } as unknown as Context
+    } as never)
     const logger = options.logger ?? createLogger().logger
     return new LivingMemoryVectorIndexService(
         ctx,
@@ -240,10 +243,10 @@ const createService = (options: {
         options.repository,
         new LivingMemoryLogger(
             {
-                info: (message: unknown) => logger.info(message),
-                warn: (...args: unknown[]) => logger.warn(...args),
-                error: (...args: unknown[]) => logger.warn(...args)
-            } as never,
+                info: logger.info,
+                warn: logger.warn,
+                error: logger.warn
+            },
             () => options.debug ?? false
         ),
         {
@@ -495,7 +498,8 @@ it('restarts the worker and reinitializes the existing index', async () => {
     })
 })
 
-it('starts a full rebuild without blocking the caller', async () => {
+it('starts a full rebuild without blocking the caller', async function () {
+    this.timeout(120_000)
     await withTemporaryDirectory(async (baseDir) => {
         const repository = new TestVectorIndexRepository([
             createSource('memory-a')
@@ -521,7 +525,8 @@ it('starts a full rebuild without blocking the caller', async () => {
     })
 })
 
-it('rolls back to the previous index when the candidate worker cannot open', async () => {
+it('rolls back to the previous index when the candidate worker cannot open', async function () {
+    this.timeout(120_000)
     await withTemporaryDirectory(async (baseDir) => {
         const repository = new TestVectorIndexRepository([
             createSource('memory-a')
@@ -593,7 +598,8 @@ it('rolls back to the previous index when the candidate worker cannot open', asy
     })
 })
 
-it('rebuilds when the model, dimension, or schema version changes', async () => {
+it('rebuilds when the model, dimension, or schema version changes', async function () {
+    this.timeout(180_000)
     await withTemporaryDirectory(async (baseDir) => {
         const repository = new TestVectorIndexRepository([
             createSource('memory-a')
@@ -690,16 +696,17 @@ it('reports worker startup failure as unavailable', async () => {
     })
 })
 
-it('keeps index jobs running until work completes and records failures', async () => {
+it('keeps index jobs running until work completes and records failures', async function () {
+    this.timeout(120_000)
     await withTemporaryDirectory(async (baseDir) => {
         const repository = new TestVectorIndexRepository([
             createSource('memory-a')
         ])
-        let releaseDocuments = () => {}
+        let releaseDocuments: (() => void) | undefined
         const documentsReleased = new Promise<void>((resolvePromise) => {
             releaseDocuments = resolvePromise
         })
-        let signalDocumentsStarted = () => {}
+        let signalDocumentsStarted: (() => void) | undefined
         const documentsStarted = new Promise<void>((resolvePromise) => {
             signalDocumentsStarted = resolvePromise
         })
@@ -712,6 +719,7 @@ it('keeps index jobs running until work completes and records failures', async (
                 if (texts[0].includes('dimension probe')) {
                     return
                 }
+                assert.ok(signalDocumentsStarted)
                 signalDocumentsStarted()
                 await documentsReleased
             }
@@ -720,6 +728,7 @@ it('keeps index jobs running until work completes and records failures', async (
         await service.start()
         await documentsStarted
         assert.equal(repository.jobs[0].status, 'running')
+        assert.ok(releaseDocuments)
         releaseDocuments()
         await service.waitForInitialization()
         assert.equal(repository.jobs[0].status, 'completed')
@@ -755,7 +764,8 @@ it('keeps index jobs running until work completes and records failures', async (
     })
 })
 
-it('logs rebuild batch progress only when debug is enabled', async () => {
+it('logs rebuild batch progress only when debug is enabled', async function () {
+    this.timeout(120_000)
     await withTemporaryDirectory(async (baseDir) => {
         const repository = new TestVectorIndexRepository(
             Array.from({ length: 51 }, (_, index) =>

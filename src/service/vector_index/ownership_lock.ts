@@ -1,5 +1,12 @@
 import { randomUUID } from 'node:crypto'
-import { link, mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises'
+import {
+    link,
+    mkdir,
+    readFile,
+    stat,
+    unlink,
+    writeFile
+} from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { LivingMemoryVectorIndexError } from './errors'
 
@@ -218,7 +225,11 @@ export class LivingMemoryVectorIndexOwnershipLock {
         try {
             await link(temporaryPath, lockPath)
         } catch (error) {
-            if (error instanceof Error && 'code' in error && error.code === 'EEXIST') {
+            if (
+                error instanceof Error &&
+                'code' in error &&
+                error.code === 'EEXIST'
+            ) {
                 return null
             }
             throw error
@@ -388,5 +399,4 @@ export class LivingMemoryVectorIndexOwnershipLock {
             }
         }
     }
-
 }

@@ -136,8 +136,15 @@ it('keeps filterMemoryIds consistent with filterMemoryList matches', () => {
         keyword: 'content-1'
     }
 
-    const listed = filterMemoryList(items, { ...filter, page: 1, pageSize: 100 })
+    const listed = filterMemoryList(items, {
+        ...filter,
+        page: 1,
+        pageSize: 100
+    })
     const ids = filterMemoryIds(items, filter)
 
-    assert.deepEqual([...ids].sort(), listed.items.map((item) => item.id).sort())
+    assert.deepEqual(
+        [...ids].sort(),
+        listed.items.map((item) => item.id).sort()
+    )
 })

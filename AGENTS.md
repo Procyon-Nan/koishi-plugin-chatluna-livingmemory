@@ -11,13 +11,13 @@ Repository-specific guidance for `koishi-plugin-chatluna-livingmemory`.
   `src/integrations/koishi-augmentations.ts` owns Koishi declaration merging,
   while `src/types.ts` is the compatibility re-export entry.
 - `src/plugins/` contains integration boundaries:
-  - `chat_middleware.ts` handles the main ChatLuna lifecycle and request-scoped
-    prompt injection.
-  - `character_middleware.ts` handles Character events and the
-    `{living_memory}` prompt function.
-  - `living_memory_tools.ts` registers `living_memory_search` and
-    `living_memory_get_messages`.
-  - `webui.ts` exposes Console RPC listeners.
+    - `chat_middleware.ts` handles the main ChatLuna lifecycle and request-scoped
+      prompt injection.
+    - `character_middleware.ts` handles Character events and the
+      `{living_memory}` prompt function.
+    - `living_memory_tools.ts` registers `living_memory_search` and
+      `living_memory_get_messages`.
+    - `webui.ts` exposes Console RPC listeners.
 - `src/service/app/living_memory_service.ts` is the application facade. The
   other files under `src/service/app/` own configuration status, scope
   construction, prompt hydration, and query projections.

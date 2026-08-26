@@ -7,7 +7,10 @@ export interface DreamHdbscanMatrix {
 }
 
 export type DreamHdbscanPhase =
-    'normalizing' | 'building-mst' | 'building-hierarchy' | 'selecting-clusters'
+    | 'normalizing'
+    | 'building-mst'
+    | 'building-hierarchy'
+    | 'selecting-clusters'
 
 export interface DreamHdbscanProgress {
     phase: DreamHdbscanPhase

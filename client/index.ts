@@ -1,5 +1,4 @@
 import { Context, icons } from '@koishijs/client'
-import type {} from './types'
 import dashboard from './dashboard.vue'
 import treeOfLife from './icons/tree-of-life.vue'
 

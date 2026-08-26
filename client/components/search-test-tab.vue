@@ -34,10 +34,7 @@
                     <label class="field-label">记忆类别</label>
                     <div class="type-button-group">
                         <button
-                            :class="[
-                                'type-btn',
-                                { active: isAllSelected }
-                            ]"
+                            :class="['type-btn', { active: isAllSelected }]"
                             @click="selectAll"
                         >
                             全部
@@ -82,10 +79,7 @@
                 <article
                     v-for="(item, index) in results"
                     :key="item.id"
-                    :class="[
-                        'result-card',
-                        `result-card--${item.type}`
-                    ]"
+                    :class="['result-card', `result-card--${item.type}`]"
                 >
                     <div class="result-card-main">
                         <div class="result-card-header">
@@ -108,9 +102,7 @@
                                     <span
                                         :class="[
                                             'score-value',
-                                            cosineScoreClass(
-                                                item.cosineScore
-                                            )
+                                            cosineScoreClass(item.cosineScore)
                                         ]"
                                     >
                                         {{ item.cosineScore.toFixed(4) }}
@@ -139,10 +131,7 @@
                             </div>
                         </div>
 
-                        <p
-                            v-if="item.summary"
-                            class="result-card-summary"
-                        >
+                        <p v-if="item.summary" class="result-card-summary">
                             {{ item.summary }}
                         </p>
                         <p class="result-card-content">

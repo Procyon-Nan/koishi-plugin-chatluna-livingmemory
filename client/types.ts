@@ -165,7 +165,10 @@ export interface MemoryConfigWarning {
 }
 
 export type MemoryVectorIndexState =
-    'ready' | 'building' | 'dirty' | 'unavailable'
+    | 'ready'
+    | 'building'
+    | 'dirty'
+    | 'unavailable'
 
 export interface MemoryVectorIndexManifest {
     schemaVersion: number
@@ -271,7 +274,8 @@ export interface LivingMemoryPresetExportV2 extends LivingMemoryPresetExportBase
 }
 
 export type LivingMemoryPresetExport =
-    LivingMemoryPresetExportV1 | LivingMemoryPresetExportV2
+    | LivingMemoryPresetExportV1
+    | LivingMemoryPresetExportV2
 
 export interface LivingMemoryPresetExportUserProfile {
     id: string
@@ -300,79 +304,77 @@ export interface LivingMemoryPresetImportResult {
     indexJobId: string
 }
 
-declare module '@koishijs/client' {
-    interface Events {
-        'living-memory/listPresetIds': () => string[]
-        'living-memory/getStatus': () => MemoryServiceStatus
-        'living-memory/listMemories': (query: {
-            presetId: string
-            type?: MemoryEntryType
-            status?: MemoryEntryStatus | 'all'
-            keyword?: string
-            page?: number
-            pageSize?: number
-        }) => MemoryListResult
-        'living-memory/listMemoryIds': (filter: MemoryListFilter) => string[]
-        'living-memory/getMemory': (
-            memoryId: string
-        ) => MemoryEntryRecord | undefined
-        'living-memory/createMemory': (input: {
-            conversationId: string
-            presetId: string
-            userId?: string
-            channelId?: string
-            memory: MemoryMutationInput
-        }) => MemoryEntryRecord
-        'living-memory/updateMemory': (
-            memoryId: string,
-            patch: Partial<MemoryMutationInput>
-        ) => { success: true }
-        'living-memory/deleteMemory': (memoryId: string) => { success: true }
-        'living-memory/deleteMemories': (
-            presetId: string,
-            ids: string[]
-        ) => { success: true; deleted: number }
-        'living-memory/listSnapshots': (query: {
-            presetId: string
-            conversationId?: string
-            page?: number
-            pageSize?: number
-        }) => PageResult<MemorySnapshotRecord>
-        'living-memory/deleteSnapshot': (snapshotId: string) => {
-            success: true
-        }
-        'living-memory/listJobs': (query: {
-            presetId: string
-            kind?: string
-            status?: string
-            page?: number
-            pageSize?: number
-        }) => PageResult<MemoryJobRecord>
-        'living-memory/listUserProfiles': (query: {
-            presetId: string
-            page?: number
-            pageSize?: number
-        }) => PageResult<UserProfileRecord>
-        'living-memory/updateUserProfile': (
-            profileId: string,
-            content: string
-        ) => { success: true }
-        'living-memory/deleteUserProfile': (profileId: string) => {
-            success: true
-        }
-        'living-memory/runDream': (presetId: string) => DreamTriggerResult
-        'living-memory/reconcileVectorIndex': (
-            presetId: string
-        ) => MemoryJobRecord
-        'living-memory/rebuildVectorIndex': () => { success: true }
-        'living-memory/restartVectorIndex': () => { success: true }
-        'living-memory/clearPresetData': (presetId: string) => { success: true }
-        'living-memory/exportPreset': (
-            presetId: string
-        ) => LivingMemoryPresetExport
-        'living-memory/importPreset': (
-            targetPresetId: string,
-            data: LivingMemoryPresetExport
-        ) => LivingMemoryPresetImportResult
+export interface LivingMemoryClientEvents {
+    'living-memory/listPresetIds': () => string[]
+    'living-memory/getStatus': () => MemoryServiceStatus
+    'living-memory/listMemories': (query: {
+        presetId: string
+        type?: MemoryEntryType
+        status?: MemoryEntryStatus | 'all'
+        keyword?: string
+        page?: number
+        pageSize?: number
+    }) => MemoryListResult
+    'living-memory/listMemoryIds': (filter: MemoryListFilter) => string[]
+    'living-memory/getMemory': (
+        memoryId: string
+    ) => MemoryEntryRecord | undefined
+    'living-memory/createMemory': (input: {
+        conversationId: string
+        presetId: string
+        userId?: string
+        channelId?: string
+        memory: MemoryMutationInput
+    }) => MemoryEntryRecord
+    'living-memory/updateMemory': (
+        memoryId: string,
+        patch: Partial<MemoryMutationInput>
+    ) => { success: true }
+    'living-memory/deleteMemory': (memoryId: string) => { success: true }
+    'living-memory/deleteMemories': (
+        presetId: string,
+        ids: string[]
+    ) => { success: true; deleted: number }
+    'living-memory/listSnapshots': (query: {
+        presetId: string
+        conversationId?: string
+        page?: number
+        pageSize?: number
+    }) => PageResult<MemorySnapshotRecord>
+    'living-memory/deleteSnapshot': (snapshotId: string) => {
+        success: true
     }
+    'living-memory/listJobs': (query: {
+        presetId: string
+        kind?: string
+        status?: string
+        page?: number
+        pageSize?: number
+    }) => PageResult<MemoryJobRecord>
+    'living-memory/listUserProfiles': (query: {
+        presetId: string
+        page?: number
+        pageSize?: number
+    }) => PageResult<UserProfileRecord>
+    'living-memory/updateUserProfile': (
+        profileId: string,
+        content: string
+    ) => { success: true }
+    'living-memory/deleteUserProfile': (profileId: string) => {
+        success: true
+    }
+    'living-memory/runDream': (presetId: string) => DreamTriggerResult
+    'living-memory/reconcileVectorIndex': (presetId: string) => MemoryJobRecord
+    'living-memory/rebuildVectorIndex': () => { success: true }
+    'living-memory/restartVectorIndex': () => { success: true }
+    'living-memory/clearPresetData': (presetId: string) => { success: true }
+    'living-memory/exportPreset': (presetId: string) => LivingMemoryPresetExport
+    'living-memory/importPreset': (
+        targetPresetId: string,
+        data: LivingMemoryPresetExport
+    ) => LivingMemoryPresetImportResult
+    'living-memory/searchMemoriesDetailed': (
+        presetId: string,
+        input: LivingMemorySearchInput
+    ) => LivingMemorySearchDetailedResult[]
 }

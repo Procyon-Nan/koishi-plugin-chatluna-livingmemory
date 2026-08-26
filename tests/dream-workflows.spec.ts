@@ -27,7 +27,6 @@ import {
     createCapturedLogger,
     createJobStore,
     createMemoryEntry,
-    debug,
     logger,
     scope,
     waitFor
@@ -437,8 +436,7 @@ it('logs manual Dream completion as separate active and archived results', async
     assert.deepEqual(clearedPresets, [scope.presetId])
     assert.ok(
         captured.info.every(
-            (message) =>
-                !message.includes('event=dream.snapshot-cache.cleared')
+            (message) => !message.includes('event=dream.snapshot-cache.cleared')
         )
     )
 })
@@ -481,7 +479,13 @@ const completeDreamMergeOperation = (
 it('enforces Dream touched-memory guards', async () => {
     const updates: Partial<MemoryEntryRecord>[] = []
     const repository = {
-        updateMemoryForDream: async (_presetId, _id, patch) => {
+        updateMemoryForDream: async (
+            _presetId: string,
+            _id: string,
+            patch: Parameters<
+                DreamExecutorRepository['updateMemoryForDream']
+            >[2]
+        ) => {
             updates.push(patch)
         },
         setMemoryConsolidation: async () => {},
@@ -518,7 +522,9 @@ it('delegates each Dream merge to one atomic repository operation', async () => 
     const repository = {
         updateMemoryForDream: async () => {},
         setMemoryConsolidation: async () => {},
-        applyDreamMerge: async (input) => {
+        applyDreamMerge: async (
+            input: Parameters<DreamExecutorRepository['applyDreamMerge']>[0]
+        ) => {
             mergeInputs.push(input)
         }
     } as unknown as DreamExecutorRepository

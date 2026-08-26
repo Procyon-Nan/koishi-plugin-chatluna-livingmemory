@@ -94,7 +94,11 @@ class MemoryIndexSinkStub implements MemoryIndexMutationSink {
 it('writes create, update, and delete facts through to the vector index', async () => {
     await withLivingMemoryRepository(async (_ctx, repository) => {
         const sink = new MemoryIndexSinkStub()
-        const mutations = new LivingMemoryMutationService(repository, sink, createLoggerStub().logger)
+        const mutations = new LivingMemoryMutationService(
+            repository,
+            sink,
+            createLoggerStub().logger
+        )
         const memory = await mutations.createMemory(scope, {
             type: 'fact',
             content: 'original content',
@@ -124,7 +128,11 @@ it('reports committed facts when vector synchronization fails', async () => {
     await withLivingMemoryRepository(async (_ctx, repository) => {
         const sink = new MemoryIndexSinkStub()
         sink.applyError = new Error('injected index failure')
-        const mutations = new LivingMemoryMutationService(repository, sink, createLoggerStub().logger)
+        const mutations = new LivingMemoryMutationService(
+            repository,
+            sink,
+            createLoggerStub().logger
+        )
 
         let failure: unknown
         try {
@@ -146,7 +154,11 @@ it('reports committed facts when vector synchronization fails', async () => {
 it('preserves vectors for consolidation and clears the preset index', async () => {
     await withLivingMemoryRepository(async (_ctx, repository) => {
         const sink = new MemoryIndexSinkStub()
-        const mutations = new LivingMemoryMutationService(repository, sink, createLoggerStub().logger)
+        const mutations = new LivingMemoryMutationService(
+            repository,
+            sink,
+            createLoggerStub().logger
+        )
         const memory = await mutations.createMemory(scope, {
             type: 'fact',
             content: 'memory to consolidate'
@@ -164,7 +176,11 @@ it('preserves vectors for consolidation and clears the preset index', async () =
 it('synchronizes a Dream merge as one vector index mutation', async () => {
     await withLivingMemoryRepository(async (_ctx, repository) => {
         const sink = new MemoryIndexSinkStub()
-        const mutations = new LivingMemoryMutationService(repository, sink, createLoggerStub().logger)
+        const mutations = new LivingMemoryMutationService(
+            repository,
+            sink,
+            createLoggerStub().logger
+        )
         const target = await repository.createMemory(scope, {
             type: 'fact',
             content: 'target'
@@ -210,7 +226,11 @@ it('synchronizes a Dream merge as one vector index mutation', async () => {
 it('queues preset reconciliation after import without applying mutations', async () => {
     await withLivingMemoryRepository(async (_ctx, repository) => {
         const sink = new MemoryIndexSinkStub()
-        const mutations = new LivingMemoryMutationService(repository, sink, createLoggerStub().logger)
+        const mutations = new LivingMemoryMutationService(
+            repository,
+            sink,
+            createLoggerStub().logger
+        )
         const data: LivingMemoryPresetExport = {
             version: 2,
             exportedAt: '2026-08-08T00:00:00.000Z',
@@ -336,8 +356,10 @@ it('deletes memories in one batch and synchronizes the vector index', async () =
         assert.deepEqual(
             [...sink.mutations[0].deletes]
                 .map((entry) => entry.id)
-                .sort(),
-            created.map((memory) => memory.id).sort()
+                .sort((left, right) => left.localeCompare(right)),
+            created
+                .map((memory) => memory.id)
+                .sort((left, right) => left.localeCompare(right))
         )
         assert.deepEqual(await repository.listEntriesByPreset(presetId), [])
     })
@@ -404,7 +426,11 @@ it('splits bulk deletions into fixed-size batches', async () => {
         const total = MEMORY_DELETE_BATCH_SIZE + 3
         const extracted = Array.from({ length: total }, (_, index) => ({
             type: 'fact' as const,
-            content: `batched-${index}`
+            content: `batched-${index}`,
+            keywords: [],
+            summary: '',
+            sentiment: '',
+            importance: 0.5
         }))
         const created = await repository.appendMemories(scope, [], extracted)
 

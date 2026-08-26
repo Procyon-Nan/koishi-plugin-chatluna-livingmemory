@@ -379,7 +379,7 @@ export class LivingMemoryVectorIndexDatabase {
     private async restorePreviousDatabase(
         databaseDirectory: string,
         previousDatabaseDirectory: string,
-        currentDirectoryError: unknown | null
+        currentDirectoryError: unknown
     ) {
         await this.closeConnection()
         if (currentDirectoryError !== null) {

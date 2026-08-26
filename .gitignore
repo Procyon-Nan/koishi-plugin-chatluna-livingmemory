@@ -35,3 +35,4 @@ tmp/
 yarn.lock
 
 tsconfig.temp.json
+data/

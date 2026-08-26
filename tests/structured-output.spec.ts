@@ -1,5 +1,11 @@
 import assert from 'node:assert/strict'
-import { AIMessage } from '@langchain/core/messages'
+import {
+    AIMessage,
+    isToolMessage,
+    type OpenAIToolCall
+} from '@langchain/core/messages'
+import type { RunnableConfig } from '@langchain/core/runnables'
+import type { ChatLunaModelCallOptions } from 'koishi-plugin-chatluna/llm-core/platform/model'
 import { z } from 'zod'
 import { invokeStructuredOutput } from '../src/service/workflows/structured_output'
 import {
@@ -20,6 +26,15 @@ const context = {
     presetId: 'preset-1',
     conversationId: 'conversation-1'
 }
+
+const boundTools = (
+    runConfig: RunnableConfig | undefined
+): NonNullable<ChatLunaModelCallOptions['tools']> =>
+    (
+        runConfig as
+            | (RunnableConfig & Pick<ChatLunaModelCallOptions, 'tools'>)
+            | undefined
+    )?.tools ?? []
 
 const invoke = (responses: Parameters<typeof createToolCallingModel>[0]) => {
     const harness = createToolCallingModel(responses)
@@ -50,7 +65,7 @@ it('accepts one valid structured result tool call', async () => {
     assert.match(resolved.output, /"tool": "submit_result"/u)
     assert.match(resolved.output, /"alpha"/u)
     assert.equal(harness.invocations.length, 1)
-    const tools = harness.bindings[0]?.['tools'] as { name?: string }[]
+    const tools = boundTools(harness.bindings[0])
     assert.equal(tools[0]?.name, toolName)
 })
 
@@ -78,11 +93,7 @@ it('decodes one whitelisted stringified array field without retry', async () => 
 it('retries malformed stringified arrays with direct array guidance', async () => {
     const { harness, result } = invoke([
         createToolCallMessage(toolName, { items: '["broken"' }),
-        createToolCallMessage(
-            toolName,
-            { items: ['corrected'] },
-            'result-2'
-        )
+        createToolCallMessage(toolName, { items: ['corrected'] }, 'result-2')
     ])
 
     const resolved = await result
@@ -101,11 +112,7 @@ it('retries malformed stringified arrays with direct array guidance', async () =
 it('does not normalize stringified values that are not arrays', async () => {
     const { harness, result } = invoke([
         createToolCallMessage(toolName, { items: '"alpha"' }),
-        createToolCallMessage(
-            toolName,
-            { items: ['corrected'] },
-            'result-2'
-        )
+        createToolCallMessage(toolName, { items: ['corrected'] }, 'result-2')
     ])
 
     const resolved = await result
@@ -141,30 +148,24 @@ it('feeds schema errors back through the tool-call scratchpad', async () => {
 
     assert.deepEqual(resolved.value, { items: ['corrected'] })
     const retryMessages = harness.invocations[1]?.messages ?? []
-    const toolMessage = retryMessages.find(
-        (message) => message.getType() === 'tool'
-    )
+    const toolMessage = retryMessages.find(isToolMessage)
     assert.match(String(toolMessage?.content), /items\.0/u)
-    assert.equal(
-        (toolMessage as { tool_call_id?: string } | undefined)?.tool_call_id,
-        'result-1'
-    )
+    assert.equal(toolMessage?.tool_call_id, 'result-1')
 })
 
 it('retries malformed legacy tool arguments once', async () => {
+    const malformedToolCall: OpenAIToolCall = {
+        id: 'result-1',
+        type: 'function',
+        function: {
+            name: toolName,
+            arguments: '{"items":["truncated"]'
+        }
+    }
     const malformed = new AIMessage({
         content: '',
         additional_kwargs: {
-            tool_calls: [
-                {
-                    id: 'result-1',
-                    type: 'function',
-                    function: {
-                        name: toolName,
-                        arguments: '{"items":["truncated"]'
-                    }
-                }
-            ]
+            tool_calls: [malformedToolCall]
         }
     })
     const { harness, result } = invoke([
@@ -177,10 +178,7 @@ it('retries malformed legacy tool arguments once', async () => {
     assert.deepEqual(resolved.value, { items: ['corrected'] })
     assert.equal(resolved.parseError, null)
     assert.equal(harness.invocations.length, 2)
-    assert.match(
-        resolved.output,
-        /^\[attempt 1\][\s\S]*\n\n\[attempt 2\]/u
-    )
+    assert.match(resolved.output, /^\[attempt 1\][\s\S]*\n\n\[attempt 2\]/u)
 })
 
 it('propagates model invocation errors without a correction retry', async () => {

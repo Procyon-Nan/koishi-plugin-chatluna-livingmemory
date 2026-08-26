@@ -154,7 +154,7 @@ it('keeps the main event loop responsive during partitioning', async () => {
 })
 
 it('reports progress only for requests that enable it', async () => {
-    const progress: DreamHdbscanProgress[] = []
+    const progress = new Array<DreamHdbscanProgress>()
     const client = new LivingMemoryDreamWorkerClient({
         workerPath: dreamWorkerPath
     })
@@ -166,10 +166,17 @@ it('reports progress only for requests that enable it', async () => {
     ])
 
     await client.runHdbscan(createMatrix(rows))
-    assert.deepEqual(progress, [])
+    assert.equal(progress.length, 0)
 
-    await client.runHdbscan(createMatrix(rows), (update) => progress.push(update))
-    const phases = progress.map(({ phase }) => phase)
+    await client.runHdbscan(
+        createMatrix(rows),
+        (update: DreamHdbscanProgress) => {
+            progress.push(update)
+        }
+    )
+    const phases: DreamHdbscanProgress['phase'][] = progress.map(
+        ({ phase }) => phase
+    )
     assert.ok(phases.includes('normalizing'))
     assert.ok(phases.includes('building-mst'))
     assert.ok(phases.includes('building-hierarchy'))

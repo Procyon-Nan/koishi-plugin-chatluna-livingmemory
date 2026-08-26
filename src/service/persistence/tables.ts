@@ -137,8 +137,7 @@ export const defineLivingMemoryTables = (ctx: Context) => {
             speakerLabel: 'string(255)',
             speakerAliases: {
                 type: 'json',
-                nullable: true,
-                initial: null
+                initial: []
             },
             speakerId: {
                 type: 'string',

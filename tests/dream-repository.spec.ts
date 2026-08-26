@@ -3,6 +3,7 @@ import { Context } from 'koishi'
 import SQLiteDriver from '@koishijs/plugin-database-sqlite'
 import type { DreamMergeMutation } from '../src/contracts/workflows'
 import { LivingMemoryRepository } from '../src/service/persistence/repository'
+import { createTestContext } from './persistence-test-utils'
 
 const scope = {
     conversationId: 'conversation-1',
@@ -42,7 +43,7 @@ const withRepository = async (
         repository: LivingMemoryRepository
     ) => Promise<void>
 ) => {
-    const ctx = new Context({ baseDir: process.cwd() })
+    const ctx = createTestContext()
     ctx.plugin(SQLiteDriver, { path: ':memory:' })
     const repository = new LivingMemoryRepository(ctx)
     repository.defineTables()
@@ -105,7 +106,7 @@ it('atomically updates an active Dream merge and archives its sources', async ()
 })
 
 it('defines the pending Dream query index', () => {
-    const ctx = new Context({ baseDir: process.cwd() })
+    const ctx = createTestContext()
     const repository = new LivingMemoryRepository(ctx)
     repository.defineTables()
 
@@ -213,12 +214,13 @@ it('rolls back the target update when Dream source deletion fails', async () => 
         const before = await repository.getEntriesByIds(ids)
         const originalRemove = ctx.database.remove
 
-        ctx.database.remove = (async (table, query) => {
+        const remove: typeof ctx.database.remove = async (table, query) => {
             if (table === 'living_memory_entry') {
                 throw new Error('injected source delete failure')
             }
             return await originalRemove.call(ctx.database, table, query)
-        }) as typeof ctx.database.remove
+        }
+        ctx.database.remove = remove
 
         try {
             await assert.rejects(

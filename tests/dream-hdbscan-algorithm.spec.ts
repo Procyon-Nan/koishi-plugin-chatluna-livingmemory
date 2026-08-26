@@ -100,7 +100,8 @@ const canonicalizeLabels = (labels: ArrayLike<number>) => {
 const assertValidLabels = (labels: ArrayLike<number>, entryCount: number) => {
     assert.equal(labels.length, entryCount)
     const clusters = new Set<number>()
-    for (const label of labels) {
+    for (let index = 0; index < labels.length; index++) {
+        const label = labels[index]
         assert.ok(Number.isInteger(label))
         assert.ok(label >= -1)
         if (label >= 0) {
@@ -317,7 +318,10 @@ it('preserves representative cluster membership', () => {
     for (const fixture of fixtures) {
         assert.deepEqual(
             canonicalizeLabels(runDreamHdbscan(createMatrix(fixture.rows))),
-            { clusters: fixture.clusters, noise: [] }
+            {
+                clusters: fixture.clusters,
+                noise: []
+            }
         )
     }
 })

@@ -44,10 +44,10 @@ it('lists stored presets and clears only the selected preset', async () => {
             'rebuild'
         )
 
-        assert.deepEqual(
-            (await repository.listDistinctPresetIds()).sort(),
-            ['preset-clear', 'preset-keep']
-        )
+        assert.deepEqual((await repository.listDistinctPresetIds()).sort(), [
+            'preset-clear',
+            'preset-keep'
+        ])
 
         await repository.clearAllByPreset('preset-clear')
 

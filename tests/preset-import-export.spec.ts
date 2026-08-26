@@ -56,7 +56,9 @@ it('copies preset data without moving source records', async () => {
         )
 
         const exported = await repository.exportPresetData(sourcePresetId)
-        assert.equal(exported.version, 2)
+        if (exported.version !== 2) {
+            throw new Error('expected version 2 preset export')
+        }
         const sourceProfile = exported.userProfiles[0]
 
         await repository.importPresetData(targetPresetId, exported)
@@ -122,6 +124,9 @@ it('preserves consolidation only for same-preset version 2 restores', async () =
         )
         await repository.setMemoryConsolidation(presetId, [memory.id], true)
         const exported = await repository.exportPresetData(presetId)
+        if (exported.version !== 2) {
+            throw new Error('expected version 2 preset export')
+        }
 
         assert.equal(exported.entries[0].isConsolidated, true)
         await repository.setMemoryConsolidation(presetId, [memory.id], false)

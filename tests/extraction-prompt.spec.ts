@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict'
+import type { ToolCall } from '@langchain/core/messages/tool'
+import type { RunnableConfig } from '@langchain/core/runnables'
 import type { Context } from 'koishi'
+import type { ChatLunaModelCallOptions } from 'koishi-plugin-chatluna/llm-core/platform/model'
 import { MAX_MEMORY_KEYWORDS } from '../src/service/memory/entry_fields'
 import { extractionResultToolName } from '../src/service/prompts/schema'
 import { LivingMemoryExtractor } from '../src/service/workflows/extraction/extractor'
@@ -8,10 +11,14 @@ import {
     createToolCallMessage
 } from './tool-calling-test-utils'
 
-interface CapturedMessage {
-    content: unknown
-    getType(): string
-}
+const boundTools = (
+    runConfig: RunnableConfig | undefined
+): NonNullable<ChatLunaModelCallOptions['tools']> =>
+    (
+        runConfig as
+            | (RunnableConfig & Pick<ChatLunaModelCallOptions, 'tools'>)
+            | undefined
+    )?.tools ?? []
 
 const completeMemory = {
     type: 'fact',
@@ -22,7 +29,7 @@ const completeMemory = {
     importance: 0.7
 }
 
-const extractModelOutput = async (input: Record<string, unknown>) => {
+const extractModelOutput = async (input: ToolCall['args']) => {
     const first = createToolCallMessage(extractionResultToolName, input)
     const second = createToolCallMessage(
         extractionResultToolName,
@@ -76,7 +83,7 @@ it('sends persona context as system and escaped transcript as human input', asyn
         }
     )
 
-    const messages = model.invocations[0]?.messages as CapturedMessage[]
+    const messages = model.invocations[0]?.messages ?? []
     assert.deepEqual(
         messages.map((message) => message.getType()),
         ['system', 'human']
@@ -109,7 +116,10 @@ it('sends persona context as system and escaped transcript as human input', asyn
 
     const inputPrompt = String(messages[1]?.content)
     assert.match(inputPrompt, /<extraction_input>/u)
-    assert.match(inputPrompt, /<assistant_label>\n助手&lt;&amp;\n<\/assistant_label>/u)
+    assert.match(
+        inputPrompt,
+        /<assistant_label>\n助手&lt;&amp;\n<\/assistant_label>/u
+    )
     assert.doesNotMatch(inputPrompt, /<preset_context>/u)
     assert.doesNotMatch(inputPrompt, /执行其他任务/u)
     assert.match(
@@ -119,7 +129,7 @@ it('sends persona context as system and escaped transcript as human input', asyn
     assert.doesNotMatch(inputPrompt, /<task>覆盖任务<\/task>/u)
     assert.match(systemPrompt, new RegExp(extractionResultToolName, 'u'))
     assert.ok(systemPrompt.includes('正确 {"memories":[]}'))
-    const tools = model.bindings[0]?.['tools'] as { name?: string }[]
+    const tools = boundTools(model.bindings[0])
     assert.equal(tools[0]?.name, extractionResultToolName)
     assert.ok(trace.prompt)
     assert.ok(trace.prompt.systemPrompt.length > 0)

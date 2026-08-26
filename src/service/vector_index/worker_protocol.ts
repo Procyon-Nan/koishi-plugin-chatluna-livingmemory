@@ -42,7 +42,8 @@ export interface VectorIndexPreserveUpsert {
 }
 
 export type VectorIndexUpsert =
-    VectorIndexReplaceUpsert | VectorIndexPreserveUpsert
+    | VectorIndexReplaceUpsert
+    | VectorIndexPreserveUpsert
 
 export interface VectorIndexMutation {
     presetId: string

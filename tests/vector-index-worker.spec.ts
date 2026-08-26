@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { rmSync } from 'node:fs'
 import {
     access,
     cp,
