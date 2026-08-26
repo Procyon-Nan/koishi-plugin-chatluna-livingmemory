@@ -27,21 +27,19 @@ import type {
     VectorIndexWorkerRequest,
     VectorIndexWorkerResponse
 } from '../src/service/vector_index/worker_protocol'
-import { ensureWorkersBuilt, vectorIndexWorkerPath } from './worker-test-utils'
+import { vectorIndexWorkerPath } from './worker-test-utils'
 
 const workerPath = vectorIndexWorkerPath
 
 let temporaryDirectory: string
 
-before(async function () {
-    this.timeout(30_000)
-    await ensureWorkersBuilt()
+beforeAll(async () => {
     temporaryDirectory = await mkdtemp(
         resolve(tmpdir(), 'living-memory-vector-worker-test-')
     )
-})
+}, 30_000)
 
-after(async () => {
+afterAll(async () => {
     await rm(temporaryDirectory, { recursive: true, force: true })
 })
 

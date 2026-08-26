@@ -11,14 +11,9 @@ import { VectorIndexOperationGate } from '../src/service/vector_index/operation_
 import { rebuildVectorIndex } from '../src/service/vector_index/rebuild'
 import { reconcileVectorIndexPreset } from '../src/service/vector_index/reconcile'
 import { LivingMemoryVectorIndexWorkerClient } from '../src/service/vector_index/worker_client'
-import { ensureWorkersBuilt, vectorIndexWorkerPath } from './worker-test-utils'
+import { vectorIndexWorkerPath } from './worker-test-utils'
 
 const workerPath = vectorIndexWorkerPath
-
-before(async function () {
-    this.timeout(30_000)
-    await ensureWorkersBuilt()
-})
 
 const createSource = (
     id: string,

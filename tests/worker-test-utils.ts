@@ -1,9 +1,10 @@
 import { execFile } from 'node:child_process'
 import { resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 
 const executeFile = promisify(execFile)
-const projectRoot = resolve(__dirname, '..')
+const projectRoot = fileURLToPath(new URL('..', import.meta.url))
 
 export const vectorIndexWorkerPath = resolve(
     projectRoot,

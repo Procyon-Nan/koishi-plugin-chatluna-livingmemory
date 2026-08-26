@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { readFile, stat } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import {
     runDreamHdbscan,
     type DreamHdbscanMatrix
@@ -9,20 +9,12 @@ import { partitionDreamEntries } from '../src/service/workflows/dream/partitioni
 import { LivingMemoryDreamWorkerClient } from '../src/service/workflows/dream/worker/client'
 import type { DreamHdbscanProgress } from '../src/service/workflows/dream/worker/protocol'
 import { LivingMemoryVectorIndexWorkerClient } from '../src/service/vector_index/worker_client'
-import {
-    dreamWorkerPath,
-    ensureWorkersBuilt,
-    vectorIndexWorkerPath
-} from './worker-test-utils'
+import { dreamWorkerPath, vectorIndexWorkerPath } from './worker-test-utils'
 
 const createMatrix = (rows: number[][]): DreamHdbscanMatrix => ({
     entryCount: rows.length,
     dimension: rows[0]?.length ?? 0,
     vectors: new Float32Array(rows.flat())
-})
-
-before(async () => {
-    await ensureWorkersBuilt()
 })
 
 it('builds both worker artifacts through the shared build script', async () => {
@@ -287,7 +279,9 @@ it('rejects active requests when the worker stops', async () => {
 
 it('rejects startup and later requests when the worker is unavailable', async () => {
     const client = new LivingMemoryDreamWorkerClient({
-        workerPath: resolve(__dirname, 'missing-dream-worker.mjs')
+        workerPath: fileURLToPath(
+            new URL('missing-dream-worker.mjs', import.meta.url)
+        )
     })
 
     await assert.rejects(

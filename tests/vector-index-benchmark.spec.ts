@@ -96,8 +96,7 @@ const runBenchmark = async () => {
     return JSON.parse(stdout) as BenchmarkResult
 }
 
-it('benchmarks production vector-index workloads reproducibly', async function () {
-    this.timeout(60_000)
+it('benchmarks production vector-index workloads reproducibly', async () => {
     const first = await runBenchmark()
     const second = await runBenchmark()
 
@@ -182,4 +181,4 @@ it('benchmarks production vector-index workloads reproducibly', async function (
         null
     )
     assert.equal(first.workloads.incremental.avoidedKeywordDistanceCount, null)
-})
+}, 60_000)

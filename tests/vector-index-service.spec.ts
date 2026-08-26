@@ -26,22 +26,10 @@ import {
     type VectorIndexWorkerFactory
 } from '../src/service/vector_index/service'
 import { LivingMemoryVectorIndexWorkerClient } from '../src/service/vector_index/worker_client'
-import { ensureWorkersBuilt, vectorIndexWorkerPath } from './worker-test-utils'
+import { vectorIndexWorkerPath } from './worker-test-utils'
 import { createTestContext } from './persistence-test-utils'
 
 const workerPath = vectorIndexWorkerPath
-
-beforeEach(function () {
-    this.timeout(30_000)
-})
-
-afterEach(function () {
-    this.timeout(30_000)
-})
-
-before(async () => {
-    await ensureWorkersBuilt()
-})
 
 const createSource = (
     id: string,
@@ -377,7 +365,7 @@ it('builds the index once and reuses its manifest after restart', async () => {
         assert.equal(secondCalls.length, 1)
         await second.stop()
     })
-})
+}, 60_000)
 
 it('removes legacy SQLite index files after initialization succeeds', async () => {
     await withTemporaryDirectory(async (baseDir) => {
@@ -498,8 +486,7 @@ it('restarts the worker and reinitializes the existing index', async () => {
     })
 })
 
-it('starts a full rebuild without blocking the caller', async function () {
-    this.timeout(120_000)
+it('starts a full rebuild without blocking the caller', async () => {
     await withTemporaryDirectory(async (baseDir) => {
         const repository = new TestVectorIndexRepository([
             createSource('memory-a')
@@ -523,10 +510,9 @@ it('starts a full rebuild without blocking the caller', async function () {
         assert.match(repository.jobs.at(-1)?.input ?? '', /manual rebuild/u)
         await service.stop()
     })
-})
+}, 120_000)
 
-it('rolls back to the previous index when the candidate worker cannot open', async function () {
-    this.timeout(120_000)
+it('rolls back to the previous index when the candidate worker cannot open', async () => {
     await withTemporaryDirectory(async (baseDir) => {
         const repository = new TestVectorIndexRepository([
             createSource('memory-a')
@@ -596,10 +582,9 @@ it('rolls back to the previous index when the candidate worker cannot open', asy
         )
         await recovered.stop()
     })
-})
+}, 120_000)
 
-it('rebuilds when the model, dimension, or schema version changes', async function () {
-    this.timeout(180_000)
+it('rebuilds when the model, dimension, or schema version changes', async () => {
     await withTemporaryDirectory(async (baseDir) => {
         const repository = new TestVectorIndexRepository([
             createSource('memory-a')
@@ -638,7 +623,7 @@ it('rebuilds when the model, dimension, or schema version changes', async functi
 
         assert.equal(new Set(generations).size, configurations.length)
     })
-})
+}, 180_000)
 
 it('replaces a corrupt formal database through the rebuild path', async () => {
     await withTemporaryDirectory(async (baseDir) => {
@@ -696,8 +681,7 @@ it('reports worker startup failure as unavailable', async () => {
     })
 })
 
-it('keeps index jobs running until work completes and records failures', async function () {
-    this.timeout(120_000)
+it('keeps index jobs running until work completes and records failures', async () => {
     await withTemporaryDirectory(async (baseDir) => {
         const repository = new TestVectorIndexRepository([
             createSource('memory-a')
@@ -762,10 +746,9 @@ it('keeps index jobs running until work completes and records failures', async f
         assert.equal(captured.warnings.length, 1)
         await service.stop()
     })
-})
+}, 120_000)
 
-it('logs rebuild batch progress only when debug is enabled', async function () {
-    this.timeout(120_000)
+it('logs rebuild batch progress only when debug is enabled', async () => {
     await withTemporaryDirectory(async (baseDir) => {
         const repository = new TestVectorIndexRepository(
             Array.from({ length: 51 }, (_, index) =>
@@ -807,7 +790,7 @@ it('logs rebuild batch progress only when debug is enabled', async function () {
         )
         await service.stop()
     })
-})
+}, 120_000)
 
 it('restores the active worker when rebuild worker shutdown reports failure', async () => {
     await withTemporaryDirectory(async (baseDir) => {
