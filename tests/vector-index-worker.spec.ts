@@ -525,3 +525,46 @@ it('rejects pending requests when the worker cannot start', async () => {
         /Cannot find module|cannot find module/
     )
 })
+
+it('checkpoints open memory mutations without persisting postmaster.pid', async () => {
+    const formalPath = resolve(temporaryDirectory, 'memory-mirror')
+    const rebuildPath = resolve(temporaryDirectory, 'memory-mirror-rebuild')
+    const checkpointPath = resolve(
+        temporaryDirectory,
+        'memory-mirror-checkpoint'
+    )
+    const previousPath = resolve(temporaryDirectory, 'memory-mirror-previous')
+    const writer = new LivingMemoryVectorIndexWorkerClient(workerPath)
+    await writer.open(formalPath, previousPath)
+
+    try {
+        await writer.createRebuildFile(rebuildPath, createManifest())
+        await writer.appendRebuildBatch('preset-a', [
+            replace(createDocument('mirrored-memory'), [1, 0, 0])
+        ])
+        assert.equal(
+            (await readdir(rebuildPath)).includes('postmaster.pid'),
+            false
+        )
+
+        await cp(rebuildPath, checkpointPath, { recursive: true })
+        await writeFile(resolve(checkpointPath, 'postmaster.pid'), 'stale lock')
+        const reader = new LivingMemoryVectorIndexWorkerClient(workerPath)
+        try {
+            await reader.openCandidate(checkpointPath)
+            const vectors = await reader.readVectors('preset-a', [
+                'mirrored-memory'
+            ])
+            assert.deepEqual([...vectors.vectors[0].vector], [1, 0, 0])
+            assert.equal(
+                (await readdir(checkpointPath)).includes('postmaster.pid'),
+                false
+            )
+        } finally {
+            await reader.dispose()
+        }
+    } finally {
+        await writer.abortRebuild()
+        await writer.dispose()
+    }
+})
