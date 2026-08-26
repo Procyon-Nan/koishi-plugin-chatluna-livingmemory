@@ -1,0 +1,18 @@
+{
+    "$schema": "./node_modules/oxlint/configuration_schema.json",
+    "plugins": ["typescript"],
+    "categories": { "correctness": "error" },
+    "rules": {
+        "no-unused-vars": [
+            "error",
+            { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }
+        ],
+        "typescript/no-explicit-any": "off",
+        "typescript/triple-slash-reference": "off"
+    },
+    "options": {
+        "typeAware": true,
+        "typeCheck": true
+    },
+    "ignorePatterns": ["node_modules", "lib", "dist", "coverage"]
+}

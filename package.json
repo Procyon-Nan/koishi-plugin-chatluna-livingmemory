@@ -1,120 +1,114 @@
 {
-  "name": "koishi-plugin-chatluna-livingmemory",
-  "version": "0.15.7",
-  "contributors": [
-    "ProcyonNAN <3189960265@qq.com>"
-  ],
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/Procyon-Nan/koishi-plugin-chatluna-livingmemory.git"
-  },
-  "type": "module",
-  "description": "Let the AI record the time spent with you as a first-person narrative memory.",
-  "main": "lib/index.cjs",
-  "module": "lib/index.mjs",
-  "typings": "lib/index.d.ts",
-  "files": [
-    "lib",
-    "dist",
-    "client",
-    "resources",
-    "scripts/vector-index-native-smoke.mjs"
-  ],
-  "exports": {
-    ".": {
-      "types": "./lib/index.d.ts",
-      "import": "./lib/index.mjs",
-      "require": "./lib/index.cjs"
+    "name": "koishi-plugin-chatluna-livingmemory",
+    "version": "0.15.7",
+    "contributors": [
+        "ProcyonNAN <3189960265@qq.com>"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/Procyon-Nan/koishi-plugin-chatluna-livingmemory.git"
     },
-    "./package.json": "./package.json"
-  },
-  "license": "MIT",
-  "keywords": [
-    "chatluna",
-    "koishi",
-    "plugin",
-    "memory"
-  ],
-  "dependencies": {
-    "@electric-sql/pglite": "^0.5.4",
-    "@electric-sql/pglite-pgvector": "^0.0.5",
-    "@langchain/core": "^0.3.80",
-    "zod": "3.25.76"
-  },
-  "resolutions": {
-    "js-tiktoken": "npm:@dingyi222666/js-tiktoken@^1.0.21"
-  },
-  "overrides": {
-    "js-tiktoken": "npm:@dingyi222666/js-tiktoken@^1.0.21"
-  },
-  "pnpm": {
-    "overrides": {
-      "js-tiktoken": "npm:@dingyi222666/js-tiktoken@^1.0.21"
-    }
-  },
-  "devDependencies": {
-    "@koishijs/client": "^5.30.11",
-    "@koishijs/plugin-console": "^5.30.11",
-    "@koishijs/plugin-database-sqlite": "^4.7.0",
-    "@typescript-eslint/eslint-plugin": "^7.18.1-alpha.3",
-    "@typescript-eslint/parser": "^8.45.1-alpha.0",
-    "atsc": "^1.2.2",
-    "esbuild": "^0.25.10",
-    "esbuild-register": "^3.6.0",
-    "eslint": "^8.57.1",
-    "eslint-config-prettier": "^9.1.2",
-    "eslint-config-standard": "^17.1.0",
-    "eslint-plugin-import": "^2.32.0",
-    "eslint-plugin-n": "^16.6.2",
-    "eslint-plugin-prettier": "^5.5.4",
-    "eslint-plugin-promise": "^7.2.1",
-    "koishi": "^4.18.9",
-    "koishi-plugin-chatluna": "^1.4.0-alpha.37",
-    "mocha": "^9.2.2",
-    "typescript": "^5.9.3",
-    "yakumo": "^1.0.0",
-    "yakumo-esbuild": "^1.0.0",
-    "yakumo-mocha": "^1.0.0",
-    "yakumo-tsc": "^1.0.0"
-  },
-  "peerDependencies": {
-    "@koishijs/plugin-console": "^5.30.11",
-    "koishi": "^4.18.9",
-    "koishi-plugin-chatluna": "^1.4.0-alpha.37"
-  },
-  "engines": {
-    "node": ">=22.13.0"
-  },
-  "scripts": {
-    "build:server": "yakumo build",
-    "build:workers": "node scripts/build-workers.mjs",
-    "yakumo:after:build": "node --run build:workers",
-    "build:client": "koishi-console build",
-    "build": "node --run build:server && node --run build:client",
-    "vector-index:smoke": "node scripts/vector-index-native-smoke.mjs",
-    "test": "mocha --timeout 30000 -r esbuild-register --exit tests/**/*.spec.ts",
-    "bump": "yakumo version",
-    "dep": "yakumo upgrade",
-    "pub": "yakumo publish",
-    "lint": "eslint src client --ext=ts",
-    "lint-fix": "eslint src client --ext=ts --fix"
-  },
-  "koishi": {
-    "description": {
-      "zh": "让 AI 以第一人称的叙事记忆，记录下与你共度的时光。",
-      "en": "Let the AI record the time spent with you as a first-person narrative memory."
+    "type": "module",
+    "description": "Let the AI record the time spent with you as a first-person narrative memory.",
+    "main": "lib/index.cjs",
+    "module": "lib/index.mjs",
+    "typings": "lib/index.d.ts",
+    "files": [
+        "lib",
+        "dist",
+        "client",
+        "resources",
+        "scripts/vector-index-native-smoke.mjs"
+    ],
+    "exports": {
+        ".": {
+            "types": "./lib/index.d.ts",
+            "import": "./lib/index.mjs",
+            "require": "./lib/index.cjs"
+        },
+        "./package.json": "./package.json"
     },
-    "service": {
-      "required": [
+    "license": "MIT",
+    "keywords": [
         "chatluna",
-        "database"
-      ],
-      "optional": [
-        "console",
-        "chatluna_character"
-      ]
+        "koishi",
+        "plugin",
+        "memory"
+    ],
+    "dependencies": {
+        "@electric-sql/pglite": "^0.5.4",
+        "@electric-sql/pglite-pgvector": "^0.0.5",
+        "@langchain/core": "^0.3.80",
+        "zod": "3.25.76"
     },
-    "browser": true,
-    "icon": "mdi:brain"
-  }
+    "resolutions": {
+        "js-tiktoken": "npm:@dingyi222666/js-tiktoken@^1.0.21"
+    },
+    "overrides": {
+        "js-tiktoken": "npm:@dingyi222666/js-tiktoken@^1.0.21"
+    },
+    "pnpm": {
+        "overrides": {
+            "js-tiktoken": "npm:@dingyi222666/js-tiktoken@^1.0.21"
+        }
+    },
+    "devDependencies": {
+        "@koishijs/client": "^5.30.11",
+        "@koishijs/plugin-console": "^5.30.11",
+        "@koishijs/plugin-database-sqlite": "^4.7.0",
+        "atsc": "^1.2.2",
+        "esbuild": "^0.25.10",
+        "esbuild-register": "^3.6.0",
+        "koishi": "^4.18.9",
+        "koishi-plugin-chatluna": "^1.4.0-alpha.37",
+        "mocha": "^9.2.2",
+        "oxfmt": "^0.65.0",
+        "oxlint": "^1.80.0",
+        "oxlint-tsgolint": "^7.0.2001",
+        "typescript": "^5.9.3",
+        "yakumo": "^1.0.0",
+        "yakumo-esbuild": "^1.0.0",
+        "yakumo-mocha": "^1.0.0",
+        "yakumo-tsc": "^1.0.0"
+    },
+    "peerDependencies": {
+        "@koishijs/plugin-console": "^5.30.11",
+        "koishi": "^4.18.9",
+        "koishi-plugin-chatluna": "^1.4.0-alpha.37"
+    },
+    "engines": {
+        "node": ">=22.13.0"
+    },
+    "scripts": {
+        "build:server": "yakumo build",
+        "build:workers": "node scripts/build-workers.mjs",
+        "yakumo:after:build": "node --run build:workers",
+        "build:client": "koishi-console build",
+        "build": "node --run build:server && node --run build:client",
+        "vector-index:smoke": "node scripts/vector-index-native-smoke.mjs",
+        "test": "mocha --timeout 30000 -r esbuild-register --exit tests/**/*.spec.ts",
+        "bump": "yakumo version",
+        "dep": "yakumo upgrade",
+        "pub": "yakumo publish",
+        "lint": "oxlint",
+        "lint-fix": "oxlint --fix && oxfmt"
+    },
+    "koishi": {
+        "description": {
+            "zh": "让 AI 以第一人称的叙事记忆，记录下与你共度的时光。",
+            "en": "Let the AI record the time spent with you as a first-person narrative memory."
+        },
+        "service": {
+            "required": [
+                "chatluna",
+                "database"
+            ],
+            "optional": [
+                "console",
+                "chatluna_character"
+            ]
+        },
+        "browser": true,
+        "icon": "mdi:brain"
+    }
 }
