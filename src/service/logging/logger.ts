@@ -84,9 +84,6 @@ const normalizeValue = (
                     : normalizeValue(value.cause, 'cause', seen)
         }
     }
-    if (typeof value !== 'object') {
-        return '[unknown]'
-    }
     if (seen.has(value)) {
         return '[Circular]'
     }

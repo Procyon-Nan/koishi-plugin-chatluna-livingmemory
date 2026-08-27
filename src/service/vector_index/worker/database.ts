@@ -9,7 +9,6 @@ import type {
     MemoryVectorIndexState
 } from '../../../contracts/vector_index'
 import { summarizeError } from '../../shared/utils'
-import { MirroredPGliteFilesystem } from './mirrored_filesystem'
 import type {
     VectorIndexHybridQuery,
     VectorIndexInspection,
@@ -65,7 +64,6 @@ interface VectorIndexDatabaseOptions {
 }
 
 export class LivingMemoryVectorIndexDatabase {
-    private filesystem: MirroredPGliteFilesystem | null = null
     private database: PGlite | null = null
     private activeDatabaseDirectory: string | null = null
     private rebuildDatabaseDirectory: string | null = null
@@ -236,21 +234,13 @@ export class LivingMemoryVectorIndexDatabase {
             memoryIds
         )
     }
-    async applyMutation(mutation: VectorIndexMutation) {
-        const result = await applyVectorIndexMutation(
-            this.requireDatabase(),
-            mutation
-        )
-        await this.checkpoint()
-        return result
+
+    applyMutation(mutation: VectorIndexMutation) {
+        return applyVectorIndexMutation(this.requireDatabase(), mutation)
     }
-    async clearPreset(presetId: string) {
-        const result = await clearVectorIndexPreset(
-            this.requireDatabase(),
-            presetId
-        )
-        await this.checkpoint()
-        return result
+
+    clearPreset(presetId: string) {
+        return clearVectorIndexPreset(this.requireDatabase(), presetId)
     }
 
     readInventoryPage(
@@ -265,13 +255,9 @@ export class LivingMemoryVectorIndexDatabase {
             limit
         )
     }
-    async markPresetState(status: MemoryVectorIndexPresetStatus) {
-        const result = await markVectorIndexPresetState(
-            this.requireDatabase(),
-            status
-        )
-        await this.checkpoint()
-        return result
+
+    markPresetState(status: MemoryVectorIndexPresetStatus) {
+        return markVectorIndexPresetState(this.requireDatabase(), status)
     }
 
     async createRebuildFile(
@@ -288,7 +274,6 @@ export class LivingMemoryVectorIndexDatabase {
         try {
             this.database = await this.openConnection(databaseDirectory)
             await createVectorIndexSchema(this.database, manifest)
-            await this.checkpoint()
             this.rebuildDatabaseDirectory = databaseDirectory
             this.mode = 'rebuild'
             return this.inspect()
@@ -300,20 +285,13 @@ export class LivingMemoryVectorIndexDatabase {
             throw error
         }
     }
-    async appendRebuildBatch(
-        presetId: string,
-        upserts: VectorIndexReplaceUpsert[]
-    ) {
-        const result = await applyVectorIndexMutation(
-            this.requireRebuildDatabase(),
-            {
-                presetId,
-                upserts,
-                deletes: []
-            }
-        )
-        await this.checkpoint()
-        return result
+
+    appendRebuildBatch(presetId: string, upserts: VectorIndexReplaceUpsert[]) {
+        return applyVectorIndexMutation(this.requireRebuildDatabase(), {
+            presetId,
+            upserts,
+            deletes: []
+        })
     }
 
     async prepareRebuild(expectedCount: number) {
@@ -351,26 +329,15 @@ export class LivingMemoryVectorIndexDatabase {
         this.mode = null
     }
 
-    private async checkpoint() {
-        if (this.filesystem !== null) {
-            await this.filesystem.checkpoint()
-        }
-    }
-
     private async openConnection(directory: string) {
         mkdirSync(dirname(directory), { recursive: true })
-        const filesystem = new MirroredPGliteFilesystem(directory)
-        const database = await PGlite.create({
-            fs: filesystem,
+        const database = await PGlite.create(directory, {
             extensions: { vector }
         })
         try {
             await database.exec('CREATE EXTENSION IF NOT EXISTS vector')
-            this.filesystem = filesystem
-            await this.checkpoint()
             return database
         } catch (error) {
-            this.filesystem = null
             await database.close()
             throw error
         }
@@ -401,12 +368,7 @@ export class LivingMemoryVectorIndexDatabase {
         if (this.database !== null) {
             const database = this.database
             this.database = null
-            try {
-                await this.checkpoint()
-            } finally {
-                this.filesystem = null
-                await database.close()
-            }
+            await database.close()
         }
     }
 

@@ -4,6 +4,7 @@ import type {
     PresetSpeakerRecord,
     UserProfileRecord
 } from '../../contracts/memory'
+import type { PresetSpeakerTableRecord } from './types'
 import {
     normalizeMemoryImportance,
     normalizeMemoryStatus,
@@ -60,7 +61,7 @@ export const createPresetImportId = (
 }
 
 export const normalizePresetSpeakerRecord = (
-    record: PresetSpeakerRecord
+    record: PresetSpeakerTableRecord
 ): PresetSpeakerRecord => ({
     ...record,
     speakerKey: record.speakerKey.trim(),

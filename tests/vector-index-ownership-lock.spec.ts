@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { fork, type ChildProcess } from 'node:child_process'
-import { mkdtemp, rm, stat, utimes, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import { LivingMemoryVectorIndexError } from '../src/service/vector_index/errors'
@@ -24,14 +24,6 @@ const withTemporaryDirectory = async (
     } finally {
         await rm(directory, { recursive: true, force: true })
     }
-}
-
-const assertFileMissing = async (filePath: string) => {
-    await assert.rejects(stat(filePath), (error: unknown) => {
-        assert.ok(error instanceof Error)
-        assert.equal((error as NodeJS.ErrnoException).code, 'ENOENT')
-        return true
-    })
 }
 
 const waitForExit = (child: ChildProcess) => {
@@ -104,7 +96,7 @@ const assertLockConflict = async (
     })
 }
 
-it('removes the lockfile on release and rejects an active owner in the same process', async () => {
+it('keeps one empty anchor and rejects an active owner in the same process', async () => {
     await withTemporaryDirectory(async (baseDir) => {
         const lockPath = resolve(baseDir, 'vector-index.lock')
         const first = new LivingMemoryVectorIndexOwnershipLock(lockPath)
@@ -117,7 +109,8 @@ it('removes the lockfile on release and rejects an active owner in the same proc
             await first.release()
         }
 
-        await assertFileMissing(lockPath)
+        assert.ok((await stat(lockPath)).isFile())
+        assert.equal(await readFile(lockPath, 'utf8'), '')
         await second.acquire()
         await second.release()
     })
@@ -139,43 +132,6 @@ it('hands the lock to a replacement while the current owner is releasing', async
     })
 })
 
-it('serializes stale lock cleanup across replacement owners', async () => {
-    await withTemporaryDirectory(async (baseDir) => {
-        const lockPath = resolve(baseDir, 'vector-index.lock')
-        await writeFile(
-            lockPath,
-            JSON.stringify({ pid: 2_147_483_647, token: 'dead-owner' })
-        )
-
-        const contenders = Array.from(
-            { length: 8 },
-            () => new LivingMemoryVectorIndexOwnershipLock(lockPath)
-        )
-        const settled = await Promise.allSettled(
-            contenders.map((lock) => lock.acquire())
-        )
-
-        assert.equal(
-            settled.filter((result) => result.status === 'fulfilled').length,
-            1
-        )
-        assert.equal(
-            settled.filter((result) => result.status === 'rejected').length,
-            contenders.length - 1
-        )
-
-        for (const [index, result] of settled.entries()) {
-            if (result.status === 'fulfilled') {
-                await contenders[index].release()
-            } else {
-                assert.ok(result.reason instanceof LivingMemoryVectorIndexError)
-                assert.equal(result.reason.code, 'lock-conflict')
-            }
-        }
-        await assertFileMissing(lockPath)
-    })
-})
-
 it('migrates only recognizable legacy lock records', async () => {
     await withTemporaryDirectory(async (baseDir) => {
         const deadOwnerPath = resolve(baseDir, 'dead-owner.lock')
@@ -188,7 +144,7 @@ it('migrates only recognizable legacy lock records', async () => {
         )
         await deadOwnerLock.acquire()
         await deadOwnerLock.release()
-        await assertFileMissing(deadOwnerPath)
+        assert.equal(await readFile(deadOwnerPath, 'utf8'), '')
 
         const reusedPidPath = resolve(baseDir, 'reused-pid.lock')
         await writeFile(
@@ -201,18 +157,18 @@ it('migrates only recognizable legacy lock records', async () => {
         )
         await reusedPidLock.acquire()
         await reusedPidLock.release()
-        await assertFileMissing(reusedPidPath)
+        assert.equal(await readFile(reusedPidPath, 'utf8'), '')
 
         const invalidPath = resolve(baseDir, 'invalid.lock')
         await writeFile(invalidPath, 'not json')
         const invalidLock = new LivingMemoryVectorIndexOwnershipLock(
             invalidPath
         )
-        await assertLockConflict(invalidLock, /unrecognized vector index lock/u)
+        await assertLockConflict(invalidLock, /unrecognized legacy/u)
     })
 })
 
-it('releases the lockfile on normal and forced process exit', async () => {
+it('releases the operating-system lock on normal and forced process exit', async () => {
     await withTemporaryDirectory(async (baseDir) => {
         const lockPath = resolve(baseDir, 'vector-index.lock')
 
