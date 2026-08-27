@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rename, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import type {
@@ -192,9 +192,19 @@ const buildFormalIndex = async (options: {
         finalize: async (transferCleanupOwnership) => {
             await client.prepareRebuild(repository.sources.length)
             transferCleanupOwnership()
-            return await client.openCandidate(
-                resolve(directory, `vector-index.rebuild-${generation}`)
+            const activeDirectory = resolve(directory, 'vector-index')
+            const previousDirectory = resolve(
+                directory,
+                'vector-index.previous'
             )
+            await rename(activeDirectory, previousDirectory)
+            await rename(
+                resolve(directory, `vector-index.rebuild-${generation}`),
+                activeDirectory
+            )
+            const inspection = await client.openCandidate(activeDirectory)
+            await rm(previousDirectory, { recursive: true })
+            return inspection
         }
     })
 }

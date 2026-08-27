@@ -33,6 +33,7 @@ import {
     createVectorIndexSchema,
     hasVectorIndexSchema
 } from './schema'
+import { LivingMemoryVectorIndexOwnershipEndpoint } from './ownership_endpoint'
 
 interface ManifestRow {
     schemaVersion: number
@@ -72,6 +73,8 @@ export class LivingMemoryVectorIndexDatabase {
     private readonly removeDatabaseDirectory: (directory: string) => void
     private readonly reportWarning: (warning: Error) => void
     private readonly analyze: typeof analyzeVectorIndex
+    private readonly ownershipEndpoint =
+        new LivingMemoryVectorIndexOwnershipEndpoint()
 
     constructor(options: VectorIndexDatabaseOptions = {}) {
         this.removeDatabaseDirectory =
@@ -88,6 +91,23 @@ export class LivingMemoryVectorIndexDatabase {
         if (this.database !== null) {
             throw new Error('vector index database is already open')
         }
+        await this.ownershipEndpoint.acquire(databaseDirectory)
+        try {
+            return await this.openOwned(
+                databaseDirectory,
+                previousDatabaseDirectory
+            )
+        } catch (error) {
+            await this.closeConnection()
+            await this.ownershipEndpoint.release()
+            throw error
+        }
+    }
+
+    private async openOwned(
+        databaseDirectory: string,
+        previousDatabaseDirectory: string
+    ): Promise<VectorIndexInspection> {
         this.activeDatabaseDirectory = databaseDirectory
         if (
             !existsSync(databaseDirectory) &&
@@ -207,6 +227,7 @@ export class LivingMemoryVectorIndexDatabase {
         if (this.database !== null) {
             throw new Error('vector index database is already open')
         }
+        this.ownershipEndpoint.assertOwned()
         this.activeDatabaseDirectory = databaseDirectory
         try {
             this.database = await this.openConnection(databaseDirectory)
@@ -308,6 +329,11 @@ export class LivingMemoryVectorIndexDatabase {
         return { indexedCount }
     }
 
+    async closeDatabase() {
+        await this.closeConnection()
+        this.mode = null
+    }
+
     async abortRebuild(): Promise<VectorIndexInspection> {
         if (this.mode === 'active') {
             return this.inspect()
@@ -324,6 +350,7 @@ export class LivingMemoryVectorIndexDatabase {
 
     async dispose() {
         await this.closeConnection()
+        await this.ownershipEndpoint.release()
         this.activeDatabaseDirectory = null
         this.rebuildDatabaseDirectory = null
         this.mode = null

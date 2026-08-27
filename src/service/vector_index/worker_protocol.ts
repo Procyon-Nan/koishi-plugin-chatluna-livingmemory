@@ -1,8 +1,10 @@
 import type { MemoryEntryStatus, MemoryEntryType } from '../../contracts/memory'
 import type {
     MemoryVectorIndexManifest,
-    MemoryVectorIndexPresetStatus
+    MemoryVectorIndexPresetStatus,
+    MemoryVectorIndexState
 } from '../../contracts/vector_index'
+import type { LivingMemoryVectorIndexErrorCode } from './errors'
 
 export interface VectorIndexInspection {
     vectorExtensionVersion: string
@@ -157,6 +159,10 @@ export interface VectorIndexWorkerCommandMap {
         input: { expectedCount: number }
         result: { indexedCount: number }
     }
+    closeDatabase: {
+        input: Record<never, never>
+        result: { closed: true }
+    }
     abortRebuild: {
         input: Record<never, never>
         result: VectorIndexInspection
@@ -189,6 +195,8 @@ export interface VectorIndexWorkerError {
     name: string
     message: string
     stack: string | null
+    code: LivingMemoryVectorIndexErrorCode | null
+    state: MemoryVectorIndexState | null
 }
 
 export type VectorIndexWorkerResponse = {

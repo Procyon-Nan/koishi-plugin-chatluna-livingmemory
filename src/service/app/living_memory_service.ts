@@ -279,7 +279,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     }
 
     protected async stop() {
-        this.vectorIndex.prepareLockRelease()
+        this.vectorIndex.beginStop()
         try {
             await this.dreamWorker.stop()
         } finally {

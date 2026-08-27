@@ -4,6 +4,7 @@ import type {
     VectorIndexWorkerResponse
 } from '../worker_protocol'
 import type { LivingMemoryVectorIndexDatabase } from './database'
+import { LivingMemoryVectorIndexError } from '../errors'
 
 interface VectorIndexWorkerPort {
     on(
@@ -22,10 +23,24 @@ const serializeError = (error: unknown): VectorIndexWorkerError => {
         return {
             name: error.name,
             message: error.message,
-            stack: error.stack ?? null
+            stack: error.stack ?? null,
+            code:
+                error instanceof LivingMemoryVectorIndexError
+                    ? error.code
+                    : null,
+            state:
+                error instanceof LivingMemoryVectorIndexError
+                    ? error.state
+                    : null
         }
     }
-    return { name: 'Error', message: String(error), stack: null }
+    return {
+        name: 'Error',
+        message: String(error),
+        stack: null,
+        code: null,
+        state: null
+    }
 }
 
 const execute = async (
@@ -90,6 +105,10 @@ const execute = async (
                 break
             case 'prepareRebuild':
                 result = await database.prepareRebuild(command.expectedCount)
+                break
+            case 'closeDatabase':
+                await database.closeDatabase()
+                result = { closed: true }
                 break
             case 'abortRebuild':
                 result = await database.abortRebuild()

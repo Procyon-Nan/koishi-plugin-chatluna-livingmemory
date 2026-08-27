@@ -29,7 +29,7 @@ const createService = (options: {
             value: {
                 start: options.vectorStart,
                 stop: options.vectorStop,
-                prepareLockRelease: () => {}
+                beginStop: () => {}
             }
         },
         dreamWorker: {

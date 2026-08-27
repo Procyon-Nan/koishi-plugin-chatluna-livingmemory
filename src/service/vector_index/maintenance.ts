@@ -89,17 +89,13 @@ export class LivingMemoryVectorIndexMaintenance {
         )
     }
 
-    async initialize(
-        inspection: VectorIndexInspection | null,
-        openError: Error | null
-    ) {
+    async initialize(inspection: VectorIndexInspection) {
         const reuseLegacyEmbeddings =
             !(await this.options.repository.hasMigratedLegacyEmbeddings())
         const { embeddings, dimension } = await this.createEmbeddingContext()
         const rebuildReason = this.resolveRebuildReason(
             inspection,
-            dimension,
-            openError
+            dimension
         )
         if (rebuildReason !== null) {
             await this.runRebuildJob(
@@ -184,15 +180,11 @@ export class LivingMemoryVectorIndexMaintenance {
     }
 
     private resolveRebuildReason(
-        inspection: VectorIndexInspection | null,
-        dimension: number,
-        openError: Error | null
+        inspection: VectorIndexInspection,
+        dimension: number
     ) {
         const { config, schemaVersion } = this.options
-        if (openError !== null) {
-            return `database open failed: ${openError.message}`
-        }
-        if (inspection === null || inspection.manifest === null) {
+        if (inspection.manifest === null) {
             return 'index manifest is missing'
         }
         if (inspection.manifest.storageEngine !== VECTOR_STORAGE_ENGINE) {

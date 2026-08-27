@@ -188,7 +188,10 @@ it('runs typed vector index worker mutations and filtered searches', async () =>
     })
     const prepared = await client.prepareRebuild(4)
     assert.equal(prepared.indexedCount, 4)
-    const finalized = await client.openCandidate(rebuildPath)
+    await rename(formalPath, previousPath)
+    await rename(rebuildPath, formalPath)
+    const finalized = await client.openCandidate(formalPath)
+    await rm(previousPath, { recursive: true })
     assert.equal(finalized.indexedCount, 4)
 
     const factHits = await client.queryKnn(
@@ -307,9 +310,6 @@ it('runs typed vector index worker mutations and filtered searches', async () =>
 
     await client.dispose()
 
-    await rm(formalPath, { recursive: true, force: true })
-    await rename(rebuildPath, formalPath)
-
     const finalizedDatabase = await PGlite.create(formalPath, {
         extensions: { vector }
     })
@@ -351,7 +351,10 @@ it('rolls back a complete mutation batch when one upsert fails', async () => {
         replace(createDocument('stable-memory'), [1, 0, 0])
     ])
     await client.prepareRebuild(1)
-    await client.openCandidate(rebuildPath)
+    await rename(formalPath, previousPath)
+    await rename(rebuildPath, formalPath)
+    await client.openCandidate(formalPath)
+    await rm(previousPath, { recursive: true })
 
     await assert.rejects(
         client.applyMutation({
@@ -395,7 +398,10 @@ it('restores the formal index when a rebuild is aborted', async () => {
         replace(createDocument('retained-memory'), [1, 0, 0])
     ])
     await client.prepareRebuild(1)
-    await client.openCandidate(firstRebuildPath)
+    await rename(formalPath, previousPath)
+    await rename(firstRebuildPath, formalPath)
+    await client.openCandidate(formalPath)
+    await rm(previousPath, { recursive: true })
 
     await client.createRebuildFile(secondRebuildPath, {
         ...createManifest(),
@@ -480,7 +486,10 @@ it('analyzes the rebuild database before switching it into place', async () => {
         replace(createDocument('analyzed-before-switch'), [1, 0, 0])
     ])
     const prepared = await database.prepareRebuild(1)
-    const inspection = await database.openCandidate(rebuildPath)
+    await rename(formalPath, previousPath)
+    await rename(rebuildPath, formalPath)
+    const inspection = await database.openCandidate(formalPath)
+    await rm(previousPath, { recursive: true })
 
     assert.equal(analyzed, true)
     assert.equal(prepared.indexedCount, 1)

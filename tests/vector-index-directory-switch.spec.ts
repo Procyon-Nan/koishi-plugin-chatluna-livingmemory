@@ -22,7 +22,7 @@ const withTemporaryDirectory = async (
 }
 
 it.skipIf(process.platform !== 'win32')(
-    'switches a PGlite directory after its worker exits',
+    'switches a PGlite directory while its worker retains ownership',
     async () => {
         await withTemporaryDirectory(async (directory) => {
             const activePath = resolve(directory, 'vector-index.pglite')
@@ -47,15 +47,13 @@ it.skipIf(process.platform !== 'win32')(
                 builtAt: Date.now()
             })
             await worker.prepareRebuild(0)
-            await worker.dispose()
 
             const switcher = new VectorIndexDirectorySwitch()
             await switcher.activate(activePath, rebuildPath, previousPath)
 
-            const reopened = new LivingMemoryVectorIndexWorkerClient(workerPath)
-            const inspection = await reopened.openCandidate(activePath)
+            const inspection = await worker.openCandidate(activePath)
             assert.equal(inspection.manifest?.generation, 'windows-switch')
-            await reopened.dispose()
+            await worker.dispose()
         })
     }
 )
