@@ -20,7 +20,8 @@
                     <span class="profile-editor-kicker">编辑用户画像</span>
                     <h2>{{ profile?.speakerLabel ?? '用户画像' }}</h2>
                     <p v-if="profile != null">
-                        基于 {{ profile.sourceMemoryIds?.length ?? 0 }} 条记忆生成
+                        基于
+                        {{ profile.sourceMemoryIds?.length ?? 0 }} 条记忆生成
                         <span aria-hidden="true">·</span>
                         更新于 {{ formatTime(profile.updatedAt) }}
                     </p>
@@ -47,9 +48,7 @@
                 :autosize="{ minRows: 8, maxRows: 14 }"
                 placeholder="描述用户的性格、偏好、习惯与重要经历"
                 :aria-describedby="
-                    validationMessage
-                        ? 'profile-editor-error'
-                        : undefined
+                    validationMessage ? 'profile-editor-error' : undefined
                 "
             />
             <p

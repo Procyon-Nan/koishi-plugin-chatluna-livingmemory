@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict'
-import { Context } from 'koishi'
 import SQLiteDriver from '@koishijs/plugin-database-sqlite'
 import { LivingMemoryRepository } from '../src/service/persistence/repository'
+import { createTestContext } from './persistence-test-utils'
 
 it('persists a failed job as one terminal record with its original start time', async () => {
-    const ctx = new Context({ baseDir: process.cwd() })
+    const ctx = createTestContext()
     ctx.plugin(SQLiteDriver, { path: ':memory:' })
     const repository = new LivingMemoryRepository(ctx)
     repository.defineTables()

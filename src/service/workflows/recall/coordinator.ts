@@ -230,7 +230,9 @@ export class LivingMemoryRecallCoordinator {
                 query,
                 [trace.item],
                 logger,
-                { matched: matchedCount }
+                {
+                    matched: matchedCount
+                }
             )
         } catch (error) {
             await this.recordFailedRecall(

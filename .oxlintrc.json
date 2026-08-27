@@ -1,0 +1,34 @@
+{
+    "$schema": "./node_modules/oxlint/configuration_schema.json",
+    "plugins": ["typescript"],
+    "categories": { "correctness": "error" },
+    "rules": {
+        "no-unused-vars": [
+            "error",
+            { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }
+        ],
+        "typescript/no-explicit-any": "off",
+        "typescript/triple-slash-reference": "off"
+    },
+    "overrides": [
+        {
+            "files": ["tests/**/*.ts"],
+            "rules": {
+                "typescript/no-base-to-string": "off",
+                "typescript/unbound-method": "off"
+            }
+        },
+        {
+            "files": [
+                "src/service/vector_index/rebuild.ts",
+                "src/service/vector_index/reconcile.ts"
+            ],
+            "rules": { "no-constant-condition": "off" }
+        }
+    ],
+    "options": {
+        "typeAware": true,
+        "typeCheck": true
+    },
+    "ignorePatterns": ["node_modules", "lib", "dist", "coverage"]
+}

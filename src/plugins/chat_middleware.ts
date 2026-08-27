@@ -383,12 +383,16 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
             const sourceTranscript = toChatLunaTranscriptMessageResult(
                 scope,
                 sourceMessage,
-                { fallbackCreatedAt: completedAt }
+                {
+                    fallbackCreatedAt: completedAt
+                }
             )
             const responseTranscript = toChatLunaTranscriptMessageResult(
                 scope,
                 responseMessage,
-                { fallbackCreatedAt: completedAt }
+                {
+                    fallbackCreatedAt: completedAt
+                }
             )
 
             if (

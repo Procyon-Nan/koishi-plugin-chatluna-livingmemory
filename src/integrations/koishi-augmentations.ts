@@ -4,12 +4,14 @@ import type {
     LivingMemoryMigrationRecord,
     MemoryJobRecord,
     MemorySnapshotRecord,
-    PresetSpeakerRecord,
     UserProfileRecord
 } from '../contracts/memory'
 import type { LivingMemoryConsoleEvents } from '../contracts/rpc'
 import type { ChatLunaLivingMemoryService } from '../service/app/living_memory_service'
-import type { LivingMemoryEntryTableRecord } from '../service/persistence/types'
+import type {
+    LivingMemoryEntryTableRecord,
+    PresetSpeakerTableRecord
+} from '../service/persistence/types'
 
 declare module 'koishi' {
     interface Context {
@@ -22,7 +24,7 @@ declare module 'koishi' {
         living_memory_snapshot: MemorySnapshotRecord
         living_memory_job: MemoryJobRecord
         living_memory_user_profile: UserProfileRecord
-        living_memory_preset_speaker: PresetSpeakerRecord
+        living_memory_preset_speaker: PresetSpeakerTableRecord
     }
 }
 

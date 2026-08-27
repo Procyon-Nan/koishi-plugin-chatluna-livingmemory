@@ -13,7 +13,9 @@ export interface LivingMemoryTranscriptInput {
 }
 
 export type LivingMemoryTranscriptMessageInvalidReason =
-    'missing-created-at' | 'missing-speaker' | 'empty-content'
+    | 'missing-created-at'
+    | 'missing-speaker'
+    | 'empty-content'
 
 export interface LivingMemoryTranscriptMessageInvalidResult {
     message: null
@@ -31,7 +33,7 @@ export type LivingMemoryTranscriptMessageResult =
 
 const bracketSpeakerLinePattern = /^\[([^\]]+)\]\s*说\s*[:：]\s*(.*)$/u
 const bareSpeakerLinePattern =
-    /^([^\s:：\[\]，。！？,.!?]{1,64})\s*说\s*[:：]\s*(.*)$/u
+    /^([^\s:：[\]，。！？,.!?]{1,64})\s*说\s*[:：]\s*(.*)$/u
 
 const normalizeBracketSpeaker = (speaker: string) => {
     const parts = speaker

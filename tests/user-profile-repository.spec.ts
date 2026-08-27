@@ -79,8 +79,7 @@ it('reconciles nickname-based profiles into one stable user identity', async () 
         assert.equal(renamedProfiles[0].id, 'profile-newer')
         assert.equal(renamedProfiles[0].speakerLabel, '再次改名')
         assert.deepEqual(
-            (await repository.listPresetSpeakers('preset-1'))[0]
-                .speakerAliases,
+            (await repository.listPresetSpeakers('preset-1'))[0].speakerAliases,
             ['旧昵称', '新昵称', '当前昵称', '再次改名']
         )
 

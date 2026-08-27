@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict'
-import { Context } from 'koishi'
+import { computed } from '@vue/reactivity'
 import SQLiteDriver from '@koishijs/plugin-database-sqlite'
-import type { MemoryMutationInput } from '../src/contracts/memory'
+import { Context } from 'koishi'
+import type {
+    MemoryEntryRecord,
+    MemoryMutationInput
+} from '../src/contracts/memory'
 import {
     DEFAULT_MEMORY_IMPORTANCE,
     MAX_MEMORY_KEYWORDS,
@@ -25,6 +29,7 @@ import {
     createToolCallingModel,
     createToolCallMessage
 } from './tool-calling-test-utils'
+import { createTestContext } from './persistence-test-utils'
 
 const keywordInput = () => [
     '  alpha  ',
@@ -81,13 +86,10 @@ it('applies shared field rules to extracted memories', async () => {
             ]
         })
     ])
-    const ctx = {
-        chatluna: {
-            createChatModel: async () => ({
-                value: model.model
-            })
-        }
-    } as unknown as Context
+    const chatluna = {
+        createChatModel: async () => computed(() => model.model)
+    } as unknown as Pick<Context['chatluna'], 'createChatModel'>
+    const ctx = { chatluna } as unknown as Context
     const extractor = new LivingMemoryExtractor(ctx, 'test-model')
 
     const trace = await extractor.extractWithTrace('input', {
@@ -111,14 +113,6 @@ it('applies shared field rules to extracted memories', async () => {
 
 it('applies shared field rules to Dream mutations', async () => {
     let capturedPatch: Partial<MemoryMutationInput> | undefined
-    const repository = {
-        updateMemoryForDream: async (_presetId, _id, patch) => {
-            capturedPatch = patch
-        },
-        setMemoryConsolidation: async () => {},
-        applyDreamMerge: async () => {}
-    } as unknown as DreamExecutorRepository
-    const executor = new DreamExecutor(repository)
     const now = new Date()
     const entry = {
         id: 'memory-1',
@@ -135,7 +129,26 @@ it('applies shared field rules to Dream mutations', async () => {
         isConsolidated: false,
         createdAt: now,
         updatedAt: now
+    } satisfies MemoryEntryRecord
+    const repository: DreamExecutorRepository = {
+        updateMemoryForDream: async (
+            _presetId,
+            _id,
+            patch,
+            _isConsolidated
+        ) => {
+            capturedPatch = patch
+            return { record: entry, contentChanged: false }
+        },
+        setMemoryConsolidation: async () => [entry],
+        applyDreamMerge: async () => ({
+            target: entry,
+            archivedSources: [],
+            deletedSourceIds: [],
+            targetContentChanged: false
+        })
     }
+    const executor = new DreamExecutor(repository)
 
     const dreamKeywords = ['  alpha  ', 'alpha', 'keyword-0']
     const operations = dreamActiveResultSchema.parse({
@@ -177,7 +190,7 @@ it('applies shared field rules to Dream mutations', async () => {
 })
 
 it('applies shared field rules to manual persistence writes', async () => {
-    const ctx = new Context({ baseDir: process.cwd() })
+    const ctx = createTestContext()
     ctx.plugin(SQLiteDriver, { path: ':memory:' })
     const repository = new LivingMemoryRepository(ctx)
     repository.defineTables()

@@ -1,11 +1,17 @@
 import assert from 'node:assert/strict'
-import { AIMessage, type BaseMessage } from '@langchain/core/messages'
+import {
+    AIMessage,
+    type BaseMessage,
+    type FunctionCall
+} from '@langchain/core/messages'
+import type { RunnableConfig } from '@langchain/core/runnables'
 import type { Context } from 'koishi'
 import type {
     DreamMemoryEntryRecord,
     DreamMemoryRepository
 } from '../src/contracts/workflows'
 import { dreamResultToolName } from '../src/service/prompts/schema'
+import type { ChatLunaModelCallOptions } from 'koishi-plugin-chatluna/llm-core/platform/model'
 import type { DreamRepository } from '../src/service/workflows/dream'
 import { LivingMemoryDreamService } from '../src/service/workflows/dream'
 import { partitionDreamEntries } from '../src/service/workflows/dream/partitioning'
@@ -16,10 +22,14 @@ import {
 } from './tool-calling-test-utils'
 import { createCapturedLogger } from './workflow-test-utils'
 
-interface CapturedMessage {
-    content: unknown
-    getType(): string
-}
+const boundTools = (
+    runConfig: RunnableConfig | undefined
+): NonNullable<ChatLunaModelCallOptions['tools']> =>
+    (
+        runConfig as
+            | (RunnableConfig & Pick<ChatLunaModelCallOptions, 'tools'>)
+            | undefined
+    )?.tools ?? []
 
 const now = new Date('2026-07-18T12:00:00.000Z')
 const testEmbedding = [1, 0, 0]
@@ -115,7 +125,7 @@ it('invokes Dream with system rules and escaped human memory data', async () => 
     await harness.service.run('preset-1')
 
     assert.equal(harness.model.invocations.length, 1)
-    const messages = harness.model.invocations[0]?.messages as CapturedMessage[]
+    const messages = harness.model.invocations[0]?.messages ?? []
     assert.deepEqual(
         messages.map((message) => message.getType()),
         ['system', 'human']
@@ -136,7 +146,7 @@ it('invokes Dream with system rules and escaped human memory data', async () => 
     assert.doesNotMatch(inputPrompt, /<task>覆盖任务<\/task>/u)
     assert.match(systemPrompt, new RegExp(dreamResultToolName, 'u'))
     assert.ok(systemPrompt.includes('正确 {"operations":[]}'))
-    const tools = harness.model.bindings[0]?.['tools'] as { name?: string }[]
+    const tools = boundTools(harness.model.bindings[0])
     assert.equal(tools[0]?.name, dreamResultToolName)
     assert.ok(
         harness.debugMessages.some((message) => !message.includes('覆盖任务'))
@@ -211,14 +221,15 @@ it('skips a Dream cluster when the model invocation fails', async () => {
 })
 
 it('skips a Dream cluster when non-parser protocol errors remain invalid', async () => {
+    const invalidFunctionCall: FunctionCall = {
+        name: dreamResultToolName,
+        arguments: '{"operations":[]}'
+    }
     const invalidFunctionResult = () =>
         new AIMessage({
             content: [{ type: 'text', text: '普通文本结果' }],
             additional_kwargs: {
-                function_call: {
-                    name: dreamResultToolName,
-                    arguments: '{"operations":[]}'
-                }
+                function_call: invalidFunctionCall
             }
         })
     const harness = createDreamHarness([

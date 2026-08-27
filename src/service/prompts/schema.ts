@@ -144,11 +144,15 @@ export type DreamOperation =
     | (Omit<
           RequiredSchemaOutput<typeof dreamUpdateOperationSchema>,
           'memory'
-      > & { memory: DreamGeneratedMemory })
+      > & {
+          memory: DreamGeneratedMemory
+      })
     | (Omit<
           RequiredSchemaOutput<typeof dreamMergeOperationSchema>,
           'memory'
-      > & { memory: DreamGeneratedMemory })
+      > & {
+          memory: DreamGeneratedMemory
+      })
     | RequiredSchemaOutput<typeof dreamArchiveOperationSchema>
     | RequiredSchemaOutput<typeof dreamDeleteSourceOperationSchema>
 

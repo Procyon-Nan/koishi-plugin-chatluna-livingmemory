@@ -25,11 +25,11 @@ export function apply(ctx: Context, config: Config) {
     })
 
     ctx.inject(['chatluna_living_memory'], (ctx) => {
-        chatMiddlewarePlugin(ctx, config)
+        void chatMiddlewarePlugin(ctx, config)
         livingMemoryToolsPlugin(ctx, config)
 
         ctx.inject(['chatluna_character'], (ctx) => {
-            characterMiddlewarePlugin(ctx, config)
+            void characterMiddlewarePlugin(ctx, config)
         })
     })
 }

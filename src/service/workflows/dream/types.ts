@@ -17,7 +17,9 @@ export interface DreamOperationStats {
 }
 
 export type DreamConsolidationMode =
-    'manual' | 'incremental-batch' | 'incremental-seed'
+    | 'manual'
+    | 'incremental-batch'
+    | 'incremental-seed'
 
 export interface DreamExecutionResult extends DreamOperationStats {
     consolidatedMemoryIds: Set<string>

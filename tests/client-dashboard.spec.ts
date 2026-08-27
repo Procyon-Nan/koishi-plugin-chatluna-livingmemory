@@ -38,7 +38,10 @@ it('enables vector workflows only when the global and preset indexes are ready',
         isVectorWorkflowReady(vectorStatus('ready', 'building'), 'preset-1'),
         false
     )
-    assert.equal(isVectorWorkflowReady(vectorStatus('dirty'), 'preset-1'), false)
+    assert.equal(
+        isVectorWorkflowReady(vectorStatus('dirty'), 'preset-1'),
+        false
+    )
     assert.equal(
         isVectorWorkflowReady(vectorStatus('unavailable'), 'preset-1'),
         false
@@ -105,11 +108,10 @@ it('tracks selection state for bulk memory operations', () => {
     assert.equal(selection.isSelected('memory-1'), false)
 
     selection.selectAll(['memory-4', 'memory-5', 'memory-6'])
-    assert.deepEqual([...selection.selectedIds.value], [
-        'memory-4',
-        'memory-5',
-        'memory-6'
-    ])
+    assert.deepEqual(
+        [...selection.selectedIds.value],
+        ['memory-4', 'memory-5', 'memory-6']
+    )
     assert.equal(selection.isSelected('memory-2'), false)
 
     selection.clearSelection()
@@ -143,6 +145,7 @@ it('formats importance values and distinguishes snapshot strategies', () => {
                 finalText: 'result',
                 toolCallSummary: {
                     searchTexts: ['query'],
+                    searchKeywords: [],
                     memoryTypes: ['all'],
                     maxCandidates: 30
                 },
@@ -154,9 +157,11 @@ it('formats importance values and distinguishes snapshot strategies', () => {
                         summary: null,
                         importance: 0.8,
                         createdAt: new Date('2026-07-01T00:00:00.000Z'),
-                        updatedAt: new Date('2026-07-01T00:00:00.000Z')
+                        updatedAt: new Date('2026-07-01T00:00:00.000Z'),
+                        matchedSearchTexts: []
                     }
-                ]
+                ],
+                matchedSearchTexts: []
             }
         ],
         resolvedItems: []

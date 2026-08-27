@@ -4,14 +4,9 @@ import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import { VectorIndexDirectorySwitch } from '../src/service/vector_index/directory_switch'
 import { LivingMemoryVectorIndexWorkerClient } from '../src/service/vector_index/worker_client'
-import { ensureWorkersBuilt, vectorIndexWorkerPath } from './worker-test-utils'
+import { vectorIndexWorkerPath } from './worker-test-utils'
 
 const workerPath = vectorIndexWorkerPath
-
-before(async function () {
-    this.timeout(30_000)
-    await ensureWorkersBuilt()
-})
 
 const withTemporaryDirectory = async (
     callback: (directory: string) => Promise<void>
@@ -26,38 +21,44 @@ const withTemporaryDirectory = async (
     }
 }
 
-it('switches a PGlite directory after its worker exits', async function () {
-    if (process.platform !== 'win32') {
-        this.skip()
-    }
-    await withTemporaryDirectory(async (directory) => {
-        const activePath = resolve(directory, 'vector-index.pglite')
-        const rebuildPath = resolve(directory, 'vector-index.rebuild.pglite')
-        const previousPath = resolve(directory, 'vector-index.previous.pglite')
-        const worker = new LivingMemoryVectorIndexWorkerClient(workerPath)
+it.skipIf(process.platform !== 'win32')(
+    'switches a PGlite directory after its worker exits',
+    async () => {
+        await withTemporaryDirectory(async (directory) => {
+            const activePath = resolve(directory, 'vector-index.pglite')
+            const rebuildPath = resolve(
+                directory,
+                'vector-index.rebuild.pglite'
+            )
+            const previousPath = resolve(
+                directory,
+                'vector-index.previous.pglite'
+            )
+            const worker = new LivingMemoryVectorIndexWorkerClient(workerPath)
 
-        await worker.open(activePath, previousPath)
-        await worker.createRebuildFile(rebuildPath, {
-            schemaVersion: 3,
-            embeddingModelId: 'model-a',
-            dimension: 3,
-            storageEngine: 'pglite-pgvector',
-            vectorExtensionVersion: '0.8.1',
-            generation: 'windows-switch',
-            builtAt: Date.now()
+            await worker.open(activePath, previousPath)
+            await worker.createRebuildFile(rebuildPath, {
+                schemaVersion: 3,
+                embeddingModelId: 'model-a',
+                dimension: 3,
+                storageEngine: 'pglite-pgvector',
+                vectorExtensionVersion: '0.8.1',
+                generation: 'windows-switch',
+                builtAt: Date.now()
+            })
+            await worker.prepareRebuild(0)
+            await worker.dispose()
+
+            const switcher = new VectorIndexDirectorySwitch()
+            await switcher.activate(activePath, rebuildPath, previousPath)
+
+            const reopened = new LivingMemoryVectorIndexWorkerClient(workerPath)
+            const inspection = await reopened.openCandidate(activePath)
+            assert.equal(inspection.manifest?.generation, 'windows-switch')
+            await reopened.dispose()
         })
-        await worker.prepareRebuild(0)
-        await worker.dispose()
-
-        const switcher = new VectorIndexDirectorySwitch()
-        await switcher.activate(activePath, rebuildPath, previousPath)
-
-        const reopened = new LivingMemoryVectorIndexWorkerClient(workerPath)
-        const inspection = await reopened.openCandidate(activePath)
-        assert.equal(inspection.manifest?.generation, 'windows-switch')
-        await reopened.dispose()
-    })
-})
+    }
+)
 
 it('rolls back the active directory when candidate activation fails', async () => {
     await withTemporaryDirectory(async (directory) => {

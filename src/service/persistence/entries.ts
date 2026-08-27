@@ -236,7 +236,9 @@ export class LivingMemoryEntryRepository
         return this.ctx.database.eval(
             'living_memory_entry',
             (entry) => $.count(entry.id),
-            { presetId }
+            {
+                presetId
+            }
         )
     }
 
@@ -258,7 +260,10 @@ export class LivingMemoryEntryRepository
         return this.ctx.database.eval(
             'living_memory_entry',
             (entry) => $.count(entry.id),
-            { presetId, isConsolidated: false }
+            {
+                presetId,
+                isConsolidated: false
+            }
         )
     }
 

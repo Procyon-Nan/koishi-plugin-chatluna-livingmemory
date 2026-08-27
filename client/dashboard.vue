@@ -107,10 +107,7 @@
                     </div>
 
                     <div class="toolbar-actions">
-                        <el-button
-                            :loading="loading"
-                            @click="manualRefresh"
-                        >
+                        <el-button :loading="loading" @click="manualRefresh">
                             刷新
                         </el-button>
                         <el-button
@@ -130,9 +127,7 @@
                             :disabled="actionPending"
                             @command="onPresetAction"
                         >
-                            <el-button
-                                :loading="actionPending"
-                            >
+                            <el-button :loading="actionPending">
                                 操作
                                 <el-icon class="el-icon--right">
                                     <arrow-down />
@@ -156,7 +151,8 @@
                                         command="reconcile-vector-index"
                                         :disabled="
                                             !presetId ||
-                                            currentPresetVectorState === 'building'
+                                            currentPresetVectorState ===
+                                                'building'
                                         "
                                         divided
                                     >
@@ -164,7 +160,9 @@
                                     </el-dropdown-item>
                                     <el-dropdown-item
                                         command="rebuild-vector-index"
-                                        :disabled="globalVectorState === 'building'"
+                                        :disabled="
+                                            globalVectorState === 'building'
+                                        "
                                     >
                                         全量重建索引
                                     </el-dropdown-item>
@@ -304,14 +302,7 @@
 </template>
 
 <script setup lang="ts">
-import {
-    computed,
-    nextTick,
-    onBeforeUnmount,
-    onMounted,
-    ref,
-    watch
-} from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useColorMode } from '@koishijs/client'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
@@ -333,7 +324,12 @@ import type {
     MemoryVectorIndexStatus
 } from './types'
 
-type DashboardTab = 'memories' | 'profiles' | 'snapshots' | 'jobs' | 'search-test'
+type DashboardTab =
+    | 'memories'
+    | 'profiles'
+    | 'snapshots'
+    | 'jobs'
+    | 'search-test'
 
 interface RefreshableTab {
     refresh(resetPage?: boolean): Promise<boolean>
@@ -628,7 +624,8 @@ const doReconcileVectorIndex = () =>
 
 const doRebuildVectorIndex = () =>
     confirmAndRun({
-        confirmMessage: '确认全量重建向量索引？重建期间 Dream 与召回测试不可用。',
+        confirmMessage:
+            '确认全量重建向量索引？重建期间 Dream 与召回测试不可用。',
         confirmTitle: '全量重建索引',
         confirmButtonText: '确认重建',
         failurePrefix: '启动索引重建失败：',

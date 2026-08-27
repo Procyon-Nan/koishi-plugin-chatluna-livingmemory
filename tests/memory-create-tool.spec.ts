@@ -141,9 +141,7 @@ it('creates memories with the resolved ChatLuna scope and returns ids', async ()
     assert.equal(calls[0]?.scope.presetId, 'default')
     assert.equal(calls[0]?.scope.conversationId, 'conversation-1')
     assert.equal(calls[0]?.input.content, sampleMemory.content)
-    assert.deepEqual(output.createdMemories, [
-        { id: 'memory-1', type: 'fact' }
-    ])
+    assert.deepEqual(output.createdMemories, [{ id: 'memory-1', type: 'fact' }])
     assert.deepEqual(output.warnings, [])
 })
 
@@ -151,9 +149,12 @@ it('creates memories with the suffixed preset and group session key in Character
     const { calls, provider } = createRecordingProvider()
     const tool = new LivingMemoryCreateMemoryTool(provider, 10)
 
-    await tool.invoke({ memories: [sampleMemory] }, {
-        configurable: characterConfigurable
-    })
+    await tool.invoke(
+        { memories: [sampleMemory] },
+        {
+            configurable: characterConfigurable
+        }
+    )
 
     assert.equal(calls[0]?.scope.presetId, '史尔特里（Character）')
     assert.equal(calls[0]?.scope.conversationId, 'group:guild-1')
@@ -167,7 +168,8 @@ it('reports committed memories as saved with a warning when index synchronizatio
             invoked += 1
             if (invoked === 2) {
                 throw new LivingMemoryFactsCommittedError(
-                    'injected index failure', {}
+                    'injected index failure',
+                    {}
                 )
             }
             return provider.createMemory(scope, input)
@@ -203,9 +205,12 @@ it('propagates not-ready failures before any memory is committed', async () => {
     const tool = new LivingMemoryCreateMemoryTool(failingProvider, 10)
 
     await assert.rejects(
-        tool.invoke({ memories: [sampleMemory] }, {
-            configurable: chatlunaConfigurable
-        }),
+        tool.invoke(
+            { memories: [sampleMemory] },
+            {
+                configurable: chatlunaConfigurable
+            }
+        ),
         (error: unknown) => {
             assert.ok(error instanceof LivingMemoryVectorIndexError)
             assert.equal(error, notReady)

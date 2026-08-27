@@ -41,6 +41,7 @@ it('completes embedding-rerank recall without persisting a successful job', asyn
         { resolve: async () => createRecallQueryResult() },
         {
             retrieve: async (_presetId, _input, _limit, runLogger) => {
+                assert.ok(runLogger)
                 runLogger.diagnostic('test.retriever.context')
                 return [
                     {
@@ -192,11 +193,12 @@ it('completes agentic recall without persisting a successful job', async () => {
     await coordinator.queue(scope, currentMessage, async () => [])
     await waitFor(() => snapshots.length === 1, 'agentic recall snapshot')
 
-    assert.equal(jobStore.jobs.length, 0)
-    assert.equal(
-        (snapshots[0]?.[0] as { finalText: string }).finalText,
-        'remembered context'
-    )
+    const snapshot = snapshots[0]
+    assert.ok(snapshot)
+    const item = snapshot[0]
+    assert.ok(item)
+    assert.ok('finalText' in item)
+    assert.equal(item.finalText, 'remembered context')
 })
 
 it('keeps the previous snapshot without persisting a job for <NO_MEMORY>', async () => {
@@ -234,7 +236,7 @@ it('keeps the previous snapshot without persisting a job for <NO_MEMORY>', async
 
 it('serializes recall runs for the same scope without persisted running state', async () => {
     const jobStore = createJobStore()
-    let resolveQuery!: (result: RecallQueryResult) => void
+    let resolveQuery: ((result: RecallQueryResult) => void) | undefined
     let queryCalls = 0
     const captured = createCapturedLogger()
     const queryResult = new Promise<RecallQueryResult>((resolve) => {
@@ -262,6 +264,7 @@ it('serializes recall runs for the same scope without persisted running state', 
     await coordinator.queue(scope, currentMessage, async () => [])
     assert.equal(queryCalls, 1)
 
+    assert.ok(resolveQuery)
     resolveQuery(createRecallQueryResult())
     await waitFor(
         () =>

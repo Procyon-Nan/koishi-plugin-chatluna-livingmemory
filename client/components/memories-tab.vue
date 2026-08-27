@@ -142,9 +142,7 @@
                                 <div class="memory-card-title-block">
                                     <div class="memory-card-kicker">
                                         <el-checkbox
-                                            :model-value="
-                                                isSelected(memory.id)
-                                            "
+                                            :model-value="isSelected(memory.id)"
                                             class="memory-card-checkbox"
                                             @change="toggleSelected(memory.id)"
                                         />
@@ -479,10 +477,9 @@ const removeSelectedMemories = async () => {
 
     batchDeleting.value = true
     try {
-        const { deleted } = await api.deleteMemories(
-            props.presetId,
-            [...selectedIds.value]
-        )
+        const { deleted } = await api.deleteMemories(props.presetId, [
+            ...selectedIds.value
+        ])
         ElMessage.success(`已删除 ${deleted} 条记忆`)
         clearSelection()
         await refresh()

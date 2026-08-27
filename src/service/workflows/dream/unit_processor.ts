@@ -58,8 +58,8 @@ export class DreamUnitProcessor {
         })
         let structuredResult
         let schema:
-            typeof dreamActiveResultSchema | typeof dreamArchivedResultSchema =
-            dreamActiveResultSchema
+            | typeof dreamActiveResultSchema
+            | typeof dreamArchivedResultSchema = dreamActiveResultSchema
         if (input.stage === 'archived') {
             schema = dreamArchivedResultSchema
         }

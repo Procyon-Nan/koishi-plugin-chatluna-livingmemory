@@ -125,10 +125,10 @@ it('fails when an index hit no longer exists in the memory repository', async ()
 })
 
 it('retrieves indexed candidates and reranks only the bounded result set', async () => {
-    let semanticQuery: MemorySemanticSearchInput | null = null
+    const semanticQueries: MemorySemanticSearchInput[] = []
     const vectorSearch = createVectorSearch({
         searchSemantic: async (input: MemorySemanticSearchInput) => {
-            semanticQuery = input
+            semanticQueries.push(input)
             return [
                 { memoryId: 'memory-a', cosineScore: 0.9 },
                 { memoryId: 'memory-b', cosineScore: 0.8 }
@@ -147,7 +147,7 @@ it('retrieves indexed candidates and reranks only the bounded result set', async
     } as unknown as Context
     const retriever = new LivingMemoryRetriever(
         context,
-        { debug: false, rerankModel: 'test/reranker' },
+        { rerankModel: 'test/reranker' },
         createRepository([createEntry('memory-a'), createEntry('memory-b')]),
         vectorSearch,
         logger
@@ -155,7 +155,7 @@ it('retrieves indexed candidates and reranks only the bounded result set', async
 
     const results = await retriever.retrieve('preset-a', 'query', 2)
 
-    assert.equal(semanticQuery?.maxCandidates, 6)
+    assert.equal(semanticQueries[0]?.maxCandidates, 6)
     assert.deepEqual(results, [
         { id: 'memory-b', content: 'content-memory-b', score: 0.95 }
     ])
@@ -172,7 +172,7 @@ it('propagates vector index failures without returning an empty recall', async (
     } as unknown as Context
     const retriever = new LivingMemoryRetriever(
         context,
-        { debug: false, rerankModel: '' },
+        { rerankModel: '' },
         createRepository([]),
         vectorSearch,
         logger

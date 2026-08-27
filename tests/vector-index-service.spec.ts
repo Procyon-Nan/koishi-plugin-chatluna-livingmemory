@@ -9,7 +9,7 @@ import {
 } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
-import type { Context, Logger } from 'koishi'
+import type { Logger } from 'koishi'
 import { LivingMemoryLogger } from '../src/service/logging/logger'
 import type {
     MemoryJobKind,
@@ -26,21 +26,10 @@ import {
     type VectorIndexWorkerFactory
 } from '../src/service/vector_index/service'
 import { LivingMemoryVectorIndexWorkerClient } from '../src/service/vector_index/worker_client'
-import { ensureWorkersBuilt, vectorIndexWorkerPath } from './worker-test-utils'
+import { vectorIndexWorkerPath } from './worker-test-utils'
+import { createTestContext } from './persistence-test-utils'
 
 const workerPath = vectorIndexWorkerPath
-
-beforeEach(function () {
-    this.timeout(30_000)
-})
-
-afterEach(function () {
-    this.timeout(30_000)
-})
-
-before(async () => {
-    await ensureWorkersBuilt()
-})
 
 const createSource = (
     id: string,
@@ -194,11 +183,15 @@ const createEmbeddings = (
 
 const createLogger = () => {
     const info: string[] = []
-    const warnings: unknown[][] = []
-    const logger = {
-        info: (message: unknown) => info.push(String(message)),
-        warn: (...args: unknown[]) => warnings.push(args)
-    } as unknown as Logger
+    const warnings: Parameters<Logger['warn']>[] = []
+    const logger: Pick<Logger, 'info' | 'warn'> = {
+        info: (message) => {
+            info.push(String(message))
+        },
+        warn: (...args) => {
+            warnings.push(args)
+        }
+    }
     return { logger, info, warnings }
 }
 
@@ -208,7 +201,7 @@ const createService = (options: {
     modelId: string
     dimension: number
     debug?: boolean
-    logger?: Logger
+    logger?: Pick<Logger, 'info' | 'warn'>
     calls?: string[][]
     schemaVersion?: number
     workerPath?: string
@@ -221,15 +214,13 @@ const createService = (options: {
         calls,
         options.onDocuments
     )
-    const ctx = {
-        baseDir: options.baseDir,
-        chatluna: {
-            createEmbeddings: async (modelId: string) => {
-                assert.equal(modelId, options.modelId)
-                return { value: embeddings }
-            }
+    const ctx = createTestContext(options.baseDir)
+    ctx.set('chatluna', {
+        createEmbeddings: async (modelId: string) => {
+            assert.equal(modelId, options.modelId)
+            return { value: embeddings }
         }
-    } as unknown as Context
+    } as never)
     const logger = options.logger ?? createLogger().logger
     return new LivingMemoryVectorIndexService(
         ctx,
@@ -240,10 +231,10 @@ const createService = (options: {
         options.repository,
         new LivingMemoryLogger(
             {
-                info: (message: unknown) => logger.info(message),
-                warn: (...args: unknown[]) => logger.warn(...args),
-                error: (...args: unknown[]) => logger.warn(...args)
-            } as never,
+                info: logger.info,
+                warn: logger.warn,
+                error: logger.warn
+            },
             () => options.debug ?? false
         ),
         {
@@ -374,7 +365,7 @@ it('builds the index once and reuses its manifest after restart', async () => {
         assert.equal(secondCalls.length, 1)
         await second.stop()
     })
-})
+}, 60_000)
 
 it('removes legacy SQLite index files after initialization succeeds', async () => {
     await withTemporaryDirectory(async (baseDir) => {
@@ -519,7 +510,7 @@ it('starts a full rebuild without blocking the caller', async () => {
         assert.match(repository.jobs.at(-1)?.input ?? '', /manual rebuild/u)
         await service.stop()
     })
-})
+}, 120_000)
 
 it('rolls back to the previous index when the candidate worker cannot open', async () => {
     await withTemporaryDirectory(async (baseDir) => {
@@ -591,7 +582,7 @@ it('rolls back to the previous index when the candidate worker cannot open', asy
         )
         await recovered.stop()
     })
-})
+}, 120_000)
 
 it('rebuilds when the model, dimension, or schema version changes', async () => {
     await withTemporaryDirectory(async (baseDir) => {
@@ -632,7 +623,7 @@ it('rebuilds when the model, dimension, or schema version changes', async () => 
 
         assert.equal(new Set(generations).size, configurations.length)
     })
-})
+}, 180_000)
 
 it('replaces a corrupt formal database through the rebuild path', async () => {
     await withTemporaryDirectory(async (baseDir) => {
@@ -695,11 +686,11 @@ it('keeps index jobs running until work completes and records failures', async (
         const repository = new TestVectorIndexRepository([
             createSource('memory-a')
         ])
-        let releaseDocuments = () => {}
+        let releaseDocuments: (() => void) | undefined
         const documentsReleased = new Promise<void>((resolvePromise) => {
             releaseDocuments = resolvePromise
         })
-        let signalDocumentsStarted = () => {}
+        let signalDocumentsStarted: (() => void) | undefined
         const documentsStarted = new Promise<void>((resolvePromise) => {
             signalDocumentsStarted = resolvePromise
         })
@@ -712,6 +703,7 @@ it('keeps index jobs running until work completes and records failures', async (
                 if (texts[0].includes('dimension probe')) {
                     return
                 }
+                assert.ok(signalDocumentsStarted)
                 signalDocumentsStarted()
                 await documentsReleased
             }
@@ -720,6 +712,7 @@ it('keeps index jobs running until work completes and records failures', async (
         await service.start()
         await documentsStarted
         assert.equal(repository.jobs[0].status, 'running')
+        assert.ok(releaseDocuments)
         releaseDocuments()
         await service.waitForInitialization()
         assert.equal(repository.jobs[0].status, 'completed')
@@ -753,7 +746,7 @@ it('keeps index jobs running until work completes and records failures', async (
         assert.equal(captured.warnings.length, 1)
         await service.stop()
     })
-})
+}, 120_000)
 
 it('logs rebuild batch progress only when debug is enabled', async () => {
     await withTemporaryDirectory(async (baseDir) => {
@@ -797,7 +790,7 @@ it('logs rebuild batch progress only when debug is enabled', async () => {
         )
         await service.stop()
     })
-})
+}, 120_000)
 
 it('restores the active worker when rebuild worker shutdown reports failure', async () => {
     await withTemporaryDirectory(async (baseDir) => {

@@ -202,7 +202,9 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                     const sections =
                         await ctx.chatluna_living_memory.hydratePromptSections(
                             scope,
-                            { speakerKeys }
+                            {
+                                speakerKeys
+                            }
                         )
                     const rendered = formatPromptVariable(sections)
 

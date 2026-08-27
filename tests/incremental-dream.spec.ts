@@ -222,8 +222,7 @@ const createHarness = (
         },
         repository,
         repository as DreamMemoryRepository,
-        neighborSearch,
-        () => {}
+        neighborSearch
     )
     return { model, neighborCalls, neighborSearch, repository, service }
 }

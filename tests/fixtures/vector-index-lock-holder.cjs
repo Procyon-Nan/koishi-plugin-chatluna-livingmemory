@@ -1,6 +1,6 @@
-const { LivingMemoryVectorIndexOwnershipLock } = require(
-    '../../src/service/vector_index/ownership_lock.ts'
-)
+const {
+    LivingMemoryVectorIndexOwnershipLock
+} = require('../../src/service/vector_index/ownership_lock.ts')
 
 const [lockPath, mode] = process.argv.slice(2)
 

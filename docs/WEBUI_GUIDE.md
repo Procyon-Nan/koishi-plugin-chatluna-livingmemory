@@ -42,22 +42,22 @@ tsconfig.json         # include: ["src"]，不包含 client
 
 ```json
 {
-  "koishi": {
-    "browser": true,
-    "service": {
-      "optional": ["console"]
+    "koishi": {
+        "browser": true,
+        "service": {
+            "optional": ["console"]
+        }
+    },
+    "files": ["lib", "dist", "client"],
+    "scripts": {
+        "build:client": "koishi-console build"
+    },
+    "devDependencies": {
+        "@koishijs/client": "^5.30.11"
+    },
+    "peerDependencies": {
+        "@koishijs/plugin-console": "^5.30.11"
     }
-  },
-  "files": ["lib", "dist", "client"],
-  "scripts": {
-    "build:client": "koishi-console build"
-  },
-  "devDependencies": {
-    "@koishijs/client": "^5.30.11"
-  },
-  "peerDependencies": {
-    "@koishijs/plugin-console": "^5.30.11"
-  }
 }
 ```
 
@@ -71,13 +71,14 @@ Koishi console 的 `serveAssets` 方法在提供客户端 bundle 时有安全检
 
 ```js
 // @koishijs/plugin-console 内部逻辑
-filename = resolve(this.root, filename);
+filename = resolve(this.root, filename)
 if (!filename.startsWith(this.root) && !filename.includes('node_modules')) {
-    return ctx.status = 403;  // 静默拒绝，无任何日志
+    return (ctx.status = 403) // 静默拒绝，无任何日志
 }
 ```
 
 这意味着：
+
 - 安装在 `node_modules/` 下的插件：路径包含 `node_modules`，**通过**
 - 通过 symlink 从 `external/` 等目录加载的插件：`resolve()` 解析出真实路径，不含 `node_modules`，**被 403 拦截**
 
@@ -89,7 +90,13 @@ const packageName = 'koishi-plugin-chatluna-livingmemory'
 function resolveEntryViaNodeModules(ctx: Context) {
     const baseDir = ctx.loader?.baseDir ?? process.cwd()
     return {
-        dev: resolve(baseDir, 'node_modules', packageName, 'client', 'index.ts'),
+        dev: resolve(
+            baseDir,
+            'node_modules',
+            packageName,
+            'client',
+            'index.ts'
+        ),
         prod: resolve(baseDir, 'node_modules', packageName, 'dist')
     }
 }
@@ -124,14 +131,14 @@ ctx.inject(['console'], (ctx) => {
 
 ```ts
 import { Context } from '@koishijs/client'
-import type {} from './types'  // 副作用导入，拉入 Events 声明
+import type {} from './types' // 副作用导入，拉入 Events 声明
 import Dashboard from './dashboard.vue'
 
 export default (ctx: Context) => {
     ctx.page({
         name: '页面名称',
         path: '/route-path',
-        icon: 'mdi:brain',       // Material Design Icons
+        icon: 'mdi:brain', // Material Design Icons
         component: Dashboard,
         order: 500,
         authority: 3
@@ -177,7 +184,7 @@ declare module '@koishijs/client' {
 
 ```ts
 ctx.console.addListener('my-plugin/list', async (query) => {
-    return await myService.list(query)  // 返回值自动通过 WebSocket 发回客户端
+    return await myService.list(query) // 返回值自动通过 WebSocket 发回客户端
 })
 ```
 
@@ -205,25 +212,26 @@ yarn build:client   # koishi-console build → dist/index.js + dist/style.css
 
 - `lib/index.mjs`（ESM bundle）中 **`__dirname` 不存在**
 - 如需在 ESM 中获取当前目录，使用：
-  ```ts
-  import { dirname } from 'path'
-  import { fileURLToPath } from 'url'
-  const currentDir = typeof __dirname !== 'undefined'
-      ? __dirname
-      : dirname(fileURLToPath(import.meta.url))
-  ```
+    ```ts
+    import { dirname } from 'path'
+    import { fileURLToPath } from 'url'
+    const currentDir =
+        typeof __dirname !== 'undefined'
+            ? __dirname
+            : dirname(fileURLToPath(import.meta.url))
+    ```
 - 但对于 `addEntry` 路径，推荐直接用 `node_modules` 路径（见上文第 2 节），可以绕过 `__dirname` 问题
 
 ## 调试排查清单
 
 当侧边栏不出现时，按以下顺序排查：
 
-| 步骤 | 检查项 | 工具 |
-|------|--------|------|
-| 1 | `apply()` 是否执行 | 服务端日志 `ctx.logger.info()` |
-| 2 | `ctx.console` 是否存在 | 日志打印 `ctx.console ? 'YES' : 'NO'` |
-| 3 | `addEntry` 是否被调用 | 日志打印路径 |
-| 4 | 浏览器是否请求了 bundle | DevTools → Network 搜索插件名 |
-| 5 | bundle 请求状态码 | 200 正常 / 403 路径安全检查拦截 / 404 文件不存在 |
-| 6 | Vue Router 是否注册路由 | DevTools → Console 搜索 `Vue Router warn` |
-| 7 | dist/index.js 内容是否正确 | 检查 `export{...as default}` 和 `ctx.page` 关键词 |
+| 步骤 | 检查项                     | 工具                                              |
+| ---- | -------------------------- | ------------------------------------------------- |
+| 1    | `apply()` 是否执行         | 服务端日志 `ctx.logger.info()`                    |
+| 2    | `ctx.console` 是否存在     | 日志打印 `ctx.console ? 'YES' : 'NO'`             |
+| 3    | `addEntry` 是否被调用      | 日志打印路径                                      |
+| 4    | 浏览器是否请求了 bundle    | DevTools → Network 搜索插件名                     |
+| 5    | bundle 请求状态码          | 200 正常 / 403 路径安全检查拦截 / 404 文件不存在  |
+| 6    | Vue Router 是否注册路由    | DevTools → Console 搜索 `Vue Router warn`         |
+| 7    | dist/index.js 内容是否正确 | 检查 `export{...as default}` 和 `ctx.page` 关键词 |

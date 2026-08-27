@@ -2,7 +2,8 @@ import { Logger } from 'koishi'
 
 export type LivingMemoryLogFields = Record<string, unknown>
 export type LivingMemoryLogFieldsInput =
-    LivingMemoryLogFields | (() => LivingMemoryLogFields)
+    | LivingMemoryLogFields
+    | (() => LivingMemoryLogFields)
 
 export interface LivingMemoryLogBlock {
     title: string
@@ -12,7 +13,8 @@ export interface LivingMemoryLogBlock {
 }
 
 export type LivingMemoryLogBlocksInput =
-    LivingMemoryLogBlock[] | (() => LivingMemoryLogBlock[])
+    | LivingMemoryLogBlock[]
+    | (() => LivingMemoryLogBlock[])
 
 type LivingMemoryLogSink = Pick<Logger, 'info' | 'warn' | 'error'>
 type LivingMemoryLogLevel = keyof LivingMemoryLogSink
@@ -40,7 +42,7 @@ const preferredFieldOrder = [
 
 const credentialKeyPattern =
     /(?:authorization|api[-_]?key|access[-_]?token|refresh[-_]?token|(?:^|[-_])token(?:$|[-_])|password|secret)/iu
-const bareValuePattern = /^[\p{L}\p{N}._:/@*+\-]+$/u
+const bareValuePattern = /^[\p{L}\p{N}._:/@*+-]+$/u
 
 const toError = (error: unknown) =>
     error instanceof Error ? error : new Error(String(error))
@@ -81,9 +83,6 @@ const normalizeValue = (
                     ? undefined
                     : normalizeValue(value.cause, 'cause', seen)
         }
-    }
-    if (typeof value !== 'object') {
-        return String(value)
     }
     if (seen.has(value)) {
         return '[Circular]'
@@ -157,10 +156,7 @@ const formatBlock = (block: LivingMemoryLogBlock) => {
         .map((key) => `${key}=${formatValue(fields[key], key)}`)
         .join(' ')
     const heading = detail.length > 0 ? `${title} ${detail}` : title
-    return `--- ${heading} ---\n${formatBlockValue(
-        block.value,
-        block.key ?? ''
-    )}`
+    return `--- ${heading} ---\n${formatBlockValue(block.value, block.key ?? '')}`
 }
 
 const emitCompleteMessage = (sink: LivingMemoryLogSink, emit: () => void) => {
