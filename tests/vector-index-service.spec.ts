@@ -541,11 +541,16 @@ it('rolls back to the previous index when the candidate worker cannot open', asy
                     workerPath,
                     onFailure
                 )
-                if (created === 2) {
+                if (created === 1) {
                     const openCandidate = worker.openCandidate.bind(worker)
+                    let failedOnce = false
                     worker.openCandidate = async (directory) => {
-                        await openCandidate(directory)
-                        throw candidateError
+                        const inspection = await openCandidate(directory)
+                        if (!failedOnce) {
+                            failedOnce = true
+                            throw candidateError
+                        }
+                        return inspection
                     }
                 }
                 return worker
@@ -563,7 +568,8 @@ it('rolls back to the previous index when the candidate worker cannot open', asy
         const indexFiles = await readdir(resolveIndexDirectory(baseDir))
         assert.equal(
             indexFiles.some((file) => file.startsWith('vector-index.rebuild-')),
-            false
+            false,
+            indexFiles.join(', ')
         )
         assert.equal(indexFiles.includes('vector-index.previous.pglite'), false)
 
@@ -658,7 +664,7 @@ it('replaces a corrupt formal database through the rebuild path', async () => {
     })
 })
 
-it('reports worker startup failure as unavailable', async () => {
+it('fails startup when the worker cannot start', async () => {
     await withTemporaryDirectory(async (baseDir) => {
         const repository = new TestVectorIndexRepository([])
         const captured = createLogger()
@@ -671,12 +677,10 @@ it('reports worker startup failure as unavailable', async () => {
             logger: captured.logger
         })
 
-        await service.start()
-        await service.waitForInitialization()
+        await assert.rejects(service.start(), /missing-worker\.mjs/u)
         const status = service.getStatus()
         assert.equal(status.state, 'unavailable')
         assert.match(status.lastError ?? '', /worker/u)
-        assert.equal(captured.warnings.length, 1)
         await service.stop()
     })
 })
@@ -792,11 +796,10 @@ it('logs rebuild batch progress only when debug is enabled', async () => {
     })
 }, 120_000)
 
-it('restores the active worker when rebuild worker shutdown reports failure', async () => {
+it('reuses one worker while finalizing a rebuild', async () => {
     await withTemporaryDirectory(async (baseDir) => {
         const repository = new TestVectorIndexRepository([])
         const captured = createLogger()
-        const disposeError = new Error('injected worker disposal failure')
         let created = 0
         const service = createService({
             baseDir,
@@ -810,29 +813,15 @@ it('restores the active worker when rebuild worker shutdown reports failure', as
                     workerPath,
                     onFailure
                 )
-                const dispose = worker.dispose.bind(worker)
-                worker.dispose = async () => {
-                    await dispose()
-                    if (created === 1) {
-                        throw disposeError
-                    }
-                }
                 return worker
             }
         })
 
         await service.start()
         await service.waitForInitialization()
-        assert.equal(captured.warnings.length, 1)
-        assert.match(
-            String(captured.warnings[0][0]),
-            /event=vector-index.unavailable workflow=vector-index state=unavailable/u
-        )
-        assert.match(
-            String((captured.warnings[0][1] as Error).message),
-            /injected worker disposal failure/u
-        )
+        assert.equal(created, 1)
+        assert.equal(captured.warnings.length, 0)
         await service.stop()
-        assert.equal(captured.warnings.length, 1)
+        assert.equal(captured.warnings.length, 0)
     })
 })

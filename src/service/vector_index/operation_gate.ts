@@ -11,7 +11,18 @@ const createDeferred = () => {
 export class VectorIndexOperationGate {
     private mutationBarrier = Promise.resolve()
     private exclusiveTail = Promise.resolve()
+    private accepting = true
+    private readonly activeOperations = new Set<Promise<unknown>>()
     private readonly activeMutations = new Set<Promise<unknown>>()
+
+    get stopping() {
+        return !this.accepting
+    }
+
+    run<T>(task: () => Promise<T>) {
+        this.assertAccepting()
+        return this.track(task())
+    }
 
     runMutation<T>(task: () => Promise<T>) {
         const barrier = this.mutationBarrier
@@ -28,6 +39,29 @@ export class VectorIndexOperationGate {
     }
 
     async runExclusive<T>(task: () => Promise<T>) {
+        this.assertAccepting()
+        return this.track(this.runExclusiveTask(task))
+    }
+
+    beginStop() {
+        this.accepting = false
+    }
+
+    async drain() {
+        await Promise.allSettled([...this.activeOperations])
+    }
+
+    reset() {
+        this.accepting = true
+    }
+
+    assertAccepting() {
+        if (!this.accepting) {
+            throw new Error('vector index service is stopping')
+        }
+    }
+
+    private async runExclusiveTask<T>(task: () => Promise<T>) {
         const previousBarrier = this.mutationBarrier
         const pendingMutations = [...this.activeMutations]
         const barrier = createDeferred()
@@ -46,6 +80,15 @@ export class VectorIndexOperationGate {
             barrier.resolve()
             exclusive.resolve()
         }
+    }
+
+    private track<T>(operation: Promise<T>) {
+        this.activeOperations.add(operation)
+        operation.then(
+            () => this.activeOperations.delete(operation),
+            () => this.activeOperations.delete(operation)
+        )
+        return operation
     }
 }
 

@@ -32,12 +32,15 @@ import {
     VectorIndexOperationGate,
     VectorIndexPresetMutationQueue
 } from './operation_gate'
-import { LivingMemoryVectorIndexOwnershipLock } from './ownership_lock'
 import { VectorIndexStatusStore } from './status_store'
 import { VECTOR_INDEX_SCHEMA_VERSION } from './worker/schema'
 import { LivingMemoryVectorIndexWorkerClient } from './worker_client'
 import type { VectorIndexInspection } from './worker_protocol'
 import type { LivingMemoryLogger } from '../logging/logger'
+import {
+    acquireVectorIndexGeneration,
+    type LivingMemoryVectorIndexGeneration
+} from './generation_coordinator'
 
 export type VectorIndexWorkerFactory = (
     onFailure: (error: Error) => void
@@ -74,7 +77,6 @@ export class LivingMemoryVectorIndexService
     private readonly indexDirectory: string
     private readonly databaseDirectory: string
     private readonly previousDatabaseDirectory: string
-    private readonly ownershipLock: LivingMemoryVectorIndexOwnershipLock
     private readonly maintenance: LivingMemoryVectorIndexMaintenance
     private readonly directorySwitch: VectorIndexDirectorySwitch
     private readonly workerFactory: VectorIndexWorkerFactory
@@ -83,7 +85,8 @@ export class LivingMemoryVectorIndexService
     private maintenanceTail: Promise<void> = Promise.resolve()
     private workerFailure: Error | null = null
     private embeddingContext: VectorIndexEmbeddingContext | null = null
-    private stopping = false
+    private generation: LivingMemoryVectorIndexGeneration | null = null
+    private stopPromise: Promise<void> | null = null
 
     constructor(
         ctx: Context,
@@ -117,9 +120,6 @@ export class LivingMemoryVectorIndexService
             this.indexDirectory,
             'vector-index.previous.pglite'
         )
-        this.ownershipLock = new LivingMemoryVectorIndexOwnershipLock(
-            resolve(this.indexDirectory, 'vector-index.lock')
-        )
         this.maintenance = new LivingMemoryVectorIndexMaintenance({
             ctx,
             config,
@@ -131,7 +131,7 @@ export class LivingMemoryVectorIndexService
             finalizeRebuild: (input, transferCleanupOwnership) =>
                 this.finalizeRebuild(input, transferCleanupOwnership),
             worker: () => this.requireWorker(),
-            shouldStop: () => this.stopping,
+            shouldStop: () => this.operationGate.stopping,
             onBuilding: (jobId) => this.markBuilding(jobId),
             onCurrentJobChanged: (jobId) => this.status.setCurrentJob(jobId),
             onInspection: (inspection) =>
@@ -144,8 +144,14 @@ export class LivingMemoryVectorIndexService
     }
 
     async start() {
+        const generationKey =
+            process.platform === 'win32'
+                ? this.databaseDirectory.toLowerCase()
+                : this.databaseDirectory
         try {
-            await this.ownershipLock.acquire()
+            this.generation = await acquireVectorIndexGeneration(
+                generationKey
+            )
         } catch (error) {
             const failure = toError(error)
             this.status.markFailure('unavailable', failure.message)
@@ -156,57 +162,71 @@ export class LivingMemoryVectorIndexService
             )
             throw error
         }
+
         try {
+            this.operationGate.assertAccepting()
             this.worker = this.workerFactory((error) => {
                 this.recordWorkerFailure(error)
             })
-        } catch (error) {
-            await this.ownershipLock.release()
-            throw error
-        }
-
-        let inspection: VectorIndexInspection | null = null
-        let openError: Error | null = null
-        try {
-            inspection = await this.worker.open(
+            const inspection = await this.worker.open(
                 this.databaseDirectory,
                 this.previousDatabaseDirectory
             )
+            this.operationGate.assertAccepting()
+            this.status.markStarting(null)
+            this.initialization = this.queueMaintenance(async () => {
+                try {
+                    await this.initialize(inspection)
+                } catch (error) {
+                    await this.handleMaintenanceFailure(error)
+                }
+            })
         } catch (error) {
-            openError = toError(error)
-        }
-
-        this.status.markStarting(openError?.message ?? null)
-        this.initialization = this.queueMaintenance(async () => {
+            const failure = toError(error)
+            this.status.markFailure('unavailable', failure.message)
+            this.logger.error(
+                'vector-index.start.failed',
+                { workflow: 'vector-index', state: 'unavailable' },
+                failure
+            )
             try {
-                await this.initialize(inspection, openError)
-            } catch (error) {
-                await this.handleMaintenanceFailure(error)
+                await this.disposeCurrentWorker()
+            } finally {
+                this.releaseGeneration()
             }
-        })
+            throw error
+        }
     }
 
     async stop() {
-        this.stopping = true
-        await this.waitForMaintenanceDuringStop()
-        if (this.worker !== null) {
-            await this.disposeWorker(this.worker)
-            this.worker = null
-        }
-        await this.ownershipLock.release()
+        this.beginStop()
+        this.stopPromise ??= this.stopService()
+        return this.stopPromise
     }
 
-    prepareLockRelease() {
-        this.ownershipLock.prepareRelease()
+    beginStop() {
+        this.operationGate.beginStop()
+        this.generation?.beginStop()
+    }
+
+    private async stopService() {
+        await this.operationGate.drain()
+        await this.waitForMaintenanceDuringStop()
+        try {
+            await this.disposeCurrentWorker()
+        } finally {
+            this.releaseGeneration()
+        }
     }
 
     async restart() {
         await this.stop()
-        this.stopping = false
         this.workerFailure = null
         this.embeddingContext = null
         this.initialization = null
         this.maintenanceTail = Promise.resolve()
+        this.stopPromise = null
+        this.operationGate.reset()
         this.status.reset()
         await this.start()
     }
@@ -225,117 +245,126 @@ export class LivingMemoryVectorIndexService
         presetId: string,
         memoryIds: string[]
     ): Promise<Map<string, Float32Array<ArrayBuffer>>> {
-        await this.awaitPresetReadBarrier(presetId)
-        const items = await this.readRequiredVectors(presetId, memoryIds)
-        const vectors = new Map<string, Float32Array<ArrayBuffer>>()
-        for (const item of items) {
-            vectors.set(item.memoryId, item.vector)
-        }
-        return vectors
+        return this.operationGate.run(async () => {
+            await this.awaitPresetReadBarrier(presetId)
+            const items = await this.readRequiredVectors(presetId, memoryIds)
+            const vectors = new Map<string, Float32Array<ArrayBuffer>>()
+            for (const item of items) {
+                vectors.set(item.memoryId, item.vector)
+            }
+            return vectors
+        })
     }
 
     async searchSemantic(
         input: MemorySemanticSearchInput
     ): Promise<MemoryVectorSearchHit[]> {
-        const vectors = await this.prepareSearchVectors(input)
+        return this.operationGate.run(async () => {
+            const vectors = await this.prepareSearchVectors(input)
 
-        const bestScores = new Map<string, number>()
-        for (const vector of vectors) {
-            const hits = await this.requireWorker().queryKnn({
-                presetId: input.presetId,
-                status: input.status,
-                types: input.memoryTypes,
-                isConsolidated: null,
-                limit: input.maxCandidates,
-                vector
-            })
-            for (const hit of hits) {
-                const current = bestScores.get(hit.memoryId)
-                if (current === undefined || hit.cosineScore > current) {
-                    bestScores.set(hit.memoryId, hit.cosineScore)
+            const bestScores = new Map<string, number>()
+            for (const vector of vectors) {
+                const hits = await this.requireWorker().queryKnn({
+                    presetId: input.presetId,
+                    status: input.status,
+                    types: input.memoryTypes,
+                    isConsolidated: null,
+                    limit: input.maxCandidates,
+                    vector
+                })
+                for (const hit of hits) {
+                    const current = bestScores.get(hit.memoryId)
+                    if (current === undefined || hit.cosineScore > current) {
+                        bestScores.set(hit.memoryId, hit.cosineScore)
+                    }
                 }
             }
-        }
 
-        return [...bestScores]
-            .map(([memoryId, cosineScore]) => ({ memoryId, cosineScore }))
-            .sort((left, right) => {
-                const scoreDifference = right.cosineScore - left.cosineScore
-                if (scoreDifference !== 0) {
-                    return scoreDifference
-                }
-                return left.memoryId.localeCompare(right.memoryId)
-            })
-            .slice(0, input.maxCandidates)
+            return [...bestScores]
+                .map(([memoryId, cosineScore]) => ({ memoryId, cosineScore }))
+                .sort((left, right) => {
+                    const scoreDifference = right.cosineScore - left.cosineScore
+                    if (scoreDifference !== 0) {
+                        return scoreDifference
+                    }
+                    return left.memoryId.localeCompare(right.memoryId)
+                })
+                .slice(0, input.maxCandidates)
+        })
     }
 
     async searchHybrid(
         input: MemoryHybridSearchInput
     ): Promise<MemoryHybridSearchHit[]> {
-        const vectors = await this.prepareSearchVectors(input)
+        return this.operationGate.run(async () => {
+            const vectors = await this.prepareSearchVectors(input)
 
-        const bestHits = new Map<string, MemoryHybridSearchHit>()
-        for (const vector of vectors) {
-            const hits = await this.requireWorker().queryHybrid({
-                presetId: input.presetId,
-                status: input.status,
-                types: input.memoryTypes,
-                isConsolidated: null,
-                limit: input.maxCandidates,
-                vector,
-                keywords: input.keywords,
-                minSimilarity: input.minSimilarity
-            })
-            for (const hit of hits) {
-                const current = bestHits.get(hit.memoryId)
-                if (
-                    current === undefined ||
-                    hit.boostedScore > current.boostedScore ||
-                    (hit.boostedScore === current.boostedScore &&
-                        hit.cosineScore > current.cosineScore)
-                ) {
-                    bestHits.set(hit.memoryId, hit)
+            const bestHits = new Map<string, MemoryHybridSearchHit>()
+            for (const vector of vectors) {
+                const hits = await this.requireWorker().queryHybrid({
+                    presetId: input.presetId,
+                    status: input.status,
+                    types: input.memoryTypes,
+                    isConsolidated: null,
+                    limit: input.maxCandidates,
+                    vector,
+                    keywords: input.keywords,
+                    minSimilarity: input.minSimilarity
+                })
+                for (const hit of hits) {
+                    const current = bestHits.get(hit.memoryId)
+                    if (
+                        current === undefined ||
+                        hit.boostedScore > current.boostedScore ||
+                        (hit.boostedScore === current.boostedScore &&
+                            hit.cosineScore > current.cosineScore)
+                    ) {
+                        bestHits.set(hit.memoryId, hit)
+                    }
                 }
             }
-        }
 
-        return [...bestHits.values()]
-            .sort((left, right) => {
-                const scoreDifference = right.boostedScore - left.boostedScore
-                if (scoreDifference !== 0) {
-                    return scoreDifference
-                }
-                return left.memoryId.localeCompare(right.memoryId)
-            })
-            .slice(0, input.maxCandidates)
+            return [...bestHits.values()]
+                .sort((left, right) => {
+                    const scoreDifference =
+                        right.boostedScore - left.boostedScore
+                    if (scoreDifference !== 0) {
+                        return scoreDifference
+                    }
+                    return left.memoryId.localeCompare(right.memoryId)
+                })
+                .slice(0, input.maxCandidates)
+        })
     }
 
     async findConsolidatedNeighbors(
         input: IncrementalDreamNeighborInput
     ): Promise<string[]> {
-        return this.runPresetMutation(input.presetId, async () => {
-            this.assertPresetReady(input.presetId)
-            const [seed] = await this.readRequiredVectors(input.presetId, [
-                input.seedMemoryId
-            ])
-            const excludedMemoryIds = new Set(input.excludedMemoryIds)
-            excludedMemoryIds.add(input.seedMemoryId)
-            const hits = await this.requireWorker().queryKnn({
-                presetId: input.presetId,
-                status: input.status,
-                types: null,
-                isConsolidated: true,
-                limit: input.limit + excludedMemoryIds.size,
-                vector: seed.vector
+        return this.operationGate.run(() =>
+            this.runPresetMutation(input.presetId, async () => {
+                this.assertPresetReady(input.presetId)
+                const [seed] = await this.readRequiredVectors(input.presetId, [
+                    input.seedMemoryId
+                ])
+                const excludedMemoryIds = new Set(input.excludedMemoryIds)
+                excludedMemoryIds.add(input.seedMemoryId)
+                const hits = await this.requireWorker().queryKnn({
+                    presetId: input.presetId,
+                    status: input.status,
+                    types: null,
+                    isConsolidated: true,
+                    limit: input.limit + excludedMemoryIds.size,
+                    vector: seed.vector
+                })
+                return hits
+                    .filter((hit) => !excludedMemoryIds.has(hit.memoryId))
+                    .slice(0, input.limit)
+                    .map((hit) => hit.memoryId)
             })
-            return hits
-                .filter((hit) => !excludedMemoryIds.has(hit.memoryId))
-                .slice(0, input.limit)
-                .map((hit) => hit.memoryId)
-        })
+        )
     }
 
-    runPresetMutation<T>(presetId: string, task: () => Promise<T>) {
+    private runPresetMutation<T>(presetId: string, task: () => Promise<T>) {
         return this.presetMutationQueue.run(presetId, task)
     }
 
@@ -344,81 +373,90 @@ export class LivingMemoryVectorIndexService
     }
 
     async applyMutation(batch: MemoryIndexMutationBatch): Promise<void> {
-        await this.waitForMaintenance()
-        await this.runPresetMutation(batch.presetId, async () => {
-            this.assertPresetReady(batch.presetId)
-            let indexedCount = this.status.getPresetIndexedCount(batch.presetId)
-            try {
-                const mutation = await buildVectorIndexWorkerMutation(
-                    batch,
-                    this.requireEmbeddingContext()
-                )
-                const result =
-                    await this.requireWorker().applyMutation(mutation)
-                indexedCount = result.indexedCount
-                const expectedCount =
-                    await this.repository.countEntriesByPreset(batch.presetId)
-                if (result.indexedCount !== expectedCount) {
-                    throw new Error(
-                        `vector index mutation count mismatch: ` +
-                            `preset=${batch.presetId}, expected=${expectedCount}, ` +
-                            `actual=${result.indexedCount}`
+        await this.operationGate.run(async () => {
+            await this.waitForMaintenance()
+            await this.runPresetMutation(batch.presetId, async () => {
+                this.assertPresetReady(batch.presetId)
+                let indexedCount =
+                    this.status.getPresetIndexedCount(batch.presetId)
+                try {
+                    const mutation = await buildVectorIndexWorkerMutation(
+                        batch,
+                        this.requireEmbeddingContext()
+                    )
+                    const result =
+                        await this.requireWorker().applyMutation(mutation)
+                    indexedCount = result.indexedCount
+                    const expectedCount =
+                        await this.repository.countEntriesByPreset(
+                            batch.presetId
+                        )
+                    if (result.indexedCount !== expectedCount) {
+                        throw new Error(
+                            `vector index mutation count mismatch: ` +
+                                `preset=${batch.presetId}, expected=${expectedCount}, ` +
+                                `actual=${result.indexedCount}`
+                        )
+                    }
+                    await this.requireWorker().markPresetState({
+                        presetId: batch.presetId,
+                        state: 'ready',
+                        expectedCount,
+                        indexedCount: result.indexedCount,
+                        lastError: null,
+                        updatedAt: Date.now()
+                    })
+                    await this.refreshInspection()
+                } catch (error) {
+                    throw await this.markMutationFailed(
+                        batch.presetId,
+                        indexedCount,
+                        error
                     )
                 }
-                await this.requireWorker().markPresetState({
-                    presetId: batch.presetId,
-                    state: 'ready',
-                    expectedCount,
-                    indexedCount: result.indexedCount,
-                    lastError: null,
-                    updatedAt: Date.now()
-                })
-                await this.refreshInspection()
-            } catch (error) {
-                throw await this.markMutationFailed(
-                    batch.presetId,
-                    indexedCount,
-                    error
-                )
-            }
+            })
         })
     }
 
     async clearPreset(presetId: string): Promise<void> {
-        await this.waitForMaintenance()
-        await this.runPresetMutation(presetId, async () => {
-            let indexedCount = this.status.getPresetIndexedCount(presetId)
-            try {
-                await this.requireWorker().clearPreset(presetId)
-                indexedCount = 0
-                await this.refreshInspection()
-            } catch (error) {
-                throw await this.markMutationFailed(
-                    presetId,
-                    indexedCount,
-                    error
-                )
-            }
+        await this.operationGate.run(async () => {
+            await this.waitForMaintenance()
+            await this.runPresetMutation(presetId, async () => {
+                let indexedCount = this.status.getPresetIndexedCount(presetId)
+                try {
+                    await this.requireWorker().clearPreset(presetId)
+                    indexedCount = 0
+                    await this.refreshInspection()
+                } catch (error) {
+                    throw await this.markMutationFailed(
+                        presetId,
+                        indexedCount,
+                        error
+                    )
+                }
+            })
         })
     }
 
     async reconcilePreset(presetId: string, reason: string) {
-        const expectedCount =
-            await this.repository.countEntriesByPreset(presetId)
-        const job = await this.maintenance.createPresetReconcileJob(
-            presetId,
-            reason
-        )
-        this.markPresetBuilding(presetId, job.id, expectedCount)
-        void this.queueMaintenance(async () => {
-            try {
-                this.markPresetBuilding(presetId, job.id, expectedCount)
-                await this.maintenance.runPresetReconcileJob(job, reason)
-            } catch (error) {
-                await this.handleMaintenanceFailure(error)
-            }
+        return this.operationGate.run(async () => {
+            const expectedCount =
+                await this.repository.countEntriesByPreset(presetId)
+            const job = await this.maintenance.createPresetReconcileJob(
+                presetId,
+                reason
+            )
+            this.markPresetBuilding(presetId, job.id, expectedCount)
+            void this.queueMaintenance(async () => {
+                try {
+                    this.markPresetBuilding(presetId, job.id, expectedCount)
+                    await this.maintenance.runPresetReconcileJob(job, reason)
+                } catch (error) {
+                    await this.handleMaintenanceFailure(error)
+                }
+            })
+            return job
         })
-        return job
     }
 
     private rebuild(reason: string) {
@@ -432,14 +470,14 @@ export class LivingMemoryVectorIndexService
     }
 
     startRebuild(reason: string) {
+        this.operationGate.assertAccepting()
         this.status.setCurrentJob(null)
         this.status.markStarting(null)
         void this.rebuild(reason)
     }
 
     private async initialize(
-        inspection: VectorIndexInspection | null,
-        openError: Error | null
+        inspection: VectorIndexInspection
     ) {
         if (this.workerFailure !== null) {
             throw new LivingMemoryVectorIndexError(
@@ -449,7 +487,7 @@ export class LivingMemoryVectorIndexService
                 { cause: this.workerFailure }
             )
         }
-        await this.maintenance.initialize(inspection, openError)
+        await this.maintenance.initialize(inspection)
         try {
             await this.removeLegacyIndexFiles()
         } catch (error) {
@@ -584,17 +622,6 @@ export class LivingMemoryVectorIndexService
         const currentWorker = this.requireWorker()
         await currentWorker.prepareRebuild(input.expectedCount)
         transferCleanupOwnership()
-        this.worker = null
-        try {
-            await currentWorker.dispose()
-        } catch (error) {
-            await this.directorySwitch.cleanup(
-                input.rebuildDatabaseDirectory,
-                'failed rebuild cleanup after worker shutdown'
-            )
-            await this.startWorkerCandidate(this.databaseDirectory)
-            throw error
-        }
 
         let activation: VectorIndexDirectoryActivation | null = null
         try {
@@ -603,7 +630,7 @@ export class LivingMemoryVectorIndexService
                 input.rebuildDatabaseDirectory,
                 this.previousDatabaseDirectory
             )
-            const inspection = await this.startWorkerCandidate(
+            const inspection = await currentWorker.openCandidate(
                 this.databaseDirectory
             )
             this.assertFinalizedInspection(inspection, input)
@@ -613,12 +640,13 @@ export class LivingMemoryVectorIndexService
             )
             return inspection
         } catch (error) {
-            await this.disposeWorkerAfterSwitchFailure()
+            await currentWorker.closeDatabase()
             if (activation !== null) {
                 try {
                     await this.directorySwitch.rollback(activation)
                 } catch (rollbackError) {
                     await this.recoverAfterRollbackFailure(
+                        currentWorker,
                         input,
                         error,
                         rollbackError
@@ -627,6 +655,7 @@ export class LivingMemoryVectorIndexService
             }
             try {
                 await this.restoreActiveDatabase(
+                    currentWorker,
                     input,
                     'failed rebuild cleanup after rollback'
                 )
@@ -643,6 +672,7 @@ export class LivingMemoryVectorIndexService
     }
 
     private async recoverAfterRollbackFailure(
+        worker: LivingMemoryVectorIndexWorkerClient,
         input: {
             rebuildDatabaseDirectory: string
             manifest: NonNullable<VectorIndexInspection['manifest']>
@@ -656,6 +686,7 @@ export class LivingMemoryVectorIndexService
             summarizeError(rollbackError)
         try {
             await this.restoreActiveDatabase(
+                worker,
                 input,
                 'failed rebuild cleanup after rollback failure'
             )
@@ -671,49 +702,23 @@ export class LivingMemoryVectorIndexService
     }
 
     /**
-     * 切换失败后在 active 目录上重建 worker；若恢复出的 generation 与
+     * 切换失败后在同一 worker 中重开 active 目录；若恢复出的 generation 与
      * 重建 manifest 不一致，说明 active 仍是旧库，清理孤立的 rebuild 目录。
      */
     private async restoreActiveDatabase(
+        worker: LivingMemoryVectorIndexWorkerClient,
         input: {
             rebuildDatabaseDirectory: string
             manifest: NonNullable<VectorIndexInspection['manifest']>
         },
         cleanupOperation: string
     ) {
-        const inspection = await this.startWorkerCandidate(
-            this.databaseDirectory
-        )
+        const inspection = await worker.openCandidate(this.databaseDirectory)
         if (inspection.manifest?.generation !== input.manifest.generation) {
             await this.directorySwitch.cleanup(
                 input.rebuildDatabaseDirectory,
                 cleanupOperation
             )
-        }
-    }
-
-    private async startWorkerCandidate(databaseDirectory: string) {
-        const worker = this.workerFactory((error) => {
-            this.recordWorkerFailure(error)
-        })
-        this.worker = worker
-        try {
-            return await worker.openCandidate(databaseDirectory)
-        } catch (error) {
-            try {
-                await worker.dispose()
-            } catch (disposeError) {
-                this.logger.diagnostic('vector-index.worker.cleanup.failed', {
-                    workflow: 'vector-index',
-                    operation: 'candidate-cleanup',
-                    error: summarizeError(disposeError)
-                })
-            } finally {
-                if (this.worker === worker) {
-                    this.worker = null
-                }
-            }
-            throw error
         }
     }
 
@@ -735,23 +740,6 @@ export class LivingMemoryVectorIndexService
                     `expectedGeneration=${expected.manifest.generation}, ` +
                     `actualGeneration=${inspection.manifest?.generation ?? 'none'}`
             )
-        }
-    }
-
-    private async disposeWorkerAfterSwitchFailure() {
-        if (this.worker === null) {
-            return
-        }
-        const worker = this.worker
-        this.worker = null
-        try {
-            await worker.dispose()
-        } catch (error) {
-            this.logger.diagnostic('vector-index.worker.cleanup.failed', {
-                workflow: 'vector-index',
-                operation: 'switch-cleanup',
-                error: summarizeError(error)
-            })
         }
     }
 
@@ -835,7 +823,6 @@ export class LivingMemoryVectorIndexService
     }
 
     private recordWorkerFailure(error: Error) {
-        this.stopping = true
         this.workerFailure = error
         this.status.markWorkerFailure(error)
         this.logger.error(
@@ -878,5 +865,19 @@ export class LivingMemoryVectorIndexService
             () => undefined
         )
         return operation
+    }
+
+    private async disposeCurrentWorker() {
+        if (this.worker === null) {
+            return
+        }
+        const worker = this.worker
+        this.worker = null
+        await this.disposeWorker(worker)
+    }
+
+    private releaseGeneration() {
+        this.generation?.release()
+        this.generation = null
     }
 }

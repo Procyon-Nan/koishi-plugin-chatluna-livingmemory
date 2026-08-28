@@ -84,10 +84,11 @@ const normalizeValue = (
                     : normalizeValue(value.cause, 'cause', seen)
         }
     }
-    if (seen.has(value)) {
+    const objectValue = value as object
+    if (seen.has(objectValue)) {
         return '[Circular]'
     }
-    seen.add(value)
+    seen.add(objectValue)
     try {
         if (Array.isArray(value)) {
             return value.map((item) => normalizeValue(item, '', seen))
@@ -105,7 +106,7 @@ const normalizeValue = (
         }
         return normalized
     } finally {
-        seen.delete(value)
+        seen.delete(objectValue)
     }
 }
 

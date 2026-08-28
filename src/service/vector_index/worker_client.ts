@@ -1,6 +1,7 @@
 import { Worker } from 'node:worker_threads'
 import { resolveWorkerArtifact } from '../../worker_artifacts'
 import { toError } from '../shared/utils'
+import { LivingMemoryVectorIndexError } from './errors'
 import type {
     VectorIndexHybridQuery,
     VectorIndexKnnQuery,
@@ -23,7 +24,14 @@ interface PendingRequest {
 }
 
 const deserializeError = (serialized: VectorIndexWorkerError) => {
-    const error = new Error(serialized.message)
+    const error =
+        serialized.code === null || serialized.state === null
+            ? new Error(serialized.message)
+            : new LivingMemoryVectorIndexError(
+                  serialized.code,
+                  serialized.state,
+                  serialized.message
+              )
     error.name = serialized.name
     if (serialized.stack !== null) {
         error.stack = serialized.stack
@@ -170,6 +178,10 @@ export class LivingMemoryVectorIndexWorkerClient {
         return this.request({ type: 'prepareRebuild', expectedCount })
     }
 
+    closeDatabase() {
+        return this.request({ type: 'closeDatabase' })
+    }
+
     abortRebuild() {
         return this.request({ type: 'abortRebuild' })
     }
@@ -185,7 +197,7 @@ export class LivingMemoryVectorIndexWorkerClient {
         this.disposeRequested = true
         let disposeError: Error | null = null
         try {
-            await this.request({ type: 'dispose' })
+            await this.sendRequest({ type: 'dispose' })
         } catch (error) {
             disposeError = toError(error)
             await this.worker.terminate()
@@ -202,6 +214,21 @@ export class LivingMemoryVectorIndexWorkerClient {
     }
 
     private request<Name extends VectorIndexWorkerCommandName>(
+        command: VectorIndexWorkerCommand<Name>
+    ): Promise<VectorIndexWorkerResult<Name>> {
+        if (this.disposeRequested) {
+            return Promise.reject(
+                new LivingMemoryVectorIndexError(
+                    'worker-unavailable',
+                    'unavailable',
+                    'vector index worker is stopping'
+                )
+            )
+        }
+        return this.sendRequest(command)
+    }
+
+    private sendRequest<Name extends VectorIndexWorkerCommandName>(
         command: VectorIndexWorkerCommand<Name>
     ): Promise<VectorIndexWorkerResult<Name>> {
         if (this.failure !== null) {
