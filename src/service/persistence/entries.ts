@@ -11,9 +11,9 @@ import type {
     MemoryIndexSourceRecord
 } from '../../contracts/vector_index'
 import type {
+    AttributedMemoryItem,
     DreamMemoryEntryRecord,
     DreamMergeInput,
-    ExtractedMemoryItem,
     ExtractionRepository,
     RecallRepository
 } from '../../contracts/workflows'
@@ -29,12 +29,18 @@ import {
     mergeMemorySourceOrigins
 } from '../memory/origins/source_origins'
 import { normalizeEntryRecord } from './normalizers'
+import {
+    createSpeakerKeysSignature,
+    createUserProfileSpeakerKey,
+    normalizeSpeakerKeys
+} from '../memory/speaker_identity'
 
 const sourceOriginsArrayMigrationId = 'source-origins-array-v1'
 const legacyEmbeddingMigrationId = 'legacy-embedding-vector-index-v1'
 const memoryEntryFields: (keyof MemoryEntryRecord)[] = [
     'id',
     'presetId',
+    'speakerKeys',
     'type',
     'status',
     'content',
@@ -61,6 +67,7 @@ const indexSourceFields: (keyof MemoryEntryRecord)[] = [
 const dreamEntryFields: (keyof MemoryEntryRecord)[] = [
     'id',
     'presetId',
+    'speakerKeys',
     'type',
     'status',
     'content',
@@ -354,7 +361,7 @@ export class LivingMemoryEntryRepository
     async appendMemories(
         scope: MemoryScope,
         sourceOriginMessages: MemorySourceMessage[],
-        extracted: ExtractedMemoryItem[]
+        extracted: AttributedMemoryItem[]
     ) {
         if (extracted.length === 0) {
             return []
@@ -371,20 +378,29 @@ export class LivingMemoryEntryRepository
     }
 
     async createMemory(scope: MemoryScope, input: MemoryMutationInput) {
-        const record = this.buildMemoryEntry(scope, input, [], new Date())
+        const record = this.buildMemoryEntry(
+            scope,
+            input,
+            [],
+            new Date(),
+            this.resolveScopeSpeakerKeys(scope)
+        )
         await this.ctx.database.create('living_memory_entry', record)
         return record
     }
 
     private buildMemoryEntry(
         scope: MemoryScope,
-        fields: ExtractedMemoryItem | MemoryMutationInput,
+        fields: AttributedMemoryItem | MemoryMutationInput,
         sourceOrigins: MemoryEntryRecord['sourceOrigins'],
-        createdAt: Date
+        createdAt: Date,
+        speakerKeys: string[] =
+            'speakerKeys' in fields ? fields.speakerKeys : []
     ): MemoryEntryRecord {
         return {
             id: randomUUID(),
             presetId: scope.presetId,
+            speakerKeys: normalizeSpeakerKeys(speakerKeys),
             type: fields.type,
             status: normalizeMemoryStatus(fields.status),
             content: normalizeMemoryText(fields.content),
@@ -398,6 +414,14 @@ export class LivingMemoryEntryRepository
             createdAt,
             updatedAt: createdAt
         }
+    }
+
+    private resolveScopeSpeakerKeys(scope: MemoryScope) {
+        const platform = scope.platform?.trim()
+        const speakerId = (scope.speakerId ?? scope.userId)?.trim()
+        return platform && speakerId
+            ? [createUserProfileSpeakerKey(platform, speakerId)]
+            : []
     }
 
     async updateMemory(id: string, patch: Partial<MemoryMutationInput>) {
@@ -538,6 +562,8 @@ export class LivingMemoryEntryRepository
             sources.some(
                 (source) =>
                     source.presetId !== target.presetId ||
+                    createSpeakerKeysSignature(source.speakerKeys) !==
+                        createSpeakerKeysSignature(target.speakerKeys) ||
                     source.status !== expectedStatus ||
                     +source.updatedAt !==
                         expectedSourceUpdatedAtById.get(source.id)

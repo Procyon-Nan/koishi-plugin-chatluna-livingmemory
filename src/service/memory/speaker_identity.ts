@@ -16,3 +16,19 @@ export const createUserProfileSpeakerKey = (
         .update(`${platform.trim()}\u0000${speakerId.trim()}`)
         .digest('hex')
 }
+
+export const normalizeSpeakerKeys = (
+    speakerKeys: readonly string[] | null | undefined
+) => {
+    return [
+        ...new Set(
+            (speakerKeys ?? [])
+                .map((key) => key.trim())
+                .filter((key) => key.length > 0)
+        )
+    ].sort()
+}
+
+export const createSpeakerKeysSignature = (speakerKeys: readonly string[]) => {
+    return speakerKeys.join('\u0000')
+}

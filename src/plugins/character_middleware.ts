@@ -4,7 +4,6 @@ import {
     type CharacterTranscriptSourceMessage,
     isCharacterBotMessage,
     isSameCharacterMessage,
-    resolveCharacterScopeSpeakerName,
     toCharacterCompletedRound,
     toCharacterTranscriptMessageResult,
     toCharacterTranscriptMessages
@@ -99,10 +98,6 @@ const createCharacterScope = async (
     const speakerId =
         toNonEmptyString(payload.focusMessage?.id) ??
         toNonEmptyString(payload.session.userId)
-    const speakerName = await resolveCharacterScopeSpeakerName(
-        payload.session,
-        payload.focusMessage
-    )
     const characterPresetId = toCharacterMemoryPresetId(payload.presetName)
 
     return ctx.chatluna_living_memory.createScope(
@@ -115,8 +110,7 @@ const createCharacterScope = async (
             isDirect: payload.session.isDirect,
             platform: payload.session.platform,
             presetLabel: payload.presetName,
-            speakerId,
-            speakerName
+            speakerId
         }
     )
 }

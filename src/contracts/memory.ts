@@ -157,6 +157,7 @@ export interface LivingMemoryCompletedRound {
 export interface MemoryEntryRecord {
     id: string
     presetId: string
+    speakerKeys: string[]
     type: MemoryEntryType
     status: MemoryEntryStatus
     content: string
@@ -278,6 +279,10 @@ export interface LivingMemoryPresetExportEntryV2 extends LivingMemoryPresetExpor
     isConsolidated: boolean
 }
 
+export interface LivingMemoryPresetExportEntryV3 extends LivingMemoryPresetExportEntryV2 {
+    speakerKeys: string[]
+}
+
 export interface LivingMemoryPresetExportUserProfile {
     id: string
     speakerKey: string
@@ -315,9 +320,15 @@ export interface LivingMemoryPresetExportV2 extends LivingMemoryPresetExportBase
     entries: LivingMemoryPresetExportEntryV2[]
 }
 
+export interface LivingMemoryPresetExportV3 extends LivingMemoryPresetExportBase {
+    version: 3
+    entries: LivingMemoryPresetExportEntryV3[]
+}
+
 export type LivingMemoryPresetExport =
     | LivingMemoryPresetExportV1
     | LivingMemoryPresetExportV2
+    | LivingMemoryPresetExportV3
 
 export interface LivingMemoryPresetImportSummary {
     entries: number

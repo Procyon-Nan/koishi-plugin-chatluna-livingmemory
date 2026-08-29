@@ -20,6 +20,7 @@ export const getLivingMemoryToolConfigurable = (
 ): LivingMemoryToolConfigurable | undefined => runConfig?.configurable
 
 interface LivingMemoryToolSessionFields {
+    platform?: string
     userId?: string
     channelId?: string
     guildId?: string
@@ -35,6 +36,7 @@ const toToolSessionFields = (
 
     const session = value as Record<string, unknown>
     return {
+        platform: toNonEmptyString(session.platform),
         userId: toNonEmptyString(session.userId),
         channelId: toNonEmptyString(session.channelId),
         guildId: toNonEmptyString(session.guildId),
@@ -123,7 +125,8 @@ export const resolveToolMemoryScopeConfigurable = (
                 channelId: session.channelId,
                 guildId: session.guildId,
                 isDirect: session.isDirect,
-                speakerId: session.userId
+                speakerId: session.userId,
+                platform: session.platform
             }
         }
     }
@@ -147,7 +150,8 @@ export const resolveToolMemoryScopeConfigurable = (
             channelId: session?.channelId,
             guildId: session?.guildId,
             isDirect: session?.isDirect,
-            speakerId: session?.userId
+            speakerId: session?.userId,
+            platform: session?.platform
         }
     }
 }

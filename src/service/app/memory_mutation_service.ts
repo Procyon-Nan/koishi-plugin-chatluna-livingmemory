@@ -13,9 +13,9 @@ import type {
     MemoryIndexUpsert
 } from '../../contracts/vector_index'
 import type {
+    AttributedMemoryItem,
     DreamMemoryRepository,
     DreamMergeInput,
-    ExtractedMemoryItem,
     ExtractionRepository
 } from '../../contracts/workflows'
 import type { LivingMemoryRepository } from '../persistence/repository'
@@ -57,7 +57,7 @@ export class LivingMemoryMutationService
     async appendMemories(
         scope: MemoryScope,
         sourceOriginMessages: MemorySourceMessage[],
-        extracted: ExtractedMemoryItem[]
+        extracted: AttributedMemoryItem[]
     ) {
         return this.runPresetMutation(scope.presetId, async () => {
             const records = await this.repository.appendMemories(

@@ -22,9 +22,9 @@ import type {
     MemoryIndexSourceRecord
 } from '../../contracts/vector_index'
 import type {
+    AttributedMemoryItem,
     DreamMemoryEntryRecord,
     DreamMergeInput,
-    ExtractedMemoryItem,
     ExtractionRepository,
     JobRepository,
     RecallRepository,
@@ -188,7 +188,7 @@ export class LivingMemoryRepository
     appendMemories(
         scope: MemoryScope,
         sourceOriginMessages: MemorySourceMessage[],
-        extracted: ExtractedMemoryItem[]
+        extracted: AttributedMemoryItem[]
     ): Promise<MemoryEntryRecord[]> {
         return this.entries.appendMemories(
             scope,
@@ -385,11 +385,12 @@ export class LivingMemoryRepository
         ])
 
         return {
-            version: 2,
+            version: 3,
             exportedAt: new Date().toISOString(),
             sourcePresetId: presetId,
             entries: entries.map((entry) => ({
                 id: entry.id,
+                speakerKeys: [...entry.speakerKeys],
                 type: entry.type,
                 status: entry.status,
                 content: entry.content,
@@ -497,10 +498,12 @@ export class LivingMemoryRepository
         }
         const createEntryRow = (
             entry: LivingMemoryPresetExportEntry,
-            isConsolidated: boolean
+            isConsolidated: boolean,
+            speakerKeys: string[]
         ) => ({
             id: resolveEntryImportId(entry.id),
             presetId: targetPresetId,
+            speakerKeys,
             type: entry.type,
             status: entry.status,
             content: entry.content,
@@ -515,11 +518,29 @@ export class LivingMemoryRepository
             updatedAt: new Date(entry.updatedAt)
         })
         const entryRows =
-            data.version === 1 || isCrossPresetImport
-                ? data.entries.map((entry) => createEntryRow(entry, false))
-                : data.entries.map((entry) =>
-                      createEntryRow(entry, entry.isConsolidated)
+            data.version === 1
+                ? data.entries.map((entry) =>
+                      createEntryRow(entry, false, [])
                   )
+                : data.version === 2
+                  ? data.entries.map((entry) =>
+                        createEntryRow(
+                            entry,
+                            isCrossPresetImport
+                                ? false
+                                : entry.isConsolidated,
+                            []
+                        )
+                    )
+                  : data.entries.map((entry) =>
+                        createEntryRow(
+                            entry,
+                            isCrossPresetImport
+                                ? false
+                                : entry.isConsolidated,
+                            entry.speakerKeys
+                        )
+                    )
         const speakerKeys = [
             ...new Set(data.userProfiles.map((profile) => profile.speakerKey))
         ]

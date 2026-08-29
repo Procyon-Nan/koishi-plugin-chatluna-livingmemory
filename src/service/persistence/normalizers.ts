@@ -11,11 +11,15 @@ import {
     normalizeOptionalMemoryText
 } from '../memory/entry_fields'
 import { normalizeMemorySourceOrigins } from '../memory/origins/source_origins'
+import { normalizeSpeakerKeys } from '../memory/speaker_identity'
 
 export const normalizeEntryRecord = (
     record: MemoryEntryRecord
 ): MemoryEntryRecord => ({
     ...record,
+    speakerKeys: normalizeSpeakerKeys(
+        (record as Partial<MemoryEntryRecord>).speakerKeys
+    ),
     status: normalizeMemoryStatus(record.status),
     sentiment: normalizeOptionalMemoryText(record.sentiment),
     importance: normalizeMemoryImportance(record.importance),

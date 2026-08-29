@@ -22,6 +22,7 @@ const now = new Date('2026-07-16T00:00:00.000Z')
 const memory: DreamMemoryEntryRecord = {
     id: 'memory-1',
     presetId: 'preset-1',
+    speakerKeys: ['张三'],
     type: 'fact',
     status: 'active',
     content: '张三正在准备考试。',

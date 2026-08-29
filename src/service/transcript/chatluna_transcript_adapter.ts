@@ -1,13 +1,16 @@
 import type { BaseMessage } from '@langchain/core/messages'
+import type { Session } from 'koishi'
 import type { MemoryScope } from '../../contracts/memory'
 import { resolveScopeAssistantLabel } from '../memory/helpers'
-import { createUserProfileSpeakerKey } from '../memory/speaker_identity'
 import { toNonEmptyString } from '../shared/utils'
 import {
     createLivingMemoryTranscriptMessageResult,
-    parseLivingMemorySpeakerLine,
     toLivingMemoryDate
 } from './transcript_message'
+import {
+    resolveUserSpeaker,
+    type UserSpeakerCache
+} from './user_speaker'
 
 export const livingMemoryRawContentKey = 'living_memory_raw_content'
 
@@ -87,39 +90,6 @@ const getMessageTextParts = (message: BaseMessage) => {
     }
 }
 
-const getMessageRawLines = (message: BaseMessage) => {
-    return getMessageTextParts(message)
-        .parts.flatMap((part) => part.replace(/\r\n/g, '\n').split('\n'))
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0)
-}
-
-const getUserSpeakerLabel = (scope: MemoryScope, message: BaseMessage) => {
-    const name = toNonEmptyString((message as { name?: unknown }).name)
-    if (name != null) {
-        return name
-    }
-
-    const prefixedSpeaker = getMessageRawLines(message)
-        .map((line) => parseLivingMemorySpeakerLine(line)?.speaker)
-        .find((speaker): speaker is string => speaker != null)
-    if (prefixedSpeaker != null) {
-        return prefixedSpeaker
-    }
-
-    const id = toNonEmptyString((message as { id?: unknown }).id)
-    if (id != null) {
-        return id
-    }
-
-    return (
-        toNonEmptyString(scope.speakerName) ??
-        toNonEmptyString(scope.speakerId) ??
-        toNonEmptyString(scope.userId) ??
-        '用户'
-    )
-}
-
 export const setLivingMemoryRawContent = (
     message: BaseMessage,
     rawContent: string
@@ -136,10 +106,14 @@ export const setLivingMemoryRawContent = (
     }
 }
 
-export const toChatLunaTranscriptMessageResult = (
+export const toChatLunaTranscriptMessageResult = async (
     scope: MemoryScope,
+    session: Session,
     message: BaseMessage,
-    options: { fallbackCreatedAt?: Date } = {}
+    options: {
+        fallbackCreatedAt?: Date
+        speakerCache?: UserSpeakerCache
+    } = {}
 ) => {
     const type = message.getType()
     if (type !== 'human' && type !== 'ai') {
@@ -163,32 +137,39 @@ export const toChatLunaTranscriptMessageResult = (
     }
 
     const speakerId = toNonEmptyString(message.id)
-    let speakerKey: string | undefined
-    if (speakerId != null) {
-        const platform = toNonEmptyString(scope.platform)
-        if (platform == null) {
-            throw new Error('ChatLuna transcript scope has no platform.')
-        }
-        speakerKey = createUserProfileSpeakerKey(platform, speakerId)
+    if (speakerId == null) {
+        throw new Error('ChatLuna user message has no id for speaker lookup.')
     }
 
+    const speaker = await resolveUserSpeaker(
+        session,
+        speakerId,
+        options.speakerCache
+    )
     return createLivingMemoryTranscriptMessageResult({
         role: 'user',
-        speakerKey,
-        speakerLabel: getUserSpeakerLabel(scope, message),
+        speakerKey: speaker.speakerKey,
+        speakerLabel: speaker.speakerLabel,
         content: resolved.parts,
         createdAt,
         stripSpeakerPrefix: resolved.stripSpeakerPrefix
     })
 }
 
-export const toChatLunaTranscriptMessages = (
+export const toChatLunaTranscriptMessages = async (
     scope: MemoryScope,
+    session: Session,
     messages: BaseMessage[]
 ) => {
-    return messages
-        .map((message) => toChatLunaTranscriptMessageResult(scope, message))
-        .flatMap((converted) =>
-            converted.message == null ? [] : [converted.message]
+    const speakerCache: UserSpeakerCache = new Map()
+    const converted = await Promise.all(
+        messages.map((message) =>
+            toChatLunaTranscriptMessageResult(scope, session, message, {
+                speakerCache
+            })
         )
+    )
+    return converted.flatMap((item) =>
+        item.message == null ? [] : [item.message]
+    )
 }

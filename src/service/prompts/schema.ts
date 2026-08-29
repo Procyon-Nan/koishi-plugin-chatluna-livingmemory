@@ -30,8 +30,9 @@ const extractionExample = {
     summary: '...',
     keywords: ['...'],
     sentiment: '...',
-    importance: 0.5
-} satisfies CompleteMemoryOutput<ExtractedMemoryItem>
+    importance: 0.5,
+    speakerLabels: ['张三']
+} satisfies ExtractedMemoryItem
 
 const requiredText = (description: string) =>
     z.string().trim().min(1).describe(description)
@@ -44,7 +45,7 @@ export const extractionResultToolName = 'living_memory_extraction_result'
 export const extractionResultToolDescription =
     '提交本次对话中提取出的长期记忆。没有可提取内容时提交空 memories 数组。'
 
-export const extractedMemorySchema = z.object({
+export const generatedMemorySchema = z.object({
     type: z.enum(memoryEntryTypes).describe('记忆类型'),
     content: requiredText('完整的第一人称长期记忆正文'),
     summary: requiredText('简短且适合检索的语义摘要'),
@@ -53,9 +54,35 @@ export const extractedMemorySchema = z.object({
     importance: z.number().finite().min(0).max(1).describe('0 到 1 的重要程度')
 })
 
+export const extractedMemorySchema = generatedMemorySchema.extend({
+    speakerLabels: z
+        .array(requiredText('对话中出现的用户昵称'))
+        .describe('这条记忆关联的用户昵称')
+})
+
 export const extractionResultSchema = z.object({
     memories: z.array(extractedMemorySchema).describe('本次提取出的长期记忆')
 })
+
+export const createExtractionResultSchema = (
+    allowedSpeakerLabels: readonly string[]
+) => {
+    const allowed = new Set(allowedSpeakerLabels)
+    return z.object({
+        memories: z.array(
+            extractedMemorySchema.extend({
+                speakerLabels: z
+                    .array(
+                        requiredText('对话中出现的用户昵称').refine(
+                            (label) => allowed.has(label),
+                            '用户昵称不在当前对话中'
+                        )
+                    )
+                    .describe('这条记忆关联的用户昵称')
+            })
+        )
+    })
+}
 const extractionResultExample = {
     memories: [extractionExample]
 } satisfies z.input<typeof extractionResultSchema>
@@ -71,7 +98,7 @@ const createDreamMemoryExample = (
     importance
 })
 
-const dreamGeneratedMemorySchema = extractedMemorySchema.extend({
+const dreamGeneratedMemorySchema = generatedMemorySchema.extend({
     keywords: memoryKeywordsSchema.min(1)
 })
 const memoryIdSchema = requiredText('来自当前 memory_entries 的记忆 id')

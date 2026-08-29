@@ -122,9 +122,13 @@ const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
     const consolidatedIds: string[] = []
     const activeEntry = {
         ...createMemoryEntry('active-memory'),
+        speakerKeys: ['张三'],
         keywords: ['张三']
     }
-    const archivedEntry = createMemoryEntry('archived-memory', 'archived')
+    const archivedEntry = {
+        ...createMemoryEntry('archived-memory', 'archived'),
+        speakerKeys: ['张三']
+    }
     const entries = [activeEntry, archivedEntry]
     let presetRenderCount = 0
     const repository = {

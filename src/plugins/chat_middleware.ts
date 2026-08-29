@@ -19,36 +19,6 @@ import {
     renderChatLunaPresetPrompt,
     resolveMainRunConversationId
 } from '../service/memory/helpers'
-import { toNonEmptyString } from '../service/shared/utils'
-
-const resolveSpeakerName = (session: Session, message: HumanMessage) => {
-    const messageName = toNonEmptyString((message as { name?: unknown }).name)
-    if (messageName != null) {
-        return messageName
-    }
-
-    return (
-        toNonEmptyString(session.author?.nick) ??
-        toNonEmptyString(session.author?.name) ??
-        toNonEmptyString(session.event?.user?.name) ??
-        toNonEmptyString(session.username) ??
-        toNonEmptyString(session.userId)
-    )
-}
-
-const prepareSpeakerName = (session: Session, message: HumanMessage) => {
-    const namedMessage = message as { name?: string }
-    const existingName = toNonEmptyString(namedMessage.name)
-    if (existingName != null) {
-        return existingName
-    }
-
-    const speakerName = resolveSpeakerName(session, message)
-    if (speakerName != null) {
-        namedMessage.name = speakerName
-    }
-    return speakerName
-}
 
 const writeRawUserContent = (
     message: HumanMessage,
@@ -89,13 +59,13 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
         activeSnapshotInjections.delete(conversationId)
     }
 
-    const resolveChatScope = (
+    const resolveChatScope = async (
         conversationId: string,
         message: HumanMessage,
         chatInterface: ChatPresetSource,
         session: Session,
         events: { skipped: string; resolved: string }
-    ): MemoryScope | null => {
+    ): Promise<MemoryScope | null> => {
         const fallbackPresetId = chatInterface.preset.value?.triggerKeyword?.[0]
         const presetId = ctx.chatluna_living_memory.resolvePresetId(
             message,
@@ -109,7 +79,6 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
             })
             return null
         }
-        const speakerName = prepareSpeakerName(session, message)
         diagnostic(events.resolved, {
             conversationId,
             presetId,
@@ -124,8 +93,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 guildId: session.guildId ?? session.channelId,
                 isDirect: session.isDirect,
                 platform: session.platform,
-                speakerId: session.userId,
-                speakerName
+                speakerId: session.userId
             }
         )
     }
@@ -191,7 +159,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 isDirect: session.isDirect
             })
 
-            const scope = resolveChatScope(
+            const scope = await resolveChatScope(
                 conversationId,
                 message,
                 chatInterface,
@@ -206,8 +174,9 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
             }
             writeRawUserContent(message, promptVariables)
 
-            const currentTranscript = toChatLunaTranscriptMessageResult(
+            const currentTranscript = await toChatLunaTranscriptMessageResult(
                 scope,
+                session,
                 message,
                 {
                     fallbackCreatedAt: new Date()
@@ -243,8 +212,9 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
             > | null = null
             const loadHistoryMessages = () => {
                 historyMessagesPromise ??= (async () => {
-                    return toChatLunaTranscriptMessages(
+                    return await toChatLunaTranscriptMessages(
                         scope,
+                        session,
                         await chatInterface.chatHistory.getMessages()
                     )
                 })()
@@ -365,7 +335,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 isDirect: session.isDirect
             })
 
-            const scope = resolveChatScope(
+            const scope = await resolveChatScope(
                 conversationId,
                 sourceMessage,
                 chatInterface,
@@ -380,15 +350,17 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
             }
 
             const completedAt = new Date()
-            const sourceTranscript = toChatLunaTranscriptMessageResult(
+            const sourceTranscript = await toChatLunaTranscriptMessageResult(
                 scope,
+                session,
                 sourceMessage,
                 {
                     fallbackCreatedAt: completedAt
                 }
             )
-            const responseTranscript = toChatLunaTranscriptMessageResult(
+            const responseTranscript = await toChatLunaTranscriptMessageResult(
                 scope,
+                session,
                 responseMessage,
                 {
                     fallbackCreatedAt: completedAt

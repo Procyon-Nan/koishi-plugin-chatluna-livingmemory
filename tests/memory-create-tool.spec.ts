@@ -58,6 +58,7 @@ const createRecordingProvider = (
             return {
                 id: `memory-${sequence}`,
                 presetId: scope.presetId,
+                speakerKeys: [],
                 type: input.type,
                 status: 'active',
                 content: input.content,

@@ -15,6 +15,7 @@ const createMemory = (
 ): MemoryEntryRecord => ({
     id,
     presetId: 'preset-1',
+    speakerKeys: [],
     type: 'fact',
     status: 'active',
     content: `content-${id}`,

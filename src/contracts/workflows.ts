@@ -30,6 +30,7 @@ export interface DreamTriggerResult {
 export interface DreamMemoryEntryRecord {
     id: string
     presetId: string
+    speakerKeys: string[]
     type: MemoryEntryType
     status: MemoryEntryStatus
     content: string
@@ -124,6 +125,12 @@ export interface ExtractedMemoryItem {
     summary: string
     sentiment: string
     importance: number
+    speakerLabels: string[]
+}
+
+export interface AttributedMemoryItem
+    extends Omit<ExtractedMemoryItem, 'speakerLabels'> {
+    speakerKeys: string[]
 }
 
 export interface RetrievedMemoryItem {
@@ -135,6 +142,10 @@ export interface RetrievedMemoryItem {
 export interface ExtractionPayload {
     input: string
     sourceOriginMessages: MemorySourceMessage[]
+    speakers: Array<{
+        speakerLabel: string
+        speakerKey: string
+    }>
 }
 
 export interface LivingMemoryConfig {
@@ -227,7 +238,7 @@ export interface ExtractionRepository {
     appendMemories(
         scope: MemoryScope,
         sourceOriginMessages: MemorySourceMessage[],
-        extracted: ExtractedMemoryItem[]
+        extracted: AttributedMemoryItem[]
     ): Promise<MemoryEntryRecord[]>
     createMemory(
         scope: MemoryScope,

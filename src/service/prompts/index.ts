@@ -30,6 +30,7 @@ export {
     DREAM_ACTIVE_FORMAT,
     DREAM_ARCHIVED_FORMAT,
     USER_PROFILE_OUTPUT_FORMAT,
+    createExtractionResultSchema,
     createUserProfileResultSchema,
     dreamActiveResultSchema,
     dreamArchivedResultSchema,

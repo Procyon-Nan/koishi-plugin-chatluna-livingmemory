@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { HumanMessage } from '@langchain/core/messages'
+import type { Session } from 'koishi'
 import type { MemoryScope } from '../src/contracts/memory'
 import { createUserProfileSpeakerKey } from '../src/service/memory/speaker_identity'
 import { toChatLunaTranscriptMessageResult } from '../src/service/transcript/chatluna_transcript_adapter'
@@ -13,12 +14,32 @@ const createScope = (platform?: string): MemoryScope => ({
     platform
 })
 
-it('derives ChatLuna profile identity from platform and message user id', () => {
-    const result = toChatLunaTranscriptMessageResult(
+const createSession = () =>
+    ({
+        platform: 'onebot',
+        guildId: 'guild-1',
+        event: {
+            user: {
+                id: 'user-1',
+                name: '当前全局昵称',
+                nick: '当前群名片'
+            }
+        },
+        bot: {
+            getUser: async (userId: string) => ({
+                id: userId,
+                name: `全局昵称-${userId}`
+            })
+        }
+    }) as unknown as Session
+
+it('derives ChatLuna profile identity and global name from message user id', async () => {
+    const result = await toChatLunaTranscriptMessageResult(
         createScope('onebot'),
+        createSession(),
         new HumanMessage({
             id: 'user-2',
-            name: '群成员',
+            name: '群名片',
             content: '消息正文'
         }),
         { fallbackCreatedAt: new Date('2026-08-21T00:00:00.000Z') }
@@ -29,18 +50,36 @@ it('derives ChatLuna profile identity from platform and message user id', () => 
         result.message?.speakerKey,
         createUserProfileSpeakerKey('onebot', 'user-2')
     )
+    assert.equal(result.message?.speakerLabel, '全局昵称-user-2')
 })
 
-it('does not attribute legacy history without a user id to the current scope user', () => {
-    const result = toChatLunaTranscriptMessageResult(
+it('uses the current user global name instead of the guild nickname', async () => {
+    const result = await toChatLunaTranscriptMessageResult(
         createScope('onebot'),
+        createSession(),
         new HumanMessage({
-            name: '历史昵称',
+            id: 'user-1',
+            name: '群名片',
             content: '消息正文'
         }),
         { fallbackCreatedAt: new Date('2026-08-21T00:00:00.000Z') }
     )
 
     assert.equal(result.reason, null)
-    assert.equal(result.message?.speakerKey, undefined)
+    assert.equal(result.message?.speakerLabel, '全局昵称-user-1')
+})
+
+it('rejects ChatLuna history without a user id', async () => {
+    await assert.rejects(
+        toChatLunaTranscriptMessageResult(
+            createScope('onebot'),
+            createSession(),
+            new HumanMessage({
+                name: '历史昵称',
+                content: '消息正文'
+            }),
+            { fallbackCreatedAt: new Date('2026-08-21T00:00:00.000Z') }
+        ),
+        /has no id/u
+    )
 })

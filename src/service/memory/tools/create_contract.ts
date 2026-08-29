@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { extractedMemorySchema } from '../../prompts/schema'
+import { generatedMemorySchema } from '../../prompts/schema'
 import {
     MEMORY_COMPLETE_FIELD_LIST,
     MEMORY_CONTENT_REQUIREMENT,
@@ -14,14 +14,14 @@ import {
 export const livingMemoryCreateMemoryToolName = 'living_memory_create_memory'
 
 /**
- * 输入 schema 逐字复用 extractedMemorySchema（提取输出的单一真相源），
- * 保证被动提取与主动创建产出的记忆字段完全同构；
+ * 输入 schema 复用基础记忆字段契约；用户关联由当前工具 scope 自动写入，
+ * 不暴露提取流程专用的 speakerLabels；
  * 上限仅由 schema 硬校验，工具描述不携带数量指导。
  */
 export const createLivingMemoryCreateInputSchema = (maxMemories: number) =>
     z.object({
         memories: z
-            .array(extractedMemorySchema)
+            .array(generatedMemorySchema)
             .min(1)
             .max(maxMemories)
             .describe(

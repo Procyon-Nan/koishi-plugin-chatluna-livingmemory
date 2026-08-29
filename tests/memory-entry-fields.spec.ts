@@ -81,7 +81,8 @@ it('applies shared field rules to extracted memories', async () => {
                     summary: '  extracted summary  ',
                     sentiment: '  neutral  ',
                     keywords: extractionKeywords,
-                    importance: 1
+                    importance: 1,
+                    speakerLabels: ['张三']
                 }
             ]
         })
@@ -95,7 +96,8 @@ it('applies shared field rules to extracted memories', async () => {
     const trace = await extractor.extractWithTrace('input', {
         conversationId: 'conversation-1',
         presetId: 'preset-1',
-        presetPrompt: '你是测试助手。'
+        presetPrompt: '你是测试助手。',
+        speakers: [{ speakerLabel: '张三', speakerKey: 'speaker-key' }]
     })
 
     assert.equal(trace.parseError, null)
@@ -106,7 +108,8 @@ it('applies shared field rules to extracted memories', async () => {
             summary: 'extracted summary',
             sentiment: 'neutral',
             keywords: normalizeMemoryKeywords(extractionKeywords),
-            importance: 1
+            importance: 1,
+            speakerKeys: ['speaker-key']
         }
     ])
 })
@@ -117,6 +120,7 @@ it('applies shared field rules to Dream mutations', async () => {
     const entry = {
         id: 'memory-1',
         presetId: 'preset-1',
+        speakerKeys: [],
         type: 'fact' as const,
         status: 'active' as const,
         content: 'old content',

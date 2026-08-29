@@ -6,6 +6,10 @@ export const defineLivingMemoryTables = (ctx: Context) => {
         {
             id: 'string(64)',
             presetId: 'string(255)',
+            speakerKeys: {
+                type: 'json',
+                initial: []
+            },
             type: 'string(32)',
             status: {
                 type: 'string',

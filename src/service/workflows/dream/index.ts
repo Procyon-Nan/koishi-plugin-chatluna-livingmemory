@@ -78,7 +78,7 @@ export class LivingMemoryDreamService {
             })
         const entries = await this.repository.listDreamEntriesByPreset(presetId)
         if (entries.length < 2) {
-            await this.consolidateSingleEntry(presetId, entries)
+            await this.consolidateEntries(presetId, entries)
             return this.createResult(entries.length, 0, {
                 detail: `dream skipped: only ${entries.length} memories`
             })
@@ -153,15 +153,14 @@ export class LivingMemoryDreamService {
         }
     }
 
-    /** 不足聚簇规模时，唯一一条记忆直接标记为已固化。 */
-    private async consolidateSingleEntry(
+    private async consolidateEntries(
         presetId: string,
         entries: DreamMemoryEntryRecord[]
     ) {
-        if (entries.length === 1) {
+        if (entries.length > 0) {
             await this.mutations.setMemoryConsolidation(
                 presetId,
-                [entries[0].id],
+                entries.map((entry) => entry.id),
                 true
             )
         }
@@ -212,7 +211,7 @@ export class LivingMemoryDreamService {
             entries: entries.length
         })
         if (entries.length < 2) {
-            await this.consolidateSingleEntry(presetId, entries)
+            await this.consolidateEntries(presetId, entries)
             return createEmptyStageResult(stage, entries.length)
         }
 
@@ -221,6 +220,15 @@ export class LivingMemoryDreamService {
             stage,
             entries,
             logger
+        )
+        const clusteredIds = new Set(
+            clusters.flatMap((cluster) =>
+                cluster.entries.map((entry) => entry.id)
+            )
+        )
+        await this.consolidateEntries(
+            presetId,
+            entries.filter((entry) => !clusteredIds.has(entry.id))
         )
 
         const stats = createEmptyStats()

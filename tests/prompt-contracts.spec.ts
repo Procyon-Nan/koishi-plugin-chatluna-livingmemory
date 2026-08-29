@@ -38,6 +38,7 @@ import { buildUserProfilePrompt } from '../src/service/prompts/user_profile'
 const memoryEntry: MemoryEntryRecord = {
     id: 'memory-1',
     presetId: 'preset-1',
+    speakerKeys: ['张三'],
     type: 'fact',
     status: 'active',
     content: '张三告诉我他最近在准备考试。',

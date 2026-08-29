@@ -29,6 +29,7 @@ const createEntry = (
 ): MemoryEntryRecord => ({
     id,
     presetId,
+    speakerKeys: [],
     type: 'fact',
     status: 'active',
     content: `content-${id}`,

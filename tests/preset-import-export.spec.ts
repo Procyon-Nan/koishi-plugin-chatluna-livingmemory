@@ -31,7 +31,9 @@ it('copies preset data without moving source records', async () => {
         const sourceMemory = await repository.createMemory(
             {
                 conversationId: 'conversation-source',
-                presetId: sourcePresetId
+                presetId: sourcePresetId,
+                platform: 'onebot',
+                speakerId: 'user-1'
             },
             {
                 type: 'fact',
@@ -56,8 +58,8 @@ it('copies preset data without moving source records', async () => {
         )
 
         const exported = await repository.exportPresetData(sourcePresetId)
-        if (exported.version !== 2) {
-            throw new Error('expected version 2 preset export')
+        if (exported.version !== 3) {
+            throw new Error('expected version 3 preset export')
         }
         const sourceProfile = exported.userProfiles[0]
 
@@ -74,6 +76,10 @@ it('copies preset data without moving source records', async () => {
         assert.equal(importedTargetMemories.length, 1)
         assert.notEqual(importedTargetMemories[0].id, sourceMemory.id)
         assert.equal(importedTargetMemories[0].content, sourceMemory.content)
+        assert.deepEqual(
+            importedTargetMemories[0].speakerKeys,
+            sourceMemory.speakerKeys
+        )
         assert.equal(importedTargetMemories[0].isConsolidated, false)
 
         const retainedSourceProfiles =
@@ -115,7 +121,7 @@ it('copies preset data without moving source records', async () => {
     })
 })
 
-it('preserves consolidation only for same-preset version 2 restores', async () => {
+it('preserves consolidation only for same-preset version 3 restores', async () => {
     await withLivingMemoryRepository(async (_ctx, repository) => {
         const presetId = 'preset-consolidation'
         const memory = await repository.createMemory(
@@ -124,8 +130,8 @@ it('preserves consolidation only for same-preset version 2 restores', async () =
         )
         await repository.setMemoryConsolidation(presetId, [memory.id], true)
         const exported = await repository.exportPresetData(presetId)
-        if (exported.version !== 2) {
-            throw new Error('expected version 2 preset export')
+        if (exported.version !== 3) {
+            throw new Error('expected version 3 preset export')
         }
 
         assert.equal(exported.entries[0].isConsolidated, true)

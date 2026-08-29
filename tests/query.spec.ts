@@ -15,6 +15,7 @@ const createMemory = (
     return {
         id: `memory-${index}`,
         presetId: 'preset-1',
+        speakerKeys: [],
         type,
         status,
         content: `content-${index}`,

@@ -153,6 +153,7 @@ export const createMemoryEntry = (
     return {
         id,
         presetId: scope.presetId,
+        speakerKeys: [],
         type: 'fact',
         status,
         content: `content-${id}`,

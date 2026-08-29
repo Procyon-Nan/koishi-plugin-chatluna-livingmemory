@@ -1,9 +1,9 @@
 import { Context } from 'koishi'
-import type { ExtractedMemoryItem } from '../../../contracts/workflows'
+import type { AttributedMemoryItem } from '../../../contracts/workflows'
 import { isModelConfigured } from '../../shared/utils'
 import {
     buildExtractionPrompt,
-    extractionResultSchema,
+    createExtractionResultSchema,
     extractionResultToolDescription,
     extractionResultToolName
 } from '../../prompts'
@@ -15,13 +15,14 @@ import {
 import { invokeStructuredOutput } from '../structured_output'
 import { resolveScopeAssistantLabel } from '../../memory/helpers'
 import type { LivingMemoryLogger } from '../../logging/logger'
+import { normalizeSpeakerKeys } from '../../memory/speaker_identity'
 
 export type LivingMemoryExtractionSkipReason =
     | 'model-not-configured'
     | 'model-unavailable'
 
 export interface LivingMemoryExtractionTrace {
-    extracted: ExtractedMemoryItem[]
+    extracted: AttributedMemoryItem[]
     prompt: PromptMessages | null
     output: string | null
     skippedReason: LivingMemoryExtractionSkipReason | null
@@ -35,6 +36,10 @@ export interface LivingMemoryExtractionContext {
     presetId: string
     presetLabel?: string
     presetPrompt: string
+    speakers: Array<{
+        speakerLabel: string
+        speakerKey: string
+    }>
 }
 
 export class LivingMemoryExtractor {
@@ -75,7 +80,9 @@ export class LivingMemoryExtractor {
             prompt,
             toolName: extractionResultToolName,
             toolDescription: extractionResultToolDescription,
-            schema: extractionResultSchema,
+            schema: createExtractionResultSchema(
+                context.speakers.map((speaker) => speaker.speakerLabel)
+            ),
             stringifiedArrayField: 'memories',
             context: {
                 presetId: context.presetId,
@@ -90,15 +97,32 @@ export class LivingMemoryExtractor {
                           stage: 'memory-extraction'
                       }
         })
+        const speakerKeyByLabel = new Map(
+            context.speakers.map((speaker) => [
+                speaker.speakerLabel,
+                speaker.speakerKey
+            ])
+        )
+        const onlySpeakerKey =
+            context.speakers.length === 1
+                ? context.speakers[0].speakerKey
+                : undefined
         const extracted =
-            result.value?.memories.map((item): ExtractedMemoryItem => {
+            result.value?.memories.map((item): AttributedMemoryItem => {
                 return {
                     type: item.type,
                     content: normalizeMemoryText(item.content),
                     summary: normalizeMemoryText(item.summary),
                     keywords: normalizeMemoryKeywords(item.keywords),
                     sentiment: normalizeMemoryText(item.sentiment),
-                    importance: item.importance
+                    importance: item.importance,
+                    speakerKeys: normalizeSpeakerKeys(
+                        onlySpeakerKey == null
+                            ? item.speakerLabels.map((label) =>
+                                  speakerKeyByLabel.get(label)!
+                              )
+                            : [onlySpeakerKey]
+                    )
                 }
             }) ?? []
 

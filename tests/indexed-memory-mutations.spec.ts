@@ -430,7 +430,8 @@ it('splits bulk deletions into fixed-size batches', async () => {
             keywords: [],
             summary: '',
             sentiment: '',
-            importance: 0.5
+            importance: 0.5,
+            speakerKeys: []
         }))
         const created = await repository.appendMemories(scope, [], extracted)
 

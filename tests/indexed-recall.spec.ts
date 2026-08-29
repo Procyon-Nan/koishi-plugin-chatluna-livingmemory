@@ -13,6 +13,7 @@ import { createCapturedLogger, logger } from './workflow-test-utils'
 const createEntry = (id: string): MemoryEntryRecord => ({
     id,
     presetId: 'preset-a',
+    speakerKeys: [],
     type: 'fact',
     status: 'active',
     content: `content-${id}`,

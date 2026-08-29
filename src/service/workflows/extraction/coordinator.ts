@@ -280,7 +280,8 @@ export class LivingMemoryExtractionCoordinator {
                     conversationId: scope.conversationId,
                     presetId: scope.presetId,
                     presetLabel: scope.presetLabel,
-                    presetPrompt
+                    presetPrompt,
+                    speakers: payload.speakers
                 },
                 logger
             )

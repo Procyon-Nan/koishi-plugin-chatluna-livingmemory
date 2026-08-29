@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import type {
-    ExtractedMemoryItem,
+    AttributedMemoryItem,
     ExtractionPayload
 } from '../src/contracts/workflows'
 import type {
@@ -24,6 +24,7 @@ import {
 const createExtractionMessages = (): LivingMemoryTranscriptMessage[] => [
     {
         role: 'user',
+        speakerKey: 'speaker-key',
         speakerLabel: '用户',
         contentLines: ['用户消息'],
         createdAt: new Date('2026-07-01T00:00:00.000Z')
@@ -47,13 +48,14 @@ const createExtractionTrace = (
     ...overrides
 })
 
-const createExtractedMemory = (): ExtractedMemoryItem => ({
+const createExtractedMemory = (): AttributedMemoryItem => ({
     type: 'fact',
     content: 'memory',
     summary: 'memory summary',
     keywords: ['memory'],
     sentiment: 'neutral',
-    importance: 0.5
+    importance: 0.5,
+    speakerKeys: ['speaker-key']
 })
 
 interface ExtractionCoordinatorOptions {
@@ -77,7 +79,7 @@ const createExtractionCoordinator = (
     const appended: {
         scope: MemoryScope
         sourceOriginMessages: MemorySourceMessage[]
-        extracted: ExtractedMemoryItem[]
+        extracted: AttributedMemoryItem[]
     }[] = []
     const captured = createCapturedLogger()
     const debugMessages = captured.info
@@ -93,6 +95,12 @@ const createExtractionCoordinator = (
                         role: 'user' as const,
                         speakerLabel: '用户',
                         content: '用户消息'
+                    }
+                ],
+                speakers: [
+                    {
+                        speakerLabel: '用户',
+                        speakerKey: 'speaker-key'
                     }
                 ]
             }))
@@ -270,7 +278,8 @@ it('uses only the configured number of recent completed rounds', async () => {
             payloads.push(messages)
             return {
                 input: 'payload',
-                sourceOriginMessages: []
+                sourceOriginMessages: [],
+                speakers: []
             }
         }
     })
@@ -339,7 +348,8 @@ it('keeps separate trigger boundaries when multiple intervals arrive in flight',
             payloads.push(messages.map((message) => message.contentLines[0]))
             return {
                 input: 'payload',
-                sourceOriginMessages: []
+                sourceOriginMessages: [],
+                speakers: []
             }
         },
         extractWithTrace: async () => {
@@ -373,7 +383,7 @@ it('keeps separate trigger boundaries when multiple intervals arrive in flight',
 })
 
 it('writes extracted memories and queues auto Dream without persisting a job', async () => {
-    const extracted: ExtractedMemoryItem[] = [
+    const extracted: AttributedMemoryItem[] = [
         {
             ...createExtractedMemory(),
             content: 'private extracted detail'

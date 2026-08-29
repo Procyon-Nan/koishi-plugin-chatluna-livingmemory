@@ -54,8 +54,6 @@ interface UserProfileGroup {
 }
 
 const collapseWhitespace = (value: string) => value.replace(/\s+/gu, ' ').trim()
-const normalizeSearchText = (value: string) =>
-    collapseWhitespace(value).toLowerCase()
 
 const unique = <T>(items: T[]) => Array.from(new Set(items))
 
@@ -355,7 +353,7 @@ export class LivingMemoryUserProfileService {
             .map((speaker) => {
                 const entries = this.selectEntriesForSpeaker(
                     activeEntries,
-                    speaker.speakerAliases
+                    speaker.speakerKey
                 )
 
                 return {
@@ -383,14 +381,10 @@ export class LivingMemoryUserProfileService {
 
     private selectEntriesForSpeaker(
         entries: DreamMemoryEntryRecord[],
-        speakerAliases: string[]
+        speakerKey: string
     ) {
         return entries
-            .filter((entry) =>
-                speakerAliases.some((alias) =>
-                    this.entryMatchesSpeakerKeyword(entry, alias)
-                )
-            )
+            .filter((entry) => entry.speakerKeys.includes(speakerKey))
             .sort((left, right) => {
                 const importanceDelta =
                     (right.importance ?? 0.5) - (left.importance ?? 0.5)
@@ -400,26 +394,6 @@ export class LivingMemoryUserProfileService {
 
                 return +right.updatedAt - +left.updatedAt
             })
-    }
-
-    private entryMatchesSpeakerKeyword(
-        entry: DreamMemoryEntryRecord,
-        speakerLabel: string
-    ) {
-        const needle = normalizeSearchText(speakerLabel)
-        if (needle.length === 0) {
-            return false
-        }
-
-        const searchable = [
-            entry.content,
-            entry.summary ?? '',
-            entry.keywords.join('\n')
-        ]
-            .map(normalizeSearchText)
-            .join('\n')
-
-        return searchable.includes(needle)
     }
 
     private latestTimestamp(entries: DreamMemoryEntryRecord[]) {

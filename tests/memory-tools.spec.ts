@@ -125,6 +125,7 @@ it('rebuilds the ChatLuna scope from the agent run context', () => {
             preset: 'default',
             agentContext: { kind: 'main', conversationId: 'conversation-1' },
             session: {
+                platform: 'onebot',
                 userId: 'user-1',
                 channelId: 'channel-1',
                 guildId: 'guild-1',
@@ -140,7 +141,8 @@ it('rebuilds the ChatLuna scope from the agent run context', () => {
                 channelId: 'channel-1',
                 guildId: 'guild-1',
                 isDirect: false,
-                speakerId: 'user-1'
+                speakerId: 'user-1',
+                platform: 'onebot'
             }
         }
     )
@@ -151,7 +153,12 @@ it('rebuilds the Character group and private scope from the session', () => {
         resolveToolMemoryScopeConfigurable({
             preset: '史尔特里',
             source: 'character',
-            session: { userId: 'user-1', guildId: 'guild-1', isDirect: false }
+            session: {
+                platform: 'onebot',
+                userId: 'user-1',
+                guildId: 'guild-1',
+                isDirect: false
+            }
         }),
         {
             ok: true,
@@ -162,7 +169,8 @@ it('rebuilds the Character group and private scope from the session', () => {
                 channelId: undefined,
                 guildId: 'guild-1',
                 isDirect: false,
-                speakerId: 'user-1'
+                speakerId: 'user-1',
+                platform: 'onebot'
             }
         }
     )
@@ -171,7 +179,11 @@ it('rebuilds the Character group and private scope from the session', () => {
         resolveToolMemoryScopeConfigurable({
             preset: '史尔特里',
             source: 'character',
-            session: { userId: 'user-1', isDirect: true }
+            session: {
+                platform: 'onebot',
+                userId: 'user-1',
+                isDirect: true
+            }
         }),
         {
             ok: true,
@@ -182,7 +194,8 @@ it('rebuilds the Character group and private scope from the session', () => {
                 channelId: undefined,
                 guildId: undefined,
                 isDirect: true,
-                speakerId: 'user-1'
+                speakerId: 'user-1',
+                platform: 'onebot'
             }
         }
     )

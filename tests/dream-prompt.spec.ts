@@ -36,6 +36,7 @@ const testEmbedding = [1, 0, 0]
 const createMemory = (id: string, content: string): DreamMemoryEntryRecord => ({
     id,
     presetId: 'preset-1',
+    speakerKeys: [],
     type: 'fact',
     status: 'active',
     content,
