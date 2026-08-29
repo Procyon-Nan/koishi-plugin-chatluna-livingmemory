@@ -15,7 +15,6 @@ import { addStats, createEmptyStats, formatStageDetail } from './stats'
 import type { DreamOperationStats, DreamRunResult, DreamStage } from './types'
 import { DreamUnitProcessor } from './unit_processor'
 import type { LivingMemoryLogger } from '../../logging/logger'
-import { createSpeakerKeysSignature } from '../../memory/speaker_identity'
 
 type IncrementalDreamConfig = Pick<LivingMemoryConfig, 'mainModel' | 'debug'>
 
@@ -111,34 +110,33 @@ export class LivingMemoryIncrementalDreamService {
         const presetPrompt = await resolvePresetPrompt(this.ctx, presetId)
 
         for (const stage of ['active', 'archived'] as const) {
-            const groups = this.groupBySpeakerKeys(
-                batch.filter((entry) => entry.status === stage)
-            )
-            for (const entries of groups) {
-                state.clusterCount++
-                state.stageClusterCounts[stage]++
-                const result = await this.unitProcessor.process({
-                    presetId,
-                    assistantLabel,
-                    presetPrompt,
-                    stage,
-                    cluster: {
-                        id: `cluster-${stage}-${state.stageClusterCounts[stage]}`,
-                        reason: 'memory group',
-                        entries
-                    },
-                    model,
-                    touchedMemoryIds: new Set(),
-                    consolidationMode: 'incremental-batch',
-                    logger
-                })
-                addStats(state.stats, result)
-                addStats(state.firstRoundStats, result)
-                addStats(state.stageStats[stage], result)
-                if (result.success === false) {
-                    state.errors.push(`first-round ${stage}: ${result.error}`)
-                    return this.createResult(presetId, batch, state)
-                }
+            const entries = batch.filter((entry) => entry.status === stage)
+            if (entries.length === 0) {
+                continue
+            }
+            state.clusterCount++
+            state.stageClusterCounts[stage]++
+            const result = await this.unitProcessor.process({
+                presetId,
+                assistantLabel,
+                presetPrompt,
+                stage,
+                cluster: {
+                    id: `cluster-${stage}`,
+                    reason: 'memory group',
+                    entries
+                },
+                model,
+                touchedMemoryIds: new Set(),
+                consolidationMode: 'incremental-batch',
+                logger
+            })
+            addStats(state.stats, result)
+            addStats(state.firstRoundStats, result)
+            addStats(state.stageStats[stage], result)
+            if (result.success === false) {
+                state.errors.push(`first-round ${stage}: ${result.error}`)
+                return this.createResult(presetId, batch, state)
             }
         }
 
@@ -155,16 +153,7 @@ export class LivingMemoryIncrementalDreamService {
                     excludedMemoryIds: batchIds,
                     limit: INCREMENTAL_DREAM_TOP_K
                 })
-            const speakerSignature = createSpeakerKeysSignature(
-                seed.speakerKeys
-            )
-            const nearest = (
-                await this.loadNeighbors(presetId, nearestIds)
-            ).filter(
-                (entry) =>
-                    createSpeakerKeysSignature(entry.speakerKeys) ===
-                    speakerSignature
-            )
+            const nearest = await this.loadNeighbors(presetId, nearestIds)
             if (nearest.length === 0) {
                 await this.mutations.setMemoryConsolidation(
                     presetId,
@@ -242,17 +231,6 @@ export class LivingMemoryIncrementalDreamService {
                     +left.createdAt - +right.createdAt ||
                     left.id.localeCompare(right.id)
             )
-    }
-
-    private groupBySpeakerKeys(entries: MemoryEntryRecord[]) {
-        const groups = new Map<string, MemoryEntryRecord[]>()
-        for (const entry of entries) {
-            const key = createSpeakerKeysSignature(entry.speakerKeys)
-            const group = groups.get(key) ?? []
-            group.push(entry)
-            groups.set(key, group)
-        }
-        return [...groups.values()]
     }
 
     private async loadNeighbors(presetId: string, memoryIds: string[]) {

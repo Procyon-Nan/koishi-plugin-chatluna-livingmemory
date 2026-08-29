@@ -469,7 +469,7 @@ it('splits an oversized cluster into units within the size cap', async () => {
 
     assert.deepEqual(
         clusters.map((cluster) => cluster.id),
-        [1, 2, 3, 4].map((index) => `cluster-${index}`)
+        [1, 2, 3, 4].map((index) => `cluster-1:chunk-${index}`)
     )
     assert.deepEqual(
         clusters.map((cluster) => cluster.reason),
@@ -518,13 +518,13 @@ it('keeps clusters within the cap intact and splits oversized ones', async () =>
         clusters
             .filter((cluster) => cluster.entries.length === 20)
             .map((cluster) => cluster.id),
-        ['cluster-1', 'cluster-2']
+        ['cluster-1:chunk-1', 'cluster-1:chunk-2']
     )
     assert.deepEqual(
         clusters
             .filter((cluster) => cluster.entries.length === 15)
             .map((cluster) => cluster.id),
-        ['cluster-3']
+        ['cluster-2']
     )
 })
 

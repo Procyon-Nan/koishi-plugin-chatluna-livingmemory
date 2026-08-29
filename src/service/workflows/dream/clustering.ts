@@ -5,7 +5,6 @@ import type { DreamWorkerRunner } from './worker/protocol'
 import { DREAM_PARTITION_MAX_SIZE } from './partitioning'
 import type { DreamCluster, DreamStage } from './types'
 import type { LivingMemoryLogger } from '../../logging/logger'
-import { createSpeakerKeysSignature } from '../../memory/speaker_identity'
 
 // 密度聚类的簇规模由数据几何决定，无法约束单次送入 LLM 的记忆数量。
 // 超过该上限的簇按关键词共现做平衡切分，与增量 Dream 的
@@ -39,40 +38,6 @@ export class DreamClusterer {
             return []
         }
 
-        const groups = new Map<string, DreamMemoryEntryRecord[]>()
-        for (const entry of entries) {
-            const key = createSpeakerKeysSignature(entry.speakerKeys)
-            const group = groups.get(key) ?? []
-            group.push(entry)
-            groups.set(key, group)
-        }
-
-        const clusters: DreamCluster[] = []
-        for (const group of groups.values()) {
-            if (group.length < 2) {
-                continue
-            }
-            clusters.push(
-                ...(await this.buildSpeakerClusters(
-                    presetId,
-                    stage,
-                    group,
-                    logger
-                ))
-            )
-        }
-        return clusters.map((cluster, index) => ({
-            ...cluster,
-            id: `cluster-${index + 1}`
-        }))
-    }
-
-    private async buildSpeakerClusters(
-        presetId: string,
-        stage: DreamStage,
-        entries: DreamMemoryEntryRecord[],
-        logger?: LivingMemoryLogger
-    ): Promise<DreamCluster[]> {
         const partitions = await this.worker.partition(entries)
         const clusters: DreamCluster[] = []
         const firstPassNoise: DreamMemoryEntryRecord[] = []

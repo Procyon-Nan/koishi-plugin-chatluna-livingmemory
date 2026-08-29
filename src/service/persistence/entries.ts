@@ -30,7 +30,6 @@ import {
 } from '../memory/origins/source_origins'
 import { normalizeEntryRecord } from './normalizers'
 import {
-    createSpeakerKeysSignature,
     createUserProfileSpeakerKey,
     normalizeSpeakerKeys
 } from '../memory/speaker_identity'
@@ -562,8 +561,6 @@ export class LivingMemoryEntryRepository
             sources.some(
                 (source) =>
                     source.presetId !== target.presetId ||
-                    createSpeakerKeysSignature(source.speakerKeys) !==
-                        createSpeakerKeysSignature(target.speakerKeys) ||
                     source.status !== expectedStatus ||
                     +source.updatedAt !==
                         expectedSourceUpdatedAtById.get(source.id)
@@ -598,6 +595,12 @@ export class LivingMemoryEntryRepository
             {
                 ...this.buildMemoryUpdatePatch(target, input.patch),
                 sourceOrigins: mergeMemorySourceOrigins([target, ...sources]),
+                // 合并为纯语义判定：产物内容涉及全部源记忆的用户，
+                // speakerKeys 取并集。
+                speakerKeys: normalizeSpeakerKeys([
+                    ...target.speakerKeys,
+                    ...sources.flatMap((source) => source.speakerKeys)
+                ]),
                 isConsolidated: input.targetIsConsolidated,
                 updatedAt: merge.updatedAt
             }

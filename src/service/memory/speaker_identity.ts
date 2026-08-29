@@ -28,7 +28,3 @@ export const normalizeSpeakerKeys = (
         )
     ].sort()
 }
-
-export const createSpeakerKeysSignature = (speakerKeys: readonly string[]) => {
-    return speakerKeys.join('\u0000')
-}
