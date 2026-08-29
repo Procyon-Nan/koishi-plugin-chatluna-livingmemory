@@ -3,6 +3,7 @@ import type { Session } from 'koishi'
 import type { MemoryScope } from '../src/contracts/memory'
 import {
     type CharacterTranscriptSourceMessage,
+    takeRecentCharacterRounds,
     toCharacterCompletedRound
 } from '../src/service/transcript/character_transcript_adapter'
 import { createUserProfileSpeakerKey } from '../src/service/memory/speaker_identity'
@@ -178,5 +179,31 @@ it('treats sender ids as authoritative when a user shares the bot display name',
     assert.deepEqual(
         result.round?.messages.map((item) => item.role),
         ['user', 'assistant']
+    )
+})
+
+it('slices recent character rounds by completed pairs', () => {
+    const history = [
+        message('user-1', '一轮', 0),
+        message('bot-1', '回复一', 1),
+        message('user-1', '二轮', 2),
+        message('bot-1', '回复二', 3),
+        message('user-1', '未回复', 4)
+    ]
+    assert.deepEqual(
+        takeRecentCharacterRounds(session, history, 1).map(
+            (item) => item.content
+        ),
+        ['二轮', '回复二', '未回复']
+    )
+    assert.deepEqual(
+        takeRecentCharacterRounds(session, history, 2).map(
+            (item) => item.content
+        ),
+        ['一轮', '回复一', '二轮', '回复二', '未回复']
+    )
+    assert.deepEqual(
+        takeRecentCharacterRounds(session, [message('user-1', '独苗', 0)], 2),
+        []
     )
 })

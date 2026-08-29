@@ -11,6 +11,7 @@ import type {
 } from '../contracts/memory'
 import {
     setLivingMemoryRawContent,
+    takeRecentChatLunaRounds,
     toChatLunaTranscriptMessageResult,
     toChatLunaTranscriptMessages
 } from '../service/transcript/chatluna_transcript_adapter'
@@ -215,7 +216,10 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                     return await toChatLunaTranscriptMessages(
                         scope,
                         session,
-                        await chatInterface.chatHistory.getMessages()
+                        takeRecentChatLunaRounds(
+                            await chatInterface.chatHistory.getMessages(),
+                            config.recallHistoryWindowRounds
+                        )
                     )
                 })()
 

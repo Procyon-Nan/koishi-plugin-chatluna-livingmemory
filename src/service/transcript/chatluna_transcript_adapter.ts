@@ -106,6 +106,39 @@ export const setLivingMemoryRawContent = (
     }
 }
 
+/**
+ * 召回与用户画像只消费最近若干轮：先切窗再转换，避免全量转换，
+ * 也避免触碰到窗口外的历史（如 infiniteContext 压缩摘要）。
+ * 配对轮次口径与 shared/rounds 的 takeRecentRounds 保持一致——
+ * 召回工作流在转换后还会按同一轮数再次开窗。
+ */
+export const takeRecentChatLunaRounds = (
+    messages: BaseMessage[],
+    roundCount: number
+) => {
+    const selected: BaseMessage[] = []
+    let completedRounds = 0
+    let hasAssistant = false
+
+    for (let index = messages.length - 1; index >= 0; index--) {
+        const message = messages[index]
+        selected.unshift(message)
+        const type = message.getType()
+
+        if (type === 'ai') {
+            hasAssistant = true
+        } else if (type === 'human' && hasAssistant) {
+            completedRounds += 1
+            hasAssistant = false
+            if (completedRounds >= roundCount) {
+                break
+            }
+        }
+    }
+
+    return completedRounds === 0 ? [] : selected
+}
+
 export const toChatLunaTranscriptMessageResult = async (
     scope: MemoryScope,
     session: Session,

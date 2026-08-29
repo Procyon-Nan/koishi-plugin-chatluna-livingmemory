@@ -4,6 +4,7 @@ import {
     type CharacterTranscriptSourceMessage,
     isCharacterBotMessage,
     isSameCharacterMessage,
+    takeRecentCharacterRounds,
     toCharacterCompletedRound,
     toCharacterTranscriptMessageResult,
     toCharacterTranscriptMessages
@@ -283,7 +284,11 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
             const history = await toCharacterTranscriptMessages(
                 scope,
                 payload.session,
-                historyMessages
+                takeRecentCharacterRounds(
+                    payload.session,
+                    historyMessages,
+                    config.recallHistoryWindowRounds
+                )
             )
             profileSpeakerKeysByScope.set(
                 scopeKey(scope),
@@ -308,7 +313,11 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
             const messages = await toCharacterTranscriptMessages(
                 scope,
                 payload.session,
-                payload.messages
+                takeRecentCharacterRounds(
+                    payload.session,
+                    payload.messages,
+                    config.recallHistoryWindowRounds
+                )
             )
             const key = scopeKey(scope)
             profileSpeakerKeysByScope.set(

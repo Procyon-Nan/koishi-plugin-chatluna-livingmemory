@@ -78,6 +78,38 @@ export const isSameCharacterMessage = (
     )
 }
 
+/**
+ * 召回与用户画像只消费最近若干轮：先切窗再转换，避免全量转换。
+ * 配对轮次口径与 shared/rounds 的 takeRecentRounds 保持一致——
+ * 召回工作流在转换后还会按同一轮数再次开窗。
+ */
+export const takeRecentCharacterRounds = (
+    session: Session,
+    messages: readonly CharacterTranscriptSourceMessage[],
+    roundCount: number
+) => {
+    const selected: CharacterTranscriptSourceMessage[] = []
+    let completedRounds = 0
+    let hasAssistant = false
+
+    for (let index = messages.length - 1; index >= 0; index--) {
+        const message = messages[index]
+        selected.unshift(message)
+
+        if (isCharacterBotMessage(session, message)) {
+            hasAssistant = true
+        } else if (hasAssistant) {
+            completedRounds += 1
+            hasAssistant = false
+            if (completedRounds >= roundCount) {
+                break
+            }
+        }
+    }
+
+    return completedRounds === 0 ? [] : selected
+}
+
 export const toCharacterTranscriptMessageResult = async (
     scope: MemoryScope,
     session: Session,
