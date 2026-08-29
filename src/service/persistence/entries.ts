@@ -370,7 +370,13 @@ export class LivingMemoryEntryRepository
         const sourceOrigins =
             createSourceOriginsFromMessages(sourceOriginMessages)
         const records = extracted.map((item) =>
-            this.buildMemoryEntry(scope, item, sourceOrigins, now)
+            this.buildMemoryEntry(
+                scope,
+                item,
+                sourceOrigins,
+                now,
+                item.speakerKeys
+            )
         )
         await this.ctx.database.upsert('living_memory_entry', records)
         return records
@@ -393,8 +399,7 @@ export class LivingMemoryEntryRepository
         fields: AttributedMemoryItem | MemoryMutationInput,
         sourceOrigins: MemoryEntryRecord['sourceOrigins'],
         createdAt: Date,
-        speakerKeys: string[] =
-            'speakerKeys' in fields ? fields.speakerKeys : []
+        speakerKeys: string[]
     ): MemoryEntryRecord {
         return {
             id: randomUUID(),
