@@ -17,9 +17,7 @@ export const normalizeEntryRecord = (
     record: MemoryEntryRecord
 ): MemoryEntryRecord => ({
     ...record,
-    speakerKeys: normalizeSpeakerKeys(
-        (record as Partial<MemoryEntryRecord>).speakerKeys
-    ),
+    speakerKeys: normalizeSpeakerKeys(record.speakerKeys),
     status: normalizeMemoryStatus(record.status),
     sentiment: normalizeOptionalMemoryText(record.sentiment),
     importance: normalizeMemoryImportance(record.importance),
