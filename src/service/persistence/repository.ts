@@ -517,30 +517,28 @@ export class LivingMemoryRepository
             createdAt: new Date(entry.createdAt),
             updatedAt: new Date(entry.updatedAt)
         })
-        const entryRows =
-            data.version === 1
-                ? data.entries.map((entry) =>
-                      createEntryRow(entry, false, [])
-                  )
-                : data.version === 2
-                  ? data.entries.map((entry) =>
-                        createEntryRow(
-                            entry,
-                            isCrossPresetImport
-                                ? false
-                                : entry.isConsolidated,
-                            []
-                        )
-                    )
-                  : data.entries.map((entry) =>
-                        createEntryRow(
-                            entry,
-                            isCrossPresetImport
-                                ? false
-                                : entry.isConsolidated,
-                            entry.speakerKeys
-                        )
-                    )
+        let entryRows
+        if (data.version === 1) {
+            entryRows = data.entries.map((entry) =>
+                createEntryRow(entry, false, [])
+            )
+        } else if (data.version === 2) {
+            entryRows = data.entries.map((entry) =>
+                createEntryRow(
+                    entry,
+                    isCrossPresetImport ? false : entry.isConsolidated,
+                    []
+                )
+            )
+        } else {
+            entryRows = data.entries.map((entry) =>
+                createEntryRow(
+                    entry,
+                    isCrossPresetImport ? false : entry.isConsolidated,
+                    entry.speakerKeys
+                )
+            )
+        }
         const speakerKeys = [
             ...new Set(data.userProfiles.map((profile) => profile.speakerKey))
         ]
