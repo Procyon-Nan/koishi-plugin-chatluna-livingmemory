@@ -10,6 +10,7 @@ import {
     toCharacterTranscriptMessages
 } from '../service/transcript/character_transcript_adapter'
 import { collectUserProfileSpeakerKeys } from '../service/user_profile'
+import type { UserSpeakerCache } from '../service/transcript/user_speaker'
 import {
     type CharacterPresetPromptSource,
     renderCharacterPresetPrompt,
@@ -166,6 +167,9 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
     const events = ctx as unknown as CharacterEventRegistrar
     const livingMemory = ctx.chatluna_living_memory
     const profileSpeakerKeysByScope = new Map<string, string[]>()
+    // 说话人解析跨轮复用：昵称变更需重启插件后生效，换取不在每轮重复
+    // 调用平台 getUser。
+    const speakerCache: UserSpeakerCache = new Map()
 
     ctx.on('dispose', () => {
         livingMemory.clearExtractionState()
@@ -250,7 +254,8 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
             const currentTranscript = await toCharacterTranscriptMessageResult(
                 scope,
                 payload.session,
-                payload.focusMessage
+                payload.focusMessage,
+                speakerCache
             )
             if (currentTranscript.message == null) {
                 logger.diagnostic('character.before.skipped', {
@@ -288,7 +293,8 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                     payload.session,
                     historyMessages,
                     config.recallHistoryWindowRounds
-                )
+                ),
+                speakerCache
             )
             profileSpeakerKeysByScope.set(
                 scopeKey(scope),
@@ -317,7 +323,8 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                     payload.session,
                     payload.messages,
                     config.recallHistoryWindowRounds
-                )
+                ),
+                speakerCache
             )
             const key = scopeKey(scope)
             profileSpeakerKeysByScope.set(
@@ -335,7 +342,8 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                           scope,
                           payload.session,
                           payload.messages,
-                          payload.focusMessage
+                          payload.focusMessage,
+                          speakerCache
                       )
 
             logger.diagnostic('character.after.received', {

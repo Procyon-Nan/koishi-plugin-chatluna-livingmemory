@@ -15,7 +15,9 @@ export const resolveUserSpeaker = async (
     cache?: UserSpeakerCache
 ): Promise<ResolvedUserSpeaker> => {
     const speakerId = userId.trim()
-    const cached = cache?.get(speakerId)
+    // 缓存键必须包含平台：同一 userId 在不同平台对应不同 speakerKey。
+    const cacheKey = `${session.platform}\u0000${speakerId}`
+    const cached = cache?.get(cacheKey)
     if (cached != null) {
         return cached
     }
@@ -36,6 +38,8 @@ export const resolveUserSpeaker = async (
             speakerLabel
         }
     })()
-    cache?.set(speakerId, pending)
+    // 解析失败的条目不留在缓存中，平台 API 瞬时故障在下一轮重试。
+    pending.catch(() => cache?.delete(cacheKey))
+    cache?.set(cacheKey, pending)
     return pending
 }

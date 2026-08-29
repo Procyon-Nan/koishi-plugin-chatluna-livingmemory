@@ -192,9 +192,9 @@ export const toChatLunaTranscriptMessageResult = async (
 export const toChatLunaTranscriptMessages = async (
     scope: MemoryScope,
     session: Session,
-    messages: BaseMessage[]
+    messages: BaseMessage[],
+    speakerCache: UserSpeakerCache = new Map()
 ) => {
-    const speakerCache: UserSpeakerCache = new Map()
     const converted = await Promise.all(
         messages.map((message) =>
             toChatLunaTranscriptMessageResult(scope, session, message, {

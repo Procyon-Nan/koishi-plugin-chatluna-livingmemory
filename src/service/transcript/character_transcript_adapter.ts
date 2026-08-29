@@ -145,9 +145,9 @@ export const toCharacterTranscriptMessageResult = async (
 export const toCharacterTranscriptMessages = async (
     scope: MemoryScope,
     session: Session,
-    messages: readonly CharacterTranscriptSourceMessage[]
+    messages: readonly CharacterTranscriptSourceMessage[],
+    cache: UserSpeakerCache = new Map()
 ) => {
-    const cache: UserSpeakerCache = new Map()
     const converted = await Promise.all(
         messages.map((message) =>
             toCharacterTranscriptMessageResult(scope, session, message, cache)
@@ -207,7 +207,8 @@ export const toCharacterCompletedRound = async (
     scope: MemoryScope,
     session: Session,
     messages: readonly CharacterTranscriptSourceMessage[],
-    focusMessage: CharacterTranscriptSourceMessage
+    focusMessage: CharacterTranscriptSourceMessage,
+    cache?: UserSpeakerCache
 ): Promise<CharacterCompletedRoundResult> => {
     if (isCharacterBotMessage(session, focusMessage)) {
         return {
@@ -219,7 +220,8 @@ export const toCharacterCompletedRound = async (
     const focusResult = await toCharacterTranscriptMessageResult(
         scope,
         session,
-        focusMessage
+        focusMessage,
+        cache
     )
     if (focusResult.message == null) {
         return {
@@ -258,7 +260,8 @@ export const toCharacterCompletedRound = async (
         session,
         messages
             .slice(firstResponseIndex, lastAssistantIndex + 1)
-            .filter((message) => isCharacterBotMessage(session, message))
+            .filter((message) => isCharacterBotMessage(session, message)),
+        cache
     )
     if (!responseMessages.some((message) => message.role === 'assistant')) {
         return {

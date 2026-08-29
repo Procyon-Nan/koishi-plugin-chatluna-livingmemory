@@ -15,6 +15,7 @@ import {
     toChatLunaTranscriptMessageResult,
     toChatLunaTranscriptMessages
 } from '../service/transcript/chatluna_transcript_adapter'
+import type { UserSpeakerCache } from '../service/transcript/user_speaker'
 import { collectUserProfileSpeakerKeys } from '../service/user_profile'
 import {
     renderChatLunaPresetPrompt,
@@ -53,6 +54,9 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
     })
     const activeUserProfileInjections = new Map<string, string>()
     const activeSnapshotInjections = new Map<string, string>()
+    // 说话人解析跨轮复用：昵称变更需重启插件后生效，换取不在每轮重复
+    // 调用平台 getUser。
+    const speakerCache: UserSpeakerCache = new Map()
     const diagnostic = (event: string, fields: Record<string, unknown>) =>
         logger.diagnostic(event, fields)
     const clearActiveInjections = (conversationId: string) => {
@@ -180,7 +184,8 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 session,
                 message,
                 {
-                    fallbackCreatedAt: new Date()
+                    fallbackCreatedAt: new Date(),
+                    speakerCache
                 }
             )
             if (currentTranscript.message == null) {
@@ -219,7 +224,8 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                         takeRecentChatLunaRounds(
                             await chatInterface.chatHistory.getMessages(),
                             config.recallHistoryWindowRounds
-                        )
+                        ),
+                        speakerCache
                     )
                 })()
 
@@ -359,7 +365,8 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 session,
                 sourceMessage,
                 {
-                    fallbackCreatedAt: completedAt
+                    fallbackCreatedAt: completedAt,
+                    speakerCache
                 }
             )
             const responseTranscript = await toChatLunaTranscriptMessageResult(
@@ -367,7 +374,8 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 session,
                 responseMessage,
                 {
-                    fallbackCreatedAt: completedAt
+                    fallbackCreatedAt: completedAt,
+                    speakerCache
                 }
             )
 
