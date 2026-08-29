@@ -102,7 +102,7 @@ export const buildExtractionPrompt = (
         MEMORY_SENTIMENT_REQUIREMENT,
         MEMORY_IMPORTANCE_REQUIREMENT,
         MEMORY_SPEAKER_REFERENCE_REQUIREMENT,
-        '- speakerLabels：填写这条记忆关联的具体用户昵称；只能使用 transcript 中用户消息前缀里出现的完整昵称。涉及多名用户时全部填写，不要填写助手昵称。',
+        '- speakerLabels：填写这条记忆内容实际关联的具体用户昵称；只涉及你自身且不关联具体用户时填写空数组。只能使用 transcript 中用户消息前缀里出现的完整昵称，涉及多名用户时全部填写，不要填写助手昵称，也不要因为用户出现在 transcript 中就自动关联。',
         '- 抽取时以消息前缀为准区分你与其他用户，不要把你自己的发言错误归给其他人。',
         '</field_rules>',
         '',

@@ -103,10 +103,6 @@ export class LivingMemoryExtractor {
                 speaker.speakerKey
             ])
         )
-        const onlySpeakerKey =
-            context.speakers.length === 1
-                ? context.speakers[0].speakerKey
-                : undefined
         const extracted =
             result.value?.memories.map((item): AttributedMemoryItem => {
                 return {
@@ -117,11 +113,9 @@ export class LivingMemoryExtractor {
                     sentiment: normalizeMemoryText(item.sentiment),
                     importance: item.importance,
                     speakerKeys: normalizeSpeakerKeys(
-                        onlySpeakerKey == null
-                            ? item.speakerLabels.map((label) =>
-                                  speakerKeyByLabel.get(label)!
-                              )
-                            : [onlySpeakerKey]
+                        item.speakerLabels.map(
+                            (label) => speakerKeyByLabel.get(label)!
+                        )
                     )
                 }
             }) ?? []
