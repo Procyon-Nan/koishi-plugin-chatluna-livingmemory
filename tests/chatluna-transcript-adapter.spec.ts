@@ -13,7 +13,6 @@ const createScope = (platform?: string): MemoryScope => ({
     presetId: 'preset-1',
     userId: 'user-1',
     speakerId: 'user-1',
-    speakerName: '当前昵称',
     platform
 })
 

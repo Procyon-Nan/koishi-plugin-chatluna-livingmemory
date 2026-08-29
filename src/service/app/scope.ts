@@ -6,7 +6,6 @@ export type CreateLivingMemoryScopeOptions = Partial<
         | 'guildId'
         | 'isDirect'
         | 'speakerId'
-        | 'speakerName'
         | 'presetLabel'
         | 'platform'
     >

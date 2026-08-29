@@ -14,7 +14,6 @@ const scope: MemoryScope = {
     presetLabel: '角色',
     userId: 'user-1',
     speakerId: 'user-1',
-    speakerName: '用户甲',
     platform: 'onebot'
 }
 

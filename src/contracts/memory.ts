@@ -106,7 +106,6 @@ export interface MemoryScope {
     guildId?: string
     isDirect?: boolean
     speakerId?: string
-    speakerName?: string
     platform?: string
 }
 
