@@ -88,7 +88,7 @@ const isSession = (value: unknown): value is Session => {
     return isRecord(value) && typeof value.isDirect === 'boolean'
 }
 
-const createCharacterScope = async (
+const createCharacterScope = (
     ctx: Context,
     payload: {
         session: Session
@@ -237,7 +237,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
     events.on(
         'chatluna_character/before-chat',
         async (payload: CharacterBeforeChatEventPayload) => {
-            const scope = await createCharacterScope(ctx, payload)
+            const scope = createCharacterScope(ctx, payload)
 
             logger.diagnostic('character.before.received', {
                 conversationId: scope.conversationId,
@@ -315,7 +315,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
     events.on(
         'chatluna_character/after-chat',
         async (payload: CharacterAfterChatEventPayload) => {
-            const scope = await createCharacterScope(ctx, payload)
+            const scope = createCharacterScope(ctx, payload)
             const messages = await toCharacterTranscriptMessages(
                 scope,
                 payload.session,

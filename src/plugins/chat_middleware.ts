@@ -64,13 +64,13 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
         activeSnapshotInjections.delete(conversationId)
     }
 
-    const resolveChatScope = async (
+    const resolveChatScope = (
         conversationId: string,
         message: HumanMessage,
         chatInterface: ChatPresetSource,
         session: Session,
         events: { skipped: string; resolved: string }
-    ): Promise<MemoryScope | null> => {
+    ): MemoryScope | null => {
         const fallbackPresetId = chatInterface.preset.value?.triggerKeyword?.[0]
         const presetId = ctx.chatluna_living_memory.resolvePresetId(
             message,
@@ -164,7 +164,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 isDirect: session.isDirect
             })
 
-            const scope = await resolveChatScope(
+            const scope = resolveChatScope(
                 conversationId,
                 message,
                 chatInterface,
@@ -345,7 +345,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 isDirect: session.isDirect
             })
 
-            const scope = await resolveChatScope(
+            const scope = resolveChatScope(
                 conversationId,
                 sourceMessage,
                 chatInterface,
