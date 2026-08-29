@@ -54,6 +54,7 @@ export interface MemorySourceOrigin {
 export interface MemoryEntryRecord {
     id: string
     presetId: string
+    speakerKeys: string[]
     type: MemoryEntryType
     status: MemoryEntryStatus
     content: string
@@ -139,6 +140,18 @@ export interface UserProfileRecord {
     speakerLabel: string
     content: string
     sourceMemoryIds: string[]
+    createdAt: Date
+    updatedAt: Date
+}
+
+export interface PresetSpeakerRecord {
+    id: string
+    presetId: string
+    speakerKey: string
+    speakerLabel: string
+    speakerAliases: string[]
+    speakerId: string | null
+    platform: string | null
     createdAt: Date
     updatedAt: Date
 }
@@ -231,6 +244,7 @@ export interface MemoryListFilter {
     type?: MemoryEntryType
     status?: MemoryEntryStatus | 'all'
     keyword?: string
+    speakerKey?: string
 }
 
 export interface MemoryListResult extends PageResult<MemoryEntryRecord> {
@@ -263,6 +277,10 @@ export interface LivingMemoryPresetExportEntryV2 extends LivingMemoryPresetExpor
     isConsolidated: boolean
 }
 
+export interface LivingMemoryPresetExportEntryV3 extends LivingMemoryPresetExportEntryV2 {
+    speakerKeys: string[]
+}
+
 export interface LivingMemoryPresetExportV1 extends LivingMemoryPresetExportBase {
     version: 1
     entries: LivingMemoryPresetExportEntry[]
@@ -273,9 +291,15 @@ export interface LivingMemoryPresetExportV2 extends LivingMemoryPresetExportBase
     entries: LivingMemoryPresetExportEntryV2[]
 }
 
+export interface LivingMemoryPresetExportV3 extends LivingMemoryPresetExportBase {
+    version: 3
+    entries: LivingMemoryPresetExportEntryV3[]
+}
+
 export type LivingMemoryPresetExport =
     | LivingMemoryPresetExportV1
     | LivingMemoryPresetExportV2
+    | LivingMemoryPresetExportV3
 
 export interface LivingMemoryPresetExportUserProfile {
     id: string
@@ -312,6 +336,7 @@ export interface LivingMemoryClientEvents {
         type?: MemoryEntryType
         status?: MemoryEntryStatus | 'all'
         keyword?: string
+        speakerKey?: string
         page?: number
         pageSize?: number
     }) => MemoryListResult
@@ -356,6 +381,9 @@ export interface LivingMemoryClientEvents {
         page?: number
         pageSize?: number
     }) => PageResult<UserProfileRecord>
+    'living-memory/listPresetSpeakers': (
+        presetId: string
+    ) => PresetSpeakerRecord[]
     'living-memory/updateUserProfile': (
         profileId: string,
         content: string

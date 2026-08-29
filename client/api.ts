@@ -16,6 +16,7 @@ import type {
     MemoryServiceStatus,
     MemorySnapshotRecord,
     PageResult,
+    PresetSpeakerRecord,
     UserProfileRecord
 } from './types'
 
@@ -37,6 +38,7 @@ export async function getStatus(): Promise<MemoryServiceStatus> {
 export interface MemoryListParams {
     presetId: string
     keyword?: string
+    speakerKey?: string
     type?: MemoryEntryType
     status?: MemoryEntryStatus | 'all'
     page?: number
@@ -135,6 +137,12 @@ export async function listUserProfiles(
     params: UserProfileListParams
 ): Promise<PageResult<UserProfileRecord>> {
     return await sendLivingMemory('living-memory/listUserProfiles', params)
+}
+
+export async function listPresetSpeakers(
+    presetId: string
+): Promise<PresetSpeakerRecord[]> {
+    return await sendLivingMemory('living-memory/listPresetSpeakers', presetId)
 }
 
 export async function deleteUserProfile(

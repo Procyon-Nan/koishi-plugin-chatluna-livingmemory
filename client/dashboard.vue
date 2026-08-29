@@ -718,7 +718,7 @@ const onImportFileSelected = async (event: Event) => {
         return
     }
 
-    if (data.version !== 1 && data.version !== 2) {
+    if (data.version !== 1 && data.version !== 2 && data.version !== 3) {
         ElMessage.error(`不支持的导出版本：${data.version}`)
         return
     }

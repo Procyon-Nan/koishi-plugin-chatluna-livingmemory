@@ -289,6 +289,17 @@
     white-space: nowrap;
 }
 
+.memory-speaker {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background-color: var(--lm-primary-light);
+    color: var(--lm-primary);
+    font-size: 12px;
+    line-height: 1.3;
+}
+
 .memory-card-summary {
     margin: 8px 0 0;
     color: var(--lm-text-primary);

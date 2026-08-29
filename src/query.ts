@@ -96,6 +96,8 @@ const selectMemoryMatches = (
     return items.filter((item) => {
         const matchesFilters =
             (filter.type == null || item.type === filter.type) &&
+            (filter.speakerKey == null ||
+                item.speakerKeys.includes(filter.speakerKey)) &&
             (filter.status == null ||
                 filter.status === 'all' ||
                 item.status === filter.status)

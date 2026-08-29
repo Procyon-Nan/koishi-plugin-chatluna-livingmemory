@@ -19,6 +19,22 @@
                     />
                 </div>
                 <div class="category-item-vertical">
+                    <span class="category-label-vertical">关联用户</span>
+                    <el-select
+                        v-model="speakerKey"
+                        placeholder="全部用户"
+                        clearable
+                        @change="onFilterChange"
+                    >
+                        <el-option
+                            v-for="speaker in speakers"
+                            :key="speaker.speakerKey"
+                            :label="speaker.speakerLabel"
+                            :value="speaker.speakerKey"
+                        />
+                    </el-select>
+                </div>
+                <div class="category-item-vertical">
                     <span class="category-label-vertical">状态</span>
                     <div class="category-options-vertical">
                         <button
@@ -174,6 +190,13 @@
                                         >
                                             {{ memory.sentiment }}
                                         </span>
+                                        <span
+                                            v-for="label in getMemorySpeakerLabels(memory)"
+                                            :key="label"
+                                            class="memory-speaker"
+                                        >
+                                            {{ label }}
+                                        </span>
                                     </div>
                                     <p
                                         v-if="memory.summary"
@@ -292,7 +315,8 @@ import { useSelection } from '../composables/use-selection'
 import {
     memoryEntryTypes,
     type MemoryEntryRecord,
-    type MemoryEntryType
+    type MemoryEntryType,
+    type PresetSpeakerRecord
 } from '../types'
 import {
     formatImportance,
@@ -330,6 +354,7 @@ const {
     keyword,
     memoryType,
     status,
+    speakerKey,
     currentFilter,
     refresh: refreshList,
     changePage,
@@ -351,6 +376,16 @@ const {
 
 const selectAllPending = ref(false)
 const batchDeleting = ref(false)
+const speakers = ref<PresetSpeakerRecord[]>([])
+const speakerLabelByKey = computed(
+    () =>
+        new Map(
+            speakers.value.map((speaker) => [
+                speaker.speakerKey,
+                speaker.speakerLabel
+            ])
+        )
+)
 
 const isAllSelected = computed(
     () => total.value > 0 && selectedCount.value >= total.value
@@ -361,18 +396,27 @@ const isIndeterminate = computed(
 
 watch(
     () => props.presetId,
-    () => clearSelection()
+    () => {
+        clearSelection()
+        speakerKey.value = ''
+        speakers.value = []
+    }
 )
 
 const refresh = async (resetPage = false): Promise<boolean> => {
     if (props.presetId.length === 0) {
         clear()
+        speakers.value = []
         emit('total-change', 0)
         return true
     }
 
     try {
-        await refreshList(resetPage)
+        const [, presetSpeakers] = await Promise.all([
+            refreshList(resetPage),
+            api.listPresetSpeakers(props.presetId)
+        ])
+        speakers.value = presetSpeakers
         emit('total-change', total.value)
         return true
     } catch (error) {
@@ -394,6 +438,15 @@ const setStatus = async (value: 'active' | 'archived' | 'all') => {
 const setMemoryType = async (value: MemoryEntryType | '') => {
     memoryType.value = value
     await onFilterChange()
+}
+
+const getMemorySpeakerLabels = (memory: MemoryEntryRecord) => {
+    if (memory.speakerKeys.length === 0) {
+        return ['未关联用户']
+    }
+    return memory.speakerKeys.map(
+        (key) => speakerLabelByKey.value.get(key) ?? '未知用户'
+    )
 }
 
 const resetMemoryFilters = async () => {

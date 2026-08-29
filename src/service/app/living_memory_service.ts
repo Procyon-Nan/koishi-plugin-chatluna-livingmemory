@@ -503,6 +503,10 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         return filterUserProfileList(items, query)
     }
 
+    async listPresetSpeakers(presetId: string) {
+        return await this.repository.listPresetSpeakers(presetId)
+    }
+
     async deleteUserProfile(profileId: string) {
         await this.repository.deleteUserProfile(profileId)
     }

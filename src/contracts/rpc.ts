@@ -10,6 +10,7 @@ import type {
     MemoryJobStatus,
     MemoryMutationInput,
     MemorySnapshotWithResolvedItems,
+    PresetSpeakerRecord,
     UserProfileRecord
 } from './memory'
 import type { DreamTriggerResult, MemoryServiceStatus } from './workflows'
@@ -24,6 +25,7 @@ export interface MemoryListFilter {
     type?: MemoryEntryRecord['type']
     status?: MemoryEntryStatus | 'all'
     keyword?: string
+    speakerKey?: string
 }
 
 export interface MemoryListQuery extends MemoryListFilter, PageRequest {}
@@ -107,6 +109,9 @@ export interface LivingMemoryConsoleEvents {
     'living-memory/listUserProfiles': (
         query: UserProfileListQuery
     ) => Promise<PageResult<UserProfileRecord>>
+    'living-memory/listPresetSpeakers': (
+        presetId: string
+    ) => Promise<PresetSpeakerRecord[]>
     'living-memory/updateUserProfile': (
         profileId: string,
         content: string

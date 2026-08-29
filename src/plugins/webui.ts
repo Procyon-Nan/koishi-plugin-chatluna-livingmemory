@@ -137,6 +137,12 @@ export function apply(ctx: Context, _config?: LivingMemoryConfig) {
     )
 
     ctx.console.addListener(
+        'living-memory/listPresetSpeakers',
+        async (presetId: string) =>
+            await service(ctx).listPresetSpeakers(presetId)
+    )
+
+    ctx.console.addListener(
         'living-memory/updateUserProfile',
         ok(async (profileId: string, content: string) => {
             await service(ctx).updateUserProfile(profileId, content)

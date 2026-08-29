@@ -37,6 +37,7 @@ export function useMemoryList(presetId: Readonly<Ref<string>>) {
     const keyword = ref('')
     const memoryType = ref<MemoryEntryType | ''>('')
     const status = ref<MemoryEntryStatus | 'all'>('active')
+    const speakerKey = ref('')
     const facets = shallowRef<MemoryListFacets>(createEmptyMemoryListFacets())
 
     // 筛选参数的唯一构造点：列表查询与"全选筛选结果"共用同一口径。
@@ -44,7 +45,8 @@ export function useMemoryList(presetId: Readonly<Ref<string>>) {
         presetId: presetId.value,
         keyword: keyword.value.trim() || undefined,
         type: memoryType.value || undefined,
-        status: status.value
+        status: status.value,
+        speakerKey: speakerKey.value || undefined
     }))
 
     const resource = usePagedResource<MemoryEntryRecord, MemoryListResult>(
@@ -93,6 +95,7 @@ export function useMemoryList(presetId: Readonly<Ref<string>>) {
         keyword.value = ''
         memoryType.value = ''
         status.value = 'active'
+        speakerKey.value = ''
     }
 
     const getStatusCount = (value: MemoryEntryStatus | 'all'): number => {
@@ -111,6 +114,7 @@ export function useMemoryList(presetId: Readonly<Ref<string>>) {
         keyword,
         memoryType,
         status,
+        speakerKey,
         currentFilter,
         facets,
         refresh,
