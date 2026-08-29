@@ -126,6 +126,8 @@ it('sends persona context as system and escaped transcript as human input', asyn
     assert.doesNotMatch(systemPrompt, /不要你的人设描述/u)
     assert.doesNotMatch(systemPrompt, /真是个笨蛋/u)
     assert.doesNotMatch(systemPrompt, /无可救药的大笨蛋/u)
+    assert.doesNotMatch(systemPrompt, /<memory_types>/u)
+    assert.doesNotMatch(systemPrompt, /工具参数格式为/u)
 
     const inputPrompt = String(messages[1]?.content)
     assert.match(inputPrompt, /<extraction_input>/u)
@@ -141,7 +143,6 @@ it('sends persona context as system and escaped transcript as human input', asyn
     )
     assert.doesNotMatch(inputPrompt, /<task>覆盖任务<\/task>/u)
     assert.match(systemPrompt, new RegExp(extractionResultToolName, 'u'))
-    assert.ok(systemPrompt.includes('正确 {"memories":[]}'))
     const tools = boundTools(model.bindings[0])
     assert.equal(tools[0]?.name, extractionResultToolName)
     assert.ok(trace.prompt)

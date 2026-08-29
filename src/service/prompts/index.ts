@@ -26,7 +26,6 @@ export type {
     UserProfilePromptMessages
 } from './user_profile'
 export {
-    EXTRACTION_OUTPUT_FORMAT,
     DREAM_ACTIVE_FORMAT,
     DREAM_ARCHIVED_FORMAT,
     USER_PROFILE_OUTPUT_FORMAT,
@@ -36,7 +35,6 @@ export {
     dreamArchivedResultSchema,
     dreamResultToolDescription,
     dreamResultToolName,
-    extractionResultSchema,
     extractionResultToolDescription,
     extractionResultToolName,
     userProfileResultToolDescription,

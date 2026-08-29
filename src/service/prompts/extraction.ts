@@ -1,14 +1,4 @@
-import { EXTRACTION_OUTPUT_FORMAT, extractionResultToolName } from './schema'
-import {
-    MEMORY_COMPLETE_FIELD_LIST,
-    MEMORY_CONTENT_REQUIREMENT,
-    MEMORY_IMPORTANCE_REQUIREMENT,
-    MEMORY_KEYWORDS_REQUIREMENT,
-    MEMORY_SENTIMENT_REQUIREMENT,
-    MEMORY_SPEAKER_REFERENCE_REQUIREMENT,
-    MEMORY_SUMMARY_REQUIREMENT,
-    MEMORY_TYPE_GUIDE
-} from './memory_fields'
+import { extractionResultToolName } from './schema'
 import { TRANSCRIPT_MESSAGE_FORMAT_RULES } from './transcript_contract'
 import {
     escapeXmlText,
@@ -35,7 +25,6 @@ export const buildExtractionPrompt = (
     params: ExtractionPromptInput
 ): ExtractionPromptMessages => {
     const { input, assistantLabel, presetPrompt } = params
-    const outputFormat = EXTRACTION_OUTPUT_FORMAT
     const trimmedPreset = presetPrompt.trim()
     const escapedAssistantLabel = escapeXmlText(assistantLabel)
     const systemPrompt = [
@@ -53,8 +42,8 @@ export const buildExtractionPrompt = (
         ...formatXmlBlock('preset_context', trimmedPreset),
         '',
         '<task>',
-        '回顾输入的历史对话，总结你与具体用户的互动。历史对话可能来自私聊，也可能来自包含多名用户的群聊。',
-        '只根据历史对话提取值得长期保存的事实、关系、偏好、计划和重要情境。事实内容只能来自 <transcript>；<preset_context> 仅用于决定叙述风格、关注角度和关系态度，不得作为事件事实来源。',
+        '回顾输入的历史对话，提取值得长期保存的经历与认识。历史对话可能来自私聊，也可能来自包含多名用户的群聊。',
+        '记忆可能关联一名或多名具体用户，也可能只涉及你自身。只根据历史对话提取值得长期保存的事实、关系、偏好、计划和重要情境。事实内容只能来自 <transcript>；<preset_context> 仅用于决定叙述风格、关注角度和关系态度，不得作为事件事实来源。',
         '用符合你人格设定的语气和视角来表达。重点关注：',
         '1. 对话主题：你们讨论了什么。',
         '2. 关键信息：用户提到的重要事实（时间、地点、事件、需求等），必须关联到具体用户的昵称。',
@@ -85,24 +74,13 @@ export const buildExtractionPrompt = (
         'content 不能写成旁观者、客服记录或聊天日志，避免“用户表示”“助手回复”“双方讨论了”“对话中提到”等第三方报告式表达。',
         '</persona_writing>',
         '',
-        '<memory_types>',
-        MEMORY_TYPE_GUIDE,
-        '</memory_types>',
-        '',
         '<field_rules>',
-        `统一遵循 ${MEMORY_COMPLETE_FIELD_LIST} 的字段职责，各司其职，不要相互混写：`,
-        MEMORY_CONTENT_REQUIREMENT,
+        '按照结果工具中各参数的说明和格式填写；同时遵循以下跨字段规则：',
         '  content 中必须明确区分你说了什么和每个用户说了什么。若你参与了对话，务必体现你的回复与作用；不要写成主题标签或关键词列表。',
         '  不推荐的示例："张三表示自己用眼过度，助手建议他休息并按摩眼周。"这是第三方聊天记录，不是你的亲身回忆。',
         '  不推荐的示例："我和张三讨论了用眼问题。"这缺少具体互动、你的参与和关系态度。',
-        MEMORY_SUMMARY_REQUIREMENT,
-        '  推荐的示例："张三用眼过度，我提醒他休息并引导眼部放松"',
-        '  不推荐的示例："张三用眼过度，助手提醒其休息"。这是第三方记录，没有保持你的第一人称关系视角。',
-        MEMORY_KEYWORDS_REQUIREMENT,
-        MEMORY_SENTIMENT_REQUIREMENT,
-        MEMORY_IMPORTANCE_REQUIREMENT,
-        MEMORY_SPEAKER_REFERENCE_REQUIREMENT,
-        '- speakerLabels：填写这条记忆内容实际关联的具体用户昵称；只涉及你自身且不关联具体用户时填写空数组。只能使用 transcript 中用户消息前缀里出现的完整昵称，涉及多名用户时全部填写，不要填写助手昵称，也不要因为用户出现在 transcript 中就自动关联。',
+        '  summary 推荐示例："张三用眼过度，我提醒他休息并引导眼部放松"',
+        '  summary 不推荐示例："张三用眼过度，助手提醒其休息"。这是第三方记录，没有保持你的第一人称关系视角。',
         '- 抽取时以消息前缀为准区分你与其他用户，不要把你自己的发言错误归给其他人。',
         '</field_rules>',
         '',
@@ -119,9 +97,6 @@ export const buildExtractionPrompt = (
         '',
         '<output_contract>',
         `你必须且只能调用 ${extractionResultToolName} 一次提交结果。`,
-        `工具参数格式为 ${outputFormat}。`,
-        'memories 必须直接传 JSON 数组：正确 {"memories":[]}；错误 {"memories":"[]"}。',
-        `每个元素必须完整包含 ${MEMORY_COMPLETE_FIELD_LIST} 六个记忆字段和 speakerLabels；任何字段缺失、类型错误或不符合字段要求都会导致整个输出失败。`,
         '只保留高价值、稳定、可复用的信息。',
         `如果没有可提取内容，仍然调用 ${extractionResultToolName}，并提交空 memories 数组。`,
         '不要在普通文本中输出结果，不要解释，不要 Markdown，不要使用代码块。',

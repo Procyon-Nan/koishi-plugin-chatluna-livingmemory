@@ -1,16 +1,6 @@
 import type { DreamCluster, DreamStage } from '../workflows/dream/types'
 import { formatMemoryEntryForPrompt } from './memory_entries'
 import {
-    MEMORY_COMPLETE_FIELD_LIST,
-    MEMORY_CONTENT_REQUIREMENT,
-    MEMORY_IMPORTANCE_REQUIREMENT,
-    MEMORY_KEYWORDS_REQUIREMENT,
-    MEMORY_SENTIMENT_REQUIREMENT,
-    MEMORY_SPEAKER_REFERENCE_REQUIREMENT,
-    MEMORY_SUMMARY_REQUIREMENT,
-    MEMORY_TYPE_GUIDE
-} from './memory_fields'
-import {
     escapeXmlText,
     formatXmlBlock,
     type PromptMessages
@@ -65,13 +55,13 @@ export const buildDreamPrompt = (
     const operationFieldGuide = [
         '操作字段要求：',
         '- keep：输出 action、memoryIds、reason，不要输出 memory。',
-        `- update：必须指定 memoryId 和 memory；memory 必须完整输出重新生成后的 ${MEMORY_COMPLETE_FIELD_LIST}。`,
-        `- merge：必须指定 targetMemoryId、sourceMemoryIds 和 memory；memory 必须完整输出合并后重新生成的 ${MEMORY_COMPLETE_FIELD_LIST}。`,
+        '- update：必须指定 memoryId 和 memory；按照工具参数说明完整重新生成 memory。',
+        '- merge：必须指定 targetMemoryId、sourceMemoryIds 和 memory；按照工具参数说明完整重新生成 memory。',
         '- archive：必须指定 memoryId；不要输出 memory，代码层只会把该条记忆的 status 改为 archived。',
         stage === 'archived'
             ? '- deleteSource：只能声明已成功 merge 的 source 可以物理删除，不要单独用于删除。'
             : '- active 阶段不要输出 deleteSource。',
-        `- 无法为 update / merge 完整重新生成 ${MEMORY_COMPLETE_FIELD_LIST} 时，改用 keep，不要输出缺字段的 update / merge。`
+        '- 无法为 update / merge 完整重新生成 memory 时，改用 keep，不要输出缺字段的 update / merge。'
     ]
     const activeFormat = DREAM_ACTIVE_FORMAT
     const archivedFormat = DREAM_ARCHIVED_FORMAT
@@ -123,15 +113,7 @@ export const buildDreamPrompt = (
         stage === 'active' ? activeFormat : archivedFormat,
         'operations 必须直接传 JSON 数组：正确 {"operations":[]}；错误 {"operations":"[]"}。',
         '',
-        '字段要求：',
-        MEMORY_TYPE_GUIDE,
-        MEMORY_CONTENT_REQUIREMENT,
-        MEMORY_SUMMARY_REQUIREMENT,
-        MEMORY_KEYWORDS_REQUIREMENT,
-        MEMORY_SENTIMENT_REQUIREMENT,
-        MEMORY_IMPORTANCE_REQUIREMENT,
-        MEMORY_SPEAKER_REFERENCE_REQUIREMENT,
-        `- update / merge 必须同步重新生成 memory 的 ${MEMORY_COMPLETE_FIELD_LIST}。`,
+        '跨字段要求：',
         '- update / merge 的 keywords 必须基于最终 memory.content 重新提取，不能复用、拼接或合并旧记忆的 keywords，也不要把正文按标点切成整句片段。',
         '- 不要在 content、summary 或 keywords 中写入“历史记录”、“已合并”等状态或整理标记；归档状态由 status 字段表达。',
         '- 所有 memoryId、targetMemoryId、sourceMemoryIds 必须来自 <memory_entries> 中的 id。',

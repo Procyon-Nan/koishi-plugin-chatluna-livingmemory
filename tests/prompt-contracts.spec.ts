@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { memoryEntryTypes } from '../src/contracts/memory'
 import type {
     MemoryEntryRecord,
     UserProfileRecord
@@ -10,24 +9,15 @@ import { buildAgenticRecallPrompt } from '../src/service/prompts/agentic_recall'
 import { buildDreamPrompt } from '../src/service/prompts/dream'
 import { buildExtractionPrompt } from '../src/service/prompts/extraction'
 import {
-    MEMORY_CONTENT_REQUIREMENT,
-    MEMORY_IMPORTANCE_REQUIREMENT,
-    MEMORY_KEYWORDS_REQUIREMENT,
-    MEMORY_SENTIMENT_REQUIREMENT,
-    MEMORY_SPEAKER_REFERENCE_REQUIREMENT,
-    MEMORY_SUMMARY_REQUIREMENT,
-    MEMORY_TYPE_GUIDE
-} from '../src/service/prompts/memory_fields'
-import {
     DREAM_ACTIVE_FORMAT,
     DREAM_ARCHIVED_FORMAT,
-    EXTRACTION_OUTPUT_FORMAT,
     createUserProfileResultSchema,
     dreamActiveResultSchema,
     dreamArchivedResultSchema,
     dreamResultToolName,
-    extractionResultSchema,
+    createExtractionResultSchema,
     extractionResultToolName,
+    generatedMemorySchema,
     USER_PROFILE_OUTPUT_FORMAT,
     userProfileResultToolName
 } from '../src/service/prompts/schema'
@@ -53,23 +43,7 @@ const memoryEntry: MemoryEntryRecord = {
     updatedAt: new Date('2026-07-15T12:30:00.000Z')
 }
 
-it('uses a valid memory type in the extraction output example', () => {
-    const output = JSON.parse(EXTRACTION_OUTPUT_FORMAT) as {
-        memories: { type: unknown }[]
-    }
-    const example = output.memories[0]
-
-    assert.equal(example?.type, 'fact')
-    assert.equal(typeof example?.type, 'string')
-    assert.ok((memoryEntryTypes as readonly unknown[]).includes(example?.type))
-})
-
 it('keeps structured-output examples aligned with their runtime schemas', () => {
-    assert.equal(
-        extractionResultSchema.safeParse(JSON.parse(EXTRACTION_OUTPUT_FORMAT))
-            .success,
-        true
-    )
     assert.equal(
         dreamActiveResultSchema.safeParse(JSON.parse(DREAM_ACTIVE_FORMAT))
             .success,
@@ -147,7 +121,7 @@ it('enforces Dream stage actions and complete generated metadata', () => {
     }
 })
 
-it('shares persistent memory field rules between Extraction and Dream', () => {
+it('keeps memory field rules in tool schemas without prompt duplication', () => {
     const extraction = buildExtractionPrompt({
         input: '[2026-07-15 20:00] 张三说：我最近在准备考试。',
         assistantLabel: '助手',
@@ -165,22 +139,53 @@ it('shares persistent memory field rules between Extraction and Dream', () => {
         stage: 'active'
     }).systemPrompt
 
-    for (const requirement of [
-        MEMORY_TYPE_GUIDE,
-        MEMORY_CONTENT_REQUIREMENT,
-        MEMORY_SUMMARY_REQUIREMENT,
-        MEMORY_KEYWORDS_REQUIREMENT,
-        MEMORY_SENTIMENT_REQUIREMENT,
-        MEMORY_IMPORTANCE_REQUIREMENT,
-        MEMORY_SPEAKER_REFERENCE_REQUIREMENT
-    ]) {
-        assert.ok(extraction.includes(requirement))
-        assert.ok(dream.includes(requirement))
+    const schemaDescriptions = [
+        generatedMemorySchema.shape.type.description,
+        generatedMemorySchema.shape.content.description,
+        generatedMemorySchema.shape.summary.description,
+        generatedMemorySchema.shape.keywords.description,
+        generatedMemorySchema.shape.sentiment.description,
+        generatedMemorySchema.shape.importance.description
+    ]
+    const extractionSchema = createExtractionResultSchema(['张三'])
+    for (const description of schemaDescriptions) {
+        assert.ok(description)
+        assert.ok(!extraction.includes(description))
+        assert.ok(!dream.includes(description))
     }
+    assert.match(
+        generatedMemorySchema.description ?? '',
+        /只涉及当前角色自身时无需添加用户昵称/u
+    )
+    assert.equal(
+        extractionSchema.shape.memories.element.description,
+        generatedMemorySchema.description
+    )
+    assert.match(
+        extractionSchema.shape.memories.element.shape.speakerLabels
+            .description ?? '',
+        /只涉及当前角色自身且不关联具体用户时填写空数组/u
+    )
+    assert.doesNotMatch(extraction, /<memory_types>/u)
+    assert.doesNotMatch(extraction, /工具参数格式为/u)
     assert.match(extraction, new RegExp(extractionResultToolName, 'u'))
     assert.match(dream, new RegExp(dreamResultToolName, 'u'))
-    assert.match(MEMORY_CONTENT_REQUIREMENT, /当前角色的第一人称关系视角/u)
-    assert.doesNotMatch(MEMORY_CONTENT_REQUIREMENT, /你的第一人称关系视角/u)
+    assert.match(
+        generatedMemorySchema.shape.content.description ?? '',
+        /当前角色的第一人称关系视角/u
+    )
+    assert.match(
+        generatedMemorySchema.shape.content.description ?? '',
+        /当前角色自身的认识/u
+    )
+    assert.doesNotMatch(
+        generatedMemorySchema.shape.content.description ?? '',
+        /你的第一人称关系视角/u
+    )
+    assert.match(
+        generatedMemorySchema.shape.keywords.description ?? '',
+        /最多 12 个/u
+    )
 })
 
 it('uses the shared memory entry and user profile output formats', () => {

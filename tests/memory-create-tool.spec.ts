@@ -98,8 +98,11 @@ it('exposes the extraction-aligned schema directly to the model-facing tool', as
         livingMemoryCreateMemoryToolDescription,
         /禁止把数组编码成 JSON 字符串|错误 \{"memories":"\[\.\.\.\]"\}/u
     )
-    // D10：单次写入数量不做提示词指导；字段规范中 keywords 的
-    // "最多 12 个" 属于字段统一要求，不在禁止范围。
+    assert.doesNotMatch(
+        livingMemoryCreateMemoryToolDescription,
+        /每条记忆遵循以下字段规范/u
+    )
+    // D10：单次写入数量不在工具描述中提供指导。
     assert.doesNotMatch(
         livingMemoryCreateMemoryToolDescription,
         /最多 \d+ 条|一次最多|单次最多|条数上限/u
