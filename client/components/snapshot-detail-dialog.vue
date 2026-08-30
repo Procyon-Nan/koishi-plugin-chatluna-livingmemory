@@ -52,13 +52,6 @@
                             }}
                         </span>
                         <span>
-                            类别：{{
-                                formatSearchTexts(
-                                    item.toolCallSummary.memoryTypes
-                                )
-                            }}
-                        </span>
-                        <span>
                             上限：{{ item.toolCallSummary.maxCandidates }}
                         </span>
                     </div>

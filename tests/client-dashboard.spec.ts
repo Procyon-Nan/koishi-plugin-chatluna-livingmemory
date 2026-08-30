@@ -146,7 +146,6 @@ it('formats importance values and distinguishes snapshot strategies', () => {
                 toolCallSummary: {
                     searchTexts: ['query'],
                     searchKeywords: [],
-                    memoryTypes: ['all'],
                     maxCandidates: 30
                 },
                 matchedMemories: [

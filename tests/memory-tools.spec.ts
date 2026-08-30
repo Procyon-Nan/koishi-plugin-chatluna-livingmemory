@@ -69,8 +69,7 @@ it('exposes the strict search schema directly to the model-facing tool', async (
 
     await rejectsStringifiedArray(
         searchTool.invoke({
-            searchTexts: '["关系", "称呼"]',
-            memoryTypes: '["all"]'
+            searchTexts: '["关系", "称呼"]'
         } as never)
     )
 })
@@ -288,7 +287,7 @@ it('queries the suffixed preset from the search tool in Character sessions', asy
     const character = createRecordingSearchProvider()
 
     await new LivingMemorySearchTool(chatluna.provider).invoke(
-        { searchTexts: ['我们一起聊过的事情'], memoryTypes: ['all'] },
+        { searchTexts: ['我们一起聊过的事情'] },
         toolConfig({
             preset: 'default',
             agentContext: {
@@ -300,7 +299,7 @@ it('queries the suffixed preset from the search tool in Character sessions', asy
         })
     )
     await new LivingMemorySearchTool(character.provider).invoke(
-        { searchTexts: ['我们一起聊过的事情'], memoryTypes: ['all'] },
+        { searchTexts: ['我们一起聊过的事情'] },
         toolConfig({
             preset: '史尔特里',
             source: 'character',

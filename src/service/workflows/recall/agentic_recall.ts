@@ -21,8 +21,6 @@ import type {
     AgenticMemorySearchToolCallSummary,
     AgenticMemorySnapshotItem,
     AgenticMemorySnapshotMemoryItem,
-    LivingMemorySearchInput,
-    LivingMemorySearchMemoryType,
     LivingMemoryTranscriptMessage,
     MemoryScope
 } from '../../../contracts/memory'
@@ -35,7 +33,8 @@ import type { LivingMemoryLogger } from '../../logging/logger'
 import { createLoggedModel } from '../../logging/model_calls'
 import {
     livingMemorySearchInputSchema,
-    livingMemorySearchToolName
+    livingMemorySearchToolName,
+    type LivingMemorySearchToolInput
 } from '../../memory/tools/search_contract'
 import {
     LivingMemorySearchTool,
@@ -91,25 +90,12 @@ const uniqueTexts = (groups: (readonly string[] | undefined)[]) => {
     ]
 }
 
-const uniqueMemoryTypes = (
-    groups: readonly LivingMemorySearchMemoryType[][]
-): LivingMemorySearchMemoryType[] => {
-    const values = [...new Set(groups.flat())]
-
-    if (values.includes('all')) {
-        return ['all']
-    }
-
-    return values
-}
-
 const normalizeToolCallSummary = (
-    input: LivingMemorySearchInput,
+    input: LivingMemorySearchToolInput,
     maxCandidates: number
 ): AgenticMemorySearchToolCallSummary => ({
     searchTexts: input.searchTexts,
     searchKeywords: input.searchKeywords ?? [],
-    memoryTypes: input.memoryTypes,
     maxCandidates
 })
 
@@ -123,9 +109,6 @@ const aggregateToolCallSummary = (
         ),
         searchKeywords: uniqueTexts(
             summaries.map((summary) => summary.searchKeywords)
-        ),
-        memoryTypes: uniqueMemoryTypes(
-            summaries.map((summary) => summary.memoryTypes)
         ),
         maxCandidates
     }
@@ -237,7 +220,7 @@ class RecordingLivingMemorySearchTool extends StructuredTool {
     }
 
     async _call(
-        input: LivingMemorySearchInput,
+        input: LivingMemorySearchToolInput,
         runManager: unknown,
         runConfig?: ToolRunnableConfig
     ) {
@@ -478,12 +461,7 @@ export class LivingMemoryAgenticRecallExecutor {
             if (parsedInput.success) {
                 toolCallSummaries.push(
                     normalizeToolCallSummary(
-                        {
-                            searchTexts: parsedInput.data.searchTexts,
-                            searchKeywords:
-                                parsedInput.data.searchKeywords ?? [],
-                            memoryTypes: parsedInput.data.memoryTypes
-                        },
+                        parsedInput.data,
                         this.config.memorySearchToolMaxResults
                     )
                 )

@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import { livingMemorySearchMemoryTypes } from '../../../contracts/memory'
 
 export const livingMemorySearchToolName = 'living_memory_search'
 export const livingMemoryGetMessagesToolName = 'living_memory_get_messages'
@@ -51,6 +50,9 @@ const createSearchFieldSchema = (rule: SearchFieldRule) =>
         {
             message: formatSearchTextLengthError(rule)
         }
+    ).refine(
+        (value) => !/^\s*\[.*\]\s*$/u.test(value),
+        { message: `${rule.fieldName} 必须直接传递数组。` }
     )
 
 const searchTextDescription =
@@ -75,19 +77,12 @@ export const livingMemorySearchInputSchema = z.object({
         .array(createSearchFieldSchema(searchKeywordRule))
         .max(memorySearchMaxKeywordCount)
         .optional()
-        .describe(searchKeywordDescription),
-    memoryTypes: z
-        .array(z.enum(livingMemorySearchMemoryTypes))
-        .min(1)
-        .refine(
-            (memoryTypes) =>
-                !memoryTypes.includes('all') || memoryTypes.length === 1,
-            {
-                message: 'memoryTypes 不能将 all 与其他类别混用。'
-            }
-        )
-        .describe('要搜索的记忆类别。使用具体类别或 all。')
+        .describe(searchKeywordDescription)
 })
+
+export type LivingMemorySearchToolInput = z.infer<
+    typeof livingMemorySearchInputSchema
+>
 
 const memoryIdsDescription =
     `要查看的记忆 ID。提供 1 到 ${memoryGetMessagesMaxIdCount} 个 ` +

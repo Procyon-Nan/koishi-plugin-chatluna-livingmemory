@@ -17,7 +17,10 @@ import type {
     LivingMemorySearchResult,
     MemoryScope
 } from '../src/contracts/memory'
-import { livingMemorySearchToolName } from '../src/service/memory/tools/search_contract'
+import {
+    livingMemorySearchToolName,
+    type LivingMemorySearchToolInput
+} from '../src/service/memory/tools/search_contract'
 import { LivingMemoryAgenticRecallExecutor } from '../src/service/workflows/recall/agentic_recall'
 import type { LivingMemoryEmbeddingSearchEngine } from '../src/service/workflows/recall/embedding_search_engine'
 import { currentMessage, scope } from './workflow-test-utils'
@@ -54,9 +57,8 @@ const testScope: MemoryScope = {
     presetLabel: '助手<&'
 }
 
-const validSearchInput = (text: string): LivingMemorySearchInput => ({
-    searchTexts: [text],
-    memoryTypes: ['all']
+const validSearchInput = (text: string): LivingMemorySearchToolInput => ({
+    searchTexts: [text]
 })
 
 const createSearchCall = (
@@ -77,7 +79,7 @@ const createSearchCall = (
 }
 
 const createMultipleSearchCalls = (
-    calls: { id: string; input: LivingMemorySearchInput }[]
+    calls: { id: string; input: LivingMemorySearchToolInput }[]
 ) => {
     return new AIMessage({
         content: '',
@@ -208,6 +210,7 @@ it('runs one search through AgentRunner and preserves preset-scoped trace data',
     assert.equal(trace.item.matchedMemories[0]?.content, 'content-memory-1')
     assert.deepEqual(trace.item.toolCallSummary.searchTexts, ['记忆'])
     assert.equal(harness.searchInvocations[0]?.presetId, scope.presetId)
+    assert.deepEqual(harness.searchInvocations[0]?.input.memoryTypes, ['all'])
     assert.equal(harness.boundInvocations.length, 2)
     assert.deepEqual(
         harness.boundInvocations[0]?.messages.map((message) =>
@@ -272,8 +275,7 @@ it('rejects stringified arrays and allows corrected search input', async () => {
     const harness = createHarness({
         responses: [
             createSearchCall('invalid-1', {
-                searchTexts: '["记忆"]',
-                memoryTypes: '["all"]'
+                searchTexts: '["记忆"]'
             }),
             createSearchCall('search-2'),
             new AIMessage('我记得修正查询后找到的内容。')
@@ -294,7 +296,6 @@ it('rejects stringified arrays and allows corrected search input', async () => {
     )
     assert.match(invalidOutput, /Expected array, received string/u)
     assert.match(invalidOutput, /searchTexts/u)
-    assert.match(invalidOutput, /memoryTypes/u)
     assert.equal(harness.searchInvocations.length, 1)
 })
 
@@ -302,16 +303,13 @@ it('never normalizes repeated stringified array inputs', async () => {
     const harness = createHarness({
         responses: [
             createSearchCall('invalid-1', {
-                searchTexts: '["记忆"]',
-                memoryTypes: '["all"]'
+                searchTexts: '["记忆"]'
             }),
             createSearchCall('invalid-2', {
-                searchTexts: '["计划"]',
-                memoryTypes: '["all"]'
+                searchTexts: '["计划"]'
             }),
             createSearchCall('invalid-3', {
-                searchTexts: '["关系"]',
-                memoryTypes: '["all"]'
+                searchTexts: '["关系"]'
             }),
             new AIMessage('<NO_MEMORY>')
         ]
@@ -462,8 +460,7 @@ it('fails after six invalid tool calls without updating a recall result', async 
     const harness = createHarness({
         responses: Array.from({ length: 6 }, (_, index) =>
             createSearchCall(`invalid-${index + 1}`, {
-                searchTexts: '["记忆"]',
-                memoryTypes: '["all"]'
+                searchTexts: '["记忆"]'
             })
         )
     })

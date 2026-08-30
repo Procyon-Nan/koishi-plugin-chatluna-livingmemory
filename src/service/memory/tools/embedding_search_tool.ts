@@ -1,6 +1,5 @@
 import { StructuredTool } from '@langchain/core/tools'
 import type { ToolRunnableConfig } from '@langchain/core/tools'
-import type { LivingMemorySearchInput } from '../../../contracts/memory'
 import type { LivingMemorySearchProvider } from '../../../contracts/workflows'
 import {
     formatSearchTextLengthRange,
@@ -9,7 +8,8 @@ import {
     memorySearchMaxKeywordCount,
     memorySearchMaxTextCount,
     searchKeywordRule,
-    searchTextRule
+    searchTextRule,
+    type LivingMemorySearchToolInput
 } from './search_contract'
 import {
     describeLivingMemoryToolScopeFailure,
@@ -28,7 +28,6 @@ export const livingMemorySearchToolDescription = [
         `每个在去除首尾空白后须为 ${formatSearchTextLengthRange(searchKeywordRule)} 个字符。` +
         '关键词应为具体的事物、活动、地点等实体名称，不应是完整句子。' +
         '禁止使用用户昵称、用户名或称呼作为关键词，这类词匹配无意义。',
-    '- memoryTypes：必填 JSON 数组，包含记忆类别；也可传 ["all"] 搜索全部类别。',
     '- 直接传递数组，禁止把数组编码成 JSON 字符串。',
     '- 本工具返回的记忆条目依照计算后的相关度得分排序。'
 ].join('\n')
@@ -44,7 +43,7 @@ export class LivingMemorySearchTool extends StructuredTool {
     }
 
     async _call(
-        input: LivingMemorySearchInput,
+        input: LivingMemorySearchToolInput,
         _runManager: unknown,
         runConfig?: ToolRunnableConfig
     ) {
@@ -58,7 +57,7 @@ export class LivingMemorySearchTool extends StructuredTool {
 
         const results = await this.searchProvider.searchMemories(
             presetIdResolution.presetId,
-            input
+            { ...input, memoryTypes: ['all'] }
         )
 
         return JSON.stringify(results, null, 2)

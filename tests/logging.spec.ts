@@ -209,7 +209,6 @@ it('logs only projected tool calls for a tool-calling model response', async () 
                     {
                         name: 'living_memory_search',
                         args: {
-                            memoryTypes: ['all'],
                             searchTexts: ['query']
                         },
                         id: 'call-1',
@@ -232,7 +231,7 @@ it('logs only projected tool calls for a tool-calling model response', async () 
     const output = String(captured.info[1]?.[0])
     assert.match(output, /--- response\.tool_calls ---\n\[/u)
     assert.match(output, /"name": "living_memory_search"/u)
-    assert.match(output, /"memoryTypes": \[\n\s+"all"\n\s+\]/u)
+    assert.match(output, /"searchTexts": \[\n\s+"query"\n\s+\]/u)
     assert.doesNotMatch(
         output,
         /response\.text|response\.raw|"(?:additional_kwargs|content|invalid_tool_calls|lc_kwargs|response_metadata|tool_call_chunks|usage_metadata)"/u

@@ -185,7 +185,6 @@ export const createAgenticTrace = (
             toolCallSummary: {
                 searchTexts: ['记忆查询'],
                 searchKeywords: [],
-                memoryTypes: ['all'],
                 maxCandidates: 3
             },
             matchedMemories: [
