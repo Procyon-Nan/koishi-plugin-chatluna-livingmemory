@@ -112,7 +112,6 @@ export interface MemoryHybridSearchInput extends MemorySemanticSearchInput {
 export interface IncrementalDreamNeighborInput {
     presetId: string
     seedMemoryId: string
-    status: MemoryEntryStatus
     excludedMemoryIds: string[]
     limit: number
 }

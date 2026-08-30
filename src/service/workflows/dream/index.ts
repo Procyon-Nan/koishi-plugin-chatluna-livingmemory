@@ -16,14 +16,8 @@ import {
 import { DreamClusterer } from './clustering'
 import type { DreamWorkerRunner } from './worker/protocol'
 import { LivingMemoryUserProfileService } from '../../user_profile'
-import {
-    addStats,
-    createEmptyStageResult,
-    createEmptyStats,
-    formatStageDetail,
-    sumStats
-} from './stats'
-import type { DreamRunResult, DreamStage, DreamStageResult } from './types'
+import { addStats, createEmptyStats, formatDreamDetail } from './stats'
+import type { DreamRunResult } from './types'
 import { DreamUnitProcessor } from './unit_processor'
 import type { LivingMemoryLogger } from '../../logging/logger'
 
@@ -85,10 +79,6 @@ export class LivingMemoryDreamService {
             })
         }
 
-        const activeEntries = entries.filter(
-            (entry) => entry.status === 'active'
-        )
-
         if (!isModelConfigured(this.config.mainModel)) {
             return this.createResult(entries.length, 0, {
                 skippedReason: 'model-not-configured',
@@ -110,27 +100,11 @@ export class LivingMemoryDreamService {
         const assistantLabel = resolveAssistantLabel(presetId)
         const presetPrompt = await resolvePresetPrompt(this.ctx, presetId)
         const speakers = await this.repository.listPresetSpeakers(presetId)
-        const activeResult = await this.runStage(
+        const result = await this.processEntries(
             presetId,
             assistantLabel,
             presetPrompt,
-            'active',
-            activeEntries,
-            speakers,
-            chatModel,
-            runLogger
-        )
-        const refreshedEntries =
-            await this.repository.listDreamEntriesByPreset(presetId)
-        const archivedEntries = refreshedEntries.filter(
-            (entry) => entry.status === 'archived'
-        )
-        const archivedResult = await this.runStage(
-            presetId,
-            assistantLabel,
-            presetPrompt,
-            'archived',
-            archivedEntries,
+            entries,
             speakers,
             chatModel,
             runLogger
@@ -140,21 +114,9 @@ export class LivingMemoryDreamService {
             chatModel,
             runLogger
         )
-        const stats = sumStats([activeResult, archivedResult])
-        const detail = [
-            activeResult.detail,
-            archivedResult.detail,
-            profileDetail
-        ].join('\n')
+        const detail = [result.detail, profileDetail].join('\n')
 
-        return {
-            entryCount: entries.length,
-            clusterCount:
-                activeResult.clusterCount + archivedResult.clusterCount,
-            stageResults: [activeResult, archivedResult],
-            ...stats,
-            detail
-        }
+        return { ...result, detail }
     }
 
     /** 不足聚簇规模时，唯一一条记忆直接标记为已固化。 */
@@ -185,7 +147,7 @@ export class LivingMemoryDreamService {
                 await this.repository.listDreamEntriesByPreset(presetId)
             const result = await this.userProfiles.regenerate(
                 presetId,
-                finalEntries.filter((entry) => entry.status === 'active'),
+                finalEntries,
                 model,
                 logger
             )
@@ -202,28 +164,31 @@ export class LivingMemoryDreamService {
         }
     }
 
-    private async runStage(
+    private async processEntries(
         presetId: string,
         assistantLabel: string,
         presetPrompt: string,
-        stage: DreamStage,
         entries: DreamMemoryEntryRecord[],
         speakers: PresetSpeakerRecord[],
         model: ChatLunaChatModel,
         logger?: LivingMemoryLogger
-    ): Promise<DreamStageResult> {
-        logger?.diagnostic('dream.stage.started', {
-            stage,
+    ): Promise<DreamRunResult> {
+        logger?.diagnostic('dream.processing.started', {
             entries: entries.length
         })
         if (entries.length < 2) {
             await this.consolidateSingleEntry(presetId, entries)
-            return createEmptyStageResult(stage, entries.length)
+            return this.createResult(entries.length, 0, {
+                detail: formatDreamDetail(
+                    entries.length,
+                    0,
+                    createEmptyStats()
+                )
+            })
         }
 
         const clusters = await this.clusterer.buildClusters(
             presetId,
-            stage,
             entries,
             logger
         )
@@ -238,7 +203,6 @@ export class LivingMemoryDreamService {
                 presetId,
                 cluster,
                 speakers,
-                stage,
                 model,
                 touchedMemoryIds,
                 consolidationMode: 'manual',
@@ -251,7 +215,6 @@ export class LivingMemoryDreamService {
                 }
                 const reason = result.error.split(':', 1)[0]
                 logger?.diagnostic('dream.cluster.skipped', {
-                    stage,
                     clusterId: cluster.id,
                     reason,
                     error: result.error
@@ -260,12 +223,10 @@ export class LivingMemoryDreamService {
         }
 
         return {
-            stage,
             entryCount: entries.length,
             clusterCount: clusters.length,
             ...stats,
-            detail: formatStageDetail(
-                stage,
+            detail: formatDreamDetail(
                 entries.length,
                 clusters.length,
                 stats
@@ -288,7 +249,6 @@ export class LivingMemoryDreamService {
             merged: 0,
             updated: 0,
             archived: 0,
-            deleted: 0,
             skipped: 0,
             skippedReason: options.skippedReason,
             detail: options.detail

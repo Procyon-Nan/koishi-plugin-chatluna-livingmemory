@@ -3,7 +3,7 @@ import type { DreamMemoryEntryRecord } from '../../../contracts/workflows'
 import { groupEntriesByLabel } from './hdbscan/labels'
 import type { DreamWorkerRunner } from './worker/protocol'
 import { DREAM_PARTITION_MAX_SIZE } from './partitioning'
-import type { DreamCluster, DreamStage } from './types'
+import type { DreamCluster } from './types'
 import type { LivingMemoryLogger } from '../../logging/logger'
 
 // 密度聚类的簇规模由数据几何决定，无法约束单次送入 LLM 的记忆数量。
@@ -30,7 +30,6 @@ export class DreamClusterer {
 
     async buildClusters(
         presetId: string,
-        stage: DreamStage,
         entries: DreamMemoryEntryRecord[],
         logger?: LivingMemoryLogger
     ): Promise<DreamCluster[]> {
@@ -42,7 +41,6 @@ export class DreamClusterer {
         const clusters: DreamCluster[] = []
         const firstPassNoise: DreamMemoryEntryRecord[] = []
         logger?.diagnostic('dream.clustering.round.started', {
-            stage,
             round: 'primary',
             batches: partitions.length
         })
@@ -61,7 +59,6 @@ export class DreamClusterer {
             }
 
             logger?.diagnostic('dream.clustering.batch.completed', {
-                stage,
                 round: 'primary',
                 batch: index + 1,
                 ...toClusterSizeFields(result.clusters),
@@ -70,14 +67,12 @@ export class DreamClusterer {
         }
 
         logger?.diagnostic('dream.clustering.round.completed', {
-            stage,
             round: 'primary',
             totalNoise: firstPassNoise.length
         })
 
         await this.appendNoiseClusters(
             presetId,
-            stage,
             firstPassNoise,
             clusters,
             logger
@@ -111,14 +106,12 @@ export class DreamClusterer {
 
     private async appendNoiseClusters(
         presetId: string,
-        stage: DreamStage,
         entries: DreamMemoryEntryRecord[],
         clusters: DreamCluster[],
         logger?: LivingMemoryLogger
     ) {
         const batches = entries.length < 2 ? 0 : 1
         logger?.diagnostic('dream.clustering.round.started', {
-            stage,
             round: 'global-noise',
             batches
         })
@@ -127,7 +120,6 @@ export class DreamClusterer {
                 this.appendCluster(clusters, 'hdbscan:final-noise', entries)
             }
             logger?.diagnostic('dream.clustering.round.completed', {
-                stage,
                 round: 'global-noise',
                 totalNoise: entries.length
             })
@@ -146,14 +138,12 @@ export class DreamClusterer {
             this.appendCluster(clusters, 'hdbscan:final-noise', result.noise)
         }
         logger?.diagnostic('dream.clustering.batch.completed', {
-            stage,
             round: 'global-noise',
             batch: 1,
             ...toClusterSizeFields(result.clusters),
             noise: result.noise.length
         })
         logger?.diagnostic('dream.clustering.round.completed', {
-            stage,
             round: 'global-noise',
             totalNoise: result.noise.length
         })

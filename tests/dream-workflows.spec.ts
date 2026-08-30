@@ -24,6 +24,7 @@ import type {
     DreamOperation,
     DreamRunResult
 } from '../src/service/workflows/dream/types'
+import { dreamResultToolName } from '../src/service/prompts/schema'
 import { LivingMemoryJobTracker } from '../src/service/workflows/job_tracker'
 import {
     createDreamRunResult,
@@ -34,6 +35,10 @@ import {
     scope,
     waitFor
 } from './workflow-test-utils'
+import {
+    createToolCallingModel,
+    createToolCallMessage
+} from './tool-calling-test-utils'
 
 const createDreamCoordinatorRepository = (
     jobStore: ReturnType<typeof createJobStore>,
@@ -47,32 +52,6 @@ const createDreamCoordinatorRepository = (
 
 const createIncrementalDreamRunResult = () => ({
     ...createDreamRunResult(),
-    stageResults: [
-        {
-            stage: 'active' as const,
-            entryCount: 0,
-            clusterCount: 0,
-            kept: 0,
-            merged: 0,
-            updated: 0,
-            archived: 0,
-            deleted: 0,
-            skipped: 0,
-            detail: 'active completed'
-        },
-        {
-            stage: 'archived' as const,
-            entryCount: 0,
-            clusterCount: 0,
-            kept: 0,
-            merged: 0,
-            updated: 0,
-            archived: 0,
-            deleted: 0,
-            skipped: 0,
-            detail: 'archived completed'
-        }
-    ],
     selectedCount: 0,
     seedCount: 0,
     successfulSeedCount: 0,
@@ -146,12 +125,27 @@ const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
         ...createMemoryEntry('archived-memory', 'archived'),
         speakerKeys: ['张三']
     }
-    const entries = [activeEntry, archivedEntry]
+    const secondActiveEntry = {
+        ...createMemoryEntry('second-active-memory'),
+        speakerKeys: ['张三']
+    }
+    const entries = [activeEntry, secondActiveEntry, archivedEntry]
+    const model = createToolCallingModel([
+        createToolCallMessage(dreamResultToolName, {
+            operations: [
+                {
+                    action: 'keep',
+                    memoryIds: [activeEntry.id, secondActiveEntry.id],
+                    reason: '保持独立'
+                }
+            ]
+        })
+    ])
     let presetRenderCount = 0
     const repository = {
         listDreamEntriesByPreset: async () => {
             events.push('list-entries')
-            return entries
+            return entries.filter((entry) => entry.status === 'active')
         },
         updateMemoryForDream: async () => {},
         setMemoryConsolidation: async (
@@ -193,11 +187,7 @@ const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
         chatluna: {
             createChatModel: async () => {
                 events.push('create-model')
-                return {
-                    value: {
-                        invoke: async () => ({ content: '[]' })
-                    }
-                }
+                return { value: model.model }
             },
             preset: {
                 getPreset: () => {
@@ -227,7 +217,10 @@ const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
         repository as unknown as DreamRepository,
         repository as unknown as DreamMemoryRepository,
         {
-            readVectors: async () => new Map()
+            readVectors: async (_presetId, memoryIds) =>
+                new Map(
+                    memoryIds.map((id) => [id, new Float32Array([1, 0])])
+                )
         },
         dreamWorker,
         captured.logger
@@ -251,7 +244,6 @@ it('keeps Dream successful when post-Dream user profile generation fails', async
         'resolve-preset',
         'list-speakers',
         'list-entries',
-        'list-entries',
         'list-speakers',
         'list-profiles',
         'resolve-preset'
@@ -268,7 +260,7 @@ it('keeps Dream successful when post-Dream user profile generation fails', async
     )
     assert.deepEqual(harness.consolidatedIds, [
         'active-memory',
-        'archived-memory'
+        'second-active-memory'
     ])
 })
 
@@ -278,23 +270,13 @@ it('does not start post-Dream user profile generation when disabled', async () =
     const result = await harness.service.run(scope.presetId)
 
     assert.match(result.detail, /user profiles skipped: disabled/u)
-    assert.deepEqual(
-        result.stageResults?.map((stageResult) => ({
-            stage: stageResult.stage,
-            entries: stageResult.entryCount,
-            clusters: stageResult.clusterCount
-        })),
-        [
-            { stage: 'active', entries: 1, clusters: 0 },
-            { stage: 'archived', entries: 1, clusters: 0 }
-        ]
-    )
+    assert.equal(result.entryCount, 2)
+    assert.equal(result.clusterCount, 1)
     assert.deepEqual(harness.events, [
         'list-entries',
         'create-model',
         'resolve-preset',
-        'list-speakers',
-        'list-entries'
+        'list-speakers'
     ])
 })
 
@@ -378,7 +360,7 @@ it('locks a Dream preset while its job is running', async () => {
     )
 })
 
-it('logs manual Dream completion as separate active and archived results', async () => {
+it('logs manual Dream completion for active memories', async () => {
     const jobStore = createJobStore()
     const captured = createCapturedLogger()
     const clearedPresets: string[] = []
@@ -388,36 +370,9 @@ it('logs manual Dream completion as separate active and archived results', async
         kept: 10,
         merged: 2,
         updated: 0,
-        archived: 0,
-        deleted: 2,
+        archived: 2,
         skipped: 1,
-        detail: 'Dream completed',
-        stageResults: [
-            {
-                stage: 'active',
-                entryCount: 20,
-                clusterCount: 3,
-                kept: 7,
-                merged: 1,
-                updated: 0,
-                archived: 0,
-                deleted: 0,
-                skipped: 1,
-                detail: 'active completed'
-            },
-            {
-                stage: 'archived',
-                entryCount: 13,
-                clusterCount: 3,
-                kept: 3,
-                merged: 1,
-                updated: 0,
-                archived: 0,
-                deleted: 2,
-                skipped: 0,
-                detail: 'archived completed'
-            }
-        ]
+        detail: 'Dream completed'
     }
     const coordinator = createDreamCoordinator(
         {
@@ -445,17 +400,12 @@ it('logs manual Dream completion as separate active and archived results', async
     const completionLogs = captured.info.filter((message) =>
         message.includes('event=dream.completed')
     )
-    assert.equal(completionLogs.length, 2)
+    assert.equal(completionLogs.length, 1)
     assert.match(
         completionLogs[0],
-        /stage=active.*archived=0.*clusters=3.*entries=20.*kept=7.*merged=1.*skipped=1.*updated=0/u
+        /archived=2.*clusters=6.*entries=33.*kept=10.*merged=2.*skipped=1.*updated=0/u
     )
-    assert.doesNotMatch(completionLogs[0], /deleted=/u)
-    assert.match(
-        completionLogs[1],
-        /stage=archived.*clusters=3.*deleted=2.*entries=13.*kept=3.*merged=1.*skipped=0.*updated=0/u
-    )
-    assert.doesNotMatch(completionLogs[1], /archived=/u)
+    assert.doesNotMatch(completionLogs[0], /stage=|deleted=/u)
     assert.deepEqual(clearedPresets, [scope.presetId])
     assert.ok(
         captured.info.every(
@@ -524,7 +474,6 @@ it('enforces Dream touched-memory guards', async () => {
     const touchedMemoryIds = new Set<string>()
     const repeatedUpdate = await executor.executeOperations(
         scope.presetId,
-        'active',
         cluster,
         [completeDreamUpdateOperation(), completeDreamUpdateOperation()],
         touchedMemoryIds,
@@ -563,7 +512,6 @@ it('delegates each Dream merge to one atomic repository operation', async () => 
     const activeTouched = new Set<string>()
     const activeResult = await executor.executeOperations(
         scope.presetId,
-        'active',
         { id: 'active-cluster', reason: 'test', entries: activeEntries },
         [
             completeDreamMergeOperation('target-active', [
@@ -575,75 +523,28 @@ it('delegates each Dream merge to one atomic repository operation', async () => 
         'manual',
         dreamSpeakers
     )
-    const archivedEntries = [
-        createMemoryEntry('target-archived', 'archived'),
-        createMemoryEntry('source-archived-1', 'archived'),
-        createMemoryEntry('source-archived-2', 'archived')
-    ]
-    const archivedTouched = new Set<string>()
-    const archivedResult = await executor.executeOperations(
-        scope.presetId,
-        'archived',
-        {
-            id: 'archived-cluster',
-            reason: 'test',
-            entries: archivedEntries
-        },
-        [
-            completeDreamMergeOperation('target-archived', [
-                'source-archived-1',
-                'source-archived-2'
-            ])
-        ],
-        archivedTouched,
-        'manual',
-        dreamSpeakers
-    )
-
-    assert.equal(mergeInputs.length, 2)
-    assert.equal(mergeInputs[0]?.sourceDisposition, 'archive')
+    assert.equal(mergeInputs.length, 1)
     assert.deepEqual(
         mergeInputs[0]?.sources.map((source) => source.id),
         ['source-active-1', 'source-active-2']
     )
     assert.equal(mergeInputs[0]?.patch.status, 'active')
-    assert.equal(mergeInputs[1]?.sourceDisposition, 'delete')
-    assert.equal(mergeInputs[1]?.patch.status, 'archived')
     const {
         consolidatedMemoryIds: _activeConsolidated,
         mutatedMemoryIds: _activeMutated,
         ...activeStats
     } = activeResult
-    const {
-        consolidatedMemoryIds: _archivedConsolidated,
-        mutatedMemoryIds: _archivedMutated,
-        ...archivedStats
-    } = archivedResult
     assert.deepEqual(activeStats, {
         kept: 0,
         merged: 1,
         updated: 0,
         archived: 2,
-        deleted: 0,
-        skipped: 0
-    })
-    assert.deepEqual(archivedStats, {
-        kept: 0,
-        merged: 1,
-        updated: 0,
-        archived: 0,
-        deleted: 2,
         skipped: 0
     })
     assert.deepEqual([...activeTouched].sort(), [
         'source-active-1',
         'source-active-2',
         'target-active'
-    ])
-    assert.deepEqual([...archivedTouched].sort(), [
-        'source-archived-1',
-        'source-archived-2',
-        'target-archived'
     ])
 })
 
@@ -661,7 +562,6 @@ it('does not touch merge state when the atomic repository write fails', async ()
     await assert.rejects(
         executor.executeOperations(
             scope.presetId,
-            'active',
             {
                 id: 'cluster-1',
                 reason: 'test',
@@ -744,9 +644,8 @@ it('runs one incremental Dream batch when pending memories reach the threshold',
     const completionLogs = captured.info.filter((message) =>
         message.includes('event=dream.completed')
     )
-    assert.equal(completionLogs.length, 2)
-    assert.ok(completionLogs[0]?.includes('stage=active'))
-    assert.ok(completionLogs[1]?.includes('stage=archived'))
+    assert.equal(completionLogs.length, 1)
+    assert.ok(!completionLogs[0]?.includes('stage='))
     assert.ok(
         captured.info.some((message) =>
             message.includes('event=dream.automatic.threshold-reached')

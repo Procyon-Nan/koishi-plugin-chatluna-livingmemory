@@ -18,7 +18,7 @@ import {
 import { LivingMemoryRepository } from '../src/service/persistence/repository'
 import { LivingMemoryExtractor } from '../src/service/workflows/extraction/extractor'
 import {
-    dreamActiveResultSchema,
+    dreamResultSchema,
     extractionResultToolName
 } from '../src/service/prompts/schema'
 import {
@@ -148,14 +148,13 @@ it('applies shared field rules to Dream mutations', async () => {
         applyDreamMerge: async () => ({
             target: entry,
             archivedSources: [],
-            deletedSourceIds: [],
             targetContentChanged: false
         })
     }
     const executor = new DreamExecutor(repository)
 
     const dreamKeywords = ['  alpha  ', 'alpha', 'keyword-0']
-    const operations = dreamActiveResultSchema.parse({
+    const operations = dreamResultSchema.parse({
         operations: [
             {
                 action: 'update',
@@ -175,7 +174,6 @@ it('applies shared field rules to Dream mutations', async () => {
     }).operations
     const stats = await executor.executeOperations(
         entry.presetId,
-        'active',
         { id: 'cluster-1', reason: 'test', entries: [entry] },
         operations,
         new Set(),

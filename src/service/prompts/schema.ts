@@ -119,35 +119,17 @@ const dreamArchiveOperationSchema = z.object({
     memoryId: memoryIdSchema,
     reason: operationReasonSchema
 })
-const dreamDeleteSourceOperationSchema = z.object({
-    action: z.literal('deleteSource'),
-    targetMemoryId: memoryIdSchema,
-    sourceMemoryIds: memoryIdsSchema,
-    reason: operationReasonSchema
-})
-
 export const dreamResultToolName = 'living_memory_dream_result'
 export const dreamResultToolDescription =
     '提交当前 Dream 记忆簇的整理操作。没有可执行操作时提交空 operations 数组。'
 
-export const dreamActiveResultSchema = z.object({
+export const dreamResultSchema = z.object({
     operations: z.array(
         z.discriminatedUnion('action', [
             dreamKeepOperationSchema,
             dreamUpdateOperationSchema,
             dreamMergeOperationSchema,
             dreamArchiveOperationSchema
-        ])
-    )
-})
-
-export const dreamArchivedResultSchema = z.object({
-    operations: z.array(
-        z.discriminatedUnion('action', [
-            dreamKeepOperationSchema,
-            dreamUpdateOperationSchema,
-            dreamMergeOperationSchema,
-            dreamDeleteSourceOperationSchema
         ])
     )
 })
@@ -172,9 +154,8 @@ export type DreamOperation =
         memory: DreamGeneratedMemory
     })
     | RequiredSchemaOutput<typeof dreamArchiveOperationSchema>
-    | RequiredSchemaOutput<typeof dreamDeleteSourceOperationSchema>
 
-const dreamActiveOperations = [
+const dreamOperations = [
     { action: 'keep', memoryIds: ['...'], reason: '...' },
     {
         action: 'update',
@@ -194,30 +175,7 @@ const dreamActiveOperations = [
         memoryId: '...',
         reason: '...'
     }
-] satisfies z.input<typeof dreamActiveResultSchema>['operations']
-
-const dreamArchivedOperations = [
-    { action: 'keep', memoryIds: ['...'], reason: '...' },
-    {
-        action: 'update',
-        memoryId: '...',
-        memory: createDreamMemoryExample(0.4),
-        reason: '...'
-    },
-    {
-        action: 'merge',
-        targetMemoryId: '...',
-        sourceMemoryIds: ['...'],
-        memory: createDreamMemoryExample(0.5),
-        reason: '...'
-    },
-    {
-        action: 'deleteSource',
-        targetMemoryId: '...',
-        sourceMemoryIds: ['...'],
-        reason: 'merge source 已压缩进 target'
-    }
-] satisfies z.input<typeof dreamArchivedResultSchema>['operations']
+] satisfies z.input<typeof dreamResultSchema>['operations']
 
 // 画像 Schema 会在调用期绑定 speakerLabel；System 示例保持静态占位符，
 // 避免把用户提供的标签插入静态规则消息。
@@ -263,14 +221,9 @@ export const createUserProfileResultSchema = (options: {
     })
 }
 
-/** Dream active 阶段展示的结果工具参数格式串。 */
-export const DREAM_ACTIVE_FORMAT = JSON.stringify({
-    operations: dreamActiveOperations
-})
-
-/** Dream archived 阶段展示的结果工具参数格式串。 */
-export const DREAM_ARCHIVED_FORMAT = JSON.stringify({
-    operations: dreamArchivedOperations
+/** Dream 展示的结果工具参数格式串。 */
+export const DREAM_OUTPUT_FORMAT = JSON.stringify({
+    operations: dreamOperations
 })
 
 /** 用户画像结果工具参数中展示的 JSON 格式串。 */

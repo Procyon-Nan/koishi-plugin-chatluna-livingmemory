@@ -187,7 +187,7 @@ export class LivingMemoryEntryRepository
     ): Promise<DreamMemoryEntryRecord[]> {
         return await this.ctx.database.get(
             'living_memory_entry',
-            { presetId },
+            { presetId, status: 'active' },
             dreamEntryFields
         )
     }
@@ -269,6 +269,7 @@ export class LivingMemoryEntryRepository
             (entry) => $.count(entry.id),
             {
                 presetId,
+                status: 'active',
                 isConsolidated: false
             }
         )
@@ -281,6 +282,7 @@ export class LivingMemoryEntryRepository
         const entries = await this.ctx.database
             .select('living_memory_entry', {
                 presetId,
+                status: 'active',
                 isConsolidated: false
             })
             .orderBy('createdAt', 'asc')
@@ -450,6 +452,9 @@ export class LivingMemoryEntryRepository
         if (current == null) {
             throw new Error(`dream update failed: memory not found: ${id}`)
         }
+        if (current.status !== 'active') {
+            throw new Error(`dream update failed: memory is not active: ${id}`)
+        }
         return this.writeMemoryUpdate(
             current,
             patch,
@@ -536,10 +541,7 @@ export class LivingMemoryEntryRepository
                 expectedStatus
             )
             await this.updateDreamMergeTarget(merge)
-            if (input.sourceDisposition === 'archive') {
-                return this.commitDreamMergeArchive(merge)
-            }
-            return this.commitDreamMergeDelete(merge)
+            return this.commitDreamMergeArchive(merge)
         })
     }
 
@@ -556,10 +558,9 @@ export class LivingMemoryEntryRepository
             throw new Error('dream merge failed: invalid source ids')
         }
 
-        const expectedStatus: MemoryEntryRecord['status'] =
-            input.sourceDisposition === 'delete' ? 'archived' : 'active'
+        const expectedStatus: MemoryEntryRecord['status'] = 'active'
         if (input.patch.status !== expectedStatus) {
-            throw new Error('dream merge failed: stage disposition mismatch')
+            throw new Error('dream merge failed: target must remain active')
         }
         return expectedStatus
     }
@@ -685,36 +686,6 @@ export class LivingMemoryEntryRepository
             archivedSources: sourceIds.map((id) =>
                 this.requireCommittedSource(committedById, id)
             ),
-            deletedSourceIds: [],
-            targetContentChanged: merge.targetContentChanged
-        }
-    }
-
-    private async commitDreamMergeDelete(merge: DreamMergeContext) {
-        const { database, sourceIds, target } = merge
-        const sourceResult = await database.remove(
-            'living_memory_entry',
-            this.buildDreamMergeSourceQuery(merge)
-        )
-        this.assertAffectedCount(
-            sourceResult.removed ?? sourceResult.matched,
-            sourceIds.length,
-            'source delete'
-        )
-        const committedTarget = (
-            await database.get(
-                'living_memory_entry',
-                { id: target.id },
-                memoryEntryFields
-            )
-        )[0]
-        if (committedTarget == null) {
-            throw new Error('dream merge failed: committed target not found')
-        }
-        return {
-            target: normalizeEntryRecord(committedTarget),
-            archivedSources: [],
-            deletedSourceIds: sourceIds,
             targetContentChanged: merge.targetContentChanged
         }
     }

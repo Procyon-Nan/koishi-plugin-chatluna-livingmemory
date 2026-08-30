@@ -3,8 +3,7 @@ import type { PresetSpeakerRecord } from '../../../contracts/memory'
 import type { DreamMemoryRepository } from '../../../contracts/workflows'
 import {
     buildDreamPrompt,
-    dreamActiveResultSchema,
-    dreamArchivedResultSchema,
+    dreamResultSchema,
     dreamResultToolDescription,
     dreamResultToolName
 } from '../../prompts'
@@ -19,7 +18,6 @@ import { createEmptyStats } from './stats'
 import type {
     DreamCluster,
     DreamOperation,
-    DreamStage,
     DreamUnitResult
 } from './types'
 import type { LivingMemoryLogger } from '../../logging/logger'
@@ -28,7 +26,6 @@ interface DreamUnitBaseInput {
     presetId: string
     assistantLabel: string
     presetPrompt: string
-    stage: DreamStage
     cluster: DreamCluster
     speakers: PresetSpeakerRecord[]
     model: ChatLunaChatModel
@@ -57,16 +54,9 @@ export class DreamUnitProcessor {
             presetPrompt: input.presetPrompt,
             presetId: input.presetId,
             cluster: input.cluster,
-            speakers: input.speakers,
-            stage: input.stage
+            speakers: input.speakers
         })
         let structuredResult
-        let schema:
-            | typeof dreamActiveResultSchema
-            | typeof dreamArchivedResultSchema = dreamActiveResultSchema
-        if (input.stage === 'archived') {
-            schema = dreamArchivedResultSchema
-        }
         try {
             structuredResult = await invokeStructuredOutput({
                 model: input.model,
@@ -74,7 +64,7 @@ export class DreamUnitProcessor {
                 toolName: dreamResultToolName,
                 toolDescription: dreamResultToolDescription,
                 stringifiedArrayField: 'operations',
-                schema,
+                schema: dreamResultSchema,
                 validateResult: ({ operations }) => {
                     for (const operation of operations) {
                         if (
@@ -93,7 +83,6 @@ export class DreamUnitProcessor {
                     conversationId: [
                         'dream',
                         input.presetId,
-                        input.stage,
                         input.cluster.id
                     ].join(':')
                 },
@@ -103,7 +92,7 @@ export class DreamUnitProcessor {
                         : {
                               logger: input.logger,
                               workflow: 'dream',
-                              stage: `dream-${input.stage}`,
+                              stage: 'dream',
                               fields: {
                                   clusterId: input.cluster.id,
                                   consolidationMode: input.consolidationMode
@@ -116,7 +105,6 @@ export class DreamUnitProcessor {
             }
             const errorSummary = summarizeError(error)
             input.logger?.diagnostic('dream.model.failed', {
-                stage: input.stage,
                 clusterId: input.cluster.id,
                 reason: 'invoke-failed',
                 error: errorSummary
@@ -143,7 +131,6 @@ export class DreamUnitProcessor {
         }
         const result = await this.executor.executeOperations(
             input.presetId,
-            input.stage,
             input.cluster,
             operations,
             input.touchedMemoryIds,

@@ -87,7 +87,6 @@ it('atomically updates an active Dream merge and archives its sources', async ()
             target,
             sources: [source1, source2],
             patch: createMergePatch('active'),
-            sourceDisposition: 'archive',
             targetIsConsolidated: false,
             sourceIsConsolidated: true
         })
@@ -121,6 +120,7 @@ it('defines the pending Dream query index', () => {
         [
             {
                 presetId: 'asc',
+                status: 'asc',
                 isConsolidated: 'asc',
                 createdAt: 'asc',
                 id: 'asc'
@@ -155,7 +155,7 @@ it('counts pending memories and selects the earliest stable batch', async () => 
             true
         )
 
-        assert.equal(await repository.countPendingEntries(scope.presetId), 3)
+        assert.equal(await repository.countPendingEntries(scope.presetId), 2)
         const selected = await repository.listPendingEntries(scope.presetId, 2)
         assert.deepEqual(
             selected.map((entry) => entry.id),
@@ -169,6 +169,7 @@ it('counts pending memories and selects the earliest stable batch', async () => 
 it('reads Dream entries without legacy vectors or source payloads', async () => {
     await withRepository(async (_ctx, repository) => {
         const entry = await createMemory(repository, 'memory-a', 'active')
+        await createMemory(repository, 'memory-b', 'archived')
 
         const records = await repository.listDreamEntriesByPreset(
             scope.presetId
@@ -180,73 +181,6 @@ it('reads Dream entries without legacy vectors or source payloads', async () => 
         assert.equal(Object.hasOwn(records[0], 'embeddingModelId'), false)
         assert.equal(Object.hasOwn(records[0], 'sourceOrigins'), false)
         assert.equal(Object.hasOwn(records[0], 'sourceConversationId'), false)
-    })
-})
-
-it('atomically updates an archived Dream merge and deletes its sources', async () => {
-    await withRepository(async (_ctx, repository) => {
-        const target = await createMemory(repository, 'target', 'archived')
-        const source1 = await createMemory(repository, 'source-1', 'archived')
-        const source2 = await createMemory(repository, 'source-2', 'archived')
-
-        await repository.applyDreamMerge({
-            presetId: scope.presetId,
-            target,
-            sources: [source1, source2],
-            patch: createMergePatch('archived'),
-            sourceDisposition: 'delete',
-            targetIsConsolidated: true,
-            sourceIsConsolidated: true
-        })
-
-        const storedTarget = await repository.getEntryById(target.id)
-        const storedSources = await repository.getEntriesByIds([
-            source1.id,
-            source2.id
-        ])
-
-        assert.equal(storedTarget?.content, 'merged content')
-        assert.equal(storedTarget?.status, 'archived')
-        assert.deepEqual(storedSources, [])
-    })
-})
-
-it('rolls back the target update when Dream source deletion fails', async () => {
-    await withRepository(async (ctx, repository) => {
-        const target = await createMemory(repository, 'target', 'archived')
-        const source1 = await createMemory(repository, 'source-1', 'archived')
-        const source2 = await createMemory(repository, 'source-2', 'archived')
-        const ids = [target.id, source1.id, source2.id]
-        const before = await repository.getEntriesByIds(ids)
-        const originalRemove = ctx.database.remove
-
-        const remove: typeof ctx.database.remove = async (table, query) => {
-            if (table === 'living_memory_entry') {
-                throw new Error('injected source delete failure')
-            }
-            return await originalRemove.call(ctx.database, table, query)
-        }
-        ctx.database.remove = remove
-
-        try {
-            await assert.rejects(
-                repository.applyDreamMerge({
-                    presetId: scope.presetId,
-                    target,
-                    sources: [source1, source2],
-                    patch: createMergePatch('archived'),
-                    sourceDisposition: 'delete',
-                    targetIsConsolidated: true,
-                    sourceIsConsolidated: true
-                }),
-                /injected source delete failure/u
-            )
-        } finally {
-            ctx.database.remove = originalRemove
-        }
-
-        const after = await repository.getEntriesByIds(ids)
-        assert.deepEqual(after, before)
     })
 })
 
@@ -266,7 +200,6 @@ it('rejects a Dream merge when a source no longer exists', async () => {
                     }
                 ],
                 patch: createMergePatch('active'),
-                sourceDisposition: 'archive',
                 targetIsConsolidated: true,
                 sourceIsConsolidated: true
             }),
@@ -297,7 +230,6 @@ it('rejects a Dream merge when a source changed after clustering', async () => {
                 target,
                 sources: [source],
                 patch: createMergePatch('active'),
-                sourceDisposition: 'archive',
                 targetIsConsolidated: true,
                 sourceIsConsolidated: true
             }),

@@ -9,11 +9,9 @@ import { buildAgenticRecallPrompt } from '../src/service/prompts/agentic_recall'
 import { buildDreamPrompt } from '../src/service/prompts/dream'
 import { buildExtractionPrompt } from '../src/service/prompts/extraction'
 import {
-    DREAM_ACTIVE_FORMAT,
-    DREAM_ARCHIVED_FORMAT,
+    DREAM_OUTPUT_FORMAT,
     createUserProfileResultSchema,
-    dreamActiveResultSchema,
-    dreamArchivedResultSchema,
+    dreamResultSchema,
     dreamResultToolName,
     extractionResultSchema,
     extractionResultToolName,
@@ -57,18 +55,12 @@ const presetSpeakers = [
 
 it('keeps structured-output examples aligned with their runtime schemas', () => {
     assert.equal(
-        dreamActiveResultSchema.safeParse(JSON.parse(DREAM_ACTIVE_FORMAT))
-            .success,
-        true
-    )
-    assert.equal(
-        dreamArchivedResultSchema.safeParse(JSON.parse(DREAM_ARCHIVED_FORMAT))
-            .success,
+        dreamResultSchema.safeParse(JSON.parse(DREAM_OUTPUT_FORMAT)).success,
         true
     )
 })
 
-it('enforces Dream stage actions and complete generated metadata', () => {
+it('enforces Dream actions and complete generated metadata', () => {
     const reason = '测试原因'
     const completeMemory = {
         type: 'fact',
@@ -81,7 +73,7 @@ it('enforces Dream stage actions and complete generated metadata', () => {
     }
 
     assert.equal(
-        dreamActiveResultSchema.safeParse({
+        dreamResultSchema.safeParse({
             operations: [
                 {
                     action: 'deleteSource',
@@ -93,14 +85,7 @@ it('enforces Dream stage actions and complete generated metadata', () => {
         }).success,
         false
     )
-    assert.equal(
-        dreamArchivedResultSchema.safeParse({
-            operations: [{ action: 'archive', memoryId: 'memory-1', reason }]
-        }).success,
-        false
-    )
-
-    for (const schema of [dreamActiveResultSchema, dreamArchivedResultSchema]) {
+    for (const schema of [dreamResultSchema]) {
         assert.equal(
             schema.safeParse({
                 operations: [
@@ -149,8 +134,7 @@ it('keeps memory field rules in tool schemas without prompt duplication', () => 
             reason: 'shared speaker',
             entries: [memoryEntry]
         },
-        speakers: presetSpeakers,
-        stage: 'active'
+        speakers: presetSpeakers
     }).systemPrompt
 
     const schemaDescriptions = [
@@ -309,8 +293,7 @@ it('separates Dream and user profile rules from escaped dynamic inputs', () => {
             reason: `shared${unsafeText}`,
             entries: [unsafeMemory]
         },
-        speakers: presetSpeakers,
-        stage: 'active'
+        speakers: presetSpeakers
     })
     const existingProfile: UserProfileRecord = {
         id: 'profile-1',

@@ -22,13 +22,11 @@ export type {
     UserProfilePromptMessages
 } from './user_profile'
 export {
-    DREAM_ACTIVE_FORMAT,
-    DREAM_ARCHIVED_FORMAT,
+    DREAM_OUTPUT_FORMAT,
     USER_PROFILE_OUTPUT_FORMAT,
     extractionResultSchema,
     createUserProfileResultSchema,
-    dreamActiveResultSchema,
-    dreamArchivedResultSchema,
+    dreamResultSchema,
     dreamResultToolDescription,
     dreamResultToolName,
     extractionResultToolDescription,

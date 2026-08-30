@@ -64,7 +64,6 @@ export interface DreamMergeInput {
     target: DreamMergeMemoryVersion
     sources: DreamMergeMemoryVersion[]
     patch: DreamMemoryMutation
-    sourceDisposition: 'archive' | 'delete'
     targetIsConsolidated: boolean
     sourceIsConsolidated: boolean
 }
@@ -77,7 +76,6 @@ export interface MemoryUpdateResult {
 export interface DreamMergeResult {
     target: MemoryEntryRecord
     archivedSources: MemoryEntryRecord[]
-    deletedSourceIds: string[]
     targetContentChanged: boolean
 }
 

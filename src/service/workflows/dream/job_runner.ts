@@ -5,7 +5,7 @@ import type { LivingMemorySnapshotCache } from '../../memory/snapshot/snapshot_c
 import type { LivingMemoryJobTracker } from '../job_tracker'
 import type { LivingMemoryIncrementalDreamService } from './incremental'
 import type { LivingMemoryDreamService } from './index'
-import type { DreamRunResult, DreamStageResult } from './types'
+import type { DreamRunResult } from './types'
 
 type DreamService = Pick<LivingMemoryDreamService, 'run'>
 type IncrementalDreamService = Pick<LivingMemoryIncrementalDreamService, 'run'>
@@ -130,16 +130,6 @@ export class LivingMemoryDreamJobRunner {
     }
 
     private logCompletion(logger: LivingMemoryLogger, result: DreamRunResult) {
-        if (result.stageResults != null && result.stageResults.length > 0) {
-            for (const stageResult of result.stageResults) {
-                logger.info(
-                    'dream.completed',
-                    toStageCompletionFields(stageResult)
-                )
-            }
-            return
-        }
-
         logger.info('dream.completed', {
             entries: result.entryCount,
             clusters: result.clusterCount,
@@ -147,7 +137,6 @@ export class LivingMemoryDreamJobRunner {
             merged: result.merged,
             updated: result.updated,
             archived: result.archived,
-            deleted: result.deleted,
             skipped: result.skipped
         })
     }
@@ -157,23 +146,7 @@ export class LivingMemoryDreamJobRunner {
     }
 }
 
-const toStageCompletionFields = (result: DreamStageResult) => {
-    const fields = {
-        stage: result.stage,
-        entries: result.entryCount,
-        clusters: result.clusterCount,
-        kept: result.kept,
-        merged: result.merged,
-        updated: result.updated,
-        skipped: result.skipped
-    }
-    return result.stage === 'active'
-        ? { ...fields, archived: result.archived }
-        : { ...fields, deleted: result.deleted }
-}
-
 const hasMemoryChanges = (result: DreamRunResult) =>
     result.merged > 0 ||
     result.updated > 0 ||
-    result.archived > 0 ||
-    result.deleted > 0
+    result.archived > 0

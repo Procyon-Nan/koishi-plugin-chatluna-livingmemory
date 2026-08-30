@@ -162,9 +162,14 @@ export class LivingMemoryMutationService
         isConsolidated: boolean
     ) {
         return this.runPresetMutation(presetId, async () => {
+            const activeIds = (
+                await this.repository.getEntriesByPresetAndIds(presetId, ids)
+            )
+                .filter((entry) => entry.status === 'active')
+                .map((entry) => entry.id)
             const records = await this.repository.setMemoryConsolidation(
                 presetId,
-                ids,
+                activeIds,
                 isConsolidated
             )
             if (records.length === 0) {
@@ -237,10 +242,7 @@ export class LivingMemoryMutationService
             await this.applyCommittedMutation({
                 presetId: result.target.presetId,
                 upserts,
-                deletes: result.deletedSourceIds.map((id: string) => ({
-                    id,
-                    presetId: result.target.presetId
-                }))
+                deletes: []
             })
             return result
         })

@@ -223,7 +223,6 @@ export const createDreamRunResult = (): DreamRunResult => ({
     merged: 0,
     updated: 0,
     archived: 0,
-    deleted: 0,
     skipped: 0,
     detail: 'no changes'
 })

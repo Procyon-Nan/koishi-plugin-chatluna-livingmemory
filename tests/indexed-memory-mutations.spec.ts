@@ -204,7 +204,6 @@ it('synchronizes a Dream merge as one vector index mutation', async () => {
                 sentiment: 'neutral',
                 importance: 0.8
             },
-            sourceDisposition: 'archive',
             targetIsConsolidated: true,
             sourceIsConsolidated: true
         })

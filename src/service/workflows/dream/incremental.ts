@@ -14,8 +14,8 @@ import {
     resolvePresetPrompt
 } from '../../memory/helpers'
 import { isModelConfigured } from '../../shared/utils'
-import { addStats, createEmptyStats, formatStageDetail } from './stats'
-import type { DreamOperationStats, DreamRunResult, DreamStage } from './types'
+import { addStats, createEmptyStats } from './stats'
+import type { DreamOperationStats, DreamRunResult } from './types'
 import { DreamUnitProcessor } from './unit_processor'
 import type { LivingMemoryLogger } from '../../logging/logger'
 
@@ -49,11 +49,7 @@ interface IncrementalRunState {
     stats: DreamOperationStats
     firstRoundStats: DreamOperationStats
     secondRoundStats: DreamOperationStats
-    stageStats: Record<DreamStage, DreamOperationStats>
-    stageClusterCounts: Record<DreamStage, number>
     clusterCount: number
-    activeInputCount: number
-    archivedInputCount: number
     seedCount: number
     successfulSeedCount: number
     failedSeedCount: number
@@ -88,17 +84,7 @@ export class LivingMemoryIncrementalDreamService {
             stats: createEmptyStats(),
             firstRoundStats: createEmptyStats(),
             secondRoundStats: createEmptyStats(),
-            stageStats: {
-                active: createEmptyStats(),
-                archived: createEmptyStats()
-            },
-            stageClusterCounts: { active: 0, archived: 0 },
             clusterCount: 0,
-            activeInputCount: batch.filter((entry) => entry.status === 'active')
-                .length,
-            archivedInputCount: batch.filter(
-                (entry) => entry.status === 'archived'
-            ).length,
             seedCount: 0,
             successfulSeedCount: 0,
             failedSeedCount: 0,
@@ -114,36 +100,27 @@ export class LivingMemoryIncrementalDreamService {
         const presetPrompt = await resolvePresetPrompt(this.ctx, presetId)
         const speakers = await this.repository.listPresetSpeakers(presetId)
 
-        for (const stage of ['active', 'archived'] as const) {
-            const entries = batch.filter((entry) => entry.status === stage)
-            if (entries.length === 0) {
-                continue
-            }
-            state.clusterCount++
-            state.stageClusterCounts[stage]++
-            const result = await this.unitProcessor.process({
-                presetId,
-                assistantLabel,
-                presetPrompt,
-                stage,
-                cluster: {
-                    id: `cluster-${stage}`,
-                    reason: 'memory group',
-                    entries
-                },
-                speakers,
-                model,
-                touchedMemoryIds: new Set(),
-                consolidationMode: 'incremental-batch',
-                logger
-            })
-            addStats(state.stats, result)
-            addStats(state.firstRoundStats, result)
-            addStats(state.stageStats[stage], result)
-            if (result.success === false) {
-                state.errors.push(`first-round ${stage}: ${result.error}`)
-                return this.createResult(presetId, batch, state)
-            }
+        state.clusterCount++
+        const firstRoundResult = await this.unitProcessor.process({
+            presetId,
+            assistantLabel,
+            presetPrompt,
+            cluster: {
+                id: 'cluster-active',
+                reason: 'memory group',
+                entries: batch
+            },
+            speakers,
+            model,
+            touchedMemoryIds: new Set(),
+            consolidationMode: 'incremental-batch',
+            logger
+        })
+        addStats(state.stats, firstRoundResult)
+        addStats(state.firstRoundStats, firstRoundResult)
+        if (firstRoundResult.success === false) {
+            state.errors.push(`first-round: ${firstRoundResult.error}`)
+            return this.createResult(presetId, batch, state)
         }
 
         const batchIds = batch.map((entry) => entry.id)
@@ -155,7 +132,6 @@ export class LivingMemoryIncrementalDreamService {
                 await this.neighborSearch.findConsolidatedNeighbors({
                     presetId,
                     seedMemoryId: seed.id,
-                    status: seed.status,
                     excludedMemoryIds: batchIds,
                     limit: INCREMENTAL_DREAM_TOP_K
                 })
@@ -172,12 +148,10 @@ export class LivingMemoryIncrementalDreamService {
             }
 
             state.clusterCount++
-            state.stageClusterCounts[seed.status]++
             const result = await this.unitProcessor.process({
                 presetId,
                 assistantLabel,
                 presetPrompt,
-                stage: seed.status,
                 cluster: {
                     id: `cluster-${seed.id}`,
                     reason: 'memory group',
@@ -192,7 +166,6 @@ export class LivingMemoryIncrementalDreamService {
             })
             addStats(state.stats, result)
             addStats(state.secondRoundStats, result)
-            addStats(state.stageStats[seed.status], result)
             if (result.success === true) {
                 state.successfulSeedCount++
             } else {
@@ -230,11 +203,12 @@ export class LivingMemoryIncrementalDreamService {
             .map((entry) => entryById.get(entry.id))
             .filter(
                 (entry): entry is MemoryEntryRecord =>
-                    entry !== undefined && !entry.isConsolidated
+                    entry !== undefined &&
+                    entry.status === 'active' &&
+                    !entry.isConsolidated
             )
             .sort(
                 (left, right) =>
-                    stageOrder(left.status) - stageOrder(right.status) ||
                     +left.createdAt - +right.createdAt ||
                     left.id.localeCompare(right.id)
             )
@@ -246,7 +220,7 @@ export class LivingMemoryIncrementalDreamService {
             memoryIds
         )
         const entryById = new Map(entries.map((entry) => [entry.id, entry]))
-        return memoryIds.map((memoryId) => {
+        return memoryIds.flatMap((memoryId) => {
             const entry = entryById.get(memoryId)
             if (entry === undefined) {
                 throw new Error(
@@ -254,7 +228,7 @@ export class LivingMemoryIncrementalDreamService {
                         `preset=${presetId}, memory=${memoryId}`
                 )
             }
-            return entry
+            return entry.status === 'active' ? [entry] : []
         })
     }
 
@@ -271,14 +245,12 @@ export class LivingMemoryIncrementalDreamService {
             `merged ${state.stats.merged}`,
             `updated ${state.stats.updated}`,
             `archived ${state.stats.archived}`,
-            `deleted ${state.stats.deleted}`,
             `skipped ${state.stats.skipped}`
         ].join(', ')
         const firstRoundDetail = [
             `merged ${state.firstRoundStats.merged}`,
             `updated ${state.firstRoundStats.updated}`,
             `archived ${state.firstRoundStats.archived}`,
-            `deleted ${state.firstRoundStats.deleted}`,
             `skipped ${state.firstRoundStats.skipped}`
         ].join(', ')
         const secondRoundDetail = [
@@ -286,11 +258,10 @@ export class LivingMemoryIncrementalDreamService {
             `merged ${state.secondRoundStats.merged}`,
             `updated ${state.secondRoundStats.updated}`,
             `archived ${state.secondRoundStats.archived}`,
-            `deleted ${state.secondRoundStats.deleted}`,
             `skipped ${state.secondRoundStats.skipped}`
         ].join(', ')
         const detail = [
-            `dream automatic incremental: selected ${batch.length}, active ${state.activeInputCount}, archived ${state.archivedInputCount}`,
+            `dream automatic incremental: selected ${batch.length} active memories`,
             `first round: ${firstRoundDetail}`,
             `second round: seeds ${state.seedCount}, succeeded ${state.successfulSeedCount}, failed ${state.failedSeedCount}`,
             `second round: no candidates ${state.noCandidateSeedCount}, ${secondRoundDetail}`,
@@ -298,31 +269,9 @@ export class LivingMemoryIncrementalDreamService {
             `remaining pending ${remainingPendingCount}`,
             ...state.errors.map((error) => `error: ${error}`)
         ].join('\n')
-        const stageResults = (['active', 'archived'] as const).map((stage) => {
-            const entryCount =
-                stage === 'active'
-                    ? state.activeInputCount
-                    : state.archivedInputCount
-            const clusterCount = state.stageClusterCounts[stage]
-            const stats = state.stageStats[stage]
-            return {
-                stage,
-                entryCount,
-                clusterCount,
-                ...stats,
-                detail: formatStageDetail(
-                    stage,
-                    entryCount,
-                    clusterCount,
-                    stats
-                )
-            }
-        })
-
         return {
             entryCount: batch.length,
             clusterCount: state.clusterCount,
-            stageResults,
             ...state.stats,
             selectedCount: batch.length,
             seedCount: state.seedCount,
@@ -333,11 +282,4 @@ export class LivingMemoryIncrementalDreamService {
             detail
         }
     }
-}
-
-const stageOrder = (stage: DreamStage) => {
-    if (stage === 'active') {
-        return 0
-    }
-    return 1
 }

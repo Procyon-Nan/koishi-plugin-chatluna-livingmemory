@@ -13,8 +13,7 @@ import type {
     DreamConsolidationMode,
     DreamExecutionResult,
     DreamOperation,
-    DreamOperationStats,
-    DreamStage
+    DreamOperationStats
 } from './types'
 
 export type DreamExecutorRepository = DreamMemoryRepository
@@ -23,13 +22,8 @@ type DreamGeneratedMemoryMutation = Omit<DreamMemoryMutation, 'status'>
 type DreamUpdateOperation = Extract<DreamOperation, { action: 'update' }>
 type DreamArchiveOperation = Extract<DreamOperation, { action: 'archive' }>
 type DreamMergeOperation = Extract<DreamOperation, { action: 'merge' }>
-type DreamDeleteSourceOperation = Extract<
-    DreamOperation,
-    { action: 'deleteSource' }
->
 
 interface DreamExecutionState {
-    stage: DreamStage
     entryById: Map<string, DreamMemoryEntryRecord>
     touchedMemoryIds: Set<string>
     stats: DreamOperationStats
@@ -37,7 +31,6 @@ interface DreamExecutionState {
     speakers: PresetSpeakerRecord[]
     consolidatedMemoryIds: Set<string>
     mutatedMemoryIds: Set<string>
-    mergeDeletedSourceIds: Set<string>
 }
 
 export const getDreamOperationMemoryIds = (operation: DreamOperation) => {
@@ -48,7 +41,6 @@ export const getDreamOperationMemoryIds = (operation: DreamOperation) => {
         case 'archive':
             return [operation.memoryId]
         case 'merge':
-        case 'deleteSource':
             return [operation.targetMemoryId, ...operation.sourceMemoryIds]
     }
 }
@@ -58,7 +50,6 @@ export class DreamExecutor {
 
     async executeOperations(
         presetId: string,
-        stage: DreamStage,
         cluster: DreamCluster,
         operations: DreamOperation[],
         touchedMemoryIds: Set<string>,
@@ -73,15 +64,13 @@ export class DreamExecutor {
             cluster.entries.map((entry) => [entry.id, entry])
         )
         const state: DreamExecutionState = {
-            stage,
             entryById,
             touchedMemoryIds,
             stats,
             consolidationMode,
             speakers,
             consolidatedMemoryIds,
-            mutatedMemoryIds,
-            mergeDeletedSourceIds: new Set()
+            mutatedMemoryIds
         }
 
         for (const operation of operations) {
@@ -90,7 +79,6 @@ export class DreamExecutor {
                 this.logSkip(
                     logger,
                     presetId,
-                    stage,
                     cluster.id,
                     operation.action,
                     'ids-not-in-cluster'
@@ -102,7 +90,6 @@ export class DreamExecutor {
                 this.logSkip(
                     logger,
                     presetId,
-                    stage,
                     cluster.id,
                     operation.action,
                     reason
@@ -121,9 +108,6 @@ export class DreamExecutor {
                     break
                 case 'merge':
                     await this.executeMerge(operation, state, logSkip)
-                    break
-                case 'deleteSource':
-                    this.executeDeleteSource(operation, state, logSkip)
                     break
             }
         }
@@ -144,21 +128,6 @@ export class DreamExecutor {
         )
     }
 
-    private executeDeleteSource(
-        operation: DreamDeleteSourceOperation,
-        state: DreamExecutionState,
-        logSkip: (reason: string) => void
-    ) {
-        if (
-            !operation.sourceMemoryIds.every((id) =>
-                state.mergeDeletedSourceIds.has(id)
-            )
-        ) {
-            state.stats.skipped++
-            logSkip('deleteSource-without-prior-merge')
-        }
-    }
-
     private async executeUpdate(
         operation: DreamUpdateOperation,
         state: DreamExecutionState,
@@ -177,7 +146,7 @@ export class DreamExecutor {
         await this.repository.updateMemoryForDream(
             entry.presetId,
             entry.id,
-            this.prepareStagePatch(state.stage, patch),
+            { ...patch, status: 'active' },
             isConsolidated
         )
         state.touchedMemoryIds.add(entry.id)
@@ -240,8 +209,7 @@ export class DreamExecutor {
                 id: source.id,
                 updatedAt: source.updatedAt
             })),
-            patch: this.prepareStagePatch(state.stage, patch),
-            sourceDisposition: this.getSourceDisposition(state.stage),
+            patch: { ...patch, status: 'active' },
             targetIsConsolidated:
                 state.consolidationMode !== 'incremental-batch',
             sourceIsConsolidated: true
@@ -256,13 +224,7 @@ export class DreamExecutor {
         }
         sourceMemoryIds.forEach((id) => state.consolidatedMemoryIds.add(id))
         state.stats.merged++
-
-        if (state.stage === 'archived') {
-            sourceMemoryIds.forEach((id) => state.mergeDeletedSourceIds.add(id))
-            state.stats.deleted += sourceMemoryIds.length
-        } else {
-            state.stats.archived += sourceMemoryIds.length
-        }
+        state.stats.archived += sourceMemoryIds.length
     }
 
     private async archiveMemory(
@@ -276,30 +238,6 @@ export class DreamExecutor {
             true
         )
         touchedMemoryIds.add(entry.id)
-    }
-
-    private getSourceDisposition(stage: DreamStage): 'archive' | 'delete' {
-        if (stage === 'active') {
-            return 'archive'
-        }
-        return 'delete'
-    }
-
-    private prepareStagePatch(
-        stage: DreamStage,
-        patch: DreamGeneratedMemoryMutation
-    ): DreamMemoryMutation {
-        if (stage === 'active') {
-            return {
-                ...patch,
-                status: 'active'
-            }
-        }
-
-        return {
-            ...patch,
-            status: 'archived'
-        }
     }
 
     private prepareMemoryPatch(
@@ -317,14 +255,12 @@ export class DreamExecutor {
     private logSkip(
         logger: LivingMemoryLogger | undefined,
         presetId: string,
-        stage: DreamStage,
         clusterId: string,
         action: string,
         reason: string
     ) {
         logger?.diagnostic('dream.operation.skipped', {
             presetId,
-            stage,
             clusterId,
             action,
             reason

@@ -269,7 +269,6 @@ it('runs one global HDBSCAN pass over all first-pass noise', async () => {
 
     const clusters = await clusterer.buildClusters(
         'preset-1',
-        'active',
         entries,
         captured.logger
     )
@@ -371,7 +370,6 @@ it('reads first-pass partitions and global noise in bounded batches', async () =
 
     const clusters = await clusterer.buildClusters(
         'preset-1',
-        'active',
         entries
     )
 
@@ -413,7 +411,6 @@ it('skips the global noise pass when the first pass has no noise', async () => {
 
     const clusters = await clusterer.buildClusters(
         'preset-1',
-        'active',
         entries,
         captured.logger
     )
@@ -463,7 +460,6 @@ it('splits an oversized cluster into units within the size cap', async () => {
 
     const clusters = await clusterer.buildClusters(
         'preset-1',
-        'active',
         entries
     )
 
@@ -504,7 +500,6 @@ it('keeps clusters within the cap intact and splits oversized ones', async () =>
 
     const clusters = await clusterer.buildClusters(
         'preset-1',
-        'active',
         entries
     )
 
@@ -550,7 +545,7 @@ it('passes the unit size cap to partitioning only for oversized clusters', async
     }
     const clusterer = new DreamClusterer(vectors.reader, worker)
 
-    await clusterer.buildClusters('preset-1', 'active', entries)
+    await clusterer.buildClusters('preset-1', entries)
 
     assert.deepEqual(partitionCalls, [
         { entryCount: 55, targetSize: undefined },
@@ -573,7 +568,6 @@ it('logs a single first-pass noise entry without a global HDBSCAN run', async ()
 
     const clusters = await clusterer.buildClusters(
         'preset-1',
-        'active',
         entries,
         captured.logger
     )
@@ -612,7 +606,7 @@ it('propagates asynchronous HDBSCAN failures', async () => {
     )
 
     await assert.rejects(
-        clusterer.buildClusters('preset-1', 'active', entries),
+        clusterer.buildClusters('preset-1', entries),
         /Dream worker failed/u
     )
 })
@@ -631,7 +625,7 @@ it('propagates asynchronous partition failures before reading vectors', async ()
     const clusterer = new DreamClusterer(vectors.reader, worker)
 
     await assert.rejects(
-        clusterer.buildClusters('preset-1', 'active', entries),
+        clusterer.buildClusters('preset-1', entries),
         /Dream partition worker failed/u
     )
     assert.deepEqual(vectors.calls, [])
@@ -658,22 +652,18 @@ it('emits batch summaries without worker progress callbacks', async () => {
 
     await clusterer.buildClusters(
         'preset-1',
-        'active',
         entries,
         captured.logger
     )
 
     assert.deepEqual(progressFlags, [false])
     assert.deepEqual(captured.info, [
-        'event=dream.clustering.round.started ' +
-            'stage=active round=primary batches=1',
+        'event=dream.clustering.round.started round=primary batches=1',
         'event=dream.clustering.batch.completed ' +
-            'stage=active round=primary batch=1 clusters-1=4 noise=0',
+            'round=primary batch=1 clusters-1=4 noise=0',
+        'event=dream.clustering.round.completed round=primary totalNoise=0',
+        'event=dream.clustering.round.started round=global-noise batches=0',
         'event=dream.clustering.round.completed ' +
-            'stage=active round=primary totalNoise=0',
-        'event=dream.clustering.round.started ' +
-            'stage=active round=global-noise batches=0',
-        'event=dream.clustering.round.completed ' +
-            'stage=active round=global-noise totalNoise=0'
+            'round=global-noise totalNoise=0'
     ])
 })

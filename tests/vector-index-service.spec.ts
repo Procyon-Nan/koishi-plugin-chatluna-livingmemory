@@ -327,7 +327,6 @@ it('builds the index once and reuses its manifest after restart', async () => {
         const neighbors = await first.findConsolidatedNeighbors({
             presetId: 'preset-a',
             seedMemoryId: 'memory-a',
-            status: 'active',
             excludedMemoryIds: [],
             limit: 30
         })

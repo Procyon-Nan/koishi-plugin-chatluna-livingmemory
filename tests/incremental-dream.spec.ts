@@ -54,7 +54,9 @@ class IncrementalRepositoryStub implements IncrementalDreamRepository {
 
     async listPendingEntries(targetPresetId: string, limit: number) {
         return this.list(targetPresetId)
-            .filter((entry) => !entry.isConsolidated)
+            .filter(
+                (entry) => entry.status === 'active' && !entry.isConsolidated
+            )
             .sort(
                 (left, right) =>
                     +left.createdAt - +right.createdAt ||
@@ -70,7 +72,7 @@ class IncrementalRepositoryStub implements IncrementalDreamRepository {
 
     async countPendingEntries(targetPresetId: string) {
         return this.list(targetPresetId).filter(
-            (entry) => !entry.isConsolidated
+            (entry) => entry.status === 'active' && !entry.isConsolidated
         ).length
     }
 
@@ -119,7 +121,6 @@ class IncrementalRepositoryStub implements IncrementalDreamRepository {
         if (target === undefined) throw new Error('missing target')
         const previousContent = target.content
         const archivedSources: MemoryEntryRecord[] = []
-        const deletedSourceIds: string[] = []
         Object.assign(target, input.patch, {
             isConsolidated: input.targetIsConsolidated,
             updatedAt: new Date(+target.updatedAt + 1)
@@ -127,20 +128,14 @@ class IncrementalRepositoryStub implements IncrementalDreamRepository {
         for (const sourceVersion of input.sources) {
             const source = this.entries.get(sourceVersion.id)
             if (source === undefined) throw new Error('missing source')
-            if (input.sourceDisposition === 'delete') {
-                this.entries.delete(source.id)
-                deletedSourceIds.push(source.id)
-            } else {
-                source.status = 'archived'
-                source.isConsolidated = input.sourceIsConsolidated
-                source.updatedAt = new Date(+source.updatedAt + 1)
-                archivedSources.push(source)
-            }
+            source.status = 'archived'
+            source.isConsolidated = input.sourceIsConsolidated
+            source.updatedAt = new Date(+source.updatedAt + 1)
+            archivedSources.push(source)
         }
         return {
             target,
             archivedSources,
-            deletedSourceIds,
             targetContentChanged: target.content !== previousContent
         }
     }
@@ -200,7 +195,7 @@ const createHarness = (
                 .filter(
                     (entry) =>
                         entry.presetId === input.presetId &&
-                        entry.status === input.status &&
+                        entry.status === 'active' &&
                         entry.isConsolidated &&
                         !excludedMemoryIds.has(entry.id)
                 )
@@ -251,17 +246,8 @@ it('runs one batch unit then consolidates every successful seed in order', async
     assert.equal(result.seedCount, 2)
     assert.equal(result.successfulSeedCount, 2)
     assert.equal(result.remainingPendingCount, 0)
-    assert.deepEqual(
-        result.stageResults?.map((stageResult) => ({
-            stage: stageResult.stage,
-            entries: stageResult.entryCount,
-            clusters: stageResult.clusterCount
-        })),
-        [
-            { stage: 'active', entries: 2, clusters: 3 },
-            { stage: 'archived', entries: 0, clusters: 0 }
-        ]
-    )
+    assert.equal(result.entryCount, 2)
+    assert.equal(result.clusterCount, 3)
     assert.equal(harness.model.invocations.length, 3)
     assert.equal(harness.repository.entries.get('seed-1')?.isConsolidated, true)
     assert.equal(harness.repository.entries.get('seed-2')?.isConsolidated, true)

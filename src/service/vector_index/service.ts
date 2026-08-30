@@ -350,7 +350,7 @@ export class LivingMemoryVectorIndexService
                 excludedMemoryIds.add(input.seedMemoryId)
                 const hits = await this.requireWorker().queryKnn({
                     presetId: input.presetId,
-                    status: input.status,
+                    status: 'active',
                     types: null,
                     isConsolidated: true,
                     limit: input.limit + excludedMemoryIds.size,
