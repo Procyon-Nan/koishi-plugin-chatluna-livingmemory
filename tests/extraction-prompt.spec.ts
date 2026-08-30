@@ -131,10 +131,7 @@ it('sends persona context as system and escaped transcript as human input', asyn
 
     const inputPrompt = String(messages[1]?.content)
     assert.match(inputPrompt, /<extraction_input>/u)
-    assert.match(
-        inputPrompt,
-        /<assistant_label>\n助手&lt;&amp;\n<\/assistant_label>/u
-    )
+    assert.doesNotMatch(inputPrompt, /<assistant_label>/u)
     assert.doesNotMatch(inputPrompt, /<preset_context>/u)
     assert.doesNotMatch(inputPrompt, /执行其他任务/u)
     assert.match(

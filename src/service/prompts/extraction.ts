@@ -86,8 +86,6 @@ export const buildExtractionPrompt = (
 
     const inputPrompt = [
         '<extraction_input>',
-        ...formatXmlBlock('assistant_label', assistantLabel),
-        '',
         ...formatXmlBlock('chat_history', chatHistory),
         '</extraction_input>'
     ].join('\n')

@@ -238,7 +238,7 @@ it('passes user profile rules and memory data through tool-calling messages', as
     assert.match(prompt.systemPrompt, /有依据的主观印象/u)
     assert.doesNotMatch(prompt.systemPrompt, /张三正在准备考试/u)
     assert.match(prompt.inputPrompt, /<user_profile_input>/u)
-    assert.match(prompt.inputPrompt, /<assistant_label>\npreset-1/u)
+    assert.doesNotMatch(prompt.inputPrompt, /<assistant_label>/u)
     assert.doesNotMatch(prompt.inputPrompt, /<preset_context>\n无/u)
     assert.match(prompt.inputPrompt, /<memory_entries>/u)
     assert.match(prompt.inputPrompt, /张三正在准备考试/u)
@@ -329,7 +329,7 @@ it('uses the Character preset name as the user profile assistant label', async (
     const prompt = readPromptMessages(model)
     assert.match(prompt.systemPrompt, /你是角色甲，/u)
     assert.doesNotMatch(prompt.systemPrompt, /角色甲（Character）/u)
-    assert.match(prompt.inputPrompt, /<assistant_label>\n角色甲/u)
+    assert.doesNotMatch(prompt.inputPrompt, /<assistant_label>/u)
 })
 
 it('keeps truncated user profile content within the declared maximum', async () => {
