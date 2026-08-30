@@ -132,7 +132,7 @@ export class LivingMemoryExtractor {
         const assistantLabel = resolveScopeAssistantLabel(context)
 
         return buildExtractionPrompt({
-            input,
+            chatHistory: input,
             assistantLabel,
             presetPrompt: context.presetPrompt
         })

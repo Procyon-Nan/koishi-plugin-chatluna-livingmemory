@@ -6,8 +6,8 @@ import {
 } from './prompt_format'
 
 export interface ExtractionPromptInput {
-    /** 已格式化的历史对话转写文本。 */
-    input: string
+    /** 已格式化的聊天记录。 */
+    chatHistory: string
     /** 角色名标签（用于「XX说：」前缀），无上下文时为占位符。 */
     assistantLabel: string
     /** preset 人设上下文，会作为 system 层角色依据提供给模型。 */
@@ -23,7 +23,7 @@ export type ExtractionPromptMessages = PromptMessages
 export const buildExtractionPrompt = (
     params: ExtractionPromptInput
 ): ExtractionPromptMessages => {
-    const { input, assistantLabel, presetPrompt } = params
+    const { chatHistory, assistantLabel, presetPrompt } = params
     const trimmedPreset = presetPrompt.trim()
     const escapedAssistantLabel = escapeXmlText(assistantLabel)
     const systemPrompt = [
@@ -40,7 +40,7 @@ export const buildExtractionPrompt = (
         ...formatXmlBlock('preset_context', trimmedPreset),
         '',
         '<task>',
-        '根据聊天记录，提取值得长期记忆的经历与认知并调用工具记录。始终以输入中的 <transcript> 内容作为唯一来源依据。',
+        '根据聊天记录，提取值得长期记忆的经历与认知并调用工具记录。始终以输入中的 <chat_history> 内容作为唯一来源依据。',
         '一条记忆可能关联一名或多名具体用户，也可能只涉及你自身。',
         '只记录你认为需要长期记住的事实、关系、偏好、计划和重要情境，避免记录流水账、无意义的日常交互。',
         '用符合你人格设定的语气和视角来表达。重点关注：',
@@ -88,7 +88,7 @@ export const buildExtractionPrompt = (
         '<extraction_input>',
         ...formatXmlBlock('assistant_label', assistantLabel),
         '',
-        ...formatXmlBlock('transcript', input),
+        ...formatXmlBlock('chat_history', chatHistory),
         '</extraction_input>'
     ].join('\n')
 

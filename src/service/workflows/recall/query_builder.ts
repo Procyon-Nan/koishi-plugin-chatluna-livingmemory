@@ -261,7 +261,7 @@ export class LivingMemoryRecallQueryBuilder {
     private buildRewritePrompt(
         scope: MemoryScope,
         cleanedQuery: string,
-        currentTranscript: string,
+        lastMessage: string,
         historyMessages: LivingMemoryTranscriptMessage[]
     ) {
         const assistantLabel = resolveScopeAssistantLabel(scope)
@@ -269,15 +269,14 @@ export class LivingMemoryRecallQueryBuilder {
             historyMessages,
             this.config.recallHistoryWindowRounds
         )
-        const history = recentMessages.length
-            ? this.formatter.toExtractionPayload(recentMessages).input
-            : '无'
+        const chatHistory =
+            this.formatter.toExtractionPayload(recentMessages).input
 
         return buildRecallRewritePrompt({
             assistantLabel,
-            currentTranscript,
+            lastMessage,
             cleanedQuery,
-            history
+            chatHistory
         })
     }
 }

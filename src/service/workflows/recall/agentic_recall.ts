@@ -392,20 +392,19 @@ export class LivingMemoryAgenticRecallExecutor {
         historyMessages: LivingMemoryTranscriptMessage[]
     ): AgenticRecallPromptMessages {
         const assistantLabel = resolveScopeAssistantLabel(scope)
-        const currentTranscript = this.formatter.toExtractionPayload([
+        const lastMessage = this.formatter.toExtractionPayload([
             currentMessage
         ]).input
         const recentMessages = this.formatter.takeRecentRounds(
             historyMessages,
             this.config.recallHistoryWindowRounds
         )
-        const history = recentMessages.length
-            ? this.formatter.toExtractionPayload(recentMessages).input
-            : '无'
+        const chatHistory =
+            this.formatter.toExtractionPayload(recentMessages).input
         return buildAgenticRecallPrompt({
             assistantLabel,
-            currentTranscript,
-            history
+            lastMessage,
+            chatHistory
         })
     }
 
