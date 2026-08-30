@@ -114,12 +114,12 @@ it('sends persona context as system and escaped transcript as human input', asyn
     )
     assert.match(
         systemPrompt,
-        /<role>\n你是助手&lt;&amp;，你正在以本人回忆亲身经历的方式书写长期记忆。/u
+        /<role>\n你是助手&lt;&amp;，你正在从聊天记录中提取值得长期记忆的内容并记录。/u
     )
     assert.doesNotMatch(systemPrompt, /你是preset-1/u)
     assert.match(systemPrompt, /优先沿用已经实际出现过的表达/u)
-    assert.match(systemPrompt, /不能写成旁观者、客服记录或聊天日志/u)
-    assert.match(systemPrompt, /事实内容只能来自 <transcript>/u)
+    assert.match(systemPrompt, /避免使用旁观者、客服记录或聊天日志/u)
+    assert.match(systemPrompt, /<transcript> 内容作为唯一来源依据/u)
     assert.match(systemPrompt, /必须体现你的实际回复或作用/u)
     assert.match(systemPrompt, /当天 00:00 之后的凌晨属于当天/u)
     assert.doesNotMatch(systemPrompt, /<preset_context> 为“无”/u)
