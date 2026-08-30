@@ -53,7 +53,7 @@ type LivingMemoryAgenticRecallConfig = Pick<
 
 interface RecordedAgenticSearchCall {
     inputKey: string
-    input: Record<string, unknown>
+    input: LivingMemorySearchToolInput
     output: string
 }
 
@@ -455,17 +455,12 @@ export class LivingMemoryAgenticRecallExecutor {
         )
 
         for (const call of orderedSearchCalls) {
-            const parsedInput = livingMemorySearchInputSchema.safeParse(
-                call.input
-            )
-            if (parsedInput.success) {
-                toolCallSummaries.push(
-                    normalizeToolCallSummary(
-                        parsedInput.data,
-                        this.config.memorySearchToolMaxResults
-                    )
+            toolCallSummaries.push(
+                normalizeToolCallSummary(
+                    call.input,
+                    this.config.memorySearchToolMaxResults
                 )
-            }
+            )
 
             matchedMemories.push(...parseMatchedMemories(call.output))
         }

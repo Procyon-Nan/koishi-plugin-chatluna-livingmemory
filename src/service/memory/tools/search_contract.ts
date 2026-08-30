@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { LivingMemorySearchInput } from '../../../contracts/memory'
 
 export const livingMemorySearchToolName = 'living_memory_search'
 export const livingMemoryGetMessagesToolName = 'living_memory_get_messages'
@@ -66,6 +67,11 @@ const searchKeywordDescription =
     '关键词应为具体的事物、活动、地点等实体名称，不应是完整句子。' +
     '禁止使用用户昵称、用户名或称呼作为关键词，这类词匹配无意义。'
 
+export type LivingMemorySearchToolInput = Pick<
+    LivingMemorySearchInput,
+    'searchTexts' | 'searchKeywords'
+>
+
 export const livingMemorySearchInputSchema = z.object({
     searchTexts: z
         .array(createSearchFieldSchema(searchTextRule))
@@ -78,10 +84,6 @@ export const livingMemorySearchInputSchema = z.object({
         .optional()
         .describe(searchKeywordDescription)
 })
-
-export type LivingMemorySearchToolInput = z.infer<
-    typeof livingMemorySearchInputSchema
->
 
 const memoryIdsDescription =
     '要查看的记忆 ID。提供至少一个来自 living_memory_search 结果的 ID。'
