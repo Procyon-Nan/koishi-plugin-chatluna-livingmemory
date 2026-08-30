@@ -1,9 +1,4 @@
 import {
-    type BaseMessage,
-    HumanMessage,
-    SystemMessage
-} from '@langchain/core/messages'
-import {
     ChatPromptTemplate,
     MessagesPlaceholder
 } from '@langchain/core/prompts'
@@ -12,7 +7,6 @@ import { StructuredTool, type ToolRunnableConfig } from '@langchain/core/tools'
 import type { ChainValues } from '@langchain/core/utils/types'
 import type { Context } from 'koishi'
 import {
-    _formatIntermediateSteps,
     AgentRunner,
     createOpenAIAgent
 } from 'koishi-plugin-chatluna/llm-core/agent'
@@ -34,15 +28,11 @@ import type {
 } from '../../../contracts/memory'
 import type { LivingMemoryConfig } from '../../../contracts/workflows'
 import { LivingMemoryMessageFormatter } from '../../transcript/message_formatter'
-import {
-    agenticRecallNoMemoryOutput,
-    buildAgenticRecallFinalizationPrompt,
-    buildAgenticRecallPrompt
-} from '../../prompts'
+import { buildAgenticRecallPrompt } from '../../prompts'
 import type { AgenticRecallPromptMessages } from '../../prompts'
-import { isModelConfigured, stringifyModelContent } from '../../shared/utils'
+import { isModelConfigured } from '../../shared/utils'
 import type { LivingMemoryLogger } from '../../logging/logger'
-import { createLoggedModel, invokeLoggedModel } from '../../logging/model_calls'
+import { createLoggedModel } from '../../logging/model_calls'
 import {
     livingMemorySearchInputSchema,
     livingMemorySearchToolName
@@ -76,6 +66,8 @@ type AgenticRecallToolAgentInput = ChainValues & {
 }
 
 const agenticRecallMaxModelCalls = 6
+const agenticRecallExhaustedMessage =
+    `agentic recall did not finish within ${agenticRecallMaxModelCalls} model calls`
 
 const agenticRecallPromptTemplate = ChatPromptTemplate.fromMessages([
     ['system', '{systemPrompt}'],
@@ -85,7 +77,6 @@ const agenticRecallPromptTemplate = ChatPromptTemplate.fromMessages([
 
 export interface LivingMemoryAgenticRecallTrace {
     prompt: AgenticRecallPromptMessages
-    finalOutput: string
     item: AgenticMemorySnapshotItem
 }
 
@@ -202,16 +193,6 @@ const createSearchInputKey = (input: unknown) => {
     return JSON.stringify(parsedInput.success ? parsedInput.data : input)
 }
 
-const hasToolCalls = (message: BaseMessage) => {
-    const directToolCalls = (message as { tool_calls?: unknown }).tool_calls
-    if (Array.isArray(directToolCalls) && directToolCalls.length > 0) {
-        return true
-    }
-
-    const rawToolCalls = message.additional_kwargs?.tool_calls
-    return Array.isArray(rawToolCalls) && rawToolCalls.length > 0
-}
-
 const orderRecordedSearchCalls = (
     calls: RecordedAgenticSearchCall[],
     steps: AgentStep[] | undefined
@@ -303,7 +284,7 @@ export class LivingMemoryAgenticRecallExecutor {
         currentMessage: LivingMemoryTranscriptMessage,
         historyMessages: LivingMemoryTranscriptMessage[],
         runLogger: LivingMemoryLogger = this.logger
-    ): Promise<LivingMemoryAgenticRecallTrace> {
+    ): Promise<LivingMemoryAgenticRecallTrace | null> {
         if (!isModelConfigured(this.config.subModel)) {
             throw new Error('subModel is not configured.')
         }
@@ -336,13 +317,8 @@ export class LivingMemoryAgenticRecallExecutor {
             agentContext,
             runLogger
         )
-        const { runner, getModelCallCount, hasUsedFinalizationCall } =
-            this.createBoundedAgentRunner(
-                chatModel,
-                prompt,
-                searchTool,
-                runLogger
-            )
+        const { runner, hasExhaustedModelCalls } =
+            this.createBoundedAgentRunner(chatModel, searchTool, runLogger)
 
         const result = await runner.invoke(
             {
@@ -360,30 +336,35 @@ export class LivingMemoryAgenticRecallExecutor {
                 }
             }
         )
+        if (hasExhaustedModelCalls()) {
+            throw new Error(agenticRecallExhaustedMessage)
+        }
         const { toolCallSummaries, matchedMemories } =
             this.collectSearchResults(
                 recordedSearchCalls,
                 result.intermediateSteps
             )
-
-        const trace = this.createTrace(
-            prompt,
-            result.output.trim(),
-            matchedMemories,
-            toolCallSummaries
-        )
-
+        const finalText = result.output.trim()
+        const uniqueMemories = uniqueMatchedMemories(matchedMemories)
         if (
-            hasUsedFinalizationCall() &&
-            trace.finalOutput === agenticRecallNoMemoryOutput
+            finalText.length === 0 ||
+            finalText === '<NO_MEMORY>' ||
+            uniqueMemories.length === 0
         ) {
-            runLogger.diagnostic('recall.agentic.exhausted', {
-                modelCalls: getModelCallCount(),
-                reason: 'max-model-calls'
-            })
+            return null
         }
 
-        return trace
+        return {
+            prompt,
+            item: {
+                finalText,
+                toolCallSummary: aggregateToolCallSummary(
+                    toolCallSummaries,
+                    this.config.memorySearchToolMaxResults
+                ),
+                matchedMemories: uniqueMemories
+            }
+        }
     }
 
     private buildRecallPrompt(
@@ -410,12 +391,11 @@ export class LivingMemoryAgenticRecallExecutor {
 
     private createBoundedAgentRunner(
         chatModel: ChatLunaChatModel,
-        prompt: AgenticRecallPromptMessages,
         searchTool: RecordingLivingMemorySearchTool,
         runLogger: LivingMemoryLogger
     ) {
         let modelCallCount = 0
-        let usedFinalizationCall = false
+        let exhaustedModelCalls = false
         const loggedModel = createLoggedModel(chatModel, {
             logger: runLogger,
             stage: 'agentic-decision',
@@ -436,23 +416,27 @@ export class LivingMemoryAgenticRecallExecutor {
                 runConfig?: RunnableConfig
             ): Promise<AgenticRecallDecision> => {
                 modelCallCount += 1
-
-                if (modelCallCount === agenticRecallMaxModelCalls) {
-                    usedFinalizationCall = true
-                    return await this.finalize(
-                        chatModel,
-                        prompt,
-                        input,
-                        runConfig,
-                        runLogger,
-                        modelCallCount
-                    )
+                const isLastAllowedCall =
+                    modelCallCount === agenticRecallMaxModelCalls
+                if (isLastAllowedCall) {
+                    exhaustedModelCalls = true
                 }
 
-                return await toolAgent.invoke(
+                const decision = await toolAgent.invoke(
                     input as AgenticRecallToolAgentInput,
                     runConfig
                 )
+                if (
+                    isLastAllowedCall &&
+                    !Array.isArray(decision) &&
+                    'returnValues' in decision
+                ) {
+                    exhaustedModelCalls = false
+                }
+                if (isLastAllowedCall && exhaustedModelCalls) {
+                    throw new Error(agenticRecallExhaustedMessage)
+                }
+                return decision
             }
         )
         const runner = AgentRunner.fromAgentAndTools({
@@ -463,7 +447,7 @@ export class LivingMemoryAgenticRecallExecutor {
             handleParsingErrors: (error) => {
                 return [
                     `Invalid tool call: ${error.message}`,
-                    `Correct the tool name or arguments, then retry the tool call or finish with ${agenticRecallNoMemoryOutput}.`
+                    'Correct the tool name or arguments, then retry the tool call.'
                 ].join(' ')
             },
             handleToolRuntimeErrors: (error) => {
@@ -472,8 +456,7 @@ export class LivingMemoryAgenticRecallExecutor {
         })
         return {
             runner,
-            getModelCallCount: () => modelCallCount,
-            hasUsedFinalizationCall: () => usedFinalizationCall
+            hasExhaustedModelCalls: () => exhaustedModelCalls
         }
     }
 
@@ -512,84 +495,4 @@ export class LivingMemoryAgenticRecallExecutor {
         return { toolCallSummaries, matchedMemories }
     }
 
-    private async finalize(
-        model: ChatLunaChatModel,
-        prompt: AgenticRecallPromptMessages,
-        input: ChainValues,
-        runConfig: RunnableConfig | undefined,
-        logger: LivingMemoryLogger,
-        attempt: number
-    ): Promise<AgentFinish> {
-        const scratchpad = _formatIntermediateSteps(
-            (input['scratchpadEntries'] ??
-                input['steps'] ??
-                []) as ScratchpadEntry[]
-        )
-        const messages = [
-            new SystemMessage(prompt.systemPrompt),
-            new HumanMessage(prompt.inputPrompt),
-            ...scratchpad,
-            new HumanMessage(buildAgenticRecallFinalizationPrompt())
-        ]
-        const invokeConfig = {
-            ...(runConfig ?? {}),
-            tools: []
-        } as Parameters<ChatLunaChatModel['invoke']>[1]
-        const response = await invokeLoggedModel(
-            model,
-            messages,
-            invokeConfig,
-            {
-                logger,
-                stage: 'agentic-finalization',
-                attempt,
-                promptLogging: 'none',
-                logResponseText: false
-            }
-        )
-        const output = stringifyModelContent(response.content).trim()
-        const finalOutput =
-            output.length === 0 || hasToolCalls(response)
-                ? agenticRecallNoMemoryOutput
-                : output
-
-        return {
-            returnValues: {
-                output: finalOutput,
-                message: response
-            },
-            log: finalOutput
-        }
-    }
-
-    private createTrace(
-        prompt: AgenticRecallPromptMessages,
-        finalOutput: string,
-        matchedMemories: AgenticMemorySnapshotMemoryItem[],
-        toolCallSummaries: AgenticMemorySearchToolCallSummary[]
-    ): LivingMemoryAgenticRecallTrace {
-        const uniqueMemories = uniqueMatchedMemories(matchedMemories)
-        const noMemories = uniqueMemories.length === 0
-        const resolvedOutput =
-            finalOutput.length === 0 ||
-            (finalOutput !== agenticRecallNoMemoryOutput && noMemories)
-                ? agenticRecallNoMemoryOutput
-                : finalOutput
-
-        const finalText =
-            resolvedOutput === agenticRecallNoMemoryOutput ? '' : resolvedOutput
-
-        return {
-            prompt,
-            finalOutput: resolvedOutput,
-            item: {
-                finalText,
-                toolCallSummary: aggregateToolCallSummary(
-                    toolCallSummaries,
-                    this.config.memorySearchToolMaxResults
-                ),
-                matchedMemories: uniqueMemories
-            }
-        }
-    }
 }

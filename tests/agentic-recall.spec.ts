@@ -10,8 +10,7 @@ import { type RunnableConfig, RunnableLambda } from '@langchain/core/runnables'
 import type { Context } from 'koishi'
 import { LivingMemoryLogger } from '../src/service/logging/logger'
 import type {
-    ChatLunaChatModel,
-    ChatLunaModelCallOptions
+    ChatLunaChatModel
 } from 'koishi-plugin-chatluna/llm-core/platform/model'
 import type {
     LivingMemorySearchInput,
@@ -36,20 +35,10 @@ interface SearchInvocation {
 
 interface AgenticRecallHarnessOptions {
     responses: (BaseMessage | Error)[]
-    finalResponse?: BaseMessage | Error
     search?: (
         invocation: SearchInvocation
     ) => Promise<LivingMemorySearchResult[]>
 }
-
-const boundTools = (
-    runConfig: RunnableConfig | undefined
-): NonNullable<ChatLunaModelCallOptions['tools']> =>
-    (
-        runConfig as
-            | (RunnableConfig & Pick<ChatLunaModelCallOptions, 'tools'>)
-            | undefined
-    )?.tools ?? []
 
 const config = {
     subModel: 'test/model',
@@ -128,7 +117,6 @@ const toMessages = (input: unknown): BaseMessage[] => {
 const createHarness = (options: AgenticRecallHarnessOptions) => {
     const responses = [...options.responses]
     const boundInvocations: ModelInvocation[] = []
-    const directInvocations: ModelInvocation[] = []
     const searchInvocations: SearchInvocation[] = []
 
     const takeResponse = (response: BaseMessage | Error | undefined) => {
@@ -152,9 +140,8 @@ const createHarness = (options: AgenticRecallHarnessOptions) => {
     )
     const model = {
         withConfig: () => boundModel,
-        invoke: async (messages: BaseMessage[], runConfig?: RunnableConfig) => {
-            directInvocations.push({ messages, config: runConfig })
-            return takeResponse(options.finalResponse)
+        invoke: async () => {
+            throw new Error('unexpected direct model invocation')
         }
     } as unknown as ChatLunaChatModel
     const mockEngine = {
@@ -195,7 +182,6 @@ const createHarness = (options: AgenticRecallHarnessOptions) => {
     return {
         boundInvocations,
         debugMessages,
-        directInvocations,
         searchInvocations,
         run: () => executor.run(testScope, currentMessage, [])
     }
@@ -216,13 +202,13 @@ it('runs one search through AgentRunner and preserves preset-scoped trace data',
 
     const trace = await harness.run()
 
-    assert.equal(trace.finalOutput, '我记得一段可靠的往事。')
+    assert.ok(trace)
+    assert.equal(trace.item.finalText, '我记得一段可靠的往事。')
     assert.equal(trace.item.matchedMemories.length, 1)
     assert.equal(trace.item.matchedMemories[0]?.content, 'content-memory-1')
     assert.deepEqual(trace.item.toolCallSummary.searchTexts, ['记忆'])
     assert.equal(harness.searchInvocations[0]?.presetId, scope.presetId)
     assert.equal(harness.boundInvocations.length, 2)
-    assert.equal(harness.directInvocations.length, 0)
     assert.deepEqual(
         harness.boundInvocations[0]?.messages.map((message) =>
             message.getType()
@@ -300,6 +286,7 @@ it('rejects stringified arrays and allows corrected search input', async () => {
         toolMessages(harness.boundInvocations[1])[0]?.content
     )
 
+    assert.ok(trace)
     assert.equal(trace.item.matchedMemories.length, 1)
     assert.match(
         invalidOutput,
@@ -335,7 +322,7 @@ it('never normalizes repeated stringified array inputs', async () => {
         toolMessages(harness.boundInvocations[3]).at(-1)?.content
     )
 
-    assert.equal(trace.finalOutput, '<NO_MEMORY>')
+    assert.equal(trace, null)
     assert.match(
         failedOutput,
         /Received tool input did not match expected schema/u
@@ -376,6 +363,7 @@ it('handles every tool call in a multi-call model response', async () => {
     const trace = await harness.run()
     const returnedToolMessages = toolMessages(harness.boundInvocations[1])
 
+    assert.ok(trace)
     assert.equal(harness.searchInvocations.length, 2)
     assert.equal(returnedToolMessages.length, 2)
     assert.deepEqual(
@@ -414,6 +402,7 @@ it('recovers from malformed raw tool arguments through parser observation', asyn
 
     const trace = await harness.run()
 
+    assert.ok(trace)
     assert.equal(trace.item.matchedMemories.length, 1)
     assert.equal(harness.boundInvocations.length, 3)
     assert.equal(harness.searchInvocations.length, 1)
@@ -445,6 +434,7 @@ it('allows the model to recover from an unavailable tool call', async () => {
     )
 
     assert.match(unavailableOutput, /is not valid/u)
+    assert.ok(trace)
     assert.equal(trace.item.matchedMemories.length, 1)
 })
 
@@ -457,7 +447,6 @@ it('propagates hard search service failures to the coordinator boundary', async 
     })
 
     await assert.rejects(harness.run(), /database unavailable/u)
-    assert.equal(harness.directInvocations.length, 0)
 })
 
 it('propagates hard model invocation failures', async () => {
@@ -469,46 +458,35 @@ it('propagates hard model invocation failures', async () => {
     assert.equal(harness.searchInvocations.length, 0)
 })
 
-it('reserves the sixth model call for tool-free finalization and never calls a seventh time', async () => {
+it('fails after six invalid tool calls without updating a recall result', async () => {
     const harness = createHarness({
-        responses: ['一', '二', '三', '四', '五'].map((text, index) =>
-            createSearchCall(
-                `search-${index + 1}`,
-                validSearchInput(`查询${text}`)
-            )
-        ),
-        finalResponse: new AIMessage('没有真实命中的记忆文本'),
-        search: async () => []
+        responses: Array.from({ length: 6 }, (_, index) =>
+            createSearchCall(`invalid-${index + 1}`, {
+                searchTexts: '["记忆"]',
+                memoryTypes: '["all"]'
+            })
+        )
     })
 
-    const trace = await harness.run()
-
-    assert.equal(trace.finalOutput, '<NO_MEMORY>')
-    assert.equal(trace.item.finalText, '')
-    assert.equal(harness.boundInvocations.length, 5)
-    assert.equal(harness.directInvocations.length, 1)
-    assert.deepEqual(boundTools(harness.directInvocations[0]?.config), [])
-    assert.equal(harness.searchInvocations.length, 5)
-    const finalMessages = harness.directInvocations[0]?.messages ?? []
-    assert.deepEqual(
-        finalMessages.slice(0, 2).map((message) => message.getType()),
-        ['system', 'human']
+    await assert.rejects(
+        harness.run(),
+        /did not finish within 6 model calls/u
     )
-    assert.match(String(finalMessages[0]?.content), /<role>/u)
-    assert.match(String(finalMessages[1]?.content), /<agentic_recall_input>/u)
-    assert.equal(finalMessages.at(-1)?.getType(), 'human')
-    assert.match(String(finalMessages.at(-1)?.content), /<finalization>/u)
+    assert.equal(harness.boundInvocations.length, 6)
+    assert.equal(harness.searchInvocations.length, 0)
 })
 
-it('accepts a valid sixth-call finalization when prior searches matched memory', async () => {
+it('accepts a normal final response on the sixth model call', async () => {
     const harness = createHarness({
-        responses: ['一', '二', '三', '四', '五'].map((text, index) =>
-            createSearchCall(
-                `search-${index + 1}`,
-                validSearchInput(`查询${text}`)
-            )
-        ),
-        finalResponse: new AIMessage('我记得在多次查询中确认的事实。'),
+        responses: [
+            ...['一', '二', '三', '四', '五'].map((text, index) =>
+                createSearchCall(
+                    `search-${index + 1}`,
+                    validSearchInput(`查询${text}`)
+                )
+            ),
+            new AIMessage('我记得在多次查询中确认的事实。')
+        ],
         search: async (invocation) => [
             createSearchResult(`memory-${invocation.input.searchTexts[0]}`)
         ]
@@ -516,10 +494,13 @@ it('accepts a valid sixth-call finalization when prior searches matched memory',
 
     const trace = await harness.run()
 
-    assert.equal(trace.finalOutput, '我记得在多次查询中确认的事实。')
+    assert.ok(trace)
+    assert.equal(
+        trace.item.finalText,
+        '我记得在多次查询中确认的事实。'
+    )
     assert.equal(trace.item.matchedMemories.length, 5)
-    assert.equal(harness.boundInvocations.length, 5)
-    assert.equal(harness.directInvocations.length, 1)
+    assert.equal(harness.boundInvocations.length, 6)
     assert.equal(
         harness.debugMessages.filter((message) =>
             message.includes('event=model.prompt')
@@ -533,27 +514,7 @@ it('accepts a valid sixth-call finalization when prior searches matched memory',
     )
 })
 
-it('normalizes a sixth-call tool request to <NO_MEMORY>', async () => {
-    const harness = createHarness({
-        responses: ['一', '二', '三', '四', '五'].map((text, index) =>
-            createSearchCall(
-                `search-${index + 1}`,
-                validSearchInput(`查询${text}`)
-            )
-        ),
-        finalResponse: createSearchCall('forbidden-final-search'),
-        search: async () => [createSearchResult('memory-1')]
-    })
-
-    const trace = await harness.run()
-
-    assert.equal(trace.finalOutput, '<NO_MEMORY>')
-    assert.equal(trace.item.finalText, '')
-    assert.equal(harness.boundInvocations.length, 5)
-    assert.equal(harness.directInvocations.length, 1)
-})
-
-it('normalizes an ordinary final memory text without matched memories to <NO_MEMORY>', async () => {
+it('returns no result when the final text has no matched memories', async () => {
     const harness = createHarness({
         responses: [
             createSearchCall('search-1'),
@@ -564,9 +525,7 @@ it('normalizes an ordinary final memory text without matched memories to <NO_MEM
 
     const trace = await harness.run()
 
-    assert.equal(trace.finalOutput, '<NO_MEMORY>')
-    assert.equal(trace.item.finalText, '')
-    assert.equal(trace.item.matchedMemories.length, 0)
+    assert.equal(trace, null)
 })
 
 it('allows a second successful search with different arguments', async () => {
@@ -587,6 +546,7 @@ it('allows a second successful search with different arguments', async () => {
 
     const trace = await harness.run()
 
+    assert.ok(trace)
     assert.equal(harness.searchInvocations.length, 2)
     assert.equal(trace.item.matchedMemories.length, 2)
     assert.deepEqual(trace.item.toolCallSummary.searchTexts, ['记忆', '计划'])
@@ -608,6 +568,7 @@ it('builds trace data from raw search output before AgentRunner guidance', async
     )
 
     assert.match(secondObservation, /Tool loop guidance/u)
+    assert.ok(trace)
     assert.equal(trace.item.matchedMemories.length, 1)
     assert.equal(trace.item.matchedMemories[0]?.content, 'content-memory-1')
 })

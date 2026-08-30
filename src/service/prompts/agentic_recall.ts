@@ -13,19 +13,6 @@ export interface AgenticRecallPromptInput {
 
 export type AgenticRecallPromptMessages = PromptMessages
 
-export const agenticRecallNoMemoryOutput = '<NO_MEMORY>'
-
-export const buildAgenticRecallFinalizationPrompt = () => {
-    return [
-        '<finalization>',
-        '工具调用阶段已经结束，不得再调用或请求任何工具。',
-        '请仅根据前面已经返回的记忆搜索结果，立即输出最终纯文本记忆内容。',
-        `如果没有可靠且相关的记忆，只输出 ${agenticRecallNoMemoryOutput}。`,
-        '不要解释工具调用过程，不要输出标题、编号、JSON 或 Markdown。',
-        '</finalization>'
-    ].join('\n')
-}
-
 export const buildAgenticRecallPrompt = (params: AgenticRecallPromptInput) => {
     const { assistantLabel, lastMessage, chatHistory } = params
     const escapedAssistantLabel = escapeXmlText(assistantLabel)
@@ -57,7 +44,7 @@ export const buildAgenticRecallPrompt = (params: AgenticRecallPromptInput) => {
         '- 只能以查询到的记忆为依据，不要编造未命中的记忆。',
         '- 保留记忆中的具体事实、偏好、关系、计划和上下文等内容。',
         '- 不要回答聊天记录中的问题。不要回答最后一条信息的问题。不要解释工具调用过程。',
-        `- 只关注与未来可能出现的话题有关的记忆。如果查询到的记忆都与未来可能出现的话题无关，只输出 ${agenticRecallNoMemoryOutput}。`,
+        '- 只关注与未来可能出现的话题有关的记忆。如果查询到的记忆都与未来可能出现的话题无关，只输出 <NO_MEMORY>。',
         '</output_contract>'
     ].join('\n')
 

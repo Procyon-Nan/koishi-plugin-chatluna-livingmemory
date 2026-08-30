@@ -212,17 +212,15 @@ export class LivingMemoryRecallCoordinator {
                 historyMessages,
                 logger
             )
-            const matchedCount = trace.item.matchedMemories.length
-
-            if (trace.item.finalText.trim().length === 0) {
+            if (trace == null) {
                 logger.info('recall.snapshot.unchanged', {
                     strategy: 'agentic-recall',
-                    reason: 'no-memory-selected',
-                    matched: matchedCount
+                    reason: 'no-memory-selected'
                 })
                 return
             }
 
+            const matchedCount = trace.item.matchedMemories.length
             const query = JSON.stringify(trace.item.toolCallSummary)
             await this.persistSnapshot(
                 scope,

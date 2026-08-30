@@ -171,36 +171,37 @@ export const createMemoryEntry = (
 
 export const createAgenticTrace = (
     finalText: string
-): LivingMemoryAgenticRecallTrace => ({
-    prompt: {
-        systemPrompt: 'agentic system prompt',
-        inputPrompt: 'agentic input prompt'
-    },
-    finalOutput: finalText.length > 0 ? finalText : '<NO_MEMORY>',
-    item: {
-        finalText,
-        toolCallSummary: {
-            searchTexts: ['记忆查询'],
-            searchKeywords: [],
-            memoryTypes: ['all'],
-            maxCandidates: 3
-        },
-        matchedMemories:
-            finalText.length > 0
-                ? [
-                      {
-                          type: 'fact',
-                          content: 'matched memory',
-                          keywords: ['memory'],
-                          summary: 'matched summary',
-                          importance: 0.5,
-                          createdAt: new Date('2026-07-01T00:00:00.000Z'),
-                          updatedAt: new Date('2026-07-01T00:00:00.000Z')
-                      }
-                  ]
-                : []
+): LivingMemoryAgenticRecallTrace | null => {
+    if (finalText.length === 0) {
+        return null
     }
-})
+    return {
+        prompt: {
+            systemPrompt: 'agentic system prompt',
+            inputPrompt: 'agentic input prompt'
+        },
+        item: {
+            finalText,
+            toolCallSummary: {
+                searchTexts: ['记忆查询'],
+                searchKeywords: [],
+                memoryTypes: ['all'],
+                maxCandidates: 3
+            },
+            matchedMemories: [
+                {
+                    type: 'fact',
+                    content: 'matched memory',
+                    keywords: ['memory'],
+                    summary: 'matched summary',
+                    importance: 0.5,
+                    createdAt: new Date('2026-07-01T00:00:00.000Z'),
+                    updatedAt: new Date('2026-07-01T00:00:00.000Z')
+                }
+            ]
+        }
+    }
+}
 
 export const waitFor = async (
     predicate: () => boolean,
