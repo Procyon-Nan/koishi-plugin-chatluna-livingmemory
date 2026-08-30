@@ -26,7 +26,6 @@ export type { DreamRunResult } from './types'
 type LivingMemoryDreamConfig = Pick<
     LivingMemoryConfig,
     | 'mainModel'
-    | 'debug'
     | 'enableUserProfileInjection'
     | 'userProfileMemoryLimit'
 >

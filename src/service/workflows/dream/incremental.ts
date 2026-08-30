@@ -19,7 +19,7 @@ import type { DreamOperationStats, DreamRunResult } from './types'
 import { DreamUnitProcessor } from './unit_processor'
 import type { LivingMemoryLogger } from '../../logging/logger'
 
-type IncrementalDreamConfig = Pick<LivingMemoryConfig, 'mainModel' | 'debug'>
+type IncrementalDreamConfig = Pick<LivingMemoryConfig, 'mainModel'>
 
 export interface IncrementalDreamRepository {
     listPendingEntries(
@@ -106,7 +106,7 @@ export class LivingMemoryIncrementalDreamService {
             assistantLabel,
             presetPrompt,
             cluster: {
-                id: 'cluster-active',
+                id: 'cluster-batch',
                 reason: 'memory group',
                 entries: batch
             },
@@ -261,7 +261,7 @@ export class LivingMemoryIncrementalDreamService {
             `skipped ${state.secondRoundStats.skipped}`
         ].join(', ')
         const detail = [
-            `dream automatic incremental: selected ${batch.length} active memories`,
+            `dream automatic incremental: selected ${batch.length} memories`,
             `first round: ${firstRoundDetail}`,
             `second round: seeds ${state.seedCount}, succeeded ${state.successfulSeedCount}, failed ${state.failedSeedCount}`,
             `second round: no candidates ${state.noCandidateSeedCount}, ${secondRoundDetail}`,

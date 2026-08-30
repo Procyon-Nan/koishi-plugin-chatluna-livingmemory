@@ -197,15 +197,13 @@ it('synchronizes a Dream merge as one vector index mutation', async () => {
             patch: {
                 speakerKeys: [],
                 type: 'fact',
-                status: 'active',
                 content: 'merged content',
                 keywords: ['merged'],
                 summary: 'merged summary',
                 sentiment: 'neutral',
                 importance: 0.8
             },
-            targetIsConsolidated: true,
-            sourceIsConsolidated: true
+            targetIsConsolidated: true
         })
 
         assert.equal(sink.mutations.length, 1)

@@ -189,8 +189,7 @@ it('applies shared field rules to Dream mutations', async () => {
         sentiment: 'concerned',
         keywords: normalizeMemoryKeywords(dreamKeywords),
         speakerKeys: [],
-        importance: 0,
-        status: 'active'
+        importance: 0
     })
 })
 

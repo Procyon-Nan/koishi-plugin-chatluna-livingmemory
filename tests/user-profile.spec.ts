@@ -24,13 +24,11 @@ const memory: DreamMemoryEntryRecord = {
     presetId: 'preset-1',
     speakerKeys: ['张三'],
     type: 'fact',
-    status: 'active',
     content: '张三正在准备考试。',
     keywords: ['张三', '准备考试'],
     summary: '张三正在准备考试',
     sentiment: '关心',
     importance: 0.7,
-    isConsolidated: false,
     createdAt: now,
     updatedAt: now
 }

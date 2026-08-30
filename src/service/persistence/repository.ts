@@ -213,7 +213,7 @@ export class LivingMemoryRepository
     updateMemoryForDream(
         id: string,
         patch: DreamMemoryMutation | { status: 'archived' },
-        isConsolidated: boolean
+        isConsolidated?: boolean
     ) {
         return this.entries.updateMemoryForDream(id, patch, isConsolidated)
     }

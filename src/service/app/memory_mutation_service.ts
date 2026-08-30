@@ -134,7 +134,7 @@ export class LivingMemoryMutationService
         presetId: string,
         id: string,
         patch: DreamMemoryMutation | { status: 'archived' },
-        isConsolidated: boolean
+        isConsolidated?: boolean
     ) {
         return this.runPresetMutation(presetId, async () => {
             const result = await this.repository.updateMemoryForDream(

@@ -25,7 +25,7 @@ export const formatDreamDetail = (
     stats: DreamOperationStats
 ) => {
     return [
-        `dream active: scanned ${entryCount}`,
+        `dream: scanned ${entryCount}`,
         `clusters ${clusterCount}`,
         `merged ${stats.merged}`,
         `updated ${stats.updated}`,

@@ -101,13 +101,13 @@ class IncrementalRepositoryStub implements IncrementalDreamRepository {
         _targetPresetId: string,
         id: string,
         patch: Partial<MemoryEntryRecord>,
-        isConsolidated: boolean
+        isConsolidated?: boolean
     ) {
         const entry = this.entries.get(id)
         if (entry === undefined) throw new Error(`missing entry: ${id}`)
         const previousContent = entry.content
         Object.assign(entry, patch, {
-            isConsolidated,
+            ...(isConsolidated === undefined ? {} : { isConsolidated }),
             updatedAt: new Date(+entry.updatedAt + 1)
         })
         return {
@@ -129,7 +129,6 @@ class IncrementalRepositoryStub implements IncrementalDreamRepository {
             const source = this.entries.get(sourceVersion.id)
             if (source === undefined) throw new Error('missing source')
             source.status = 'archived'
-            source.isConsolidated = input.sourceIsConsolidated
             source.updatedAt = new Date(+source.updatedAt + 1)
             archivedSources.push(source)
         }
@@ -218,8 +217,7 @@ const createHarness = (
     const service = new LivingMemoryIncrementalDreamService(
         ctx,
         {
-            mainModel: 'main-model',
-            debug: true
+            mainModel: 'main-model'
         },
         repository,
         repository as DreamMemoryRepository,

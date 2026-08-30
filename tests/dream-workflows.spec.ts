@@ -210,7 +210,6 @@ const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
         ctx,
         {
             mainModel: 'dream-model',
-            debug: false,
             enableUserProfileInjection,
             userProfileMemoryLimit: 20
         },
@@ -293,7 +292,6 @@ it('marks a single-memory manual Dream as consolidated', async () => {
         {} as Context,
         {
             mainModel: 'dream-model',
-            debug: false,
             enableUserProfileInjection: false,
             userProfileMemoryLimit: 20
         },
@@ -528,7 +526,6 @@ it('delegates each Dream merge to one atomic repository operation', async () => 
         mergeInputs[0]?.sources.map((source) => source.id),
         ['source-active-1', 'source-active-2']
     )
-    assert.equal(mergeInputs[0]?.patch.status, 'active')
     const {
         consolidatedMemoryIds: _activeConsolidated,
         mutatedMemoryIds: _activeMutated,

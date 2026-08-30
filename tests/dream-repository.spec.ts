@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { Context } from 'koishi'
 import SQLiteDriver from '@koishijs/plugin-database-sqlite'
+import type { MemoryEntryStatus } from '../src/contracts/memory'
 import type { DreamMemoryMutation } from '../src/contracts/workflows'
 import { LivingMemoryRepository } from '../src/service/persistence/repository'
 import { createTestContext } from './persistence-test-utils'
@@ -10,12 +11,9 @@ const scope = {
     presetId: 'preset-1'
 }
 
-const createMergePatch = (
-    status: DreamMemoryMutation['status']
-): DreamMemoryMutation => ({
+const createMergePatch = (): DreamMemoryMutation => ({
     speakerKeys: ['replacement-speaker'],
     type: 'fact',
-    status,
     content: 'merged content',
     keywords: ['merged'],
     summary: 'merged summary',
@@ -26,7 +24,7 @@ const createMergePatch = (
 const createMemory = (
     repository: LivingMemoryRepository,
     label: string,
-    status: DreamMemoryMutation['status']
+    status: MemoryEntryStatus
 ) =>
     repository.createMemory(
         scope,
@@ -86,9 +84,8 @@ it('atomically updates an active Dream merge and archives its sources', async ()
             presetId: scope.presetId,
             target,
             sources: [source1, source2],
-            patch: createMergePatch('active'),
-            targetIsConsolidated: false,
-            sourceIsConsolidated: true
+            patch: createMergePatch(),
+            targetIsConsolidated: false
         })
 
         const entries = await repository.getEntriesByIds([
@@ -105,8 +102,8 @@ it('atomically updates an active Dream merge and archives its sources', async ()
         assert.equal(entryById.get(source1.id)?.status, 'archived')
         assert.equal(entryById.get(source2.id)?.status, 'archived')
         assert.equal(storedTarget?.isConsolidated, false)
-        assert.equal(entryById.get(source1.id)?.isConsolidated, true)
-        assert.equal(entryById.get(source2.id)?.isConsolidated, true)
+        assert.equal(entryById.get(source1.id)?.isConsolidated, false)
+        assert.equal(entryById.get(source2.id)?.isConsolidated, false)
     })
 })
 
@@ -181,6 +178,8 @@ it('reads Dream entries without legacy vectors or source payloads', async () => 
         assert.equal(Object.hasOwn(records[0], 'embeddingModelId'), false)
         assert.equal(Object.hasOwn(records[0], 'sourceOrigins'), false)
         assert.equal(Object.hasOwn(records[0], 'sourceConversationId'), false)
+        assert.equal(Object.hasOwn(records[0], 'status'), false)
+        assert.equal(Object.hasOwn(records[0], 'isConsolidated'), false)
     })
 })
 
@@ -199,9 +198,8 @@ it('rejects a Dream merge when a source no longer exists', async () => {
                         updatedAt: new Date()
                     }
                 ],
-                patch: createMergePatch('active'),
-                targetIsConsolidated: true,
-                sourceIsConsolidated: true
+                patch: createMergePatch(),
+                targetIsConsolidated: true
             }),
             /target or source memories changed/u
         )
@@ -229,9 +227,8 @@ it('rejects a Dream merge when a source changed after clustering', async () => {
                 presetId: scope.presetId,
                 target,
                 sources: [source],
-                patch: createMergePatch('active'),
-                targetIsConsolidated: true,
-                sourceIsConsolidated: true
+                patch: createMergePatch(),
+                targetIsConsolidated: true
             }),
             /target or source memories changed/u
         )

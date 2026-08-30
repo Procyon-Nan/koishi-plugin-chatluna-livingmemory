@@ -9,7 +9,6 @@ export const formatMemoryEntryForPrompt = (entry: DreamMemoryEntryRecord) => {
     return [
         `id=${entry.id}`,
         `type=${entry.type}`,
-        `status=${entry.status}`,
         `createdAt=${toIsoString(entry.createdAt)}`,
         `updatedAt=${toIsoString(entry.updatedAt)}`,
         `sentiment=${entry.sentiment ?? ''}`,

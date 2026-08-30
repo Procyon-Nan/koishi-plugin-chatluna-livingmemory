@@ -36,9 +36,9 @@ export const buildDreamPrompt = (
     const operationGuide = [
         '可执行操作：',
         '- keep：记忆彼此不重复，保持不变。',
-        '- update：某条 active 记忆需要补充信息增量，保持同一条记忆的基本身份。',
-        '- merge：多条 active 记忆描述同一对象、同一状态或同一关系画像时，选择一条作为 target，写成更完整的新正文；其余 source 会被代码层自动改为 archived 历史记录。',
-        '- archive：某条 active 记忆已经过时或与新状态冲突，只把它标记为 archived。',
+        '- update：某条记忆需要补充信息增量，保持同一条记忆的基本身份。',
+        '- merge：多条记忆描述同一对象、同一状态或同一关系画像时，选择一条作为 target，写成更完整的新正文；其余 source 会被代码层自动归档。',
+        '- archive：某条记忆已经过时或与新状态冲突，将其归档。',
         '- Dream 不会物理删除记忆。'
     ]
     const operationFieldGuide = [
@@ -47,7 +47,7 @@ export const buildDreamPrompt = (
         '- update：必须指定 memoryId 和 memory；按照工具参数说明完整重新生成 memory。',
         '- merge：必须指定 targetMemoryId、sourceMemoryIds 和 memory；按照工具参数说明完整重新生成 memory。',
         '- update / merge 的 speakerLabels 直接覆盖目标记忆的用户关联；根据整理后的最终内容重新填写，不继承原值、不取并集。',
-        '- archive：必须指定 memoryId；不要输出 memory，代码层只会把该条记忆的 status 改为 archived。',
+        '- archive：必须指定 memoryId；不要输出 memory，代码层会将该条记忆归档。',
         '- 无法为 update / merge 完整重新生成 memory 时，改用 keep，不要输出缺字段的 update / merge。'
     ]
     const speakerLabelByKey = new Map(
@@ -79,7 +79,7 @@ export const buildDreamPrompt = (
         '<task>',
         '整理同一 preset 下已有的记忆条目，而不是重新创作新记忆。',
         '只能基于 <memory_entries> 中给出的记忆条目做判断，禁止引入条目之外的新事实。',
-        '当前只处理 active 记忆：目标是软整理当前可召回记忆，保留关系演化痕迹。',
+        '输入均为当前可召回记忆：目标是软整理这些记忆，保留关系演化痕迹。',
         'update 或 merge 重新生成 memory 正文时，必须以你的第一人称关系视角重写，保持 <preset_context> 中的人格、语气和关注点，与原有记忆的风格一致。',
         '</task>',
         '',
@@ -95,7 +95,7 @@ export const buildDreamPrompt = (
         '合并判断依据：',
         '1. 事实一致性：同一对象同一状态的信息应合并。',
         '2. 信息增量：新记忆提供旧记忆没有的维度时，应补充而不是丢弃。',
-        '3. 时间权重与冲突：出现矛盾时以较新的状态为有效值，旧状态应标记为 archived。',
+        '3. 时间权重与冲突：出现矛盾时以较新的状态为有效值，旧状态应归档。',
         '4. importance 越高越应保留为 target 或被认真整合；sentiment 用于判断情绪和关系阶段。',
         '',
         ...operationFieldGuide,
@@ -109,9 +109,8 @@ export const buildDreamPrompt = (
         '',
         '跨字段要求：',
         '- update / merge 的 keywords 必须基于最终 memory.content 重新提取，不能复用、拼接或合并旧记忆的 keywords，也不要把正文按标点切成整句片段。',
-        '- 不要在 content、summary 或 keywords 中写入“历史记录”、“已合并”等状态或整理标记；归档状态由 status 字段表达。',
+        '- 不要在 content、summary 或 keywords 中写入“历史记录”、“已合并”等整理标记；需要归档时使用 archive 操作。',
         '- 所有 memoryId、targetMemoryId、sourceMemoryIds 必须来自 <memory_entries> 中的 id。',
-        '- update / merge target 会被代码层强制保持 active。',
         `没有可执行操作时，仍然调用 ${dreamResultToolName}，并提交空 operations 数组。`,
         '不要在普通文本中输出结果，不要解释，不要 Markdown，不要使用代码块。',
         '</output_contract>'

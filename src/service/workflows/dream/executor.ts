@@ -18,7 +18,6 @@ import type {
 
 export type DreamExecutorRepository = DreamMemoryRepository
 
-type DreamGeneratedMemoryMutation = Omit<DreamMemoryMutation, 'status'>
 type DreamUpdateOperation = Extract<DreamOperation, { action: 'update' }>
 type DreamArchiveOperation = Extract<DreamOperation, { action: 'archive' }>
 type DreamMergeOperation = Extract<DreamOperation, { action: 'merge' }>
@@ -146,7 +145,7 @@ export class DreamExecutor {
         await this.repository.updateMemoryForDream(
             entry.presetId,
             entry.id,
-            { ...patch, status: 'active' },
+            patch,
             isConsolidated
         )
         state.touchedMemoryIds.add(entry.id)
@@ -209,10 +208,9 @@ export class DreamExecutor {
                 id: source.id,
                 updatedAt: source.updatedAt
             })),
-            patch: { ...patch, status: 'active' },
+            patch,
             targetIsConsolidated:
-                state.consolidationMode !== 'incremental-batch',
-            sourceIsConsolidated: true
+                state.consolidationMode !== 'incremental-batch'
         })
 
         state.touchedMemoryIds.add(target.id)
@@ -234,8 +232,7 @@ export class DreamExecutor {
         await this.repository.updateMemoryForDream(
             entry.presetId,
             entry.id,
-            { status: 'archived' },
-            true
+            { status: 'archived' }
         )
         touchedMemoryIds.add(entry.id)
     }
@@ -243,7 +240,7 @@ export class DreamExecutor {
     private prepareMemoryPatch(
         memory: DreamUpdateOperation['memory'],
         speakers: PresetSpeakerRecord[]
-    ): DreamGeneratedMemoryMutation {
+    ): DreamMemoryMutation {
         const { speakerLabels, ...fields } = memory
         return {
             ...fields,

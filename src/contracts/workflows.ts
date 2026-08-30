@@ -3,7 +3,6 @@ import type {
     LivingMemorySearchResult,
     LivingMemoryTranscriptMessage,
     MemoryEntryRecord,
-    MemoryEntryStatus,
     MemoryEntryType,
     MemoryJobKind,
     MemoryJobRecord,
@@ -32,13 +31,11 @@ export interface DreamMemoryEntryRecord {
     presetId: string
     speakerKeys: string[]
     type: MemoryEntryType
-    status: MemoryEntryStatus
     content: string
     keywords: string[]
     summary: string | null
     sentiment: string | null
     importance: number | null
-    isConsolidated: boolean
     createdAt: Date
     updatedAt: Date
 }
@@ -46,7 +43,6 @@ export interface DreamMemoryEntryRecord {
 export interface DreamMemoryMutation {
     speakerKeys: string[]
     type: MemoryEntryType
-    status: MemoryEntryStatus
     content: string
     keywords: string[]
     summary: string
@@ -65,7 +61,6 @@ export interface DreamMergeInput {
     sources: DreamMergeMemoryVersion[]
     patch: DreamMemoryMutation
     targetIsConsolidated: boolean
-    sourceIsConsolidated: boolean
 }
 
 export interface MemoryUpdateResult {
@@ -88,7 +83,7 @@ export interface DreamMemoryRepository extends DreamMergeRepository {
         presetId: string,
         id: string,
         patch: DreamMemoryMutation | { status: 'archived' },
-        isConsolidated: boolean
+        isConsolidated?: boolean
     ): Promise<MemoryUpdateResult>
     setMemoryConsolidation(
         presetId: string,
@@ -118,7 +113,6 @@ export interface MemoryServiceStatus {
 
 export interface ExtractedMemoryItem {
     type: MemoryEntryType
-    status?: MemoryEntryStatus
     content: string
     keywords: string[]
     summary: string
