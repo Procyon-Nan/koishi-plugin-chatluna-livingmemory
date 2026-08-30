@@ -23,25 +23,18 @@ type CompleteMemoryOutput<T extends MemoryMutationInput> = {
 
 const requiredText = (description: string) =>
     z.string().trim().min(1).describe(description)
-const memoryKeywordsSchema = z
-    .array(requiredText('非空记忆关键词'))
-    .max(MAX_MEMORY_KEYWORDS)
-    .describe(
-        '短词数组，作为检索锚点，保留具体昵称、状态、动作、关系和事件关键词；' +
-            `不要包含普通日期、时间戳；最多 ${MAX_MEMORY_KEYWORDS} 个。`
-    )
 
 export const extractionResultToolName = 'living_memory_extraction_result'
 export const extractionResultToolDescription =
-    '提交本次对话中提取出的长期记忆。没有可提取内容时提交空 memories 数组。'
+    '提交本次记录的长期记忆。没有可记录的记忆时提交空 memories 数组。'
 
 export const generatedMemorySchema = z
     .object({
         type: z.enum(memoryEntryTypes).describe(
             [
                 `必须取以下之一（${memoryEntryTypes.join('|')}）：`,
-                '- identity：用户或当前角色的稳定身份信息，如身份、角色、长期属性。',
-                '- preference：用户的长期偏好、习惯、喜恶。',
+                '- identity：用户或是你自己的稳定身份信息，如身份、角色、长期属性。',
+                '- preference：用户或是你自己的长期偏好、习惯、喜恶。',
                 '- fact：已确认的客观事实，如事件、需求、状态，通常关联具体昵称与时间。',
                 '- plan：尚未发生、面向未来的计划、约定或待办。',
                 '- context：当前对话的背景或短期情境，参考价值随时间衰减。',
@@ -49,14 +42,20 @@ export const generatedMemorySchema = z
             ].join('\n')
         ),
         content: requiredText(
-            '记忆正文，必须使用当前角色的第一人称关系视角（“我”即当前角色），体现其人格、语气、关注点与关系视角，口语化且自然地描述当前角色自身的认识，或其与具体发言者之间的互动、关系、事实或偏好，追求详略得当，避免流水账；字数保持在 300 字以内。'
+            '记忆正文。必须使用你的第一人称视角，体现你的人格、语气、关注点与关系态度，口语化且自然地描述你的认识，或与某个人之间的互动、关系、事实或偏好，追求详略得当，避免流水账；字数保持在 300 字以内。'
         ),
         summary: requiredText(
-            '检索友好的语义摘要，第一人称、简短、清晰、准确；避免颜文字、口癖、过度角色语气和长句，不要写成角色台词、吐槽或抒情句。'
+            '利于语义检索的概括性摘要。必须使用你的第一人称视角，简短、清晰、准确；避免颜文字、口癖、吐槽、抒情、语气化和长句。'
         ),
-        keywords: memoryKeywordsSchema,
+        keywords: z
+            .array(requiredText('记忆的关键词。'))
+            .min(1)
+            .max(MAX_MEMORY_KEYWORDS)
+            .describe(
+                `使用 1 到 ${MAX_MEMORY_KEYWORDS} 个关键词刻画记忆的核心主题。`
+            ),
         sentiment: requiredText(
-            '简短自由文本的情绪色彩，可使用“担心”、“亲近”、“愉快”、“疲惫”、“中性”等词；没有明显情绪时写“中性”，不要写成长句。'
+            '简短的情绪标注词。可使用“担心”、“亲近”、“愉快”、“疲惫”、“平静”等词；没有明显情绪时可写“平静”。'
         ),
         importance: z
             .number()
@@ -64,12 +63,11 @@ export const generatedMemorySchema = z
             .min(0)
             .max(1)
             .describe(
-                '0 到 1 之间的数字，表示记忆的长期价值，越高越重要；日常闲聊但有关系连续性价值可给 0.4 到 0.7，明确身份、偏好、关系、健康、计划等长期信息可给 0.7 到 1。'
+                '记忆的重要性。使用 0 到 1 之间的数字，数字越大表示重要性越高。'
             )
     })
     .describe(
-        '涉及具体用户时，content、summary 和 keywords 必须沿用输入材料中的具体昵称；' +
-            '只涉及当前角色自身时无需添加用户昵称。不能用“用户”、“对方”等泛化词汇或用户 ID 替代，也不能把多名用户混成同一个人。'
+        '在记忆中描述某个用户时，必须使用当前输入材料中的具体用户昵称。避免用“用户”、“对方”等泛化词汇或用户 ID 替代，也不要把多个不同用户混成同一个人。'
     )
 
 export const createExtractionResultSchema = (
@@ -106,9 +104,6 @@ const createDreamMemoryExample = (
     importance
 })
 
-const dreamGeneratedMemorySchema = generatedMemorySchema.extend({
-    keywords: memoryKeywordsSchema.min(1)
-})
 const memoryIdSchema = requiredText('来自当前 memory_entries 的记忆 id')
 const memoryIdsSchema = z.array(memoryIdSchema).min(1)
 const operationReasonSchema = requiredText('执行该操作的简短原因')
@@ -121,14 +116,14 @@ const dreamKeepOperationSchema = z.object({
 const dreamUpdateOperationSchema = z.object({
     action: z.literal('update'),
     memoryId: memoryIdSchema,
-    memory: dreamGeneratedMemorySchema,
+    memory: generatedMemorySchema,
     reason: operationReasonSchema
 })
 const dreamMergeOperationSchema = z.object({
     action: z.literal('merge'),
     targetMemoryId: memoryIdSchema,
     sourceMemoryIds: memoryIdsSchema,
-    memory: dreamGeneratedMemorySchema,
+    memory: generatedMemorySchema,
     reason: operationReasonSchema
 })
 const dreamArchiveOperationSchema = z.object({

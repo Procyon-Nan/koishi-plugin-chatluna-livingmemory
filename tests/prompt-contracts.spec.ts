@@ -154,7 +154,7 @@ it('keeps memory field rules in tool schemas without prompt duplication', () => 
     }
     assert.match(
         generatedMemorySchema.description ?? '',
-        /只涉及当前角色自身时无需添加用户昵称/u
+        /在记忆中描述某个用户时/u
     )
     assert.equal(
         extractionSchema.shape.memories.element.description,
@@ -171,19 +171,15 @@ it('keeps memory field rules in tool schemas without prompt duplication', () => 
     assert.match(dream, new RegExp(dreamResultToolName, 'u'))
     assert.match(
         generatedMemorySchema.shape.content.description ?? '',
-        /当前角色的第一人称关系视角/u
+        /必须使用你的第一人称视角/u
     )
     assert.match(
         generatedMemorySchema.shape.content.description ?? '',
-        /当前角色自身的认识/u
-    )
-    assert.doesNotMatch(
-        generatedMemorySchema.shape.content.description ?? '',
-        /你的第一人称关系视角/u
+        /描述你的认识/u
     )
     assert.match(
         generatedMemorySchema.shape.keywords.description ?? '',
-        /最多 12 个/u
+        /1 到 12 个关键词/u
     )
 })
 
