@@ -34,9 +34,11 @@ type MemoryFactRepository = Pick<
     | 'updateMemory'
     | 'updateMemoryForDream'
     | 'setMemoryConsolidation'
+    | 'archiveActiveEntries'
     | 'applyDreamMerge'
     | 'deleteMemory'
     | 'deleteEntries'
+    | 'deleteSnapshotsByPreset'
     | 'clearAllByPreset'
     | 'importPresetData'
 >
@@ -176,6 +178,47 @@ export class LivingMemoryMutationService
                 deletes: []
             })
             return records
+        })
+    }
+
+    async archiveActiveMemories(presetId: string, ids: string[]) {
+        const uniqueIds = [...new Set(ids)]
+        if (uniqueIds.length === 0) {
+            return { archived: 0 }
+        }
+        return this.runPresetMutation(presetId, async () => {
+            let archived = 0
+            let snapshotsCleared = false
+            for (
+                let start = 0;
+                start < uniqueIds.length;
+                start += MEMORY_DELETE_BATCH_SIZE
+            ) {
+                const records =
+                    await this.repository.archiveActiveEntries(
+                        presetId,
+                        uniqueIds.slice(
+                            start,
+                            start + MEMORY_DELETE_BATCH_SIZE
+                        )
+                    )
+                if (records.length === 0) {
+                    continue
+                }
+                if (!snapshotsCleared) {
+                    await this.repository.deleteSnapshotsByPreset(presetId)
+                    snapshotsCleared = true
+                }
+                await this.applyCommittedMutation({
+                    presetId,
+                    upserts: records.map((record) =>
+                        this.upsert(record, 'preserve')
+                    ),
+                    deletes: []
+                })
+                archived += records.length
+            }
+            return { archived }
         })
     }
 

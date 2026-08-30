@@ -496,6 +496,34 @@ export class LivingMemoryEntryRepository
         return await this.getEntriesByPresetAndIds(presetId, ids)
     }
 
+    async archiveActiveEntries(presetId: string, ids: string[]) {
+        if (ids.length === 0) {
+            return []
+        }
+        const records = (
+            await this.getEntriesByPresetAndIds(presetId, ids)
+        ).filter((record) => record.status === 'active')
+        if (records.length === 0) {
+            return []
+        }
+
+        const updatedAt = new Date()
+        await this.ctx.database.set(
+            'living_memory_entry',
+            {
+                presetId,
+                status: 'active',
+                id: { $in: records.map((record) => record.id) }
+            },
+            { status: 'archived', updatedAt }
+        )
+        return records.map((record) => ({
+            ...record,
+            status: 'archived' as const,
+            updatedAt
+        }))
+    }
+
     async applyDreamMerge(input: DreamMergeInput) {
         const sourceIds = input.sources.map((source) => source.id)
         const expectedStatus = this.validateDreamMergeInput(input, sourceIds)

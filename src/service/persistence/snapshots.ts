@@ -138,4 +138,8 @@ export class LivingMemorySnapshotRepository implements SnapshotRepository {
 
         return snapshots
     }
+
+    async deleteSnapshotsByPreset(presetId: string) {
+        await this.ctx.database.remove('living_memory_snapshot', { presetId })
+    }
 }

@@ -444,6 +444,44 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         return filterMemoryIds(items, filter)
     }
 
+    async findActiveMemoryIdsByText(presetId: string, text: string) {
+        const query = text.toLowerCase()
+        return (await this.repository.listEntriesByPreset(presetId))
+            .filter(
+                (memory) =>
+                    memory.status === 'active' &&
+                    (memory.content.toLowerCase().includes(query) ||
+                        memory.summary?.toLowerCase().includes(query) === true ||
+                        memory.keywords.some((keyword) =>
+                            keyword.toLowerCase().includes(query)
+                        ))
+            )
+            .map((memory) => memory.id)
+    }
+
+    async findActiveMemoryIdsByUser(
+        presetId: string,
+        platform: string,
+        userId: string
+    ) {
+        const speakerKey = createUserProfileSpeakerKey(platform, userId)
+        return (await this.repository.listEntriesByPreset(presetId))
+            .filter(
+                (memory) =>
+                    memory.status === 'active' &&
+                    memory.speakerKeys.includes(speakerKey)
+            )
+            .map((memory) => memory.id)
+    }
+
+    async archiveActiveMemories(presetId: string, ids: string[]) {
+        try {
+            return await this.mutations.archiveActiveMemories(presetId, ids)
+        } finally {
+            this.snapshotCache.clearByPreset(presetId)
+        }
+    }
+
     async getMemory(memoryId: string) {
         return await this.repository.getEntryById(memoryId)
     }

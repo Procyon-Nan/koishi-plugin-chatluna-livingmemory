@@ -4,6 +4,7 @@ import type {} from '@koishijs/plugin-console'
 import { apply as characterMiddlewarePlugin } from './plugins/character_middleware'
 import { apply as chatMiddlewarePlugin } from './plugins/chat_middleware'
 import { apply as livingMemoryToolsPlugin } from './plugins/living_memory_tools'
+import { apply as livingMemoryCommandsPlugin } from './plugins/commands'
 import {
     registerEntry as registerWebUIEntry,
     apply as webuiPlugin
@@ -25,6 +26,7 @@ export function apply(ctx: Context, config: Config) {
     })
 
     ctx.inject(['chatluna_living_memory'], (ctx) => {
+        livingMemoryCommandsPlugin(ctx)
         void chatMiddlewarePlugin(ctx, config)
         livingMemoryToolsPlugin(ctx, config)
 

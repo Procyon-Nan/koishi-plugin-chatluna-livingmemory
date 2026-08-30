@@ -230,6 +230,10 @@ export class LivingMemoryRepository
         )
     }
 
+    archiveActiveEntries(presetId: string, ids: string[]) {
+        return this.entries.archiveActiveEntries(presetId, ids)
+    }
+
     applyDreamMerge(input: DreamMergeInput) {
         return this.entries.applyDreamMerge(input)
     }
@@ -271,6 +275,10 @@ export class LivingMemoryRepository
         conversationId: string
     ): Promise<MemorySnapshotRecord[]> {
         return this.snapshots.deleteSnapshotsByConversation(conversationId)
+    }
+
+    deleteSnapshotsByPreset(presetId: string) {
+        return this.snapshots.deleteSnapshotsByPreset(presetId)
     }
 
     createJob(
