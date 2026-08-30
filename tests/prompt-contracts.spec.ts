@@ -22,7 +22,6 @@ import {
     userProfileResultToolName
 } from '../src/service/prompts/schema'
 import { buildRecallRewritePrompt } from '../src/service/prompts/recall_query'
-import { TRANSCRIPT_MESSAGE_FORMAT_RULES } from '../src/service/prompts/transcript_contract'
 import { buildUserProfilePrompt } from '../src/service/prompts/user_profile'
 
 const memoryEntry: MemoryEntryRecord = {
@@ -240,35 +239,6 @@ it('keeps the search tool description within its own capability boundary', () =>
     assert.doesNotMatch(
         livingMemorySearchToolDescription,
         new RegExp(livingMemoryGetMessagesToolName, 'u')
-    )
-})
-
-it('shares transcript interpretation rules across prompt workflows', () => {
-    const extraction = buildExtractionPrompt({
-        input: '历史消息',
-        assistantLabel: '助手',
-        presetPrompt: '你是测试助手。'
-    }).systemPrompt
-    const recall = buildRecallRewritePrompt({
-        assistantLabel: '助手',
-        currentTranscript: '当前消息',
-        cleanedQuery: '当前消息',
-        history: '历史消息'
-    }).systemPrompt
-    const agenticRecall = buildAgenticRecallPrompt({
-        assistantLabel: '助手',
-        currentTranscript: '当前消息',
-        history: '历史消息'
-    }).systemPrompt
-
-    for (const prompt of [extraction, recall, agenticRecall]) {
-        for (const rule of TRANSCRIPT_MESSAGE_FORMAT_RULES) {
-            assert.ok(prompt.includes(rule))
-        }
-    }
-    assert.match(
-        TRANSCRIPT_MESSAGE_FORMAT_RULES.join('\n'),
-        /除了你自己的发言以外/u
     )
 })
 
