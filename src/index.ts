@@ -52,12 +52,6 @@ export const Config: Schema<Config> = Schema.intersect([
         enableUserProfileInjection: Schema.boolean()
             .description('开启用户画像注入。')
             .default(false),
-        recallStrategy: Schema.union([
-            'embedding-rerank',
-            'agentic-recall'
-        ] as const)
-            .description('记忆召回策略。')
-            .default('embedding-rerank'),
         extractionRounds: Schema.number()
             .min(1)
             .max(100)
@@ -74,22 +68,6 @@ export const Config: Schema<Config> = Schema.intersect([
                 '每隔多少轮对话触发一次记忆提取；设为 0 时不执行自动记忆提取。'
             )
             .default(10),
-        recallInterval: Schema.number()
-            .min(1)
-            .max(30)
-            .step(1)
-            .description(
-                '自动记忆召回的频率；每隔制定对话轮数进行一次记忆召回。'
-            )
-            .default(5),
-        recallHistoryWindowRounds: Schema.number()
-            .min(1)
-            .max(12)
-            .step(1)
-            .description(
-                '记忆召回流程使用的最近对话轮数，用于查询改写和 agentic-recall 规划（1 轮 = 1 次用户消息 + 1 次助手回复）。'
-            )
-            .default(3),
         debug: Schema.boolean()
             .description(
                 '输出 Recall、Extraction、Dream 的完整模型 Prompt、原始响应与诊断事件；包含对话、预设提示词和记忆正文，仅应在访问受控环境启用。'
@@ -105,6 +83,14 @@ export const Config: Schema<Config> = Schema.intersect([
         subModel: Schema.dynamic('model')
             .description(
                 '子 LLM 模型，用于 embedding-rerank 查询改写和 agentic-recall 记忆召回。'
+            )
+            .default('无'),
+        embeddingModel: Schema.dynamic('embeddings')
+            .description('用于 embedding-rerank 向量化检索的嵌入模型。')
+            .default('无'),
+        rerankModel: Schema.dynamic('reranker')
+            .description(
+                '用于 embedding-rerank 召回结果重排序的 Reranker 模型。'
             )
             .default('无')
     }).description('模型配置'),
@@ -162,19 +148,33 @@ export const Config: Schema<Config> = Schema.intersect([
             .default(20)
     }).description('Dream 流程配置'),
     Schema.object({
+        recallStrategy: Schema.union([
+            'embedding-rerank',
+            'agentic-recall'
+        ] as const)
+            .description('记忆召回策略。')
+            .default('embedding-rerank'),
+        recallInterval: Schema.number()
+            .min(1)
+            .max(30)
+            .step(1)
+            .description(
+                '自动记忆召回的轮次间隔；每个预设会话首次立即召回，此后每隔指定轮数召回一次。'
+            )
+            .default(5),
+        recallHistoryWindowRounds: Schema.number()
+            .min(1)
+            .max(12)
+            .step(1)
+            .description(
+                '记忆召回流程使用的最近对话轮数，用于查询改写和 agentic-recall 规划（1 轮 = 1 次用户消息 + 1 次助手回复）。'
+            )
+            .default(3),
         enableRecallQueryRewrite: Schema.boolean()
             .description(
                 '是否在 embedding-rerank 召回前使用 LLM 根据历史信息改写检索的查询文本。'
             )
             .default(false),
-        embeddingModel: Schema.dynamic('embeddings')
-            .description('用于 embedding-rerank 向量化检索的嵌入模型。')
-            .default('无'),
-        rerankModel: Schema.dynamic('reranker')
-            .description(
-                '用于 embedding-rerank 召回结果重排序的 Reranker 模型。'
-            )
-            .default('无'),
         recallTopK: Schema.number()
             .min(1)
             .max(100)
@@ -183,7 +183,7 @@ export const Config: Schema<Config> = Schema.intersect([
                 'embedding-rerank 每次召回时返回的最相关记忆条数上限。'
             )
             .default(5)
-    }).description('embedding-rerank 配置')
+    }).description('记忆召回配置')
 ])
 
 export * from './types'
