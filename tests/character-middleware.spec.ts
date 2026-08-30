@@ -23,6 +23,7 @@ const testConfig: LivingMemoryConfig = {
     rerankModel: 'test-model',
     extractionRounds: 1,
     extractionInterval: 0,
+    recallInterval: 5,
     recallTopK: 1,
     memorySearchToolMaxResults: 1,
     memorySearchMinSimilarity: 0,
@@ -34,6 +35,7 @@ const testConfig: LivingMemoryConfig = {
 it('clears extraction state when Character integration unloads', async () => {
     const ctx = createTestContext()
     let clearCalls = 0
+    let clearRecallCalls = 0
     const chatluna = {
         promptRenderer: {
             registerFunctionProvider: () => () => true
@@ -49,10 +51,13 @@ it('clears extraction state when Character integration unloads', async () => {
         memoryLogger: new LivingMemoryLogger(new Logger('test'), () => false),
         clearExtractionState: () => {
             clearCalls += 1
+        },
+        clearRecallState: () => {
+            clearRecallCalls += 1
         }
     } satisfies Pick<
         Context['chatluna_living_memory'],
-        'memoryLogger' | 'clearExtractionState'
+        'memoryLogger' | 'clearExtractionState' | 'clearRecallState'
     >
     setTestService(ctx, 'chatluna_living_memory', livingMemory)
     ctx.inject(
@@ -68,6 +73,7 @@ it('clears extraction state when Character integration unloads', async () => {
         disposeCharacter()
 
         assert.equal(clearCalls, 1)
+        assert.equal(clearRecallCalls, 1)
     } finally {
         await ctx.stop()
     }

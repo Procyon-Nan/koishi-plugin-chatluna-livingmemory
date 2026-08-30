@@ -52,6 +52,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
     const logger = ctx.chatluna_living_memory.memoryLogger.with({
         workflow: 'chat'
     })
+    const livingMemory = ctx.chatluna_living_memory
     const activeUserProfileInjections = new Map<string, string>()
     const activeSnapshotInjections = new Map<string, string>()
     // 说话人解析跨轮复用：昵称变更需重启插件后生效，换取不在每轮重复
@@ -59,6 +60,10 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
     const speakerCache: UserSpeakerCache = new Map()
     const diagnostic = (event: string, fields: Record<string, unknown>) =>
         logger.diagnostic(event, fields)
+
+    ctx.on('dispose', () => {
+        livingMemory.clearRecallState()
+    })
     const clearActiveInjections = (conversationId: string) => {
         activeUserProfileInjections.delete(conversationId)
         activeSnapshotInjections.delete(conversationId)

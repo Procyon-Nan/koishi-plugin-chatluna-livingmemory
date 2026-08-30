@@ -74,6 +74,14 @@ export const Config: Schema<Config> = Schema.intersect([
                 '每隔多少轮对话触发一次记忆提取；设为 0 时不执行自动记忆提取。'
             )
             .default(10),
+        recallInterval: Schema.number()
+            .min(1)
+            .max(30)
+            .step(1)
+            .description(
+                '自动记忆召回的频率；每隔制定对话轮数进行一次记忆召回。'
+            )
+            .default(5),
         recallHistoryWindowRounds: Schema.number()
             .min(1)
             .max(12)

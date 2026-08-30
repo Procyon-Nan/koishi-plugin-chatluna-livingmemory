@@ -159,6 +159,7 @@ export interface LivingMemoryConfig {
     autoDreamMemoryGrowthThreshold: number
     userProfileMemoryLimit: number
     enableRecallQueryRewrite: boolean
+    recallInterval: number
     recallHistoryWindowRounds: number
     embeddingModel: string
     rerankModel: string

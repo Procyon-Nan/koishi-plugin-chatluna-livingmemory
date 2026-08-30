@@ -419,9 +419,14 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         this.extractionCoordinator.clearAll()
     }
 
+    clearRecallState() {
+        this.recallCoordinator.clearAll()
+    }
+
     async cleanupConversation(conversationId: string) {
         await this.repository.deleteSnapshotsByConversation(conversationId)
         this.snapshotCache.clearByConversation(conversationId)
+        this.recallCoordinator.clearByConversation(conversationId)
         this.extractionCoordinator.clearByConversation(conversationId)
     }
 

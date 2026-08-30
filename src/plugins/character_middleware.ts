@@ -173,6 +173,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
 
     ctx.on('dispose', () => {
         livingMemory.clearExtractionState()
+        livingMemory.clearRecallState()
     })
 
     ctx.effect(() =>

@@ -20,7 +20,7 @@ import type {
 
 type LivingMemoryRecallCoordinatorConfig = Pick<
     LivingMemoryConfig,
-    'recallStrategy' | 'recallTopK'
+    'recallStrategy' | 'recallTopK' | 'recallInterval'
 >
 
 type RecallQueryBuilder = Pick<LivingMemoryRecallQueryBuilder, 'resolve'>
@@ -32,6 +32,7 @@ export type RecallWorkflowRepository = Pick<JobRepository, 'createFailedJob'> &
 
 export class LivingMemoryRecallCoordinator {
     private readonly recallLockByConversation = new Set<string>()
+    private readonly turnsSinceRecallByConversation = new Map<string, number>()
 
     constructor(
         private readonly config: LivingMemoryRecallCoordinatorConfig,
@@ -49,6 +50,26 @@ export class LivingMemoryRecallCoordinator {
         loadHistoryMessages: () => Promise<LivingMemoryTranscriptMessage[]>
     ) {
         const lockKey = scopeKey(scope)
+        const previousTurns = this.turnsSinceRecallByConversation.get(lockKey)
+        if (previousTurns !== undefined) {
+            const turnsSinceRecall = Math.min(
+                previousTurns + 1,
+                this.config.recallInterval
+            )
+            this.turnsSinceRecallByConversation.set(lockKey, turnsSinceRecall)
+            if (turnsSinceRecall < this.config.recallInterval) {
+                this.logger.diagnostic('recall.skipped', {
+                    workflow: 'recall',
+                    conversationId: scope.conversationId,
+                    presetId: scope.presetId,
+                    reason: 'recall-interval',
+                    turnsRemaining:
+                        this.config.recallInterval - turnsSinceRecall
+                })
+                return
+            }
+        }
+
         if (this.recallLockByConversation.has(lockKey)) {
             // 同一会话同一预设已有召回在跑，本次请求直接丢弃，不做 coalescing。
             // snapshot 由后续请求基于最新历史消息重新触发追上，最多滞后一轮。
@@ -61,6 +82,7 @@ export class LivingMemoryRecallCoordinator {
             return
         }
 
+        this.turnsSinceRecallByConversation.set(lockKey, 0)
         this.recallLockByConversation.add(lockKey)
 
         const runLogger = this.logger.with({
@@ -76,6 +98,18 @@ export class LivingMemoryRecallCoordinator {
             .finally(() => {
                 this.recallLockByConversation.delete(lockKey)
             })
+    }
+
+    clearAll() {
+        this.turnsSinceRecallByConversation.clear()
+    }
+
+    clearByConversation(conversationId: string) {
+        for (const key of this.turnsSinceRecallByConversation.keys()) {
+            if (key.endsWith(`\n${conversationId}`)) {
+                this.turnsSinceRecallByConversation.delete(key)
+            }
+        }
     }
 
     private async run(
