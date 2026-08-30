@@ -1,4 +1,5 @@
 import type { DreamCluster, DreamStage } from '../workflows/dream/types'
+import type { PresetSpeakerRecord } from '../../contracts/memory'
 import { formatMemoryEntryForPrompt } from './memory_entries'
 import {
     escapeXmlText,
@@ -20,6 +21,8 @@ export interface DreamPromptInput {
     presetId: string
     /** 记忆簇。 */
     cluster: DreamCluster
+    /** 当前 preset 下可关联的用户。 */
+    speakers: PresetSpeakerRecord[]
     /** 整理阶段。 */
     stage: DreamStage
 }
@@ -33,7 +36,8 @@ export type DreamPromptMessages = PromptMessages
 export const buildDreamPrompt = (
     input: DreamPromptInput
 ): DreamPromptMessages => {
-    const { assistantLabel, presetPrompt, presetId, cluster, stage } = input
+    const { assistantLabel, presetPrompt, presetId, cluster, stage, speakers } =
+        input
     const escapedAssistantLabel = escapeXmlText(assistantLabel)
     const trimmedPreset = presetPrompt.trim()
     const activeOperationGuide = [
@@ -57,6 +61,7 @@ export const buildDreamPrompt = (
         '- keep：输出 action、memoryIds、reason，不要输出 memory。',
         '- update：必须指定 memoryId 和 memory；按照工具参数说明完整重新生成 memory。',
         '- merge：必须指定 targetMemoryId、sourceMemoryIds 和 memory；按照工具参数说明完整重新生成 memory。',
+        '- update / merge 的 speakerLabels 直接覆盖目标记忆的用户关联；根据整理后的最终内容重新填写，不继承原值、不取并集。',
         '- archive：必须指定 memoryId；不要输出 memory，代码层只会把该条记忆的 status 改为 archived。',
         stage === 'archived'
             ? '- deleteSource：只能声明已成功 merge 的 source 可以物理删除，不要单独用于删除。'
@@ -65,6 +70,17 @@ export const buildDreamPrompt = (
     ]
     const activeFormat = DREAM_ACTIVE_FORMAT
     const archivedFormat = DREAM_ARCHIVED_FORMAT
+    const speakerLabelByKey = new Map(
+        speakers.map((speaker) => [speaker.speakerKey, speaker.speakerLabel])
+    )
+    const resolveEntrySpeakerLabels = (entry: DreamCluster['entries'][number]) =>
+        entry.speakerKeys.map((key) => {
+            const label = speakerLabelByKey.get(key)
+            if (label == null) {
+                throw new Error(`unknown speaker key: ${key}`)
+            }
+            return label
+        })
 
     const systemPrompt = [
         '<role>',
@@ -136,8 +152,19 @@ export const buildDreamPrompt = (
         ...formatXmlBlock('cluster_reason', cluster.reason),
         '',
         ...formatXmlBlock(
+            'available_speaker_labels',
+            speakers.map((speaker) => speaker.speakerLabel).join('\n')
+        ),
+        '',
+        ...formatXmlBlock(
             'memory_entries',
-            cluster.entries.map(formatMemoryEntryForPrompt).join('\n\n---\n\n')
+            cluster.entries
+                .map(
+                    (entry) =>
+                        `${formatMemoryEntryForPrompt(entry)}\n` +
+                        `speakerLabels=${JSON.stringify(resolveEntrySpeakerLabels(entry))}`
+                )
+                .join('\n\n---\n\n')
         ),
         '</dream_input>'
     ].join('\n')

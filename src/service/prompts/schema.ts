@@ -16,10 +16,11 @@ import { MAX_MEMORY_KEYWORDS } from '../memory/entry_fields'
  *   2. 提示词展示的格式与代码理解的形状不会各自漂移。
  */
 
-type GeneratedMemoryFieldName = Exclude<keyof MemoryMutationInput, 'status'>
-type CompleteMemoryOutput<T extends MemoryMutationInput> = {
-    [K in GeneratedMemoryFieldName]-?: NonNullable<T[K]>
-}
+type GeneratedMemoryOutput = {
+    [K in Exclude<keyof MemoryMutationInput, 'status'>]-?: NonNullable<
+        MemoryMutationInput[K]
+    >
+} & { speakerLabels: string[] }
 
 const requiredText = (description: string) =>
     z.string().trim().min(1).describe(description)
@@ -54,6 +55,11 @@ export const generatedMemorySchema = z
             .describe(
                 `使用 1 到 ${MAX_MEMORY_KEYWORDS} 个关键词刻画记忆的核心主题。`
             ),
+        speakerLabels: z
+            .array(requiredText('与记忆相关的用户。'))
+            .describe(
+                '填写与这一条记忆内容相关的所有用户昵称，记忆只涉及你自身时填写空数组。必须准确使用输入材料中提供的用户昵称，禁止捏造或擅自更改。'
+            ),
         sentiment: requiredText(
             '简短的情绪标注词。可使用“担心”、“亲近”、“愉快”、“疲惫”、“平静”等词；没有明显情绪时可写“平静”。'
         ),
@@ -70,36 +76,18 @@ export const generatedMemorySchema = z
         '在记忆中描述某个用户时，必须使用当前输入材料中的具体用户昵称。避免用“用户”、“对方”等泛化词汇或用户 ID 替代，也不要把多个不同用户混成同一个人。'
     )
 
-export const createExtractionResultSchema = (
-    allowedSpeakerLabels: readonly string[]
-) => {
-    const allowed = new Set(allowedSpeakerLabels)
-    return z.object({
-        memories: z.array(
-            generatedMemorySchema.extend({
-                speakerLabels: z
-                    .array(
-                        requiredText('对话中出现的用户昵称').refine(
-                            (label) => allowed.has(label),
-                            '用户昵称不在当前对话中'
-                        )
-                    )
-                    .describe(
-                        '这条记忆内容实际关联的用户昵称。只涉及当前角色自身且不关联具体用户时填写空数组。' +
-                            '只能填写 transcript 中用户消息前缀里出现的完整昵称；涉及多名用户时全部填写；' +
-                            '不要填写助手昵称，也不要因为用户出现在 transcript 中就自动关联。'
-                    )
-            })
-        )
+export const extractionResultSchema =
+    z.object({
+        memories: z.array(generatedMemorySchema)
     })
-}
 const createDreamMemoryExample = (
     importance: number
-): CompleteMemoryOutput<MemoryMutationInput> => ({
+): GeneratedMemoryOutput => ({
     type: 'fact',
     content: '...',
     summary: '...',
     keywords: ['...'],
+    speakerLabels: [],
     sentiment: '...',
     importance
 })
@@ -167,22 +155,22 @@ export const dreamArchivedResultSchema = z.object({
 type RequiredSchemaOutput<Schema extends z.ZodTypeAny> = Required<
     z.output<Schema>
 >
-type DreamGeneratedMemory = CompleteMemoryOutput<MemoryMutationInput>
+type DreamGeneratedMemory = GeneratedMemoryOutput
 
 export type DreamOperation =
     | RequiredSchemaOutput<typeof dreamKeepOperationSchema>
     | (Omit<
-          RequiredSchemaOutput<typeof dreamUpdateOperationSchema>,
-          'memory'
-      > & {
-          memory: DreamGeneratedMemory
-      })
+        RequiredSchemaOutput<typeof dreamUpdateOperationSchema>,
+        'memory'
+    > & {
+        memory: DreamGeneratedMemory
+    })
     | (Omit<
-          RequiredSchemaOutput<typeof dreamMergeOperationSchema>,
-          'memory'
-      > & {
-          memory: DreamGeneratedMemory
-      })
+        RequiredSchemaOutput<typeof dreamMergeOperationSchema>,
+        'memory'
+    > & {
+        memory: DreamGeneratedMemory
+    })
     | RequiredSchemaOutput<typeof dreamArchiveOperationSchema>
     | RequiredSchemaOutput<typeof dreamDeleteSourceOperationSchema>
 

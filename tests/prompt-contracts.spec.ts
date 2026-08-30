@@ -15,7 +15,7 @@ import {
     dreamActiveResultSchema,
     dreamArchivedResultSchema,
     dreamResultToolName,
-    createExtractionResultSchema,
+    extractionResultSchema,
     extractionResultToolName,
     generatedMemorySchema,
     USER_PROFILE_OUTPUT_FORMAT,
@@ -41,6 +41,19 @@ const memoryEntry: MemoryEntryRecord = {
     createdAt: new Date('2026-07-15T12:00:00.000Z'),
     updatedAt: new Date('2026-07-15T12:30:00.000Z')
 }
+const presetSpeakers = [
+    {
+        id: 'speaker-1',
+        presetId: 'preset-1',
+        speakerKey: '张三',
+        speakerLabel: '张三',
+        speakerAliases: ['张三'],
+        speakerId: 'user-1',
+        platform: 'test',
+        createdAt: memoryEntry.createdAt,
+        updatedAt: memoryEntry.updatedAt
+    }
+]
 
 it('keeps structured-output examples aligned with their runtime schemas', () => {
     assert.equal(
@@ -62,6 +75,7 @@ it('enforces Dream stage actions and complete generated metadata', () => {
         content: '完整内容',
         summary: '完整摘要',
         keywords: ['关键词'],
+        speakerLabels: ['张三'],
         sentiment: '平静',
         importance: 0.5
     }
@@ -135,6 +149,7 @@ it('keeps memory field rules in tool schemas without prompt duplication', () => 
             reason: 'shared speaker',
             entries: [memoryEntry]
         },
+        speakers: presetSpeakers,
         stage: 'active'
     }).systemPrompt
 
@@ -143,27 +158,27 @@ it('keeps memory field rules in tool schemas without prompt duplication', () => 
         generatedMemorySchema.shape.content.description,
         generatedMemorySchema.shape.summary.description,
         generatedMemorySchema.shape.keywords.description,
+        generatedMemorySchema.shape.speakerLabels.description,
         generatedMemorySchema.shape.sentiment.description,
         generatedMemorySchema.shape.importance.description
     ]
-    const extractionSchema = createExtractionResultSchema(['张三'])
     for (const description of schemaDescriptions) {
         assert.ok(description)
         assert.ok(!extraction.includes(description))
         assert.ok(!dream.includes(description))
     }
     assert.match(
-        generatedMemorySchema.description ?? '',
-        /在记忆中描述某个用户时/u
+        generatedMemorySchema.shape.speakerLabels.description ?? '',
+        /只涉及你自身时填写空数组/u
     )
     assert.equal(
-        extractionSchema.shape.memories.element.description,
+        extractionResultSchema.shape.memories.element.description,
         generatedMemorySchema.description
     )
     assert.match(
-        extractionSchema.shape.memories.element.shape.speakerLabels
+        extractionResultSchema.shape.memories.element.shape.speakerLabels
             .description ?? '',
-        /只涉及当前角色自身且不关联具体用户时填写空数组/u
+        /只涉及你自身时填写空数组/u
     )
     assert.doesNotMatch(extraction, /<memory_types>/u)
     assert.doesNotMatch(extraction, /工具参数格式为/u)
@@ -293,6 +308,7 @@ it('separates Dream and user profile rules from escaped dynamic inputs', () => {
             reason: `shared${unsafeText}`,
             entries: [unsafeMemory]
         },
+        speakers: presetSpeakers,
         stage: 'active'
     })
     const existingProfile: UserProfileRecord = {

@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
 import type { Context } from 'koishi'
-import type { MemoryEntryRecord } from '../src/contracts/memory'
+import type {
+    MemoryEntryRecord,
+    PresetSpeakerRecord
+} from '../src/contracts/memory'
 import type { DreamMemoryRepository } from '../src/contracts/workflows'
 import {
     type DreamRepository,
@@ -86,6 +89,20 @@ const dreamWorker: DreamWorkerRunner = {
     partition: async (entries) => partitionDreamEntries(entries),
     runHdbscan: async ({ entryCount }) => new Int32Array(entryCount)
 }
+
+const dreamSpeakers: PresetSpeakerRecord[] = [
+    {
+        id: 'speaker-1',
+        presetId: scope.presetId,
+        speakerKey: 'speaker-key',
+        speakerLabel: '张三',
+        speakerAliases: ['张三'],
+        speakerId: 'user-1',
+        platform: 'test',
+        createdAt: new Date('2026-07-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-07-01T00:00:00.000Z')
+    }
+]
 
 type DreamCoordinatorArgs = ConstructorParameters<
     typeof LivingMemoryDreamCoordinator
@@ -232,6 +249,7 @@ it('keeps Dream successful when post-Dream user profile generation fails', async
         'list-entries',
         'create-model',
         'resolve-preset',
+        'list-speakers',
         'list-entries',
         'list-entries',
         'list-speakers',
@@ -275,6 +293,7 @@ it('does not start post-Dream user profile generation when disabled', async () =
         'list-entries',
         'create-model',
         'resolve-preset',
+        'list-speakers',
         'list-entries'
     ])
 })
@@ -456,6 +475,7 @@ const completeDreamUpdateOperation = (): Extract<
         content: 'updated content',
         summary: 'updated summary',
         keywords: ['updated'],
+        speakerLabels: ['张三'],
         sentiment: 'neutral',
         importance: 0.8
     },
@@ -474,6 +494,7 @@ const completeDreamMergeOperation = (
         content: 'merged content',
         summary: 'merged summary',
         keywords: ['merged'],
+        speakerLabels: ['张三'],
         sentiment: 'neutral',
         importance: 0.9
     },
@@ -508,6 +529,7 @@ it('enforces Dream touched-memory guards', async () => {
         [completeDreamUpdateOperation(), completeDreamUpdateOperation()],
         touchedMemoryIds,
         'manual',
+        dreamSpeakers,
         captured.logger
     )
 
@@ -550,7 +572,8 @@ it('delegates each Dream merge to one atomic repository operation', async () => 
             ])
         ],
         activeTouched,
-        'manual'
+        'manual',
+        dreamSpeakers
     )
     const archivedEntries = [
         createMemoryEntry('target-archived', 'archived'),
@@ -573,7 +596,8 @@ it('delegates each Dream merge to one atomic repository operation', async () => 
             ])
         ],
         archivedTouched,
-        'manual'
+        'manual',
+        dreamSpeakers
     )
 
     assert.equal(mergeInputs.length, 2)
@@ -648,7 +672,8 @@ it('does not touch merge state when the atomic repository write fails', async ()
             },
             [completeDreamMergeOperation('target', ['source'])],
             touchedMemoryIds,
-            'manual'
+            'manual',
+            dreamSpeakers
         ),
         /merge write failed/u
     )

@@ -7,6 +7,7 @@ import type {
     LivingMemoryConfig,
     UserProfileRepository
 } from '../../../contracts/workflows'
+import type { PresetSpeakerRecord } from '../../../contracts/memory'
 import { isModelConfigured, summarizeError } from '../../shared/utils'
 import {
     resolveAssistantLabel,
@@ -108,12 +109,14 @@ export class LivingMemoryDreamService {
         const chatModel = model.value
         const assistantLabel = resolveAssistantLabel(presetId)
         const presetPrompt = await resolvePresetPrompt(this.ctx, presetId)
+        const speakers = await this.repository.listPresetSpeakers(presetId)
         const activeResult = await this.runStage(
             presetId,
             assistantLabel,
             presetPrompt,
             'active',
             activeEntries,
+            speakers,
             chatModel,
             runLogger
         )
@@ -128,6 +131,7 @@ export class LivingMemoryDreamService {
             presetPrompt,
             'archived',
             archivedEntries,
+            speakers,
             chatModel,
             runLogger
         )
@@ -204,6 +208,7 @@ export class LivingMemoryDreamService {
         presetPrompt: string,
         stage: DreamStage,
         entries: DreamMemoryEntryRecord[],
+        speakers: PresetSpeakerRecord[],
         model: ChatLunaChatModel,
         logger?: LivingMemoryLogger
     ): Promise<DreamStageResult> {
@@ -232,6 +237,7 @@ export class LivingMemoryDreamService {
                 presetPrompt,
                 presetId,
                 cluster,
+                speakers,
                 stage,
                 model,
                 touchedMemoryIds,

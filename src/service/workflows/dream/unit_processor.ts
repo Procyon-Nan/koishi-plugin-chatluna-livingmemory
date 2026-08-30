@@ -1,4 +1,5 @@
 import type { ChatLunaChatModel } from 'koishi-plugin-chatluna/llm-core/platform/model'
+import type { PresetSpeakerRecord } from '../../../contracts/memory'
 import type { DreamMemoryRepository } from '../../../contracts/workflows'
 import {
     buildDreamPrompt,
@@ -12,6 +13,7 @@ import {
     invokeStructuredOutput,
     isStructuredOutputModelInvocationError
 } from '../structured_output'
+import { resolveSpeakerKeysByLabels } from '../../memory/speaker_identity'
 import { DreamExecutor, getDreamOperationMemoryIds } from './executor'
 import { createEmptyStats } from './stats'
 import type {
@@ -28,6 +30,7 @@ interface DreamUnitBaseInput {
     presetPrompt: string
     stage: DreamStage
     cluster: DreamCluster
+    speakers: PresetSpeakerRecord[]
     model: ChatLunaChatModel
     touchedMemoryIds: Set<string>
     logger?: LivingMemoryLogger
@@ -54,6 +57,7 @@ export class DreamUnitProcessor {
             presetPrompt: input.presetPrompt,
             presetId: input.presetId,
             cluster: input.cluster,
+            speakers: input.speakers,
             stage: input.stage
         })
         let structuredResult
@@ -71,6 +75,19 @@ export class DreamUnitProcessor {
                 toolDescription: dreamResultToolDescription,
                 stringifiedArrayField: 'operations',
                 schema,
+                validateResult: ({ operations }) => {
+                    for (const operation of operations) {
+                        if (
+                            operation.action === 'update' ||
+                            operation.action === 'merge'
+                        ) {
+                            resolveSpeakerKeysByLabels(
+                                operation.memory.speakerLabels,
+                                input.speakers
+                            )
+                        }
+                    }
+                },
                 context: {
                     presetId: input.presetId,
                     conversationId: [
@@ -131,6 +148,7 @@ export class DreamUnitProcessor {
             operations,
             input.touchedMemoryIds,
             input.consolidationMode,
+            input.speakers,
             input.logger
         )
         if (result.skipped > 0) {

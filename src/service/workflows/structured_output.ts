@@ -51,6 +51,7 @@ interface StructuredOutputOptions<Schema extends z.AnyZodObject> {
     toolName: string
     toolDescription: string
     schema: Schema
+    validateResult?: (value: z.output<Schema>) => void
     stringifiedArrayField: Extract<keyof z.input<Schema>, string>
     context: StructuredOutputContext
     logging?: {
@@ -355,6 +356,7 @@ export async function invokeStructuredOutput<Schema extends z.AnyZodObject>(
                 )
             }
             if (validated.error == null) {
+                options.validateResult?.(validated.value)
                 return {
                     value: validated.value,
                     output: outputs.join('\n\n'),

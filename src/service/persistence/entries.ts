@@ -14,6 +14,7 @@ import type {
     AttributedMemoryItem,
     DreamMemoryEntryRecord,
     DreamMergeInput,
+    DreamMemoryMutation,
     ExtractionRepository,
     RecallRepository
 } from '../../contracts/workflows'
@@ -382,13 +383,17 @@ export class LivingMemoryEntryRepository
         return records
     }
 
-    async createMemory(scope: MemoryScope, input: MemoryMutationInput) {
+    async createMemory(
+        scope: MemoryScope,
+        input: MemoryMutationInput,
+        speakerKeys?: string[]
+    ) {
         const record = this.buildMemoryEntry(
             scope,
             input,
             [],
             new Date(),
-            this.resolveScopeSpeakerKeys(scope)
+            speakerKeys ?? this.resolveScopeSpeakerKeys(scope)
         )
         await this.ctx.database.create('living_memory_entry', record)
         return record
@@ -438,7 +443,7 @@ export class LivingMemoryEntryRepository
 
     async updateMemoryForDream(
         id: string,
-        patch: Partial<MemoryMutationInput>,
+        patch: DreamMemoryMutation | { status: 'archived' },
         isConsolidated: boolean
     ) {
         const current = await this.getEntryById(id)
@@ -455,7 +460,7 @@ export class LivingMemoryEntryRepository
 
     private async writeMemoryUpdate(
         current: MemoryEntryRecord,
-        patch: Partial<MemoryMutationInput>,
+        patch: Partial<MemoryMutationInput> & { speakerKeys?: string[] },
         isConsolidated?: boolean,
         operation = 'memory update'
     ) {
@@ -600,12 +605,6 @@ export class LivingMemoryEntryRepository
             {
                 ...this.buildMemoryUpdatePatch(target, input.patch),
                 sourceOrigins: mergeMemorySourceOrigins([target, ...sources]),
-                // 合并为纯语义判定：产物内容涉及全部源记忆的用户，
-                // speakerKeys 取并集。
-                speakerKeys: normalizeSpeakerKeys([
-                    ...target.speakerKeys,
-                    ...sources.flatMap((source) => source.speakerKeys)
-                ]),
                 isConsolidated: input.targetIsConsolidated,
                 updatedAt: merge.updatedAt
             }
@@ -734,7 +733,7 @@ export class LivingMemoryEntryRepository
 
     private buildMemoryUpdatePatch(
         current: MemoryEntryRecord,
-        patch: Partial<MemoryMutationInput>
+        patch: Partial<MemoryMutationInput> & { speakerKeys?: string[] }
     ) {
         const content =
             patch.content === undefined
@@ -761,6 +760,10 @@ export class LivingMemoryEntryRepository
                 ? normalizeMemoryImportance(current.importance)
                 : normalizeMemoryImportance(patch.importance)
         return {
+            speakerKeys:
+                patch.speakerKeys === undefined
+                    ? current.speakerKeys
+                    : normalizeSpeakerKeys(patch.speakerKeys),
             type: patch.type ?? current.type,
             status,
             content,

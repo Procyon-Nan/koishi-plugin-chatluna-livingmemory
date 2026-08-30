@@ -1,10 +1,12 @@
 import type {
     DreamMemoryEntryRecord,
     DreamMemoryRepository,
-    DreamMergeMutation
+    DreamMemoryMutation
 } from '../../../contracts/workflows'
+import type { PresetSpeakerRecord } from '../../../contracts/memory'
 import { normalizeMemoryKeywords } from '../../memory/entry_fields'
 import type { LivingMemoryLogger } from '../../logging/logger'
+import { resolveSpeakerKeysByLabels } from '../../memory/speaker_identity'
 import { createEmptyStats } from './stats'
 import type {
     DreamCluster,
@@ -17,7 +19,7 @@ import type {
 
 export type DreamExecutorRepository = DreamMemoryRepository
 
-type DreamGeneratedMemoryMutation = Omit<DreamMergeMutation, 'status'>
+type DreamGeneratedMemoryMutation = Omit<DreamMemoryMutation, 'status'>
 type DreamUpdateOperation = Extract<DreamOperation, { action: 'update' }>
 type DreamArchiveOperation = Extract<DreamOperation, { action: 'archive' }>
 type DreamMergeOperation = Extract<DreamOperation, { action: 'merge' }>
@@ -32,6 +34,7 @@ interface DreamExecutionState {
     touchedMemoryIds: Set<string>
     stats: DreamOperationStats
     consolidationMode: DreamConsolidationMode
+    speakers: PresetSpeakerRecord[]
     consolidatedMemoryIds: Set<string>
     mutatedMemoryIds: Set<string>
     mergeDeletedSourceIds: Set<string>
@@ -60,6 +63,7 @@ export class DreamExecutor {
         operations: DreamOperation[],
         touchedMemoryIds: Set<string>,
         consolidationMode: DreamConsolidationMode,
+        speakers: PresetSpeakerRecord[],
         logger?: LivingMemoryLogger
     ): Promise<DreamExecutionResult> {
         const stats = createEmptyStats()
@@ -74,6 +78,7 @@ export class DreamExecutor {
             touchedMemoryIds,
             stats,
             consolidationMode,
+            speakers,
             consolidatedMemoryIds,
             mutatedMemoryIds,
             mergeDeletedSourceIds: new Set()
@@ -166,7 +171,7 @@ export class DreamExecutor {
             return
         }
 
-        const patch = this.prepareMemoryPatch(operation.memory)
+        const patch = this.prepareMemoryPatch(operation.memory, state.speakers)
 
         const isConsolidated = state.consolidationMode !== 'incremental-batch'
         await this.repository.updateMemoryForDream(
@@ -222,7 +227,7 @@ export class DreamExecutor {
             return
         }
 
-        const patch = this.prepareMemoryPatch(operation.memory)
+        const patch = this.prepareMemoryPatch(operation.memory, state.speakers)
         const sourceMemoryIds = sources.map((source) => source.id)
 
         await this.repository.applyDreamMerge({
@@ -283,7 +288,7 @@ export class DreamExecutor {
     private prepareStagePatch(
         stage: DreamStage,
         patch: DreamGeneratedMemoryMutation
-    ): DreamMergeMutation {
+    ): DreamMemoryMutation {
         if (stage === 'active') {
             return {
                 ...patch,
@@ -298,11 +303,14 @@ export class DreamExecutor {
     }
 
     private prepareMemoryPatch(
-        memory: DreamUpdateOperation['memory']
+        memory: DreamUpdateOperation['memory'],
+        speakers: PresetSpeakerRecord[]
     ): DreamGeneratedMemoryMutation {
+        const { speakerLabels, ...fields } = memory
         return {
-            ...memory,
-            keywords: normalizeMemoryKeywords(memory.keywords)
+            ...fields,
+            speakerKeys: resolveSpeakerKeysByLabels(speakerLabels, speakers),
+            keywords: normalizeMemoryKeywords(fields.keywords)
         }
     }
 

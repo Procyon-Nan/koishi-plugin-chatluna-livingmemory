@@ -195,6 +195,7 @@ it('synchronizes a Dream merge as one vector index mutation', async () => {
             target,
             sources: [source],
             patch: {
+                speakerKeys: [],
                 type: 'fact',
                 status: 'active',
                 content: 'merged content',

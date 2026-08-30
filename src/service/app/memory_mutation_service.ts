@@ -16,6 +16,7 @@ import type {
     AttributedMemoryItem,
     DreamMemoryRepository,
     DreamMergeInput,
+    DreamMemoryMutation,
     ExtractionRepository
 } from '../../contracts/workflows'
 import type { LivingMemoryRepository } from '../persistence/repository'
@@ -79,13 +80,21 @@ export class LivingMemoryMutationService
         })
     }
 
-    async createMemory(scope: MemoryScope, input: MemoryMutationInput) {
+    async createMemory(
+        scope: MemoryScope,
+        input: MemoryMutationInput,
+        speakerKeys?: string[]
+    ) {
         return this.runPresetMutation(scope.presetId, async () => {
             // 落库前预检索引就绪状态：未就绪时立即失败且零副作用。
             // 仅 createMemory 预检；appendMemories 的提取窗口过期即失，
             // 宁可落库后进入 dirty 由对账修复，也不能丢轮次。
             this.vectorIndex.assertPresetReady(scope.presetId)
-            const record = await this.repository.createMemory(scope, input)
+            const record = await this.repository.createMemory(
+                scope,
+                input,
+                speakerKeys
+            )
             await this.applyCommittedMutation({
                 presetId: record.presetId,
                 upserts: [this.upsert(record, 'replace')],
@@ -122,7 +131,7 @@ export class LivingMemoryMutationService
     async updateMemoryForDream(
         presetId: string,
         id: string,
-        patch: Partial<MemoryMutationInput>,
+        patch: DreamMemoryMutation | { status: 'archived' },
         isConsolidated: boolean
     ) {
         return this.runPresetMutation(presetId, async () => {

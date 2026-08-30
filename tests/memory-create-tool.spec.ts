@@ -38,6 +38,7 @@ const sampleMemory = {
     content: '张三在2026-08-15说他喜欢爬山，我表示下次一起',
     summary: '张三喜欢爬山，我约好下次同去',
     keywords: ['张三', '爬山', '约定'],
+    speakerLabels: ['张三'],
     sentiment: '愉快',
     importance: 0.7
 }
@@ -45,15 +46,32 @@ const sampleMemory = {
 const createRecordingProvider = (
     failureFor?: (input: MemoryMutationInput) => Error
 ) => {
-    const calls: { scope: MemoryScope; input: MemoryMutationInput }[] = []
+    const calls: {
+        scope: MemoryScope
+        input: MemoryMutationInput
+        speakerKeys: string[]
+    }[] = []
     let sequence = 0
     const provider: LivingMemoryCreationProvider = {
-        createMemory: async (scope, input) => {
+        listPresetSpeakers: async (presetId) => [
+            {
+                id: 'speaker-1',
+                presetId,
+                speakerKey: 'speaker-key-1',
+                speakerLabel: '张三',
+                speakerAliases: ['张三'],
+                speakerId: 'user-1',
+                platform: 'test',
+                createdAt: new Date(),
+                updatedAt: new Date()
+            }
+        ],
+        createMemory: async (scope, input, speakerKeys) => {
             const error = failureFor?.(input)
             if (error != null) {
                 throw error
             }
-            calls.push({ scope, input })
+            calls.push({ scope, input, speakerKeys })
             sequence += 1
             return {
                 id: `memory-${sequence}`,
@@ -145,6 +163,7 @@ it('creates memories with the resolved ChatLuna scope and returns ids', async ()
     assert.equal(calls[0]?.scope.presetId, 'default')
     assert.equal(calls[0]?.scope.conversationId, 'conversation-1')
     assert.equal(calls[0]?.input.content, sampleMemory.content)
+    assert.deepEqual(calls[0]?.speakerKeys, ['speaker-key-1'])
     assert.deepEqual(output.createdMemories, [{ id: 'memory-1', type: 'fact' }])
     assert.deepEqual(output.warnings, [])
 })
@@ -168,7 +187,8 @@ it('reports committed memories as saved with a warning when index synchronizatio
     let invoked = 0
     const { calls, provider } = createRecordingProvider()
     const failingProvider: LivingMemoryCreationProvider = {
-        createMemory: async (scope, input) => {
+        listPresetSpeakers: provider.listPresetSpeakers,
+        createMemory: async (scope, input, speakerKeys) => {
             invoked += 1
             if (invoked === 2) {
                 throw new LivingMemoryFactsCommittedError(
@@ -176,7 +196,7 @@ it('reports committed memories as saved with a warning when index synchronizatio
                     {}
                 )
             }
-            return provider.createMemory(scope, input)
+            return provider.createMemory(scope, input, speakerKeys)
         }
     }
     const tool = new LivingMemoryCreateMemoryTool(failingProvider, 10)
@@ -202,6 +222,19 @@ it('propagates not-ready failures before any memory is committed', async () => {
         'vector index is not ready'
     )
     const failingProvider: LivingMemoryCreationProvider = {
+        listPresetSpeakers: async (presetId) => [
+            {
+                id: 'speaker-1',
+                presetId,
+                speakerKey: 'speaker-key-1',
+                speakerLabel: '张三',
+                speakerAliases: ['张三'],
+                speakerId: 'user-1',
+                platform: 'test',
+                createdAt: new Date(),
+                updatedAt: new Date()
+            }
+        ],
         createMemory: async () => {
             throw notReady
         }

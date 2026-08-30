@@ -166,6 +166,7 @@ it('applies shared field rules to Dream mutations', async () => {
                     summary: '  dream summary  ',
                     sentiment: '  concerned  ',
                     keywords: dreamKeywords,
+                    speakerLabels: [],
                     importance: 0
                 },
                 reason: 'test update'
@@ -178,7 +179,8 @@ it('applies shared field rules to Dream mutations', async () => {
         { id: 'cluster-1', reason: 'test', entries: [entry] },
         operations,
         new Set(),
-        'manual'
+        'manual',
+        []
     )
 
     assert.equal(stats.updated, 1)
@@ -188,6 +190,7 @@ it('applies shared field rules to Dream mutations', async () => {
         summary: 'dream summary',
         sentiment: 'concerned',
         keywords: normalizeMemoryKeywords(dreamKeywords),
+        speakerKeys: [],
         importance: 0,
         status: 'active'
     })

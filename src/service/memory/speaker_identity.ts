@@ -28,3 +28,37 @@ export const normalizeSpeakerKeys = (
         )
     ].sort()
 }
+
+export const resolveSpeakerKeysByLabels = (
+    speakerLabels: readonly string[],
+    speakers: readonly {
+        speakerKey: string
+        speakerLabel: string
+        speakerAliases?: string[]
+    }[]
+) => {
+    const speakerKeyByLabel = new Map<string, string>()
+    for (const speaker of speakers) {
+        for (const label of [
+            speaker.speakerLabel,
+            ...(speaker.speakerAliases ?? [])
+        ]) {
+            speakerKeyByLabel.set(
+                normalizeUserProfileSpeakerAliasKey(label),
+                speaker.speakerKey
+            )
+        }
+    }
+
+    return normalizeSpeakerKeys(
+        speakerLabels.map((label) => {
+            const speakerKey = speakerKeyByLabel.get(
+                normalizeUserProfileSpeakerAliasKey(label)
+            )
+            if (speakerKey == null) {
+                throw new Error(`unknown speaker label: ${label}`)
+            }
+            return speakerKey
+        })
+    )
+}

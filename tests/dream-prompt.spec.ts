@@ -72,6 +72,13 @@ const createDreamHarness = (
     } as unknown as Context
     const repository = {
         listDreamEntriesByPreset: async () => memories,
+        listPresetSpeakers: async () => [
+            {
+                speakerKey: 'speaker-key',
+                speakerLabel: '张三',
+                speakerAliases: ['张三']
+            }
+        ],
         setMemoryConsolidation: async () => {}
     } as unknown as DreamRepository
     const vectors = {
@@ -183,6 +190,36 @@ it('retries Dream once after a non-tool response', async () => {
 
     assert.equal(harness.model.invocations.length, 2)
     assert.equal(result.kept, 1)
+})
+
+it('retries Dream before execution when a speaker label is unknown', async () => {
+    const harness = createDreamHarness([
+        createToolCallMessage(dreamResultToolName, {
+            operations: [
+                {
+                    action: 'update',
+                    memoryId: 'memory-1',
+                    memory: {
+                        type: 'fact',
+                        content: '错误关联了不存在的用户',
+                        summary: '错误用户关联',
+                        keywords: ['错误关联'],
+                        speakerLabels: ['李四'],
+                        sentiment: '平静',
+                        importance: 0.5
+                    },
+                    reason: '测试未知用户'
+                }
+            ]
+        }),
+        validKeepResult()
+    ])
+
+    const result = await harness.service.run('preset-1')
+
+    assert.equal(harness.model.invocations.length, 2)
+    assert.equal(result.kept, 1)
+    assert.equal(result.updated, 0)
 })
 
 it('skips a Dream cluster after three invalid structured responses', async () => {

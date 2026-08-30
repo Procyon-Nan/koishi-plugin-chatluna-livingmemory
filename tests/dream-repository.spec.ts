@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { Context } from 'koishi'
 import SQLiteDriver from '@koishijs/plugin-database-sqlite'
-import type { DreamMergeMutation } from '../src/contracts/workflows'
+import type { DreamMemoryMutation } from '../src/contracts/workflows'
 import { LivingMemoryRepository } from '../src/service/persistence/repository'
 import { createTestContext } from './persistence-test-utils'
 
@@ -11,8 +11,9 @@ const scope = {
 }
 
 const createMergePatch = (
-    status: DreamMergeMutation['status']
-): DreamMergeMutation => ({
+    status: DreamMemoryMutation['status']
+): DreamMemoryMutation => ({
+    speakerKeys: ['replacement-speaker'],
     type: 'fact',
     status,
     content: 'merged content',
@@ -25,17 +26,21 @@ const createMergePatch = (
 const createMemory = (
     repository: LivingMemoryRepository,
     label: string,
-    status: DreamMergeMutation['status']
+    status: DreamMemoryMutation['status']
 ) =>
-    repository.createMemory(scope, {
-        type: 'fact',
-        status,
-        content: `${label} content`,
-        keywords: [label],
-        summary: `${label} summary`,
-        sentiment: 'neutral',
-        importance: 0.5
-    })
+    repository.createMemory(
+        scope,
+        {
+            type: 'fact',
+            status,
+            content: `${label} content`,
+            keywords: [label],
+            summary: `${label} summary`,
+            sentiment: 'neutral',
+            importance: 0.5
+        },
+        [`${label}-speaker`]
+    )
 
 const withRepository = async (
     callback: (
@@ -96,6 +101,7 @@ it('atomically updates an active Dream merge and archives its sources', async ()
         const storedTarget = entryById.get(target.id)
 
         assert.equal(storedTarget?.content, 'merged content')
+        assert.deepEqual(storedTarget?.speakerKeys, ['replacement-speaker'])
         assert.deepEqual(storedTarget?.sourceOrigins, sourceOrigins)
         assert.equal(entryById.get(source1.id)?.status, 'archived')
         assert.equal(entryById.get(source2.id)?.status, 'archived')

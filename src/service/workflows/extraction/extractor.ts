@@ -3,7 +3,7 @@ import type { AttributedMemoryItem } from '../../../contracts/workflows'
 import { isModelConfigured } from '../../shared/utils'
 import {
     buildExtractionPrompt,
-    createExtractionResultSchema,
+    extractionResultSchema,
     extractionResultToolDescription,
     extractionResultToolName
 } from '../../prompts'
@@ -15,7 +15,7 @@ import {
 import { invokeStructuredOutput } from '../structured_output'
 import { resolveScopeAssistantLabel } from '../../memory/helpers'
 import type { LivingMemoryLogger } from '../../logging/logger'
-import { normalizeSpeakerKeys } from '../../memory/speaker_identity'
+import { resolveSpeakerKeysByLabels } from '../../memory/speaker_identity'
 
 export type LivingMemoryExtractionSkipReason =
     | 'model-not-configured'
@@ -80,9 +80,15 @@ export class LivingMemoryExtractor {
             prompt,
             toolName: extractionResultToolName,
             toolDescription: extractionResultToolDescription,
-            schema: createExtractionResultSchema(
-                context.speakers.map((speaker) => speaker.speakerLabel)
-            ),
+            schema: extractionResultSchema,
+            validateResult: ({ memories }) => {
+                for (const memory of memories) {
+                    resolveSpeakerKeysByLabels(
+                        memory.speakerLabels,
+                        context.speakers
+                    )
+                }
+            },
             stringifiedArrayField: 'memories',
             context: {
                 presetId: context.presetId,
@@ -97,12 +103,6 @@ export class LivingMemoryExtractor {
                           stage: 'memory-extraction'
                       }
         })
-        const speakerKeyByLabel = new Map(
-            context.speakers.map((speaker) => [
-                speaker.speakerLabel,
-                speaker.speakerKey
-            ])
-        )
         const extracted =
             result.value?.memories.map((item): AttributedMemoryItem => {
                 return {
@@ -112,10 +112,9 @@ export class LivingMemoryExtractor {
                     keywords: normalizeMemoryKeywords(item.keywords),
                     sentiment: normalizeMemoryText(item.sentiment),
                     importance: item.importance,
-                    speakerKeys: normalizeSpeakerKeys(
-                        item.speakerLabels.map(
-                            (label) => speakerKeyByLabel.get(label)!
-                        )
+                    speakerKeys: resolveSpeakerKeysByLabels(
+                        item.speakerLabels,
+                        context.speakers
                     )
                 }
             }) ?? []

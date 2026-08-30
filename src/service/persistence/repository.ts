@@ -25,6 +25,7 @@ import type {
     AttributedMemoryItem,
     DreamMemoryEntryRecord,
     DreamMergeInput,
+    DreamMemoryMutation,
     ExtractionRepository,
     JobRepository,
     RecallRepository,
@@ -199,9 +200,10 @@ export class LivingMemoryRepository
 
     createMemory(
         scope: MemoryScope,
-        input: MemoryMutationInput
+        input: MemoryMutationInput,
+        speakerKeys?: string[]
     ): Promise<MemoryEntryRecord> {
-        return this.entries.createMemory(scope, input)
+        return this.entries.createMemory(scope, input, speakerKeys)
     }
 
     updateMemory(id: string, patch: Partial<MemoryMutationInput>) {
@@ -210,7 +212,7 @@ export class LivingMemoryRepository
 
     updateMemoryForDream(
         id: string,
-        patch: Partial<MemoryMutationInput>,
+        patch: DreamMemoryMutation | { status: 'archived' },
         isConsolidated: boolean
     ) {
         return this.entries.updateMemoryForDream(id, patch, isConsolidated)

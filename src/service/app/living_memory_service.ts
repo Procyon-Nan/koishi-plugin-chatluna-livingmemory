@@ -462,8 +462,16 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         )
     }
 
-    async createMemory(scope: MemoryScope, input: MemoryMutationInput) {
-        const memory = await this.mutations.createMemory(scope, input)
+    async createMemory(
+        scope: MemoryScope,
+        input: MemoryMutationInput,
+        speakerKeys?: string[]
+    ) {
+        const memory = await this.mutations.createMemory(
+            scope,
+            input,
+            speakerKeys
+        )
         this.queueAutoDreamIfThresholdReached(scope.presetId)
         return memory
     }

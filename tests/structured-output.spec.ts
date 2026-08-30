@@ -36,7 +36,10 @@ const boundTools = (
             | undefined
     )?.tools ?? []
 
-const invoke = (responses: Parameters<typeof createToolCallingModel>[0]) => {
+const invoke = (
+    responses: Parameters<typeof createToolCallingModel>[0],
+    validate?: (value: { items: string[]; note?: string }) => void
+) => {
     const harness = createToolCallingModel(responses)
     return {
         harness,
@@ -46,11 +49,36 @@ const invoke = (responses: Parameters<typeof createToolCallingModel>[0]) => {
             toolName,
             toolDescription: '提交测试结果。',
             schema,
+            validateResult: validate,
             stringifiedArrayField: 'items',
             context
         })
     }
 }
+
+it('retries results rejected by contextual validation', async () => {
+    const { harness, result } = invoke(
+        [
+            createToolCallMessage(toolName, { items: ['unknown'] }),
+            createToolCallMessage(
+                toolName,
+                { items: ['corrected'] },
+                'result-2'
+            )
+        ],
+        ({ items }) => {
+            if (items.includes('unknown')) {
+                throw new Error('unknown item')
+            }
+        }
+    )
+
+    const resolved = await result
+
+    assert.deepEqual(resolved.value, { items: ['corrected'] })
+    assert.equal(resolved.parseError, null)
+    assert.equal(harness.invocations.length, 2)
+})
 
 it('accepts one valid structured result tool call', async () => {
     const { harness, result } = invoke([

@@ -74,6 +74,10 @@ class IncrementalRepositoryStub implements IncrementalDreamRepository {
         ).length
     }
 
+    async listPresetSpeakers() {
+        return []
+    }
+
     async setMemoryConsolidation(
         targetPresetId: string,
         ids: string[],
@@ -168,6 +172,7 @@ const mergeResult = (targetMemoryId: string, sourceMemoryId: string) =>
                     content: 'candidate updated by seed one',
                     summary: 'updated candidate',
                     keywords: ['updated'],
+                    speakerLabels: [],
                     sentiment: 'neutral',
                     importance: 0.7
                 },

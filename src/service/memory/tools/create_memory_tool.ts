@@ -13,6 +13,7 @@ import {
     getLivingMemoryToolConfigurable,
     resolveToolMemoryScopeConfigurable
 } from './tool_runtime'
+import { resolveSpeakerKeysByLabels } from '../speaker_identity'
 
 type LivingMemoryCreateMemoryToolInput = z.infer<
     ReturnType<typeof createLivingMemoryCreateInputSchema>
@@ -47,7 +48,17 @@ export class LivingMemoryCreateMemoryTool extends StructuredTool {
 
         const createdMemories: { id: string; type: string }[] = []
         const warnings: string[] = []
-        for (const memory of input.memories) {
+        const speakers = await this.creation.listPresetSpeakers(
+            resolution.scope.presetId
+        )
+        const memories = input.memories.map((memory) => ({
+            memory,
+            speakerKeys: resolveSpeakerKeysByLabels(
+                memory.speakerLabels,
+                speakers
+            )
+        }))
+        for (const { memory, speakerKeys } of memories) {
             try {
                 // 非 strict 模式下 zod 推断字段为可选，运行时已由 schema
                 // 硬校验保证完整；逐字段映射与 extraction extractor 的
@@ -61,7 +72,8 @@ export class LivingMemoryCreateMemoryTool extends StructuredTool {
                         summary: memory.summary,
                         sentiment: memory.sentiment,
                         importance: memory.importance
-                    }
+                    },
+                    speakerKeys
                 )
                 createdMemories.push({ id: record.id, type: record.type })
             } catch (error) {

@@ -43,7 +43,8 @@ export interface DreamMemoryEntryRecord {
     updatedAt: Date
 }
 
-export interface DreamMergeMutation {
+export interface DreamMemoryMutation {
+    speakerKeys: string[]
     type: MemoryEntryType
     status: MemoryEntryStatus
     content: string
@@ -62,7 +63,7 @@ export interface DreamMergeInput {
     presetId: string
     target: DreamMergeMemoryVersion
     sources: DreamMergeMemoryVersion[]
-    patch: DreamMergeMutation
+    patch: DreamMemoryMutation
     sourceDisposition: 'archive' | 'delete'
     targetIsConsolidated: boolean
     sourceIsConsolidated: boolean
@@ -88,7 +89,7 @@ export interface DreamMemoryRepository extends DreamMergeRepository {
     updateMemoryForDream(
         presetId: string,
         id: string,
-        patch: Partial<MemoryMutationInput>,
+        patch: DreamMemoryMutation | { status: 'archived' },
         isConsolidated: boolean
     ): Promise<MemoryUpdateResult>
     setMemoryConsolidation(
@@ -186,9 +187,11 @@ export interface LivingMemorySearchProvider {
 }
 
 export interface LivingMemoryCreationProvider {
+    listPresetSpeakers(presetId: string): Promise<PresetSpeakerRecord[]>
     createMemory(
         scope: MemoryScope,
-        input: MemoryMutationInput
+        input: MemoryMutationInput,
+        speakerKeys: string[]
     ): Promise<MemoryEntryRecord>
 }
 
