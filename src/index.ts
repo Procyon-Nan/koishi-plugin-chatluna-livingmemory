@@ -155,11 +155,11 @@ export const Config: Schema<Config> = Schema.intersect([
             .description('记忆召回策略。')
             .default('embedding-rerank'),
         recallInterval: Schema.number()
-            .min(1)
+            .min(0)
             .max(30)
             .step(1)
             .description(
-                '自动记忆召回的轮次间隔；每个预设会话首次立即召回，此后每隔指定轮数召回一次。'
+                '自动记忆召回的轮次间隔；设为 0 时不启用自动召回，否则每个预设会话首次立即召回，此后每隔指定轮数召回一次。'
             )
             .default(5),
         recallHistoryWindowRounds: Schema.number()

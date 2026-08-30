@@ -49,6 +49,16 @@ export class LivingMemoryRecallCoordinator {
         currentMessage: LivingMemoryTranscriptMessage,
         loadHistoryMessages: () => Promise<LivingMemoryTranscriptMessage[]>
     ) {
+        if (this.config.recallInterval === 0) {
+            this.logger.diagnostic('recall.skipped', {
+                workflow: 'recall',
+                conversationId: scope.conversationId,
+                presetId: scope.presetId,
+                reason: 'disabled'
+            })
+            return
+        }
+
         const lockKey = scopeKey(scope)
         const previousTurns = this.turnsSinceRecallByConversation.get(lockKey)
         if (previousTurns !== undefined) {
