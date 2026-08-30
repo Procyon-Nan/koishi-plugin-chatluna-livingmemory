@@ -5,7 +5,6 @@ export const livingMemoryGetMessagesToolName = 'living_memory_get_messages'
 
 export const memorySearchMaxTextCount = 3
 export const memorySearchMaxKeywordCount = 3
-export const memoryGetMessagesMaxIdCount = 10
 
 interface SearchFieldRule {
     fieldName: string
@@ -85,13 +84,11 @@ export type LivingMemorySearchToolInput = z.infer<
 >
 
 const memoryIdsDescription =
-    `要查看的记忆 ID。提供 1 到 ${memoryGetMessagesMaxIdCount} 个 ` +
-    '来自 living_memory_search 结果的 ID。'
+    '要查看的记忆 ID。提供至少一个来自 living_memory_search 结果的 ID。'
 
 export const livingMemoryGetMessagesInputSchema = z.object({
     memoryIds: z
         .array(z.string().trim().min(1))
         .min(1)
-        .max(memoryGetMessagesMaxIdCount)
         .describe(memoryIdsDescription)
 })

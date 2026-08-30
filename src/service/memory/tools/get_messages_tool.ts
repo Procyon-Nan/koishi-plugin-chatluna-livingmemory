@@ -4,8 +4,7 @@ import type { Context } from 'koishi'
 import type { z } from 'zod'
 import {
     livingMemoryGetMessagesInputSchema,
-    livingMemoryGetMessagesToolName,
-    memoryGetMessagesMaxIdCount
+    livingMemoryGetMessagesToolName
 } from './search_contract'
 import {
     describeLivingMemoryToolScopeFailure,
@@ -17,7 +16,7 @@ export const livingMemoryGetMessagesToolDescription = [
     '按记忆 ID 获取当前预设中记忆的来源对话消息。',
     '',
     '当你需要查看特定记忆是否有来源对话消息支撑时使用此工具。',
-    `- memoryIds：必填 JSON 数组，包含 1 到 ${memoryGetMessagesMaxIdCount} 个来自 living_memory_search 结果的记忆 ID。`,
+    '- memoryIds：必填 JSON 数组，包含至少一个来自 living_memory_search 结果的记忆 ID。',
     '- 直接传递数组，禁止把数组编码成 JSON 字符串。',
     '- 本工具仅读取当前预设拥有的记忆。',
     '- 每条结果包含目标记忆 ID、类别（type）、内容（content）、摘要（summary）、关键词（keywords）、重要度（importance）、时间戳以及 sourceOrigins。',
