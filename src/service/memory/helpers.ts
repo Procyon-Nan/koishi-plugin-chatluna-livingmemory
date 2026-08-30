@@ -6,6 +6,7 @@ import { toNonEmptyString } from '../shared/utils'
 
 export interface QueueExtractionOptions {
     resolvePresetPrompt: () => Promise<string>
+    resolveTranscriptHeader: () => Promise<string>
 }
 
 export interface CharacterPresetPromptSource {

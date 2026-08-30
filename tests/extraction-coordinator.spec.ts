@@ -152,7 +152,10 @@ const queueExtraction = async (
     completedRoundCount = 1,
     resolvePresetPrompt: () => Promise<string> = async () => '你是测试助手。'
 ) => {
-    const options = { resolvePresetPrompt }
+    const options = {
+        resolvePresetPrompt,
+        resolveTranscriptHeader: async () => '以下是聊天记录：'
+    }
     for (let index = 0; index < completedRoundCount; index++) {
         await coordinator.queue(
             scope,
@@ -169,7 +172,8 @@ it('counts the first completed round and extracts immediately at interval one', 
         scope,
         { messages: createExtractionMessages() },
         {
-            resolvePresetPrompt: async () => '你是测试助手。'
+            resolvePresetPrompt: async () => '你是测试助手。',
+            resolveTranscriptHeader: async () => '以下是聊天记录：'
         }
     )
     await waitFor(() => getExtractorCalls() === 1, 'first extraction')
@@ -215,7 +219,8 @@ it('rejects an invalid completed-round contract', async () => {
 
     await assert.rejects(
         coordinator.queue(scope, userOnlyRound, {
-            resolvePresetPrompt: async () => '你是测试助手。'
+            resolvePresetPrompt: async () => '你是测试助手。',
+            resolveTranscriptHeader: async () => '以下是聊天记录：'
         }),
         /must contain both user and assistant messages/u
     )
@@ -242,7 +247,8 @@ it('preserves completed rounds while an extraction is in flight', async () => {
             }
         })
     const options = {
-        resolvePresetPrompt: async () => '你是测试助手。'
+        resolvePresetPrompt: async () => '你是测试助手。',
+        resolveTranscriptHeader: async () => '以下是聊天记录：'
     }
 
     await coordinator.queue(
@@ -293,7 +299,8 @@ it('uses only the configured number of recent completed rounds', async () => {
             scope,
             { messages: round },
             {
-                resolvePresetPrompt: async () => '你是测试助手。'
+                resolvePresetPrompt: async () => '你是测试助手。',
+                resolveTranscriptHeader: async () => '以下是聊天记录：'
             }
         )
     }
@@ -361,7 +368,8 @@ it('keeps separate trigger boundaries when multiple intervals arrive in flight',
         }
     })
     const options = {
-        resolvePresetPrompt: async () => '你是测试助手。'
+        resolvePresetPrompt: async () => '你是测试助手。',
+        resolveTranscriptHeader: async () => '以下是聊天记录：'
     }
 
     for (let index = 1; index <= 6; index++) {
@@ -440,7 +448,7 @@ it('persists one failed extraction job when the model throws', async () => {
     await queueExtraction(coordinator)
     await waitFor(() => jobStore.jobs.length === 1, 'failed extraction model')
 
-    assert.equal(jobStore.jobs[0]?.input, 'payload')
+    assert.equal(jobStore.jobs[0]?.input, '以下是聊天记录：\n\npayload')
     assert.match(jobStore.jobs[0]?.error ?? '', /extraction failure/u)
 })
 

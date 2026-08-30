@@ -31,6 +31,7 @@ type ExtractionModel = Pick<LivingMemoryExtractor, 'extractWithTrace'>
 interface ExtractionRoundRequest {
     scope: MemoryScope
     resolvePresetPrompt: () => Promise<string>
+    resolveTranscriptHeader: () => Promise<string>
 }
 
 interface BufferedExtractionRound {
@@ -136,7 +137,8 @@ export class LivingMemoryExtractionCoordinator {
         ) {
             state.triggerRequests.set(state.lastCompletedSequence, {
                 scope,
-                resolvePresetPrompt: options.resolvePresetPrompt
+                resolvePresetPrompt: options.resolvePresetPrompt,
+                resolveTranscriptHeader: options.resolveTranscriptHeader
             })
         }
         this.stateByScope.set(key, state)
@@ -209,7 +211,13 @@ export class LivingMemoryExtractionCoordinator {
             bufferedRounds: selectedRounds.length,
             messages: rounds.length
         })
-        this.run(request.scope, rounds, request.resolvePresetPrompt, runLogger)
+        this.run(
+            request.scope,
+            rounds,
+            request.resolvePresetPrompt,
+            request.resolveTranscriptHeader,
+            runLogger
+        )
             .catch((error) => {
                 runLogger.warn('extraction.failed', { operation: 'run' }, error)
             })
@@ -257,6 +265,7 @@ export class LivingMemoryExtractionCoordinator {
         scope: MemoryScope,
         messages: LivingMemoryTranscriptMessage[],
         resolvePresetPrompt: () => Promise<string>,
+        resolveTranscriptHeader: () => Promise<string>,
         logger: LivingMemoryLogger
     ) {
         const startedAt = new Date()
@@ -267,15 +276,16 @@ export class LivingMemoryExtractionCoordinator {
         try {
             payload = this.formatter.toExtractionPayload(messages)
             input = payload.input
+            input = `${await resolveTranscriptHeader()}\n\n${input}`
 
             logger.diagnostic('extraction.input.prepared', {
                 sourceOriginMessages: payload.sourceOriginMessages.length,
-                inputLength: payload.input.length
+                inputLength: input.length
             })
 
             const presetPrompt = await resolvePresetPrompt()
             trace = await this.extractor.extractWithTrace(
-                payload.input,
+                input,
                 {
                     conversationId: scope.conversationId,
                     presetId: scope.presetId,

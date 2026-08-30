@@ -364,6 +364,16 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 scope,
                 completedRound.round,
                 {
+                    resolveTranscriptHeader: async () => {
+                        if (payload.session.isDirect) {
+                            return `以下是你与${completedRound.round.messages[0].speakerLabel}（用户 ID：${scope.speakerId}）的聊天记录：`
+                        }
+
+                        const guild = await payload.session.bot.getGuild(
+                            scope.guildId!
+                        )
+                        return `以下是你在「${guild.name}」（群聊 ID：${scope.guildId}）中的聊天记录：`
+                    },
                     resolvePresetPrompt: async () =>
                         await renderCharacterPresetPrompt(ctx, payload.preset, {
                             session: payload.session

@@ -408,6 +408,16 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 scope,
                 completedRound,
                 {
+                    resolveTranscriptHeader: async () => {
+                        if (session.isDirect) {
+                            return `以下是你与${sourceTranscript.message.speakerLabel}（用户 ID：${scope.speakerId}）的聊天记录：`
+                        }
+
+                        const guild = await session.bot.getGuild(
+                            scope.guildId!
+                        )
+                        return `以下是你在「${guild.name}」（群聊 ID：${scope.guildId}）中的聊天记录：`
+                    },
                     resolvePresetPrompt: async () =>
                         await renderChatLunaPresetPrompt(
                             ctx,
