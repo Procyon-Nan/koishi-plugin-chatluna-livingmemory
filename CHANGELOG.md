@@ -1,9 +1,13 @@
 # CHANGELOG
 
+## 2026-08-31 version:0.18.4
+
+- pending: 更新插件版本至 0.18.4。
+- e23efcf: 新增基于 GitHub Actions 与 npm Trusted Publisher 的自动构建发布流程。
+
 ## 2026-08-31 version:0.18.3
 
-- pending: 新增基于 GitHub Actions 与 npm Trusted Publisher 的自动构建发布流程。
-- pending: 更新插件版本至 0.18.3。
+- c49405e: 更新插件版本至 0.18.3。
 - 42fcd0a: 参照当前项目架构重写开发规范，补充模块职责、设计约束与验证要求。
 - 6ddf1ad: 移除没有生产调用者的归档记忆向量检索能力，并修正 Dream 归档行为说明。
 
