@@ -3,33 +3,25 @@ import { toCharacterMemoryPresetId } from '../service/memory/helpers'
 
 export function apply(ctx: Context) {
     ctx.command(
-        'livingmemory <integration:string> <preset:string> <operation:string> <filter:string> <value:text>',
+        'livingmemory <preset:string> <operation:string> <filter:string> <value:text>',
         '管理指定预设下的记忆与用户画像',
         { authority: 3 }
-    ).action(
-        async (
-            { session },
-            integration,
-            preset,
-            operation,
-            filter,
-            value
-        ) => {
+    )
+        .option('character', '-c 使用 Character 预设')
+        .action(async ({ session, options }, preset, operation, filter, value) => {
             const commandSession = session!
             if (
-                (integration !== 'chatluna' && integration !== 'character') ||
                 operation !== 'delete' ||
                 (filter !== 'text' &&
                     filter !== 'user' &&
                     filter !== 'profile')
             ) {
-                return '命令格式：livingmemory <chatluna|character> <预设名> delete <text|user|profile> <匹配值>'
+                return '命令格式：livingmemory [-c] <预设名> delete <text|user|profile> <匹配值>'
             }
 
-            const presetId =
-                integration === 'character'
-                    ? toCharacterMemoryPresetId(preset)
-                    : preset
+            const presetId = options?.character
+                ? toCharacterMemoryPresetId(preset)
+                : preset
 
             if (filter === 'profile') {
                 const profileId =
@@ -90,6 +82,5 @@ export function apply(ctx: Context) {
                     memoryIds
                 )
             return `已归档 ${result.archived} 条记忆`
-        }
-    )
+        })
 }
