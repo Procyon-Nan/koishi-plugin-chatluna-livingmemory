@@ -179,6 +179,18 @@ export class LivingMemoryEntryRepository
         return entries.map(normalizeEntryRecord)
     }
 
+    async listArchivedEntriesBefore(presetId: string, updatedBefore: Date) {
+        return await this.ctx.database.get(
+            'living_memory_entry',
+            {
+                presetId,
+                status: 'archived',
+                updatedAt: { $lte: updatedBefore }
+            },
+            ['id', 'importance', 'updatedAt']
+        )
+    }
+
     async listDreamEntriesByPreset(
         presetId: string
     ): Promise<DreamMemoryEntryRecord[]> {

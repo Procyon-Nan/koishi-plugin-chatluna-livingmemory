@@ -54,7 +54,8 @@ export const defineLivingMemoryTables = (ctx: Context) => {
             autoInc: false,
             primary: 'id',
             indexes: [
-                ['presetId', 'status', 'isConsolidated', 'createdAt', 'id']
+                ['presetId', 'status', 'isConsolidated', 'createdAt', 'id'],
+                ['presetId', 'status', 'updatedAt']
             ]
         }
     )

@@ -92,6 +92,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     private readonly vectorIndex: LivingMemoryVectorIndexService
     private readonly dreamWorker: LivingMemoryDreamWorkerClient
     private readonly mutations: LivingMemoryMutationService
+    private archivedMemoryCleanup = Promise.resolve()
 
     constructor(
         public readonly ctx: Context,
@@ -219,6 +220,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
                     error
                 )
             })
+            this.queueExpiredArchivedMemoryCleanup('scheduled')
         }, Time.day)
     }
 
@@ -276,9 +278,12 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             }
             throw error
         }
+        this.queueExpiredArchivedMemoryCleanup('startup')
+        await this.archivedMemoryCleanup
     }
 
     protected async stop() {
+        await this.archivedMemoryCleanup
         this.vectorIndex.beginStop()
         try {
             await this.dreamWorker.stop()
@@ -627,5 +632,48 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
 
     async cleanupStaleJobs(maxAge: number = Time.week) {
         await this.repository.removeExpiredJobs(new Date(Date.now() - maxAge))
+    }
+
+    private queueExpiredArchivedMemoryCleanup(
+        trigger: 'startup' | 'scheduled'
+    ) {
+        this.archivedMemoryCleanup = this.archivedMemoryCleanup.then(() =>
+            this.cleanupExpiredArchivedMemories(trigger)
+        )
+    }
+
+    private async cleanupExpiredArchivedMemories(
+        trigger: 'startup' | 'scheduled'
+    ) {
+        try {
+            let deleted = 0
+            const now = new Date()
+            for (const presetId of await this.repository.listEntryPresetIds()) {
+                const result =
+                    await this.mutations.deleteExpiredArchivedMemories(
+                        presetId,
+                        now
+                    )
+                deleted += result.deleted
+            }
+            if (deleted > 0) {
+                this.memoryLogger.info('maintenance.archive-cleanup.completed', {
+                    workflow: 'maintenance',
+                    operation: 'cleanup-expired-archived-memories',
+                    trigger,
+                    deleted
+                })
+            }
+        } catch (error) {
+            this.memoryLogger.warn(
+                'maintenance.cleanup.failed',
+                {
+                    workflow: 'maintenance',
+                    operation: 'cleanup-expired-archived-memories',
+                    trigger
+                },
+                error
+            )
+        }
     }
 }

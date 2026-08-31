@@ -19,7 +19,9 @@ import type {
     DreamMemoryMutation,
     ExtractionRepository
 } from '../../contracts/workflows'
+import { Time } from 'koishi'
 import type { LivingMemoryRepository } from '../persistence/repository'
+import { DEFAULT_MEMORY_IMPORTANCE } from '../memory/entry_fields'
 import { PresetTaskQueue } from '../shared/preset_task_queue'
 import { summarizeError } from '../shared/utils'
 import { LivingMemoryFactsCommittedError } from '../vector_index/errors'
@@ -30,6 +32,7 @@ type MemoryFactRepository = Pick<
     | 'appendMemories'
     | 'getEntryById'
     | 'getEntriesByPresetAndIds'
+    | 'listArchivedEntriesBefore'
     | 'createMemory'
     | 'updateMemory'
     | 'updateMemoryForDream'
@@ -45,6 +48,8 @@ type MemoryFactRepository = Pick<
 
 // 批量删除的单批上限：约束 SQL $in 规模与索引同步批次大小。
 export const MEMORY_DELETE_BATCH_SIZE = 500
+const ARCHIVED_MEMORY_GRACE_PERIOD = 7 * Time.day
+const ARCHIVED_MEMORY_DECAY_PERIOD = 180 * Time.day
 
 export class LivingMemoryMutationService
     implements ExtractionRepository, DreamMemoryRepository
@@ -300,6 +305,47 @@ export class LivingMemoryMutationService
                     deletes: validIds.map((id) => ({ id, presetId }))
                 })
                 deleted += validIds.length
+            }
+            return { deleted }
+        })
+    }
+
+    async deleteExpiredArchivedMemories(presetId: string, now: Date) {
+        return this.runPresetMutation(presetId, async () => {
+            const records = await this.repository.listArchivedEntriesBefore(
+                presetId,
+                new Date(now.getTime() - ARCHIVED_MEMORY_GRACE_PERIOD)
+            )
+            const expiredIds = records
+                .filter((record) => {
+                    const importance =
+                        record.importance ?? DEFAULT_MEMORY_IMPORTANCE
+                    return (
+                        record.updatedAt.getTime() +
+                            ARCHIVED_MEMORY_GRACE_PERIOD +
+                            importance * ARCHIVED_MEMORY_DECAY_PERIOD <=
+                        now.getTime()
+                    )
+                })
+                .map((record) => record.id)
+
+            let deleted = 0
+            for (
+                let start = 0;
+                start < expiredIds.length;
+                start += MEMORY_DELETE_BATCH_SIZE
+            ) {
+                const ids = expiredIds.slice(
+                    start,
+                    start + MEMORY_DELETE_BATCH_SIZE
+                )
+                await this.repository.deleteEntries(presetId, ids)
+                await this.applyCommittedMutation({
+                    presetId,
+                    upserts: [],
+                    deletes: ids.map((id) => ({ id, presetId }))
+                })
+                deleted += ids.length
             }
             return { deleted }
         })

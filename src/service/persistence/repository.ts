@@ -112,6 +112,10 @@ export class LivingMemoryRepository
         return this.entries.listEntriesByPreset(presetId)
     }
 
+    listArchivedEntriesBefore(presetId: string, updatedBefore: Date) {
+        return this.entries.listArchivedEntriesBefore(presetId, updatedBefore)
+    }
+
     listDreamEntriesByPreset(
         presetId: string
     ): Promise<DreamMemoryEntryRecord[]> {
