@@ -258,6 +258,10 @@ export interface MemoryMutationInput {
     importance?: number | null
 }
 
+export type MemoryUpdatePatch = Partial<MemoryMutationInput> & {
+    speakerKeys?: string[]
+}
+
 export interface LivingMemoryPresetExportEntry {
     id: string
     type: MemoryEntryType

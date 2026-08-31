@@ -9,6 +9,7 @@ import type {
     MemoryJobRecord,
     MemoryJobStatus,
     MemoryMutationInput,
+    MemoryUpdatePatch,
     MemorySnapshotWithResolvedItems,
     PresetSpeakerRecord,
     UserProfileRecord
@@ -69,6 +70,7 @@ export interface CreateMemoryRequest {
     userId?: string
     channelId?: string
     memory: MemoryMutationInput
+    speakerKeys?: string[]
 }
 
 export interface LivingMemoryConsoleEvents {
@@ -88,7 +90,7 @@ export interface LivingMemoryConsoleEvents {
     ) => Promise<MemoryEntryRecord>
     'living-memory/updateMemory': (
         memoryId: string,
-        patch: Partial<MemoryMutationInput>
+        patch: MemoryUpdatePatch
     ) => Promise<{ success: true }>
     'living-memory/deleteMemory': (
         memoryId: string

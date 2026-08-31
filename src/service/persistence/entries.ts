@@ -4,7 +4,8 @@ import type {
     MemoryEntryRecord,
     MemoryMutationInput,
     MemoryScope,
-    MemorySourceMessage
+    MemorySourceMessage,
+    MemoryUpdatePatch
 } from '../../contracts/memory'
 import type {
     LegacyMemoryEmbeddingRecord,
@@ -444,7 +445,7 @@ export class LivingMemoryEntryRepository
             : []
     }
 
-    async updateMemory(id: string, patch: Partial<MemoryMutationInput>) {
+    async updateMemory(id: string, patch: MemoryUpdatePatch) {
         const current = await this.getEntryById(id)
         if (current == null) {
             return null

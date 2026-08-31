@@ -13,6 +13,7 @@ import type {
     MemoryListFilter,
     MemoryListResult,
     MemoryMutationInput,
+    MemoryUpdatePatch,
     MemoryServiceStatus,
     MemorySnapshotRecord,
     PageResult,
@@ -86,18 +87,20 @@ export async function getMemory(
 
 export async function createMemory(
     presetId: string,
-    memory: MemoryMutationInput
+    memory: MemoryMutationInput,
+    speakerKeys: string[]
 ): Promise<MemoryEntryRecord> {
     return await sendLivingMemory('living-memory/createMemory', {
         conversationId: `webui:${presetId}`,
         presetId,
-        memory
+        memory,
+        speakerKeys
     })
 }
 
 export async function updateMemory(
     memoryId: string,
-    patch: Partial<MemoryMutationInput>
+    patch: MemoryUpdatePatch
 ): Promise<{ success: true }> {
     return await sendLivingMemory('living-memory/updateMemory', memoryId, patch)
 }

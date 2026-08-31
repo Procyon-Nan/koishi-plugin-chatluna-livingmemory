@@ -12,6 +12,7 @@ import type {
     MemorySnapshotItem,
     MemorySnapshotRecord,
     MemorySourceMessage,
+    MemoryUpdatePatch,
     PresetSpeakerInput,
     PresetSpeakerRecord,
     UserProfileInput,
@@ -210,7 +211,7 @@ export class LivingMemoryRepository
         return this.entries.createMemory(scope, input, speakerKeys)
     }
 
-    updateMemory(id: string, patch: Partial<MemoryMutationInput>) {
+    updateMemory(id: string, patch: MemoryUpdatePatch) {
         return this.entries.updateMemory(id, patch)
     }
 

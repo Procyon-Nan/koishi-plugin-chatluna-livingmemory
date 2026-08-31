@@ -5,7 +5,7 @@ import type {} from '@koishijs/plugin-console'
 import type {
     LivingMemoryPresetExport,
     LivingMemorySearchInput,
-    MemoryMutationInput
+    MemoryUpdatePatch
 } from '../contracts/memory'
 import type {
     CreateMemoryRequest,
@@ -86,13 +86,14 @@ export function apply(ctx: Context, _config?: LivingMemoryConfig) {
                 payload.userId,
                 payload.channelId
             ),
-            payload.memory
+            payload.memory,
+            payload.speakerKeys
         )
     })
 
     ctx.console.addListener(
         'living-memory/updateMemory',
-        ok(async (memoryId: string, patch: Partial<MemoryMutationInput>) => {
+        ok(async (memoryId: string, patch: MemoryUpdatePatch) => {
             await service(ctx).updateMemory(memoryId, patch)
         })
     )

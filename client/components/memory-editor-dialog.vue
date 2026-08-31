@@ -44,6 +44,28 @@
                 />
             </el-form-item>
 
+            <el-form-item class="memory-editor-speakers" label="关联用户">
+                <el-select
+                    v-model="form.speakerKeys"
+                    multiple
+                    collapse-tags
+                    collapse-tags-tooltip
+                    :max-collapse-tags="3"
+                    filterable
+                    clearable
+                    :loading="speakersPending"
+                    placeholder="选择关联用户，可留空"
+                    :popper-class="selectPopperClass"
+                >
+                    <el-option
+                        v-for="speaker in speakers"
+                        :key="speaker.speakerKey"
+                        :label="speaker.speakerLabel"
+                        :value="speaker.speakerKey"
+                    />
+                </el-select>
+            </el-form-item>
+
             <div class="memory-editor-grid memory-editor-core-grid">
                 <el-form-item label="类型">
                     <el-select
@@ -133,7 +155,8 @@ import {
     type MemoryEntryRecord,
     type MemoryEntryStatus,
     type MemoryEntryType,
-    type MemoryMutationInput
+    type MemoryMutationInput,
+    type PresetSpeakerRecord
 } from '../types'
 import { formatTime, getMemoryTypeLabel } from '../utils/display'
 
@@ -151,6 +174,8 @@ const emit = defineEmits<{
 
 const memoryTypes = memoryEntryTypes
 const submitPending = ref(false)
+const speakersPending = ref(false)
+const speakers = ref<PresetSpeakerRecord[]>([])
 const contentInput = ref<{ focus: () => void } | null>(null)
 const form = reactive({
     type: 'fact' as MemoryEntryType,
@@ -159,7 +184,8 @@ const form = reactive({
     keywords: [] as string[],
     summary: '',
     sentiment: '',
-    importance: null as number | null
+    importance: null as number | null,
+    speakerKeys: [] as string[]
 })
 
 const visible = computed({
@@ -195,6 +221,20 @@ const hydrateForm = () => {
     form.summary = props.memory?.summary ?? ''
     form.sentiment = props.memory?.sentiment ?? ''
     form.importance = props.memory?.importance ?? null
+    form.speakerKeys = [...(props.memory?.speakerKeys ?? [])]
+}
+
+const loadSpeakers = async () => {
+    speakers.value = []
+    speakersPending.value = true
+    try {
+        speakers.value = await api.listPresetSpeakers(props.presetId)
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        ElMessage.error(`获取关联用户失败：${message}`)
+    } finally {
+        speakersPending.value = false
+    }
 }
 
 const normalizeImportanceInput = (value: number | null): number | null => {
@@ -230,10 +270,13 @@ const submit = async () => {
     submitPending.value = true
     try {
         if (props.memory == null) {
-            await api.createMemory(presetId, mutation)
+            await api.createMemory(presetId, mutation, form.speakerKeys)
             ElMessage.success('记忆已创建')
         } else {
-            await api.updateMemory(props.memory.id, mutation)
+            await api.updateMemory(props.memory.id, {
+                ...mutation,
+                speakerKeys: form.speakerKeys
+            })
             ElMessage.success('记忆已更新')
         }
 
@@ -252,6 +295,7 @@ watch(
     ([isVisible]) => {
         if (isVisible) {
             hydrateForm()
+            void loadSpeakers()
         }
     },
     { immediate: true }

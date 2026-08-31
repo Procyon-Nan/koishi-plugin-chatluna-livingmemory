@@ -224,6 +224,10 @@ export interface MemoryMutationInput {
     importance?: number | null
 }
 
+export type MemoryUpdatePatch = Partial<MemoryMutationInput> & {
+    speakerKeys?: string[]
+}
+
 export interface PageResult<T> {
     items: T[]
     page: number
@@ -349,10 +353,11 @@ export interface LivingMemoryClientEvents {
         userId?: string
         channelId?: string
         memory: MemoryMutationInput
+        speakerKeys?: string[]
     }) => MemoryEntryRecord
     'living-memory/updateMemory': (
         memoryId: string,
-        patch: Partial<MemoryMutationInput>
+        patch: MemoryUpdatePatch
     ) => { success: true }
     'living-memory/deleteMemory': (memoryId: string) => { success: true }
     'living-memory/deleteMemories': (

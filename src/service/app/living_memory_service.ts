@@ -32,7 +32,8 @@ import type {
     LivingMemorySearchInput,
     LivingMemoryTranscriptMessage,
     MemoryMutationInput,
-    MemoryScope
+    MemoryScope,
+    MemoryUpdatePatch
 } from '../../contracts/memory'
 import type {
     JobListQuery,
@@ -537,7 +538,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         return memory
     }
 
-    async updateMemory(memoryId: string, patch: Partial<MemoryMutationInput>) {
+    async updateMemory(memoryId: string, patch: MemoryUpdatePatch) {
         await this.mutations.updateMemory(memoryId, patch)
     }
 

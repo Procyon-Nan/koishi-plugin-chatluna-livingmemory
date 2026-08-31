@@ -3,6 +3,7 @@ import type {
     LivingMemoryPresetImportResult,
     MemoryEntryRecord,
     MemoryMutationInput,
+    MemoryUpdatePatch,
     MemoryScope,
     MemorySourceMessage
 } from '../../contracts/memory'
@@ -111,7 +112,7 @@ export class LivingMemoryMutationService
         })
     }
 
-    async updateMemory(id: string, patch: Partial<MemoryMutationInput>) {
+    async updateMemory(id: string, patch: MemoryUpdatePatch) {
         const current = await this.repository.getEntryById(id)
         if (current === undefined) {
             return null
