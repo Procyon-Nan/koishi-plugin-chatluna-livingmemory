@@ -474,6 +474,19 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             .map((memory) => memory.id)
     }
 
+    async findUserProfileIdByUser(
+        presetId: string,
+        platform: string,
+        userId: string
+    ) {
+        const speakerKey = createUserProfileSpeakerKey(platform, userId)
+        return (
+            await this.repository.listUserProfilesBySpeakerKeys(presetId, [
+                speakerKey
+            ])
+        )[0]?.id
+    }
+
     async archiveActiveMemories(presetId: string, ids: string[]) {
         try {
             return await this.mutations.archiveActiveMemories(presetId, ids)

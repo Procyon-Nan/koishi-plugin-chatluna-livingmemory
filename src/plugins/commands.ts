@@ -4,7 +4,7 @@ import { toCharacterMemoryPresetId } from '../service/memory/helpers'
 export function apply(ctx: Context) {
     ctx.command(
         'livingmemory <integration:string> <preset:string> <operation:string> <filter:string> <value:text>',
-        '归档指定预设下满足条件的活跃记忆',
+        '管理指定预设下的记忆与用户画像',
         { authority: 3 }
     ).action(
         async (
@@ -19,15 +19,44 @@ export function apply(ctx: Context) {
             if (
                 (integration !== 'chatluna' && integration !== 'character') ||
                 operation !== 'delete' ||
-                (filter !== 'text' && filter !== 'user')
+                (filter !== 'text' &&
+                    filter !== 'user' &&
+                    filter !== 'profile')
             ) {
-                return '命令格式：livingmemory <chatluna|character> <预设名> delete <text|user> <匹配值>'
+                return '命令格式：livingmemory <chatluna|character> <预设名> delete <text|user|profile> <匹配值>'
             }
 
             const presetId =
                 integration === 'character'
                     ? toCharacterMemoryPresetId(preset)
                     : preset
+
+            if (filter === 'profile') {
+                const profileId =
+                    await ctx.chatluna_living_memory.findUserProfileIdByUser(
+                        presetId,
+                        commandSession.platform,
+                        value
+                    )
+                if (profileId == null) {
+                    return '未查询到该用户画像'
+                }
+
+                await commandSession.send(
+                    '查询到该用户的画像，输入“ok”以确认删除'
+                )
+                const confirmation = await commandSession.prompt(
+                    (reply) => reply.content,
+                    { timeout: 60_000 }
+                )
+                if (confirmation !== 'ok') {
+                    return '操作取消'
+                }
+
+                await ctx.chatluna_living_memory.deleteUserProfile(profileId)
+                return '已删除用户画像'
+            }
+
             const memoryIds =
                 filter === 'text'
                     ? await ctx.chatluna_living_memory.findActiveMemoryIdsByText(
