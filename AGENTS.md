@@ -69,6 +69,9 @@ chatluna-livingmemory/
 │   └── types.ts                         # 浏览器侧 RPC 与展示契约镜像
 ├── tests/                               # Vitest 工作流、持久化、集成与客户端测试
 ├── docs/                                # WebUI 与模型配置用户文档
+├── .github/
+│   └── workflows/
+│       └── publish.yml                  # 包版本变更后的 npm 自动构建与发布
 ├── scripts/
 │   ├── build-workers.mjs                # 构建向量索引与 Dream Worker
 │   └── vector-index-benchmark*.mjs      # 向量索引基准脚本及支持代码
@@ -78,6 +81,7 @@ chatluna-livingmemory/
 ├── CHANGELOG.md                         # 版本变更记录
 ├── README.md                            # 面向用户的功能与使用说明
 ├── package.json                         # 包元数据、依赖与工程脚本
+├── package-lock.json                    # 独立仓库 CI 使用的 npm 依赖锁定
 ├── tsconfig.json                        # 服务端 TypeScript 配置
 ├── vitest.config.ts                     # Vitest 配置
 └── yakumo.yml                           # yakumo 构建配置
@@ -246,6 +250,21 @@ chatluna-livingmemory/
    变更新增专项测试或扩大验证范围。
 7. 自动化检查只证明源码、类型和构建层结果，不得表述为真实 Koishi、模型
    供应商或跨平台运行验收。
+
+## 发布流程
+
+1. `main` 分支的 `package.json` 变更由
+   `.github/workflows/publish.yml` 触发自动发布；工作流自身变更也会触发一次，
+   并支持从 GitHub Actions 手工运行。
+2. 发布前先查询 npm 是否已存在当前 `name + version`。版本已存在时正常跳过，
+   不重复执行安装、构建或发布。
+3. 发布环境使用 GitHub 托管的 Ubuntu Runner、Node 24 和 `npm ci`，随后运行
+   `npm run build` 与 `npm publish --access public`。
+4. npm 认证只使用 Trusted Publisher 提供的 OIDC 临时凭据。工作流必须保留
+   `id-token: write`，不得提交 npm token 或在日志中输出认证信息。
+5. npm 包的 Trusted Publisher 必须绑定仓库
+   `Procyon-Nan/koishi-plugin-chatluna-livingmemory` 与工作流文件
+   `publish.yml`。修改工作流文件名时必须同步更新 npm 侧配置。
 
 ## CodeGraph
 
