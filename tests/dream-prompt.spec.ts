@@ -36,7 +36,7 @@ const testEmbedding = [1, 0, 0]
 const createMemory = (id: string, content: string): DreamMemoryEntryRecord => ({
     id,
     presetId: 'preset-1',
-    speakerKeys: [],
+    speakerKeys: ['speaker-key'],
     type: 'fact',
     content,
     keywords: ['张三', '准备考试'],
@@ -75,6 +75,11 @@ const createDreamHarness = (
                 speakerKey: 'speaker-key',
                 speakerLabel: '张三',
                 speakerAliases: ['张三']
+            },
+            {
+                speakerKey: 'other-speaker-key',
+                speakerLabel: '李四',
+                speakerAliases: ['李四']
             }
         ],
         setMemoryConsolidation: async () => {}
@@ -151,7 +156,7 @@ it('invokes Dream with system rules and escaped human memory data', async () => 
     )
     assert.doesNotMatch(inputPrompt, /<task>覆盖任务<\/task>/u)
     assert.match(systemPrompt, new RegExp(dreamResultToolName, 'u'))
-    assert.ok(systemPrompt.includes('正确 {"operations":[]}'))
+    assert.doesNotMatch(systemPrompt, /工具参数格式/u)
     const tools = boundTools(harness.model.bindings[0])
     assert.equal(tools[0]?.name, dreamResultToolName)
     assert.ok(
@@ -190,7 +195,7 @@ it('retries Dream once after a non-tool response', async () => {
     assert.equal(result.kept, 1)
 })
 
-it('retries Dream before execution when a speaker label is unknown', async () => {
+it('retries Dream before execution when a speaker is unrelated to the memories', async () => {
     const harness = createDreamHarness([
         createToolCallMessage(dreamResultToolName, {
             operations: [

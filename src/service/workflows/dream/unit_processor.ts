@@ -70,10 +70,27 @@ export class DreamUnitProcessor {
                             operation.action === 'update' ||
                             operation.action === 'merge'
                         ) {
-                            resolveSpeakerKeysByLabels(
+                            const speakerKeys = resolveSpeakerKeysByLabels(
                                 operation.memory.speakerLabels,
                                 input.speakers
                             )
+                            const memoryIds = new Set(
+                                getDreamOperationMemoryIds(operation)
+                            )
+                            const allowedSpeakerKeys = new Set(
+                                input.cluster.entries
+                                    .filter((entry) => memoryIds.has(entry.id))
+                                    .flatMap((entry) => entry.speakerKeys)
+                            )
+                            if (
+                                speakerKeys.some(
+                                    (key) => !allowedSpeakerKeys.has(key)
+                                )
+                            ) {
+                                throw new Error(
+                                    'speakerLabels 包含当前操作涉及记忆之外的用户'
+                                )
+                            }
                         }
                     }
                 },

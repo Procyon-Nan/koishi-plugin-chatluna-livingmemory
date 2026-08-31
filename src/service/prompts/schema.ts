@@ -10,7 +10,7 @@ import { MAX_MEMORY_KEYWORDS } from '../memory/entry_fields'
  * 模型输出契约的单一真相源。
  *
  * Zod Schema 同时定义结果工具的参数形状、字段说明和运行时校验。
- * Dream 与用户画像的格式示例由目标业务类型约束，再由 JSON.stringify 生成，
+ * 用户画像的格式示例由目标业务类型约束，再由 JSON.stringify 生成，
  * 从而保证：
  *   1. 字段重命名、删除或阶段操作变化会在编译期报错，强制同步；
  *   2. 提示词展示的格式与代码理解的形状不会各自漂移。
@@ -80,18 +80,6 @@ export const extractionResultSchema =
     z.object({
         memories: z.array(generatedMemorySchema)
     })
-const createDreamMemoryExample = (
-    importance: number
-): GeneratedMemoryOutput => ({
-    type: 'fact',
-    content: '...',
-    summary: '...',
-    keywords: ['...'],
-    speakerLabels: [],
-    sentiment: '...',
-    importance
-})
-
 const memoryIdSchema = requiredText('来自当前 memory_entries 的记忆 id')
 const memoryIdsSchema = z.array(memoryIdSchema).min(1)
 const operationReasonSchema = requiredText('执行该操作的简短原因')
@@ -137,45 +125,21 @@ export const dreamResultSchema = z.object({
 type RequiredSchemaOutput<Schema extends z.ZodTypeAny> = Required<
     z.output<Schema>
 >
-type DreamGeneratedMemory = GeneratedMemoryOutput
-
 export type DreamOperation =
     | RequiredSchemaOutput<typeof dreamKeepOperationSchema>
     | (Omit<
         RequiredSchemaOutput<typeof dreamUpdateOperationSchema>,
         'memory'
     > & {
-        memory: DreamGeneratedMemory
+        memory: GeneratedMemoryOutput
     })
     | (Omit<
         RequiredSchemaOutput<typeof dreamMergeOperationSchema>,
         'memory'
     > & {
-        memory: DreamGeneratedMemory
+        memory: GeneratedMemoryOutput
     })
     | RequiredSchemaOutput<typeof dreamArchiveOperationSchema>
-
-const dreamOperations = [
-    { action: 'keep', memoryIds: ['...'], reason: '...' },
-    {
-        action: 'update',
-        memoryId: '...',
-        memory: createDreamMemoryExample(0.5),
-        reason: '...'
-    },
-    {
-        action: 'merge',
-        targetMemoryId: '...',
-        sourceMemoryIds: ['...'],
-        memory: createDreamMemoryExample(0.8),
-        reason: '...'
-    },
-    {
-        action: 'archive',
-        memoryId: '...',
-        reason: '...'
-    }
-] satisfies z.input<typeof dreamResultSchema>['operations']
 
 // 画像 Schema 会在调用期绑定 speakerLabel；System 示例保持静态占位符，
 // 避免把用户提供的标签插入静态规则消息。
@@ -220,11 +184,6 @@ export const createUserProfileResultSchema = (options: {
             .describe('当前 speaker 的用户画像；无需更新时为空数组')
     })
 }
-
-/** Dream 展示的结果工具参数格式串。 */
-export const DREAM_OUTPUT_FORMAT = JSON.stringify({
-    operations: dreamOperations
-})
 
 /** 用户画像结果工具参数中展示的 JSON 格式串。 */
 export const USER_PROFILE_OUTPUT_FORMAT = JSON.stringify({

@@ -9,7 +9,6 @@ import { buildAgenticRecallPrompt } from '../src/service/prompts/agentic_recall'
 import { buildDreamPrompt } from '../src/service/prompts/dream'
 import { buildExtractionPrompt } from '../src/service/prompts/extraction'
 import {
-    DREAM_OUTPUT_FORMAT,
     createUserProfileResultSchema,
     dreamResultSchema,
     dreamResultToolName,
@@ -52,13 +51,6 @@ const presetSpeakers = [
         updatedAt: memoryEntry.updatedAt
     }
 ]
-
-it('keeps structured-output examples aligned with their runtime schemas', () => {
-    assert.equal(
-        dreamResultSchema.safeParse(JSON.parse(DREAM_OUTPUT_FORMAT)).success,
-        true
-    )
-})
 
 it('enforces Dream actions and complete generated metadata', () => {
     const reason = '测试原因'
