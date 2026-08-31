@@ -1,9 +1,6 @@
 import { z } from 'zod'
 import { memoryEntryTypes } from '../../contracts/memory'
-import type {
-    MemoryMutationInput,
-    UserProfileInput
-} from '../../contracts/memory'
+import type { UserProfileInput } from '../../contracts/memory'
 import { MAX_MEMORY_KEYWORDS } from '../memory/entry_fields'
 
 /**
@@ -15,12 +12,6 @@ import { MAX_MEMORY_KEYWORDS } from '../memory/entry_fields'
  *   1. 字段重命名、删除或阶段操作变化会在编译期报错，强制同步；
  *   2. 提示词展示的格式与代码理解的形状不会各自漂移。
  */
-
-type GeneratedMemoryOutput = {
-    [K in Exclude<keyof MemoryMutationInput, 'status'>]-?: NonNullable<
-        MemoryMutationInput[K]
-    >
-} & { speakerLabels: string[] }
 
 const requiredText = (description: string) =>
     z.string().trim().min(1).describe(description)
@@ -76,70 +67,62 @@ export const generatedMemorySchema = z
         '在记忆中描述某个用户时，必须使用当前输入材料中的具体用户昵称。避免用“用户”、“对方”等泛化词汇或用户 ID 替代，也不要把多个不同用户混成同一个人。'
     )
 
-export const extractionResultSchema =
-    z.object({
-        memories: z.array(generatedMemorySchema)
-    })
-const memoryIdSchema = requiredText('来自当前 memory_entries 的记忆 id')
-const memoryIdsSchema = z.array(memoryIdSchema).min(1)
-const operationReasonSchema = requiredText('执行该操作的简短原因')
-
-const dreamKeepOperationSchema = z.object({
-    action: z.literal('keep'),
-    memoryIds: memoryIdsSchema,
-    reason: operationReasonSchema
-})
-const dreamUpdateOperationSchema = z.object({
-    action: z.literal('update'),
-    memoryId: memoryIdSchema,
-    memory: generatedMemorySchema,
-    reason: operationReasonSchema
-})
-const dreamMergeOperationSchema = z.object({
-    action: z.literal('merge'),
-    targetMemoryId: memoryIdSchema,
-    sourceMemoryIds: memoryIdsSchema,
-    memory: generatedMemorySchema,
-    reason: operationReasonSchema
-})
-const dreamArchiveOperationSchema = z.object({
-    action: z.literal('archive'),
-    memoryId: memoryIdSchema,
-    reason: operationReasonSchema
+export const extractionResultSchema = z.object({
+    memories: z.array(generatedMemorySchema)
 })
 export const dreamResultToolName = 'living_memory_dream_result'
-export const dreamResultToolDescription =
-    '提交当前 Dream 记忆簇的整理操作。没有可执行操作时提交空 operations 数组。'
 
 export const dreamResultSchema = z.object({
     operations: z.array(
         z.discriminatedUnion('action', [
-            dreamKeepOperationSchema,
-            dreamUpdateOperationSchema,
-            dreamMergeOperationSchema,
-            dreamArchiveOperationSchema
+            z.object({
+                action: z.literal('keep'),
+                memoryIds: z
+                    .array(
+                        requiredText(
+                            '来自当前 memory_entries 的记忆 id'
+                        )
+                    )
+                    .min(1),
+                reason: requiredText('执行该操作的简短原因')
+            }),
+            z.object({
+                action: z.literal('update'),
+                memoryId: requiredText(
+                    '来自当前 memory_entries 的记忆 id'
+                ),
+                memory: generatedMemorySchema,
+                reason: requiredText('执行该操作的简短原因')
+            }),
+            z.object({
+                action: z.literal('merge'),
+                targetMemoryId: requiredText(
+                    '来自当前 memory_entries 的记忆 id'
+                ),
+                sourceMemoryIds: z
+                    .array(
+                        requiredText(
+                            '来自当前 memory_entries 的记忆 id'
+                        )
+                    )
+                    .min(1),
+                memory: generatedMemorySchema,
+                reason: requiredText('执行该操作的简短原因')
+            }),
+            z.object({
+                action: z.literal('archive'),
+                memoryId: requiredText(
+                    '来自当前 memory_entries 的记忆 id'
+                ),
+                reason: requiredText('执行该操作的简短原因')
+            })
         ])
     )
 })
 
-type RequiredSchemaOutput<Schema extends z.ZodTypeAny> = Required<
-    z.output<Schema>
->
-export type DreamOperation =
-    | RequiredSchemaOutput<typeof dreamKeepOperationSchema>
-    | (Omit<
-        RequiredSchemaOutput<typeof dreamUpdateOperationSchema>,
-        'memory'
-    > & {
-        memory: GeneratedMemoryOutput
-    })
-    | (Omit<
-        RequiredSchemaOutput<typeof dreamMergeOperationSchema>,
-        'memory'
-    > & {
-        memory: GeneratedMemoryOutput
-    })
-    | RequiredSchemaOutput<typeof dreamArchiveOperationSchema>
+export type DreamOperation = z.output<
+    typeof dreamResultSchema
+>['operations'][number]
 
 // 画像 Schema 会在调用期绑定 speakerLabel；System 示例保持静态占位符，
 // 避免把用户提供的标签插入静态规则消息。

@@ -26,7 +26,6 @@ export {
     extractionResultSchema,
     createUserProfileResultSchema,
     dreamResultSchema,
-    dreamResultToolDescription,
     dreamResultToolName,
     extractionResultToolDescription,
     extractionResultToolName,

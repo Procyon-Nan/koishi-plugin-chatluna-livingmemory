@@ -4,7 +4,6 @@ import type { DreamMemoryRepository } from '../../../contracts/workflows'
 import {
     buildDreamPrompt,
     dreamResultSchema,
-    dreamResultToolDescription,
     dreamResultToolName
 } from '../../prompts'
 import { summarizeError } from '../../shared/utils'
@@ -61,7 +60,8 @@ export class DreamUnitProcessor {
                 model: input.model,
                 prompt,
                 toolName: dreamResultToolName,
-                toolDescription: dreamResultToolDescription,
+                toolDescription:
+                    '提交当前 Dream 记忆簇的整理操作。没有可执行操作时提交空 operations 数组。',
                 stringifiedArrayField: 'operations',
                 schema: dreamResultSchema,
                 validateResult: ({ operations }) => {
