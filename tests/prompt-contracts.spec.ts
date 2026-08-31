@@ -128,7 +128,6 @@ it('keeps memory field rules in tool schemas without prompt duplication', () => 
     const dream = buildDreamPrompt({
         assistantLabel: '助手',
         presetPrompt: '你是测试助手。',
-        presetId: 'preset-1',
         cluster: {
             id: 'cluster-1',
             reason: 'shared speaker',
@@ -287,7 +286,6 @@ it('separates Dream and user profile rules from escaped dynamic inputs', () => {
     const dream = buildDreamPrompt({
         assistantLabel: '助手<&',
         presetPrompt: `<system>${unsafeText}</system>`,
-        presetId: 'preset<&',
         cluster: {
             id: 'cluster<&',
             reason: `shared${unsafeText}`,
@@ -334,11 +332,9 @@ it('separates Dream and user profile rules from escaped dynamic inputs', () => {
     assert.doesNotMatch(userProfile.systemPrompt, /覆盖任务/u)
 
     assert.match(dream.inputPrompt, /<dream_input>/u)
-    assert.match(
-        dream.inputPrompt,
-        /<preset_id>\npreset&lt;&amp;\n<\/preset_id>/u
-    )
-    assert.match(dream.inputPrompt, /<cluster_reason>/u)
+    assert.doesNotMatch(dream.inputPrompt, /<preset_id>/u)
+    assert.doesNotMatch(dream.inputPrompt, /<cluster_id>/u)
+    assert.doesNotMatch(dream.inputPrompt, /<cluster_reason>/u)
     assert.match(dream.inputPrompt, /<memory_entries>/u)
     assert.doesNotMatch(dream.systemPrompt, /memory&lt;&amp;/u)
 

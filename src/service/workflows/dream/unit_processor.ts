@@ -52,7 +52,6 @@ export class DreamUnitProcessor {
         const prompt = buildDreamPrompt({
             assistantLabel: input.assistantLabel,
             presetPrompt: input.presetPrompt,
-            presetId: input.presetId,
             cluster: input.cluster,
             speakers: input.speakers
         })

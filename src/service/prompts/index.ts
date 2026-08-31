@@ -14,7 +14,7 @@ export type {
     AgenticRecallPromptMessages
 } from './agentic_recall'
 export { buildDreamPrompt } from './dream'
-export type { DreamPromptInput, DreamPromptMessages } from './dream'
+export type { DreamPromptInput } from './dream'
 export { buildUserProfilePrompt } from './user_profile'
 export type {
     UserProfilePromptGroup,
