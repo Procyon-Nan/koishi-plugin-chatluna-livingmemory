@@ -88,7 +88,6 @@ it('uses the vector index for hybrid search and restores hit order', async () =>
         presetId: 'preset-a',
         searchTexts: ['first query', 'second query'],
         keywords: ['memory-b'],
-        status: 'active',
         memoryTypes: ['fact'],
         maxCandidates: 30,
         minSimilarity: 0.4

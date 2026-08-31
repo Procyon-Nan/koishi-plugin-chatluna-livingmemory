@@ -36,7 +36,6 @@ export class LivingMemoryRetriever {
         const hits = await this.vectorSearch.searchSemantic({
             presetId,
             searchTexts: [input],
-            status: 'active',
             memoryTypes: null,
             maxCandidates: candidateCount
         })

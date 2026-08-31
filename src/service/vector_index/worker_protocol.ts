@@ -55,7 +55,6 @@ export interface VectorIndexMutation {
 
 export interface VectorIndexFilter {
     presetId: string
-    status: MemoryEntryStatus
     types: MemoryEntryType[] | null
     isConsolidated: boolean | null
 }

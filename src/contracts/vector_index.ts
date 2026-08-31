@@ -99,7 +99,6 @@ export interface MemoryHybridSearchHit extends MemoryVectorSearchHit {
 export interface MemorySemanticSearchInput {
     presetId: string
     searchTexts: string[]
-    status: MemoryEntryStatus
     memoryTypes: MemoryEntryType[] | null
     maxCandidates: number
 }

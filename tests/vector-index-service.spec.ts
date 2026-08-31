@@ -305,7 +305,6 @@ it('builds the index once and reuses its manifest after restart', async () => {
         const semanticHits = await first.searchSemantic({
             presetId: 'preset-a',
             searchTexts: ['content memory-a'],
-            status: 'active',
             memoryTypes: ['fact'],
             maxCandidates: 2
         })
@@ -317,7 +316,6 @@ it('builds the index once and reuses its manifest after restart', async () => {
             presetId: 'preset-a',
             searchTexts: ['content memory-a'],
             keywords: ['memory-b'],
-            status: 'active',
             memoryTypes: null,
             maxCandidates: 2,
             minSimilarity: 0

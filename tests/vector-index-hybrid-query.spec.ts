@@ -19,7 +19,6 @@ const createQuery = (
     options: Partial<VectorIndexHybridQuery> = {}
 ): VectorIndexHybridQuery => ({
     presetId: 'preset-a',
-    status: 'active',
     types: null,
     isConsolidated: null,
     limit: 2,

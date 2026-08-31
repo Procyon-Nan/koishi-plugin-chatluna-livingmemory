@@ -58,7 +58,6 @@ export class LivingMemoryEmbeddingSearchEngine implements LivingMemorySearchProv
             presetId,
             searchTexts: input.searchTexts,
             keywords: input.searchKeywords ?? [],
-            status: 'active',
             memoryTypes: resolveMemoryTypes(input),
             maxCandidates: this.config.memorySearchToolMaxResults,
             minSimilarity: this.config.memorySearchMinSimilarity

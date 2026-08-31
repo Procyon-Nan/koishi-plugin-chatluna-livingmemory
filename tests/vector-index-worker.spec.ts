@@ -88,14 +88,12 @@ const query = (
     vector: number[],
     options: {
         presetId?: string
-        status?: MemoryEntryStatus
         types?: MemoryEntryType[] | null
         isConsolidated?: boolean | null
         limit?: number
     } = {}
 ) => ({
     presetId: options.presetId ?? 'preset-a',
-    status: options.status ?? 'active',
     types: options.types ?? null,
     isConsolidated: options.isConsolidated ?? null,
     limit: options.limit ?? 30,
@@ -256,14 +254,6 @@ it('runs typed vector index worker mutations and filtered searches', async () =>
         activeAfterArchive.map((hit) => hit.memoryId),
         ['memory-b']
     )
-    const archivedAfterArchive = await client.queryKnn(
-        query([1, 0, 0], { status: 'archived' })
-    )
-    assert.deepEqual(
-        archivedAfterArchive.map((hit) => hit.memoryId),
-        ['memory-a', 'memory-c']
-    )
-
     await client.applyMutation({
         presetId: 'preset-a',
         upserts: [

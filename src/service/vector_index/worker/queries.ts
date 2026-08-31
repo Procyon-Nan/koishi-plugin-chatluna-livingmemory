@@ -30,7 +30,7 @@ interface KeywordRow {
 
 const appendFilters = (query: VectorIndexKnnQuery) => {
     const conditions = ['preset_id = $1', 'status = $2']
-    const parameters: unknown[] = [query.presetId, query.status]
+    const parameters: unknown[] = [query.presetId, 'active']
     if (query.types !== null) {
         conditions.push(`type = ANY($${parameters.length + 1}::text[])`)
         parameters.push(query.types)

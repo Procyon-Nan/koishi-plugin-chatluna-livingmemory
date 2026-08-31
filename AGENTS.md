@@ -57,9 +57,10 @@ Repository-specific guidance for `koishi-plugin-chatluna-livingmemory`.
 - Structured result tools are invocation-scoped internal tools. Keep prompt
   output rules, Zod schemas, validation, retry behavior, and workflow failure
   handling aligned.
-- Dream processes active and archived stages separately. Preserve stage action
-  allowlists, touched-memory guards, complete generated metadata, and atomic
-  merge persistence through `applyDreamMerge()`.
+- Dream only processes active memories. Preserve action allowlists,
+  touched-memory guards, complete generated metadata, and atomic merge
+  persistence through `applyDreamMerge()`; archive and merge actions may move
+  processed active memories into the archived history.
 - User profile generation and rendering must honor
   `enableUserProfileInjection`; speaker discovery remains independent from that
   gate.
