@@ -52,7 +52,7 @@ interface StructuredOutputOptions<Schema extends z.AnyZodObject> {
     toolDescription: string
     schema: Schema
     validateResult?: (value: z.output<Schema>) => void
-    stringifiedArrayField: Extract<keyof z.input<Schema>, string>
+    stringifiedArrayField?: Extract<keyof z.input<Schema>, string>
     context: StructuredOutputContext
     logging?: {
         logger: LivingMemoryLogger
@@ -145,7 +145,7 @@ const validateDecision = <Schema extends z.AnyZodObject>(
     decision: StructuredOutputDecision,
     toolName: string,
     schema: Schema,
-    stringifiedArrayField: string
+    stringifiedArrayField?: string
 ): StructuredOutputValidation<z.output<Schema>> => {
     const actions = toActions(decision)
     if (actions.length === 0) {
@@ -173,10 +173,11 @@ const validateDecision = <Schema extends z.AnyZodObject>(
         }
     }
 
-    const normalized = normalizeStringifiedArrayField(
-        parseToolInput(action.toolInput),
-        stringifiedArrayField
-    )
+    const toolInput = parseToolInput(action.toolInput)
+    const normalized =
+        stringifiedArrayField == null
+            ? { value: toolInput, normalizedField: null }
+            : normalizeStringifiedArrayField(toolInput, stringifiedArrayField)
     const parsed = schema.safeParse(normalized.value)
     if (!parsed.success) {
         return {
@@ -197,12 +198,16 @@ const createRetryEntries = (
     decision: StructuredOutputDecision | null,
     toolName: string,
     error: string,
-    stringifiedArrayField: string
+    stringifiedArrayField?: string
 ): ScratchpadEntry[] => {
     const correction = [
         `结构化结果无效：${error}。`,
         `必须且只能调用 ${toolName} 一次，并完整修正工具参数。`,
-        `${stringifiedArrayField} 必须直接传 JSON 数组：正确 {"${stringifiedArrayField}":[]}；错误 {"${stringifiedArrayField}":"[]"}。`,
+        ...(stringifiedArrayField == null
+            ? []
+            : [
+                  `${stringifiedArrayField} 必须直接传 JSON 数组：正确 {"${stringifiedArrayField}":[]}；错误 {"${stringifiedArrayField}":"[]"}。`
+              ]),
         '不要在普通文本中输出结果。'
     ].join(' ')
     const actions = decision == null ? [] : toActions(decision)

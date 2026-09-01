@@ -13,15 +13,13 @@ import type {
 import { resolveAssistantLabel, resolvePresetPrompt } from './memory/helpers'
 import {
     buildUserProfilePrompt,
-    createUserProfileResultSchema,
-    userProfileResultToolDescription,
+    userProfileMaxLength,
+    userProfileResultSchema,
     userProfileResultToolName
 } from './prompts'
 import { summarizeError } from './shared/utils'
 import { invokeStructuredOutput } from './workflows/structured_output'
 import type { LivingMemoryLogger } from './logging/logger'
-
-export const userProfileMaxLength = 220
 
 export const normalizeManualUserProfileContent = (content: string) => {
     const normalized = content.trim()
@@ -207,8 +205,7 @@ export class LivingMemoryUserProfileService {
         const prompt = buildUserProfilePrompt({
             assistantLabel,
             presetPrompt,
-            group,
-            maxProfileLength: userProfileMaxLength
+            group
         })
         let structuredResult
         try {
@@ -216,13 +213,9 @@ export class LivingMemoryUserProfileService {
                 model,
                 prompt,
                 toolName: userProfileResultToolName,
-                toolDescription: userProfileResultToolDescription,
-                schema: createUserProfileResultSchema({
-                    speakerLabel: group.speakerLabel,
-                    allowedSourceMemoryIds:
-                        this.getProfileFallbackSourceMemoryIds(group)
-                }),
-                stringifiedArrayField: 'profiles',
+                toolDescription:
+                    '提交当前用户画像的更新结果。无需更新时将 content 设为 null。',
+                schema: userProfileResultSchema,
                 context: {
                     presetId,
                     conversationId: [
@@ -264,19 +257,19 @@ export class LivingMemoryUserProfileService {
             return 'failed'
         }
 
-        const parsed = structuredResult.value.profiles[0]
-        if (parsed === undefined) {
+        const profileContent = structuredResult.value.content
+        if (profileContent === null) {
             this.logProfileSkipped(runLogger, {
                 presetId,
                 speaker: group.speakerLabel,
-                reason: 'empty-profiles'
+                reason: 'empty-content'
             })
             return 'empty'
         }
 
         const content = this.normalizeProfileContent(
             group.speakerLabel,
-            parsed.content
+            profileContent
         )
         if (content.length === 0) {
             this.logProfileSkipped(runLogger, {
@@ -291,7 +284,10 @@ export class LivingMemoryUserProfileService {
             speakerKey: group.speakerKey,
             speakerLabel: group.speakerLabel,
             content,
-            sourceMemoryIds: unique(parsed.sourceMemoryIds)
+            sourceMemoryIds: unique([
+                ...(group.existingProfile?.sourceMemoryIds ?? []),
+                ...group.entries.map((entry) => entry.id)
+            ])
         })
         return 'generated'
     }
@@ -336,7 +332,7 @@ export class LivingMemoryUserProfileService {
             })
             .map(
                 (profile) =>
-                    `${profile.speakerLabel}的个人画像：\n${profile.content}`
+                    `${profile.speakerLabel}的人物画像：\n${profile.content}`
             )
             .join('\n\n')
     }
@@ -407,15 +403,8 @@ export class LivingMemoryUserProfileService {
         )
     }
 
-    private getProfileFallbackSourceMemoryIds(group: UserProfileGroup) {
-        return [
-            ...(group.existingProfile?.sourceMemoryIds ?? []),
-            ...group.entries.map((entry) => entry.id)
-        ]
-    }
-
     private stripGeneratedTitle(speakerLabel: string, content: string) {
-        const title = `${speakerLabel}的个人画像`
+        const title = `${speakerLabel}的人物画像`
         if (content === title) {
             return ''
         }

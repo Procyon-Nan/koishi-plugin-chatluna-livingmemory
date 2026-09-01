@@ -1,16 +1,13 @@
 import { z } from 'zod'
 import { memoryEntryTypes } from '../../contracts/memory'
-import type { UserProfileInput } from '../../contracts/memory'
 import { MAX_MEMORY_KEYWORDS } from '../memory/entry_fields'
+
+export const userProfileMaxLength = 300
 
 /**
  * 模型输出契约的单一真相源。
  *
  * Zod Schema 同时定义结果工具的参数形状、字段说明和运行时校验。
- * 用户画像的格式示例由目标业务类型约束，再由 JSON.stringify 生成，
- * 从而保证：
- *   1. 字段重命名、删除或阶段操作变化会在编译期报错，强制同步；
- *   2. 提示词展示的格式与代码理解的形状不会各自漂移。
  */
 
 const requiredText = (description: string) =>
@@ -124,51 +121,15 @@ export type DreamOperation = z.output<
     typeof dreamResultSchema
 >['operations'][number]
 
-// 画像 Schema 会在调用期绑定 speakerLabel；System 示例保持静态占位符，
-// 避免把用户提供的标签插入静态规则消息。
-const userProfileExample = {
-    speakerLabel: '<speaker_label>',
-    content: '...',
-    sourceMemoryIds: ['...']
-} satisfies Pick<
-    UserProfileInput,
-    'speakerLabel' | 'content' | 'sourceMemoryIds'
->
-
 export const userProfileResultToolName = 'living_memory_user_profile_result'
-export const userProfileResultToolDescription =
-    '提交当前用户画像的更新结果。无需更新时提交空 profiles 数组。'
 
-export const createUserProfileResultSchema = (options: {
-    speakerLabel: string
-    allowedSourceMemoryIds: readonly string[]
-}) => {
-    const allowedSourceMemoryIds = new Set(options.allowedSourceMemoryIds)
-    const sourceMemoryIdSchema = requiredText('画像引用的来源记忆 id').refine(
-        (id) => allowedSourceMemoryIds.has(id),
-        '来源记忆 id 不在当前画像允许的集合中'
-    )
-
-    return z.object({
-        profiles: z
-            .array(
-                z.object({
-                    speakerLabel: z
-                        .literal(options.speakerLabel)
-                        .describe('必须严格等于当前画像 speaker 的完整文本'),
-                    content: requiredText('完整的第一人称用户画像内容'),
-                    sourceMemoryIds: z
-                        .array(sourceMemoryIdSchema)
-                        .min(1)
-                        .describe('当前画像引用的来源记忆 id')
-                })
-            )
-            .max(1)
-            .describe('当前 speaker 的用户画像；无需更新时为空数组')
-    })
-}
-
-/** 用户画像结果工具参数中展示的 JSON 格式串。 */
-export const USER_PROFILE_OUTPUT_FORMAT = JSON.stringify({
-    profiles: [userProfileExample]
+export const userProfileResultSchema = z.object({
+    content: z
+        .string()
+        .trim()
+        .min(1)
+        .nullable()
+        .describe(
+            `人物画像的正文内容，长度不超过 ${userProfileMaxLength} 个字符；无需更新时为 null`
+        )
 })

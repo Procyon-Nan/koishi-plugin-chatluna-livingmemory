@@ -121,10 +121,10 @@ const createHarness = (
 
 it('validates manual user profile content with the generated profile limit', () => {
     assert.equal(normalizeManualUserProfileContent('  手工画像  '), '手工画像')
-    assert.throws(() => normalizeManualUserProfileContent('  '), /1-220/u)
+    assert.throws(() => normalizeManualUserProfileContent('  '), /1-300/u)
     assert.throws(
-        () => normalizeManualUserProfileContent('甲'.repeat(221)),
-        /1-220/u
+        () => normalizeManualUserProfileContent('甲'.repeat(301)),
+        /1-300/u
     )
 })
 
@@ -135,9 +135,7 @@ it('matches Dream memories through a stable user identity old nickname', async (
     })
     const { result } = await harness.run([
         createProfileCall({
-            speakerLabel: '新昵称',
-            content: '我知道该用户正在准备考试。',
-            sourceMemoryIds: ['memory-1']
+            content: '我知道该用户正在准备考试。'
         })
     ])
 
@@ -146,16 +144,14 @@ it('matches Dream memories through a stable user identity old nickname', async (
 })
 
 const baseProfileOutput = {
-    speakerLabel: '张三',
     content: '我知道张三正在准备考试。'
 }
 
-const createProfileCall = (profile: unknown, id = 'result-1') => {
-    return createToolCallMessage(
-        userProfileResultToolName,
-        { profiles: [profile] },
-        id
-    )
+const createProfileCall = (
+    profile: Record<string, unknown>,
+    id = 'result-1'
+) => {
+    return createToolCallMessage(userProfileResultToolName, profile, id)
 }
 
 const readPromptMessages = (
@@ -174,82 +170,37 @@ const readPromptMessages = (
     }
 }
 
-const invalidSourceMemoryIds = [
-    ['missing', undefined],
-    ['non-array', 'memory-1'],
-    ['empty', []],
-    ['invalid-type', ['memory-1', 1]],
-    ['outside-allowed-set', ['memory-2']]
-] as const
-
-for (const [name, sourceMemoryIds] of invalidSourceMemoryIds) {
-    it(`rejects a user profile with ${name} sourceMemoryIds`, async () => {
-        const harness = createHarness()
-        const output =
-            sourceMemoryIds === undefined
-                ? { ...baseProfileOutput }
-                : { ...baseProfileOutput, sourceMemoryIds }
-
-        const { result } = await harness.run([
-            createProfileCall(output),
-            createProfileCall(output, 'result-2')
-        ])
-
-        assert.equal(result.generated, 0)
-        assert.equal(harness.savedProfiles.length, 0)
-        assert.match(result.detail, /failed=1/u)
-    })
-}
-
-it('rejects a non-object user profile without sourceMemoryIds', async () => {
-    const harness = createHarness()
-
-    const { result } = await harness.run([
-        createProfileCall(null),
-        createProfileCall(null, 'result-2')
-    ])
-
-    assert.equal(result.generated, 0)
-    assert.equal(harness.savedProfiles.length, 0)
-    assert.match(result.detail, /failed=1/u)
-})
-
 it('passes user profile rules and memory data through tool-calling messages', async () => {
     const harness = createHarness()
 
-    const { model } = await harness.run([
-        createProfileCall({
-            ...baseProfileOutput,
-            sourceMemoryIds: ['memory-1']
-        })
-    ])
+    const { model } = await harness.run([createProfileCall(baseProfileOutput)])
 
     assert.equal(model.invocations.length, 1)
     const prompt = readPromptMessages(model)
     assert.match(prompt.systemPrompt, /<output_contract>/u)
-    assert.match(prompt.systemPrompt, /<perspective_contract>/u)
+    assert.match(prompt.systemPrompt, /<update_rules>/u)
+    assert.match(prompt.systemPrompt, /<preset_context>/u)
     assert.match(
         prompt.systemPrompt,
-        /你是preset-1，你正在以本人关系视角维护一名用户的长期画像/u
+        /你是preset-1，你正在维护张三的人物画像/u
     )
-    assert.match(prompt.systemPrompt, /“我”始终指preset-1/u)
-    assert.match(prompt.systemPrompt, /有依据的主观印象/u)
+    assert.match(
+        prompt.systemPrompt,
+        /张三的关系视角，使用第三人称/u
+    )
     assert.doesNotMatch(prompt.systemPrompt, /张三正在准备考试/u)
     assert.match(prompt.inputPrompt, /<user_profile_input>/u)
     assert.doesNotMatch(prompt.inputPrompt, /<assistant_label>/u)
-    assert.doesNotMatch(prompt.inputPrompt, /<preset_context>\n无/u)
+    assert.doesNotMatch(prompt.inputPrompt, /<speaker_label>/u)
+    assert.doesNotMatch(prompt.inputPrompt, /<preset_context>/u)
+    assert.doesNotMatch(prompt.inputPrompt, /<existing_source_memory_ids>/u)
     assert.match(prompt.inputPrompt, /<memory_entries>/u)
     assert.match(prompt.inputPrompt, /张三正在准备考试/u)
 })
 
 it('keeps user profile payloads out of ordinary debug logs', async () => {
     const harness = createHarness()
-    await harness.run([
-        createProfileCall({
-            ...baseProfileOutput,
-            sourceMemoryIds: ['memory-1']
-        })
-    ])
+    await harness.run([createProfileCall(baseProfileOutput)])
 
     assert.ok(
         harness.debugMessages.every(
@@ -317,12 +268,7 @@ it('uses the Character preset name as the user profile assistant label', async (
         presetId: `角色甲${characterPresetSuffix}`
     })
 
-    const { model } = await harness.run([
-        createProfileCall({
-            ...baseProfileOutput,
-            sourceMemoryIds: ['memory-1']
-        })
-    ])
+    const { model } = await harness.run([createProfileCall(baseProfileOutput)])
 
     const prompt = readPromptMessages(model)
     assert.match(prompt.systemPrompt, /你是角色甲，/u)
@@ -335,100 +281,29 @@ it('keeps truncated user profile content within the declared maximum', async () 
     const { result } = await harness.run([
         createProfileCall({
             ...baseProfileOutput,
-            content: '甲'.repeat(221),
-            sourceMemoryIds: ['memory-1', 'memory-1']
+            content: '甲'.repeat(301)
         })
     ])
 
     assert.equal(result.generated, 1)
     assert.equal(harness.savedProfiles.length, 1)
-    assert.equal(harness.savedProfiles[0]?.content, `${'甲'.repeat(217)}...`)
+    assert.equal(harness.savedProfiles[0]?.content, `${'甲'.repeat(297)}...`)
     assert.equal(
         Array.from(harness.savedProfiles[0]?.content ?? '').length,
-        220
+        300
     )
     assert.deepEqual(harness.savedProfiles[0]?.sourceMemoryIds, ['memory-1'])
-})
-
-it('accepts a stringified profiles array through bounded normalization', async () => {
-    const harness = createHarness()
-    const { model, result } = await harness.run([
-        createToolCallMessage(userProfileResultToolName, {
-            profiles: JSON.stringify([
-                {
-                    ...baseProfileOutput,
-                    sourceMemoryIds: ['memory-1']
-                }
-            ])
-        })
-    ])
-
-    assert.equal(result.generated, 1)
-    assert.equal(model.invocations.length, 1)
 })
 
 it('retries once after a non-tool response', async () => {
     const harness = createHarness()
     const { model, result } = await harness.run([
         new AIMessage('普通文本画像'),
-        createProfileCall(
-            {
-                ...baseProfileOutput,
-                sourceMemoryIds: ['memory-1']
-            },
-            'result-2'
-        )
+        createProfileCall(baseProfileOutput, 'result-2')
     ])
 
     assert.equal(result.generated, 1)
     assert.equal(model.invocations.length, 2)
-})
-
-it('feeds invalid source memory ids back before accepting a correction', async () => {
-    const harness = createHarness()
-    const { model, result } = await harness.run([
-        createProfileCall({
-            ...baseProfileOutput,
-            sourceMemoryIds: ['memory-2']
-        }),
-        createProfileCall(
-            {
-                ...baseProfileOutput,
-                sourceMemoryIds: ['memory-1']
-            },
-            'result-2'
-        )
-    ])
-
-    assert.equal(result.generated, 1)
-    assert.equal(model.invocations.length, 2)
-    const retryMessages = model.invocations[1]?.messages ?? []
-    assert.ok(
-        retryMessages.some((message) =>
-            String(message.content).includes(
-                '来源记忆 id 不在当前画像允许的集合中'
-            )
-        )
-    )
-})
-
-it('rejects a profile for a different speaker after the correction attempt', async () => {
-    const harness = createHarness()
-    const wrongSpeakerProfile = {
-        ...baseProfileOutput,
-        speakerLabel: '李四',
-        sourceMemoryIds: ['memory-1']
-    }
-    const { model, result } = await harness.run([
-        createProfileCall(wrongSpeakerProfile),
-        createProfileCall(wrongSpeakerProfile, 'result-2'),
-        createProfileCall(wrongSpeakerProfile, 'result-3')
-    ])
-
-    assert.equal(result.generated, 0)
-    assert.equal(model.invocations.length, 3)
-    assert.equal(harness.savedProfiles.length, 0)
-    assert.match(result.detail, /failed=1/u)
 })
 
 it('preserves brackets inside profile content', async () => {
@@ -437,8 +312,7 @@ it('preserves brackets inside profile content', async () => {
     const { result } = await harness.run([
         createProfileCall({
             ...baseProfileOutput,
-            content,
-            sourceMemoryIds: ['memory-1']
+            content
         })
     ])
 
@@ -446,10 +320,10 @@ it('preserves brackets inside profile content', async () => {
     assert.equal(harness.savedProfiles[0]?.content, content)
 })
 
-it('treats an empty profiles result as a valid no-op', async () => {
+it('treats null content as a valid no-op', async () => {
     const harness = createHarness()
     const { result } = await harness.run([
-        createToolCallMessage(userProfileResultToolName, { profiles: [] })
+        createToolCallMessage(userProfileResultToolName, { content: null })
     ])
 
     assert.equal(result.generated, 0)

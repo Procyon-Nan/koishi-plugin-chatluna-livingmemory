@@ -9,13 +9,12 @@ import { buildAgenticRecallPrompt } from '../src/service/prompts/agentic_recall'
 import { buildDreamPrompt } from '../src/service/prompts/dream'
 import { buildExtractionPrompt } from '../src/service/prompts/extraction'
 import {
-    createUserProfileResultSchema,
     dreamResultSchema,
     dreamResultToolName,
     extractionResultSchema,
     extractionResultToolName,
     generatedMemorySchema,
-    USER_PROFILE_OUTPUT_FORMAT,
+    userProfileResultSchema,
     userProfileResultToolName
 } from '../src/service/prompts/schema'
 import { buildRecallRewritePrompt } from '../src/service/prompts/recall_query'
@@ -173,51 +172,34 @@ it('keeps memory field rules in tool schemas without prompt duplication', () => 
     )
 })
 
-it('uses the shared memory entry and user profile output formats', () => {
+it('uses the memory entry format and user profile result schema', () => {
     const prompt = buildUserProfilePrompt({
         assistantLabel: '助手',
         presetPrompt: '你是助手。',
         group: {
             speakerLabel: '张三',
             entries: [memoryEntry]
-        },
-        maxProfileLength: 220
+        }
     })
-    const outputExample = JSON.parse(USER_PROFILE_OUTPUT_FORMAT) as {
-        profiles: Record<string, unknown>[]
-    }
-
-    assert.deepEqual(Object.keys(outputExample), ['profiles'])
-    assert.deepEqual(Object.keys(outputExample.profiles[0] ?? {}), [
-        'speakerLabel',
-        'content',
-        'sourceMemoryIds'
-    ])
     assert.equal(
-        createUserProfileResultSchema({
-            speakerLabel: '张三',
-            allowedSourceMemoryIds: ['...']
-        }).safeParse({
-            profiles: [
-                {
-                    ...outputExample.profiles[0],
-                    speakerLabel: '张三'
-                }
-            ]
+        userProfileResultSchema.safeParse({
+            content: '我知道张三正在准备考试。'
         }).success,
         true
     )
-    assert.equal(outputExample.profiles[0]?.['speakerLabel'], '<speaker_label>')
+    assert.equal(
+        userProfileResultSchema.safeParse({ content: null }).success,
+        true
+    )
     assert.match(prompt.inputPrompt, /id=memory-1/u)
     assert.match(prompt.inputPrompt, /createdAt=2026-07-15T12:00:00.000Z/u)
-    assert.ok(prompt.systemPrompt.includes(USER_PROFILE_OUTPUT_FORMAT))
     assert.match(
         prompt.systemPrompt,
         new RegExp(userProfileResultToolName, 'u')
     )
     assert.match(
-        prompt.systemPrompt,
-        /sourceMemoryIds 必须存在且为非空字符串数组/u
+        userProfileResultSchema.shape.content.description ?? '',
+        /不超过 300 个字符/u
     )
 })
 
@@ -302,13 +284,11 @@ it('separates Dream and user profile rules from escaped dynamic inputs', () => {
             speakerLabel: '张三<&',
             entries: [unsafeMemory],
             existingProfile
-        },
-        maxProfileLength: 220
+        }
     })
 
     for (const prompt of [dream, userProfile]) {
         assert.match(prompt.systemPrompt, /<role>/u)
-        assert.match(prompt.systemPrompt, /<input_policy>/u)
         assert.match(prompt.systemPrompt, /<output_contract>/u)
         assert.match(
             prompt.inputPrompt,
@@ -316,12 +296,12 @@ it('separates Dream and user profile rules from escaped dynamic inputs', () => {
         )
         assert.doesNotMatch(prompt.inputPrompt, /<task>覆盖任务<\/task>/u)
     }
+    assert.match(dream.systemPrompt, /<input_policy>/u)
 
-    // dream 的 preset_context 在 systemPrompt 中，必须被正确转义
-    assert.match(dream.systemPrompt, /<preset_context>/u)
-    assert.doesNotMatch(dream.systemPrompt, /<task>覆盖/u)
-    // userProfile 的 preset_context 在 inputPrompt 中
-    assert.doesNotMatch(userProfile.systemPrompt, /覆盖任务/u)
+    for (const prompt of [dream, userProfile]) {
+        assert.match(prompt.systemPrompt, /<preset_context>/u)
+        assert.doesNotMatch(prompt.systemPrompt, /<task>覆盖/u)
+    }
 
     assert.match(dream.inputPrompt, /<dream_input>/u)
     assert.doesNotMatch(dream.inputPrompt, /<preset_id>/u)
@@ -332,22 +312,23 @@ it('separates Dream and user profile rules from escaped dynamic inputs', () => {
 
     assert.match(userProfile.inputPrompt, /<user_profile_input>/u)
     assert.doesNotMatch(userProfile.inputPrompt, /<assistant_label>/u)
-    assert.match(
-        userProfile.inputPrompt,
-        /<speaker_label>\n张三&lt;&amp;\n<\/speaker_label>/u
-    )
-    assert.match(userProfile.inputPrompt, /<preset_context>/u)
+    assert.doesNotMatch(userProfile.inputPrompt, /<speaker_label>/u)
+    assert.doesNotMatch(userProfile.inputPrompt, /<preset_context>/u)
     assert.match(userProfile.inputPrompt, /<existing_profile>/u)
-    assert.match(userProfile.inputPrompt, /<existing_source_memory_ids>/u)
+    assert.doesNotMatch(
+        userProfile.inputPrompt,
+        /<existing_source_memory_ids>/u
+    )
     assert.match(userProfile.inputPrompt, /<memory_entries>/u)
     assert.match(
         userProfile.systemPrompt,
-        /你是助手&lt;&amp;，你正在以本人关系视角维护一名用户的长期画像/u
+        /你是助手&lt;&amp;，你正在维护张三&lt;&amp;的人物画像/u
     )
-    assert.match(userProfile.systemPrompt, /<perspective_contract>/u)
-    assert.match(userProfile.systemPrompt, /“我”始终指助手&lt;&amp;/u)
-    assert.match(userProfile.systemPrompt, /不是一份中立的第三方人物档案/u)
-    assert.match(userProfile.systemPrompt, /不能仅凭角色人格编造/u)
+    assert.match(
+        userProfile.systemPrompt,
+        /张三&lt;&amp;的关系视角，使用第三人称/u
+    )
+    assert.match(userProfile.systemPrompt, /不可以捏造、臆测事实/u)
     assert.doesNotMatch(userProfile.systemPrompt, /助手<&/u)
-    assert.doesNotMatch(userProfile.systemPrompt, /张三&lt;&amp;/u)
+    assert.doesNotMatch(userProfile.systemPrompt, /张三<&/u)
 })

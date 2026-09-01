@@ -16,19 +16,14 @@ export type {
 export { buildDreamPrompt } from './dream'
 export type { DreamPromptInput } from './dream'
 export { buildUserProfilePrompt } from './user_profile'
-export type {
-    UserProfilePromptGroup,
-    UserProfilePromptInput,
-    UserProfilePromptMessages
-} from './user_profile'
+export type { UserProfilePromptInput } from './user_profile'
 export {
-    USER_PROFILE_OUTPUT_FORMAT,
     extractionResultSchema,
-    createUserProfileResultSchema,
     dreamResultSchema,
     dreamResultToolName,
     extractionResultToolDescription,
     extractionResultToolName,
-    userProfileResultToolDescription,
+    userProfileMaxLength,
+    userProfileResultSchema,
     userProfileResultToolName
 } from './schema'
