@@ -2,7 +2,6 @@ import { Context } from 'koishi'
 import type { ChatLunaChatModel } from 'koishi-plugin-chatluna/llm-core/platform/model'
 import type {
     LivingMemoryTranscriptMessage,
-    PresetSpeakerRecord,
     UserProfileRecord
 } from '../contracts/memory'
 import type {
@@ -34,7 +33,9 @@ export const normalizeManualUserProfileContent = (content: string) => {
 
 type LivingMemoryUserProfileConfig = Pick<
     LivingMemoryConfig,
-    'enableUserProfileInjection' | 'userProfileMemoryLimit'
+    | 'enableUserProfileInjection'
+    | 'userProfileMinMemoryCount'
+    | 'userProfileMemoryLimit'
 >
 
 export interface UserProfileGenerationResult {
@@ -112,6 +113,17 @@ export class LivingMemoryUserProfileService {
             }
         }
 
+        const memoryGroups = this.buildGroups(activeEntries)
+        if (memoryGroups.length === 0) {
+            return {
+                generated: 0,
+                skippedReason: 'insufficient-related-memories',
+                detail:
+                    'user profiles skipped: insufficient-related-memories ' +
+                    `minimum=${this.config.userProfileMinMemoryCount}`
+            }
+        }
+
         const speakers = await this.repository.listPresetSpeakers(presetId)
         if (speakers.length === 0) {
             return {
@@ -121,12 +133,29 @@ export class LivingMemoryUserProfileService {
             }
         }
 
-        const groups = this.buildGroups(activeEntries, speakers)
-        if (groups.length === 0) {
+        const speakerByKey = new Map(
+            speakers
+                .filter(
+                    (speaker) =>
+                        speaker.speakerId != null && speaker.platform != null
+                )
+                .map((speaker) => [speaker.speakerKey, speaker] as const)
+        )
+        const profileGroups: UserProfileGroup[] = []
+        for (const group of memoryGroups) {
+            const speaker = speakerByKey.get(group.speakerKey)
+            if (speaker != null) {
+                profileGroups.push({
+                    ...group,
+                    speakerLabel: speaker.speakerLabel
+                })
+            }
+        }
+        if (profileGroups.length === 0) {
             return {
                 generated: 0,
-                skippedReason: 'no-related-memories',
-                detail: `user profiles skipped: no-related-memories speakers=${speakers.length}`
+                skippedReason: 'no-user-speakers',
+                detail: 'user profiles skipped: no-user-speakers'
             }
         }
 
@@ -135,10 +164,9 @@ export class LivingMemoryUserProfileService {
         const existingProfileByKey = new Map(
             existingProfiles.map((profile) => [profile.speakerKey, profile])
         )
-        const profileGroups: UserProfileGroup[] = groups.map((group) => ({
-            ...group,
-            existingProfile: existingProfileByKey.get(group.speakerKey)
-        }))
+        for (const group of profileGroups) {
+            group.existingProfile = existingProfileByKey.get(group.speakerKey)
+        }
         const assistantLabel = resolveAssistantLabel(presetId)
         const presetPrompt = await resolvePresetPrompt(this.ctx, presetId)
         const matchedEntryCount = profileGroups.reduce(
@@ -181,7 +209,7 @@ export class LivingMemoryUserProfileService {
                 `matched=${profileGroups.length}`,
                 `matchedMemories=${matchedEntryCount}`,
                 `selectedMemories=${selectedEntryCount}`,
-                `skippedNoRelated=${speakers.length - profileGroups.length}`,
+                `minimumMemories=${this.config.userProfileMinMemoryCount}`,
                 `empty=${empty}`,
                 `failed=${failed}`
             ].join(' ')
@@ -337,58 +365,54 @@ export class LivingMemoryUserProfileService {
             .join('\n\n')
     }
 
-    private buildGroups(
-        activeEntries: DreamMemoryEntryRecord[],
-        speakers: PresetSpeakerRecord[]
-    ): UserProfileGroup[] {
-        return speakers
-            .filter(
-                (speaker) =>
-                    speaker.speakerId != null && speaker.platform != null
-            )
-            .map((speaker) => {
-                const entries = this.selectEntriesForSpeaker(
-                    activeEntries,
-                    speaker.speakerKey
-                )
+    private buildGroups(activeEntries: DreamMemoryEntryRecord[]) {
+        const entriesBySpeakerKey = new Map<
+            string,
+            DreamMemoryEntryRecord[]
+        >()
 
-                return {
-                    speakerKey: speaker.speakerKey,
-                    speakerLabel: speaker.speakerLabel,
-                    entries: entries.slice(
-                        0,
-                        this.config.userProfileMemoryLimit
-                    ),
-                    matchedEntryCount: entries.length
+        for (const entry of activeEntries) {
+            for (const speakerKey of entry.speakerKeys) {
+                const entries = entriesBySpeakerKey.get(speakerKey)
+                if (entries == null) {
+                    entriesBySpeakerKey.set(speakerKey, [entry])
+                } else {
+                    entries.push(entry)
                 }
-            })
-            .filter((group) => group.entries.length > 0)
+            }
+        }
+
+        return Array.from(entriesBySpeakerKey)
+            .filter(
+                ([, entries]) =>
+                    entries.length >=
+                    this.config.userProfileMinMemoryCount
+            )
+            .map(([speakerKey, entries]) => ({
+                speakerKey,
+                entries: entries
+                    .sort((left, right) => {
+                        const importanceDelta =
+                            (right.importance ?? 0.5) -
+                            (left.importance ?? 0.5)
+                        if (importanceDelta !== 0) {
+                            return importanceDelta
+                        }
+
+                        return +right.updatedAt - +left.updatedAt
+                    })
+                    .slice(0, this.config.userProfileMemoryLimit),
+                matchedEntryCount: entries.length
+            }))
             .sort((left, right) => {
-                if (right.entries.length !== left.entries.length) {
-                    return right.entries.length - left.entries.length
+                if (right.matchedEntryCount !== left.matchedEntryCount) {
+                    return right.matchedEntryCount - left.matchedEntryCount
                 }
 
                 return (
                     this.latestTimestamp(right.entries) -
                     this.latestTimestamp(left.entries)
                 )
-            })
-    }
-
-    private selectEntriesForSpeaker(
-        entries: DreamMemoryEntryRecord[],
-        speakerKey: string
-    ) {
-        return entries
-            .filter((entry) => entry.speakerKeys.includes(speakerKey))
-            .sort((left, right) => {
-                const importanceDelta =
-                    (right.importance ?? 0.5) - (left.importance ?? 0.5)
-                if (importanceDelta !== 0) {
-                    return importanceDelta
-                }
-
-                return +right.updatedAt - +left.updatedAt
             })
     }
 

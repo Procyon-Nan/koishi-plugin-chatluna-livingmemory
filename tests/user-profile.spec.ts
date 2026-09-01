@@ -39,6 +39,7 @@ const createHarness = (
         presetId?: string
         speakerLabel?: string
         speakerAliases?: string[]
+        userProfileMinMemoryCount?: number
     } = {}
 ) => {
     const savedProfiles: UserProfileInput[] = []
@@ -87,6 +88,8 @@ const createHarness = (
         ctx,
         {
             enableUserProfileInjection: true,
+            userProfileMinMemoryCount:
+                options.userProfileMinMemoryCount ?? 1,
             userProfileMemoryLimit: 20
         },
         repository,

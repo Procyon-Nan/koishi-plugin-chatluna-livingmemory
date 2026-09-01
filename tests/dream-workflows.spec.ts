@@ -211,6 +211,7 @@ const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
         {
             mainModel: 'dream-model',
             enableUserProfileInjection,
+            userProfileMinMemoryCount: 1,
             userProfileMemoryLimit: 20
         },
         repository as unknown as DreamRepository,
@@ -293,6 +294,7 @@ it('marks a single-memory manual Dream as consolidated', async () => {
         {
             mainModel: 'dream-model',
             enableUserProfileInjection: false,
+            userProfileMinMemoryCount: 3,
             userProfileMemoryLimit: 20
         },
         repository as unknown as DreamRepository,

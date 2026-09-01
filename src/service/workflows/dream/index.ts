@@ -27,6 +27,7 @@ type LivingMemoryDreamConfig = Pick<
     LivingMemoryConfig,
     | 'mainModel'
     | 'enableUserProfileInjection'
+    | 'userProfileMinMemoryCount'
     | 'userProfileMemoryLimit'
 >
 

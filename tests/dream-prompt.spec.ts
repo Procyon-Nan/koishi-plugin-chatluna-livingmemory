@@ -99,6 +99,7 @@ const createDreamHarness = (
         {
             mainModel: 'test-model',
             enableUserProfileInjection: false,
+            userProfileMinMemoryCount: 3,
             userProfileMemoryLimit: 20
         },
         repository,
