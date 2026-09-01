@@ -14,8 +14,6 @@ const requiredText = (description: string) =>
     z.string().trim().min(1).describe(description)
 
 export const extractionResultToolName = 'living_memory_extraction_result'
-export const extractionResultToolDescription =
-    '提交本次记录的长期记忆。没有可记录的记忆时提交空 memories 数组。'
 
 export const generatedMemorySchema = z
     .object({

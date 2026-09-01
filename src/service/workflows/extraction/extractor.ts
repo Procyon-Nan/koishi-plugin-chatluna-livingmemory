@@ -4,7 +4,6 @@ import { isModelConfigured } from '../../shared/utils'
 import {
     buildExtractionPrompt,
     extractionResultSchema,
-    extractionResultToolDescription,
     extractionResultToolName
 } from '../../prompts'
 import type { PromptMessages } from '../../prompts/prompt_format'
@@ -79,7 +78,8 @@ export class LivingMemoryExtractor {
             model: model.value,
             prompt,
             toolName: extractionResultToolName,
-            toolDescription: extractionResultToolDescription,
+            toolDescription:
+                '提交本次记录的长期记忆。没有可记录的记忆时提交空 memories 数组。',
             schema: extractionResultSchema,
             validateResult: ({ memories }) => {
                 for (const memory of memories) {

@@ -21,7 +21,6 @@ export {
     extractionResultSchema,
     dreamResultSchema,
     dreamResultToolName,
-    extractionResultToolDescription,
     extractionResultToolName,
     userProfileMaxLength,
     userProfileResultSchema,
