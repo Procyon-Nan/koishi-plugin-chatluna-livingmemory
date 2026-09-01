@@ -12,6 +12,7 @@ const createConfig = (
     subModel: '',
     enableAutoDream: false,
     autoDreamMemoryGrowthThreshold: 30,
+    userProfileMinMemoryCount: 3,
     userProfileMemoryLimit: 20,
     enableRecallQueryRewrite: false,
     recallHistoryWindowRounds: 3,

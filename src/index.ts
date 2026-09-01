@@ -51,9 +51,6 @@ export const Config: Schema<Config> = Schema.intersect([
                 '开启 chatLuna 主插件的记忆注入（character 插件需通过预设中的 {living_memory} 变量注入）'
             )
             .default(true),
-        enableUserProfileInjection: Schema.boolean()
-            .description('开启用户画像注入。')
-            .default(false),
         extractionRounds: Schema.number()
             .min(1)
             .max(100)
@@ -141,14 +138,25 @@ export const Config: Schema<Config> = Schema.intersect([
             .description(
                 '自动增量 Dream 的 pending 记忆阈值，同时也是单次任务选取的批次大小。'
             )
-            .default(30),
+            .default(30)
+    }).description('Dream 流程配置'),
+    Schema.object({
+        enableUserProfileInjection: Schema.boolean()
+            .description('开启用户画像注入。')
+            .default(false),
+        userProfileMinMemoryCount: Schema.number()
+            .min(1)
+            .max(30)
+            .step(1)
+            .description('生成或更新单个用户画像所需的最少关联活跃记忆条数。')
+            .default(3),
         userProfileMemoryLimit: Schema.number()
             .min(5)
             .max(100)
             .step(1)
             .description('生成单个用户画像时可送入 LLM 的相关记忆条数上限。')
             .default(20)
-    }).description('Dream 流程配置'),
+    }).description('用户画像配置'),
     Schema.object({
         recallStrategy: Schema.union([
             'embedding-rerank',

@@ -16,6 +16,7 @@ const testConfig: LivingMemoryConfig = {
     subModel: 'test-model',
     enableAutoDream: false,
     autoDreamMemoryGrowthThreshold: 10,
+    userProfileMinMemoryCount: 3,
     userProfileMemoryLimit: 5,
     enableRecallQueryRewrite: false,
     recallHistoryWindowRounds: 1,

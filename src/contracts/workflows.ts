@@ -149,6 +149,7 @@ export interface LivingMemoryConfig {
     subModel: string
     enableAutoDream: boolean
     autoDreamMemoryGrowthThreshold: number
+    userProfileMinMemoryCount: number
     userProfileMemoryLimit: number
     enableRecallQueryRewrite: boolean
     recallInterval: number
