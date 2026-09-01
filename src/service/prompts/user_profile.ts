@@ -1,6 +1,5 @@
 import type { UserProfileRecord } from '../../contracts/memory'
 import type { DreamMemoryEntryRecord } from '../../contracts/workflows'
-import { formatMemoryEntryForPrompt } from './memory_entries'
 import {
     escapeXmlText,
     formatXmlBlock,
@@ -67,7 +66,17 @@ export const buildUserProfilePrompt = (
         ...formatXmlBlock(
             'memory_entries',
             input.group.entries
-                .map(formatMemoryEntryForPrompt)
+                .map((entry) =>
+                    [
+                        `id=${entry.id}`,
+                        `type=${entry.type}`,
+                        `createdAt=${entry.createdAt.toISOString()}`,
+                        `updatedAt=${entry.updatedAt.toISOString()}`,
+                        `sentiment=${entry.sentiment ?? ''}`,
+                        'content:',
+                        entry.content
+                    ].join('\n')
+                )
                 .join('\n\n---\n\n')
         ),
         '</user_profile_input>'
