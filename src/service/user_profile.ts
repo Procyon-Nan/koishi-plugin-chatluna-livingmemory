@@ -12,7 +12,6 @@ import type {
 import { resolveAssistantLabel, resolvePresetPrompt } from './memory/helpers'
 import {
     buildUserProfilePrompt,
-    userProfileMaxLength,
     userProfileResultSchema,
     userProfileResultToolName
 } from './prompts'
@@ -22,11 +21,8 @@ import type { LivingMemoryLogger } from './logging/logger'
 
 export const normalizeManualUserProfileContent = (content: string) => {
     const normalized = content.trim()
-    const length = Array.from(normalized).length
-    if (length === 0 || length > userProfileMaxLength) {
-        throw new RangeError(
-            `用户画像正文长度必须为 1-${userProfileMaxLength} 个字符。`
-        )
+    if (normalized.length === 0) {
+        throw new RangeError('用户画像正文不能为空。')
     }
     return normalized
 }
@@ -50,21 +46,6 @@ interface UserProfileGroup {
     entries: DreamMemoryEntryRecord[]
     matchedEntryCount: number
     existingProfile?: UserProfileRecord
-}
-
-const collapseWhitespace = (value: string) => value.replace(/\s+/gu, ' ').trim()
-
-const unique = <T>(items: T[]) => Array.from(new Set(items))
-
-const truncateText = (value: string, maxLength: number) => {
-    const chars = Array.from(value)
-    if (chars.length <= maxLength) {
-        return value
-    }
-
-    const suffix = '...'
-    const contentLength = Math.max(0, maxLength - suffix.length)
-    return `${chars.slice(0, contentLength).join('')}${suffix.slice(0, maxLength)}`
 }
 
 export const collectUserProfileSpeakerKeys = (
@@ -295,10 +276,7 @@ export class LivingMemoryUserProfileService {
             return 'empty'
         }
 
-        const content = this.normalizeProfileContent(
-            group.speakerLabel,
-            profileContent
-        )
+        const content = profileContent.replace(/\s+/gu, ' ').trim()
         if (content.length === 0) {
             this.logProfileSkipped(runLogger, {
                 presetId,
@@ -312,10 +290,7 @@ export class LivingMemoryUserProfileService {
             speakerKey: group.speakerKey,
             speakerLabel: group.speakerLabel,
             content,
-            sourceMemoryIds: unique([
-                ...(group.existingProfile?.sourceMemoryIds ?? []),
-                ...group.entries.map((entry) => entry.id)
-            ])
+            sourceMemoryIds: group.entries.map((entry) => entry.id)
         })
         return 'generated'
     }
@@ -418,28 +393,6 @@ export class LivingMemoryUserProfileService {
 
     private latestTimestamp(entries: DreamMemoryEntryRecord[]) {
         return Math.max(...entries.map((entry) => +entry.updatedAt))
-    }
-
-    private normalizeProfileContent(speakerLabel: string, content: string) {
-        return truncateText(
-            this.stripGeneratedTitle(speakerLabel, collapseWhitespace(content)),
-            userProfileMaxLength
-        )
-    }
-
-    private stripGeneratedTitle(speakerLabel: string, content: string) {
-        const title = `${speakerLabel}的人物画像`
-        if (content === title) {
-            return ''
-        }
-        if (
-            content.startsWith(`${title}:`) ||
-            content.startsWith(`${title}：`)
-        ) {
-            return content.slice(title.length + 1).trim()
-        }
-
-        return content
     }
 
     private toOrderedSpeakerKeys(speakerKeys: string[]) {

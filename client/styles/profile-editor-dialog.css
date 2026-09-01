@@ -81,14 +81,6 @@
     font-weight: 600;
 }
 
-.profile-editor-count {
-    color: var(--lm-text-tertiary);
-    font-family: var(--lm-font-mono);
-    font-size: 11px;
-    transition: color 150ms ease;
-}
-
-.profile-editor-count.is-invalid,
 .profile-editor-error {
     color: var(--lm-danger);
 }

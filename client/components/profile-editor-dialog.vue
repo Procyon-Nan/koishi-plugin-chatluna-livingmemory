@@ -32,12 +32,6 @@
         <div class="profile-editor-body">
             <div class="profile-editor-field-header">
                 <label for="profile-editor-content">画像内容</label>
-                <span
-                    class="profile-editor-count"
-                    :class="{ 'is-invalid': contentLength > maxContentLength }"
-                >
-                    {{ contentLength }} / {{ maxContentLength }}
-                </span>
             </div>
             <el-input
                 id="profile-editor-content"
@@ -81,8 +75,6 @@ import * as api from '../api'
 import type { UserProfileRecord } from '../types'
 import { formatTime } from '../utils/display'
 
-const maxContentLength = 220
-
 const props = defineProps<{
     modelValue: boolean
     profile: UserProfileRecord | null
@@ -104,17 +96,13 @@ const visible = computed({
 })
 
 const normalizedContent = computed(() => content.value.trim())
-const contentLength = computed(() => Array.from(normalizedContent.value).length)
 const originalContent = computed(() => props.profile?.content.trim() ?? '')
 const profileInitial = computed(
     () => Array.from(props.profile?.speakerLabel.trim() || '用')[0]
 )
 const validationMessage = computed(() => {
-    if (contentLength.value === 0) {
+    if (normalizedContent.value.length === 0) {
         return '画像内容不能为空'
-    }
-    if (contentLength.value > maxContentLength) {
-        return `画像内容不能超过 ${maxContentLength} 个字符`
     }
     return ''
 })

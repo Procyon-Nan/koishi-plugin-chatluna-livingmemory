@@ -2,8 +2,6 @@ import { z } from 'zod'
 import { memoryEntryTypes } from '../../contracts/memory'
 import { MAX_MEMORY_KEYWORDS } from '../memory/entry_fields'
 
-export const userProfileMaxLength = 300
-
 /**
  * 模型输出契约的单一真相源。
  *
@@ -128,6 +126,6 @@ export const userProfileResultSchema = z.object({
         .min(1)
         .nullable()
         .describe(
-            `人物画像的正文内容，长度不超过 ${userProfileMaxLength} 个字符；无需更新时为 null`
+            '人物画像的正文内容，长度不超过 300 个字符；无需更新时为 null'
         )
 })

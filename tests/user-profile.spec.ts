@@ -40,6 +40,7 @@ const createHarness = (
         speakerLabel?: string
         speakerAliases?: string[]
         userProfileMinMemoryCount?: number
+        existingSourceMemoryIds?: string[]
     } = {}
 ) => {
     const savedProfiles: UserProfileInput[] = []
@@ -59,7 +60,21 @@ const createHarness = (
             }
         ],
         upsertPresetSpeaker: async () => {},
-        listUserProfilesByPreset: async () => [],
+        listUserProfilesByPreset: async () =>
+            options.existingSourceMemoryIds == null
+                ? []
+                : [
+                      {
+                          id: 'profile-1',
+                          presetId: options.presetId ?? 'preset-1',
+                          speakerKey: '张三',
+                          speakerLabel: options.speakerLabel ?? '张三',
+                          content: '旧画像',
+                          sourceMemoryIds: options.existingSourceMemoryIds,
+                          createdAt: now,
+                          updatedAt: now
+                      }
+                  ],
         listUserProfilesBySpeakerKeys: async () => [],
         replaceUserProfile: async (_presetId, profile) => {
             savedProfiles.push(profile)
@@ -122,12 +137,12 @@ const createHarness = (
     }
 }
 
-it('validates manual user profile content with the generated profile limit', () => {
+it('accepts manual user profile content without a length limit', () => {
     assert.equal(normalizeManualUserProfileContent('  手工画像  '), '手工画像')
-    assert.throws(() => normalizeManualUserProfileContent('  '), /1-300/u)
-    assert.throws(
-        () => normalizeManualUserProfileContent('甲'.repeat(301)),
-        /1-300/u
+    assert.throws(() => normalizeManualUserProfileContent('  '), /不能为空/u)
+    assert.equal(
+        normalizeManualUserProfileContent('甲'.repeat(301)),
+        '甲'.repeat(301)
     )
 })
 
@@ -279,22 +294,21 @@ it('uses the Character preset name as the user profile assistant label', async (
     assert.doesNotMatch(prompt.inputPrompt, /<assistant_label>/u)
 })
 
-it('keeps truncated user profile content within the declared maximum', async () => {
-    const harness = createHarness()
+it('does not rewrite or truncate generated user profile content', async () => {
+    const harness = createHarness({
+        existingSourceMemoryIds: ['memory-old']
+    })
+    const content = `张三的人物画像：${'甲'.repeat(301)}`
     const { result } = await harness.run([
         createProfileCall({
             ...baseProfileOutput,
-            content: '甲'.repeat(301)
+            content
         })
     ])
 
     assert.equal(result.generated, 1)
     assert.equal(harness.savedProfiles.length, 1)
-    assert.equal(harness.savedProfiles[0]?.content, `${'甲'.repeat(297)}...`)
-    assert.equal(
-        Array.from(harness.savedProfiles[0]?.content ?? '').length,
-        300
-    )
+    assert.equal(harness.savedProfiles[0]?.content, content)
     assert.deepEqual(harness.savedProfiles[0]?.sourceMemoryIds, ['memory-1'])
 })
 
