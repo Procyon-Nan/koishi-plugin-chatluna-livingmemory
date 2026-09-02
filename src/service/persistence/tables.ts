@@ -78,6 +78,24 @@ export const defineLivingMemoryTables = (ctx: Context) => {
     )
 
     ctx.model.extend(
+        'living_memory_entry_speaker',
+        {
+            id: 'string(64)',
+            presetId: 'string(255)',
+            speakerKey: 'string(255)',
+            memoryId: 'string(64)'
+        },
+        {
+            autoInc: false,
+            primary: 'id',
+            indexes: [
+                ['presetId', 'speakerKey'],
+                ['presetId', 'memoryId']
+            ]
+        }
+    )
+
+    ctx.model.extend(
         'living_memory_migration',
         {
             id: 'string(64)',

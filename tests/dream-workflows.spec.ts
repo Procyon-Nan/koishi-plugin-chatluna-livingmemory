@@ -4,7 +4,10 @@ import type {
     MemoryEntryRecord,
     PresetSpeakerRecord
 } from '../src/contracts/memory'
-import type { DreamMemoryRepository } from '../src/contracts/workflows'
+import type {
+    DreamMemoryRepository,
+    UserProfileRepository
+} from '../src/contracts/workflows'
 import {
     type DreamRepository,
     LivingMemoryDreamService
@@ -26,6 +29,7 @@ import type {
 } from '../src/service/workflows/dream/types'
 import { dreamResultToolName } from '../src/service/prompts/schema'
 import { LivingMemoryJobTracker } from '../src/service/workflows/job_tracker'
+import { LivingMemoryUserProfileService } from '../src/service/user_profile'
 import {
     createDreamRunResult,
     createCapturedLogger,
@@ -147,6 +151,24 @@ const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
             events.push('list-entries')
             return entries.filter((entry) => entry.status === 'active')
         },
+        getEntriesByPresetAndIds: async (
+            _presetId: string,
+            memoryIds: string[]
+        ) =>
+            entries.filter(
+                (entry) =>
+                    entry.status === 'active' && memoryIds.includes(entry.id)
+            ),
+        listActiveMemorySpeakerKeys: async () => ['张三'],
+        listActiveMemorySpeakerLinks: async () =>
+            entries
+                .filter((entry) => entry.status === 'active')
+                .flatMap((entry) =>
+                    entry.speakerKeys.map((speakerKey) => ({
+                        speakerKey,
+                        memoryId: entry.id
+                    }))
+                ),
         updateMemoryForDream: async () => {},
         setMemoryConsolidation: async (
             _presetId: string,
@@ -206,24 +228,31 @@ const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
             }
         }
     } as unknown as Context
+    const userProfiles = new LivingMemoryUserProfileService(
+        ctx,
+        {
+            enableUserProfileInjection,
+            userProfileMinMemoryCount: 1,
+            userProfileMemoryLimit: 20
+        },
+        repository as unknown as UserProfileRepository,
+        captured.logger
+    )
     const service = new LivingMemoryDreamService(
         ctx,
         {
             mainModel: 'dream-model',
-            enableUserProfileInjection,
-            userProfileMinMemoryCount: 1,
-            userProfileMemoryLimit: 20
+            enableUserProfileInjection
         },
         repository as unknown as DreamRepository,
         repository as unknown as DreamMemoryRepository,
         {
             readVectors: async (_presetId, memoryIds) =>
-                new Map(
-                    memoryIds.map((id) => [id, new Float32Array([1, 0])])
-                )
+                new Map(memoryIds.map((id) => [id, new Float32Array([1, 0])]))
         },
         dreamWorker,
-        captured.logger
+        captured.logger,
+        userProfiles
     )
 
     return { consolidatedIds, debugMessages: captured.info, events, service }
@@ -243,9 +272,7 @@ it('keeps Dream successful when post-Dream user profile generation fails', async
         'create-model',
         'resolve-preset',
         'list-speakers',
-        'list-entries',
         'list-speakers',
-        'list-profiles',
         'resolve-preset'
     ])
     assert.ok(
@@ -293,9 +320,7 @@ it('marks a single-memory manual Dream as consolidated', async () => {
         {} as Context,
         {
             mainModel: 'dream-model',
-            enableUserProfileInjection: false,
-            userProfileMinMemoryCount: 3,
-            userProfileMemoryLimit: 20
+            enableUserProfileInjection: false
         },
         repository as unknown as DreamRepository,
         repository as unknown as DreamMemoryRepository,
@@ -303,13 +328,56 @@ it('marks a single-memory manual Dream as consolidated', async () => {
             readVectors: async () => new Map()
         },
         dreamWorker,
-        logger
+        logger,
+        {} as LivingMemoryUserProfileService
     )
 
     const result = await service.run(scope.presetId)
 
     assert.equal(result.entryCount, 1)
     assert.deepEqual(consolidatedIds, [entry.id])
+})
+
+it('updates the related user profile after a single-memory Dream', async () => {
+    const entry = {
+        ...createMemoryEntry('only-memory'),
+        speakerKeys: ['speaker-1']
+    }
+    const regenerated: string[][] = []
+    const repository = {
+        listDreamEntriesByPreset: async () => [entry],
+        listActiveMemorySpeakerKeys: async () => ['speaker-1'],
+        setMemoryConsolidation: async () => {}
+    } as unknown as DreamRepository
+    const ctx = {
+        chatluna: {
+            createChatModel: async () => ({ value: {} })
+        }
+    } as unknown as Context
+    const userProfiles = {
+        regenerate: async (_presetId: string, speakerKeys: string[]) => {
+            regenerated.push(speakerKeys)
+            return { generated: 1, detail: 'user profiles generated: 1' }
+        }
+    } as unknown as LivingMemoryUserProfileService
+    const service = new LivingMemoryDreamService(
+        ctx,
+        {
+            mainModel: 'dream-model',
+            enableUserProfileInjection: true
+        },
+        repository,
+        repository as unknown as DreamMemoryRepository,
+        { readVectors: async () => new Map() },
+        dreamWorker,
+        logger,
+        userProfiles
+    )
+
+    const result = await service.run(scope.presetId)
+
+    assert.deepEqual(regenerated, [['speaker-1']])
+    assert.match(result.detail, /user profiles generated: 1/u)
 })
 
 it('locks a Dream preset while its job is running', async () => {

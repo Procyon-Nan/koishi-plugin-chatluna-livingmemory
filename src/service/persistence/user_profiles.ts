@@ -6,7 +6,6 @@ import type {
     UserProfileInput,
     UserProfileRecord
 } from '../../contracts/memory'
-import type { UserProfileRepository } from '../../contracts/workflows'
 import {
     createPresetSpeakerId,
     normalizeOptionalString,
@@ -14,7 +13,7 @@ import {
     normalizeUserProfileRecord
 } from './normalizers'
 
-export class LivingMemoryUserProfileRepository implements UserProfileRepository {
+export class LivingMemoryUserProfileRepository {
     constructor(private readonly ctx: Context) {}
 
     async listPresetSpeakers(presetId: string): Promise<PresetSpeakerRecord[]> {

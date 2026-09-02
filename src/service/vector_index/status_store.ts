@@ -35,7 +35,7 @@ export class VectorIndexStatusStore {
     }
 
     snapshot(): MemoryVectorIndexStatus {
-        let manifest = null
+        let manifest: MemoryVectorIndexStatus['manifest'] = null
         if (this.status.manifest !== null) {
             manifest = { ...this.status.manifest }
         }

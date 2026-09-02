@@ -30,7 +30,10 @@ import {
     createSourceOriginsFromMessages,
     mergeMemorySourceOrigins
 } from '../memory/origins/source_origins'
-import { normalizeEntryRecord } from './normalizers'
+import {
+    createActiveMemorySpeakerRows,
+    normalizeEntryRecord
+} from './normalizers'
 import {
     createUserProfileSpeakerKey,
     normalizeSpeakerKeys
@@ -38,6 +41,8 @@ import {
 
 const sourceOriginsArrayMigrationId = 'source-origins-array-v1'
 const legacyEmbeddingMigrationId = 'legacy-embedding-vector-index-v1'
+const activeMemorySpeakersMigrationId = 'active-memory-speakers-v1'
+const ACTIVE_MEMORY_SPEAKER_BATCH_SIZE = 500
 const memoryEntryFields: (keyof MemoryEntryRecord)[] = [
     'id',
     'presetId',
@@ -89,7 +94,7 @@ const recallEntryFields: (keyof MemoryEntryRecord)[] = [
     'updatedAt'
 ]
 
-type EntryTransaction = Parameters<
+export type EntryTransaction = Parameters<
     Parameters<Context['database']['transact']>[0]
 >[0]
 
@@ -106,7 +111,48 @@ interface DreamMergeContext {
 export class LivingMemoryEntryRepository
     implements RecallRepository, ExtractionRepository
 {
-    constructor(private readonly ctx: Context) {}
+    constructor(
+        private readonly ctx: Context,
+        private readonly transact: <T>(
+            callback: (database: EntryTransaction) => Promise<T>
+        ) => Promise<T>
+    ) {}
+
+    async migrateActiveMemorySpeakers(): Promise<number> {
+        return await this.transact(async (database) => {
+            const applied = await database.get('living_memory_migration', {
+                id: activeMemorySpeakersMigrationId
+            })
+            if (applied.length > 0) {
+                return 0
+            }
+
+            const entries = await database.get(
+                'living_memory_entry',
+                { status: 'active' },
+                ['id', 'presetId', 'speakerKeys', 'status']
+            )
+            const rows = entries.flatMap(createActiveMemorySpeakerRows)
+            for (
+                let offset = 0;
+                offset < rows.length;
+                offset += ACTIVE_MEMORY_SPEAKER_BATCH_SIZE
+            ) {
+                await database.upsert(
+                    'living_memory_entry_speaker',
+                    rows.slice(
+                        offset,
+                        offset + ACTIVE_MEMORY_SPEAKER_BATCH_SIZE
+                    )
+                )
+            }
+            await database.create('living_memory_migration', {
+                id: activeMemorySpeakersMigrationId,
+                appliedAt: new Date()
+            })
+            return rows.length
+        })
+    }
 
     async migrateMemorySourceOriginsArray(): Promise<number> {
         const applied = await this.ctx.database.get('living_memory_migration', {
@@ -149,7 +195,7 @@ export class LivingMemoryEntryRepository
     }
 
     async completeLegacyEmbeddingMigration() {
-        await this.ctx.database.withTransaction(async (database) => {
+        await this.transact(async (database) => {
             const records = await database.get(
                 'living_memory_migration',
                 { id: legacyEmbeddingMigrationId },
@@ -199,6 +245,34 @@ export class LivingMemoryEntryRepository
             'living_memory_entry',
             { presetId, status: 'active' },
             dreamEntryFields
+        )
+    }
+
+    async listActiveMemorySpeakerKeys(presetId: string): Promise<string[]> {
+        const rows = await this.ctx.database
+            .select('living_memory_entry_speaker', { presetId })
+            .groupBy('speakerKey')
+            .execute(['speakerKey'])
+        return rows.map((row) => row.speakerKey).sort()
+    }
+
+    async listActiveMemorySpeakerLinks(
+        presetId: string,
+        speakerKeys: string[]
+    ) {
+        if (speakerKeys.length === 0) {
+            return []
+        }
+
+        const links = await this.ctx.database.get(
+            'living_memory_entry_speaker',
+            { presetId, speakerKey: { $in: speakerKeys } },
+            ['speakerKey', 'memoryId']
+        )
+        return links.sort(
+            (left, right) =>
+                left.speakerKey.localeCompare(right.speakerKey) ||
+                left.memoryId.localeCompare(right.memoryId)
         )
     }
 
@@ -391,7 +465,10 @@ export class LivingMemoryEntryRepository
                 item.speakerKeys
             )
         )
-        await this.ctx.database.upsert('living_memory_entry', records)
+        await this.transact(async (database) => {
+            await database.upsert('living_memory_entry', records)
+            await this.replaceActiveMemorySpeakers(database, records)
+        })
         return records
     }
 
@@ -407,7 +484,10 @@ export class LivingMemoryEntryRepository
             new Date(),
             speakerKeys ?? this.resolveScopeSpeakerKeys(scope)
         )
-        await this.ctx.database.create('living_memory_entry', record)
+        await this.transact(async (database) => {
+            await database.create('living_memory_entry', record)
+            await this.replaceActiveMemorySpeakers(database, [record])
+        })
         return record
     }
 
@@ -479,20 +559,51 @@ export class LivingMemoryEntryRepository
         isConsolidated?: boolean,
         operation = 'memory update'
     ) {
-        await this.ctx.database.set(
-            'living_memory_entry',
-            { id: current.id },
-            {
-                ...this.buildMemoryUpdatePatch(current, patch),
+        const fields = this.buildMemoryUpdatePatch(current, patch)
+        const speakersChanged =
+            fields.status !== current.status ||
+            fields.speakerKeys.length !== current.speakerKeys.length ||
+            fields.speakerKeys.some(
+                (speakerKey, index) => speakerKey !== current.speakerKeys[index]
+            )
+        return await this.transact(async (database) => {
+            const updatedAt = new Date()
+            const nextRecord = {
+                ...current,
+                ...fields,
                 ...(isConsolidated === undefined ? {} : { isConsolidated }),
-                updatedAt: new Date()
+                updatedAt
             }
-        )
-        const record = await this.requireEntryById(current.id, operation)
-        return {
-            record,
-            contentChanged: record.content !== current.content
-        }
+            await database.set(
+                'living_memory_entry',
+                { id: current.id },
+                {
+                    ...fields,
+                    ...(isConsolidated === undefined ? {} : { isConsolidated }),
+                    updatedAt
+                }
+            )
+            if (speakersChanged) {
+                await this.replaceActiveMemorySpeakers(database, [nextRecord])
+            }
+            const stored = (
+                await database.get(
+                    'living_memory_entry',
+                    { id: current.id },
+                    memoryEntryFields
+                )
+            )[0]
+            if (stored == null) {
+                throw new Error(
+                    `${operation} failed: memory not found: ${current.id}`
+                )
+            }
+            const record = normalizeEntryRecord(stored)
+            return {
+                record,
+                contentChanged: record.content !== current.content
+            }
+        })
     }
 
     async setMemoryConsolidation(
@@ -523,20 +634,24 @@ export class LivingMemoryEntryRepository
         }
 
         const updatedAt = new Date()
-        await this.ctx.database.set(
-            'living_memory_entry',
-            {
-                presetId,
-                status: 'active',
-                id: { $in: records.map((record) => record.id) }
-            },
-            { status: 'archived', updatedAt }
-        )
-        return records.map((record) => ({
+        const archived = records.map((record) => ({
             ...record,
             status: 'archived' as const,
             updatedAt
         }))
+        await this.transact(async (database) => {
+            await database.set(
+                'living_memory_entry',
+                {
+                    presetId,
+                    status: 'active',
+                    id: { $in: records.map((record) => record.id) }
+                },
+                { status: 'archived', updatedAt }
+            )
+            await this.replaceActiveMemorySpeakers(database, archived)
+        })
+        return archived
     }
 
     async applyDreamMerge(input: DreamMergeInput) {
@@ -550,7 +665,7 @@ export class LivingMemoryEntryRepository
             throw new Error('dream merge failed: invalid source ids')
         }
 
-        return await this.ctx.database.transact(async (database) => {
+        return await this.transact(async (database) => {
             const merge = await this.loadDreamMergeState(
                 database,
                 input,
@@ -663,6 +778,7 @@ export class LivingMemoryEntryRepository
                 memoryEntryFields
             )
         ).map(normalizeEntryRecord)
+        await this.replaceActiveMemorySpeakers(database, committedEntries)
         const committedById = new Map(
             committedEntries.map((entry) => [entry.id, entry])
         )
@@ -697,7 +813,13 @@ export class LivingMemoryEntryRepository
         if (current == null) {
             return null
         }
-        await this.ctx.database.remove('living_memory_entry', { id })
+        await this.transact(async (database) => {
+            await database.remove('living_memory_entry', { id })
+            await database.remove('living_memory_entry_speaker', {
+                presetId: current.presetId,
+                memoryId: id
+            })
+        })
         return current
     }
 
@@ -705,18 +827,37 @@ export class LivingMemoryEntryRepository
         if (ids.length === 0) {
             return
         }
-        await this.ctx.database.remove('living_memory_entry', {
-            presetId,
-            id: { $in: ids }
+        await this.transact(async (database) => {
+            await database.remove('living_memory_entry', {
+                presetId,
+                id: { $in: ids }
+            })
+            await database.remove('living_memory_entry_speaker', {
+                presetId,
+                memoryId: { $in: ids }
+            })
         })
     }
 
-    private async requireEntryById(id: string, operation: string) {
-        const record = await this.getEntryById(id)
-        if (record == null) {
-            throw new Error(`${operation} failed: memory not found: ${id}`)
+    private async replaceActiveMemorySpeakers(
+        database: EntryTransaction,
+        entries: Pick<
+            MemoryEntryRecord,
+            'id' | 'presetId' | 'speakerKeys' | 'status'
+        >[]
+    ) {
+        if (entries.length === 0) {
+            return
         }
-        return record
+
+        await database.remove('living_memory_entry_speaker', {
+            presetId: entries[0].presetId,
+            memoryId: { $in: entries.map((entry) => entry.id) }
+        })
+        const rows = entries.flatMap(createActiveMemorySpeakerRows)
+        if (rows.length > 0) {
+            await database.upsert('living_memory_entry_speaker', rows)
+        }
     }
 
     private buildMemoryUpdatePatch(

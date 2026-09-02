@@ -15,6 +15,7 @@ import {
     type IncrementalDreamRepository,
     LivingMemoryIncrementalDreamService
 } from '../src/service/workflows/dream/incremental'
+import type { LivingMemoryUserProfileService } from '../src/service/user_profile'
 import {
     createToolCallingModel,
     createToolCallMessage
@@ -47,6 +48,7 @@ const createEntry = (
 
 class IncrementalRepositoryStub implements IncrementalDreamRepository {
     readonly entries = new Map<string, MemoryEntryRecord>()
+    failMergeAfterCommit = false
 
     constructor(entries: MemoryEntryRecord[]) {
         entries.forEach((entry) => this.entries.set(entry.id, entry))
@@ -77,7 +79,19 @@ class IncrementalRepositoryStub implements IncrementalDreamRepository {
     }
 
     async listPresetSpeakers() {
-        return []
+        return [
+            {
+                id: 'speaker-1',
+                presetId,
+                speakerKey: 'speaker-1',
+                speakerLabel: '张三',
+                speakerAliases: ['张三'],
+                speakerId: 'user-1',
+                platform: 'test',
+                createdAt: now,
+                updatedAt: now
+            }
+        ]
     }
 
     async setMemoryConsolidation(
@@ -132,6 +146,9 @@ class IncrementalRepositoryStub implements IncrementalDreamRepository {
             source.updatedAt = new Date(+source.updatedAt + 1)
             archivedSources.push(source)
         }
+        if (this.failMergeAfterCommit) {
+            throw new Error('injected post-commit failure')
+        }
         return {
             target,
             archivedSources,
@@ -182,6 +199,7 @@ const createHarness = (
     const model = createToolCallingModel(responses)
     const repository = new IncrementalRepositoryStub(entries)
     const neighborCalls: IncrementalDreamNeighborInput[] = []
+    const profileSpeakerKeys: string[][] = []
     const neighborSearch: IncrementalDreamNeighborSearch = {
         assertPresetReady: () => {},
         findConsolidatedNeighbors: async (input) => {
@@ -214,6 +232,12 @@ const createHarness = (
             }
         }
     } as unknown as Context
+    const userProfiles = {
+        regenerate: async (_presetId: string, speakerKeys: string[]) => {
+            profileSpeakerKeys.push(speakerKeys)
+            return { generated: 0, detail: 'user profiles generated: 0' }
+        }
+    } as unknown as LivingMemoryUserProfileService
     const service = new LivingMemoryIncrementalDreamService(
         ctx,
         {
@@ -221,16 +245,24 @@ const createHarness = (
         },
         repository,
         repository as DreamMemoryRepository,
-        neighborSearch
+        neighborSearch,
+        userProfiles
     )
-    return { model, neighborCalls, neighborSearch, repository, service }
+    return {
+        model,
+        neighborCalls,
+        neighborSearch,
+        profileSpeakerKeys,
+        repository,
+        service
+    }
 }
 
 it('runs one batch unit then consolidates every successful seed in order', async () => {
     const harness = createHarness(
         [emptyResult(), keepResult(['seed-1', 'candidate']), emptyResult()],
         [
-            createEntry('seed-1'),
+            createEntry('seed-1', { speakerKeys: ['speaker-1'] }),
             createEntry('seed-2', {
                 createdAt: new Date(+now + 1)
             }),
@@ -249,6 +281,7 @@ it('runs one batch unit then consolidates every successful seed in order', async
     assert.equal(harness.model.invocations.length, 3)
     assert.equal(harness.repository.entries.get('seed-1')?.isConsolidated, true)
     assert.equal(harness.repository.entries.get('seed-2')?.isConsolidated, true)
+    assert.deepEqual(harness.profileSpeakerKeys, [['speaker-1']])
 })
 
 it('fails before model invocation when the vector index is not ready', async () => {
@@ -262,6 +295,23 @@ it('fails before model invocation when the vector index is not ready', async () 
         /vector index is not ready/u
     )
     assert.equal(harness.model.invocations.length, 0)
+})
+
+it('updates affected profiles after a Dream unit throws post-commit', async () => {
+    const harness = createHarness(
+        [mergeResult('seed-1', 'seed-2')],
+        [
+            createEntry('seed-1', { speakerKeys: ['speaker-1'] }),
+            createEntry('seed-2', { speakerKeys: ['speaker-1'] })
+        ]
+    )
+    harness.repository.failMergeAfterCommit = true
+
+    await assert.rejects(
+        harness.service.run(presetId, 2),
+        /injected post-commit failure/u
+    )
+    assert.deepEqual(harness.profileSpeakerKeys, [['speaker-1']])
 })
 
 it('continues after a seed structured-output failure and leaves it pending', async () => {

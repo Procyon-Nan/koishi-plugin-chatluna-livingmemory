@@ -81,6 +81,17 @@ it('copies preset data without moving source records', async () => {
             sourceMemory.speakerKeys
         )
         assert.equal(importedTargetMemories[0].isConsolidated, false)
+        assert.deepEqual(
+            await repository.listActiveMemorySpeakerLinks(targetPresetId, [
+                sourceMemory.speakerKeys[0]
+            ]),
+            [
+                {
+                    speakerKey: sourceMemory.speakerKeys[0],
+                    memoryId: importedTargetMemories[0].id
+                }
+            ]
+        )
 
         const retainedSourceProfiles =
             await repository.listUserProfilesByPreset(sourcePresetId)
@@ -178,19 +189,52 @@ it('preserves record ids when restoring the source preset', async () => {
             {
                 type: 'fact',
                 content: 'original memory'
-            }
+            },
+            ['original-speaker']
         )
         const exported = await repository.exportPresetData(presetId)
 
+        const retained = await repository.createMemory(
+            {
+                conversationId: 'conversation-retained',
+                presetId
+            },
+            {
+                type: 'fact',
+                content: 'retained memory'
+            },
+            ['retained-speaker']
+        )
+
         await repository.updateMemory(memory.id, {
-            content: 'changed memory'
+            content: 'changed memory',
+            speakerKeys: ['temporary-speaker']
         })
         await repository.importPresetData(presetId, exported)
 
         const restored = await repository.listEntriesByPreset(presetId)
-        assert.equal(restored.length, 1)
-        assert.equal(restored[0].id, memory.id)
-        assert.equal(restored[0].content, 'original memory')
+        assert.equal(restored.length, 2)
+        assert.equal(
+            restored.find((entry) => entry.id === memory.id)?.content,
+            'original memory'
+        )
+        assert.deepEqual(
+            await repository.listActiveMemorySpeakerLinks(presetId, [
+                'original-speaker',
+                'temporary-speaker',
+                'retained-speaker'
+            ]),
+            [
+                {
+                    speakerKey: 'original-speaker',
+                    memoryId: memory.id
+                },
+                {
+                    speakerKey: 'retained-speaker',
+                    memoryId: retained.id
+                }
+            ]
+        )
     })
 })
 

@@ -2,11 +2,11 @@ import assert from 'node:assert/strict'
 import { AIMessage } from '@langchain/core/messages'
 import type { Context } from 'koishi'
 import { LivingMemoryLogger } from '../src/service/logging/logger'
-import type { UserProfileInput } from '../src/contracts/memory'
 import type {
-    DreamMemoryEntryRecord,
-    UserProfileRepository
-} from '../src/contracts/workflows'
+    MemoryEntryRecord,
+    UserProfileInput
+} from '../src/contracts/memory'
+import type { UserProfileRepository } from '../src/contracts/workflows'
 import { characterPresetSuffix } from '../src/service/memory/helpers'
 import { userProfileResultToolName } from '../src/service/prompts/schema'
 import {
@@ -19,16 +19,20 @@ import {
 } from './tool-calling-test-utils'
 
 const now = new Date('2026-07-16T00:00:00.000Z')
-const memory: DreamMemoryEntryRecord = {
+const memory: MemoryEntryRecord = {
     id: 'memory-1',
     presetId: 'preset-1',
     speakerKeys: ['张三'],
     type: 'fact',
+    status: 'active',
     content: '张三正在准备考试。',
     keywords: ['张三', '准备考试'],
     summary: '张三正在准备考试',
     sentiment: '关心',
     importance: 0.7,
+    sourceConversationId: 'conversation-1',
+    sourceOrigins: [],
+    isConsolidated: true,
     createdAt: now,
     updatedAt: now
 }
@@ -45,7 +49,26 @@ const createHarness = (
 ) => {
     const savedProfiles: UserProfileInput[] = []
     const debugMessages: string[] = []
+    const existingProfiles =
+        options.existingSourceMemoryIds == null
+            ? []
+            : [
+                  {
+                      id: 'profile-1',
+                      presetId: options.presetId ?? 'preset-1',
+                      speakerKey: '张三',
+                      speakerLabel: options.speakerLabel ?? '张三',
+                      content: '旧画像',
+                      sourceMemoryIds: options.existingSourceMemoryIds,
+                      createdAt: now,
+                      updatedAt: now
+                  }
+              ]
     const repository: UserProfileRepository = {
+        getEntriesByPresetAndIds: async () => [memory],
+        listActiveMemorySpeakerLinks: async () => [
+            { speakerKey: '张三', memoryId: memory.id }
+        ],
         listPresetSpeakers: async () => [
             {
                 id: 'speaker-1',
@@ -60,22 +83,8 @@ const createHarness = (
             }
         ],
         upsertPresetSpeaker: async () => {},
-        listUserProfilesByPreset: async () =>
-            options.existingSourceMemoryIds == null
-                ? []
-                : [
-                      {
-                          id: 'profile-1',
-                          presetId: options.presetId ?? 'preset-1',
-                          speakerKey: '张三',
-                          speakerLabel: options.speakerLabel ?? '张三',
-                          content: '旧画像',
-                          sourceMemoryIds: options.existingSourceMemoryIds,
-                          createdAt: now,
-                          updatedAt: now
-                      }
-                  ],
-        listUserProfilesBySpeakerKeys: async () => [],
+        listUserProfilesByPreset: async () => existingProfiles,
+        listUserProfilesBySpeakerKeys: async () => existingProfiles,
         replaceUserProfile: async (_presetId, profile) => {
             savedProfiles.push(profile)
         },
@@ -103,8 +112,7 @@ const createHarness = (
         ctx,
         {
             enableUserProfileInjection: true,
-            userProfileMinMemoryCount:
-                options.userProfileMinMemoryCount ?? 1,
+            userProfileMinMemoryCount: options.userProfileMinMemoryCount ?? 1,
             userProfileMemoryLimit: 20
         },
         repository,
@@ -128,7 +136,7 @@ const createHarness = (
             const model = createToolCallingModel(responses)
             const result = await service.regenerate(
                 options.presetId ?? 'preset-1',
-                [memory],
+                [memory.speakerKeys[0]],
                 model.model,
                 logger
             )
@@ -159,6 +167,17 @@ it('matches Dream memories through a stable user identity old nickname', async (
 
     assert.equal(result.generated, 1)
     assert.equal(harness.savedProfiles[0].speakerLabel, '新昵称')
+})
+
+it('skips profile generation below the active memory threshold', async () => {
+    const harness = createHarness({ userProfileMinMemoryCount: 2 })
+    const { model, result } = await harness.run([
+        createProfileCall({ content: '不应生成。' })
+    ])
+
+    assert.equal(result.generated, 0)
+    assert.equal(result.skippedReason, 'insufficient-related-memories')
+    assert.equal(model.invocations.length, 0)
 })
 
 const baseProfileOutput = {
@@ -198,14 +217,8 @@ it('passes user profile rules and memory data through tool-calling messages', as
     assert.match(prompt.systemPrompt, /<output_contract>/u)
     assert.match(prompt.systemPrompt, /<update_rules>/u)
     assert.match(prompt.systemPrompt, /<preset_context>/u)
-    assert.match(
-        prompt.systemPrompt,
-        /你是preset-1，你正在维护张三的人物画像/u
-    )
-    assert.match(
-        prompt.systemPrompt,
-        /张三的关系视角，使用第三人称/u
-    )
+    assert.match(prompt.systemPrompt, /你是preset-1，你正在维护张三的人物画像/u)
+    assert.match(prompt.systemPrompt, /张三的关系视角，使用第三人称/u)
     assert.doesNotMatch(prompt.systemPrompt, /张三正在准备考试/u)
     assert.match(prompt.inputPrompt, /<user_profile_input>/u)
     assert.doesNotMatch(prompt.inputPrompt, /<assistant_label>/u)

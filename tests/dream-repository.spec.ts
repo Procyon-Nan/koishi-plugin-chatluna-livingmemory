@@ -104,6 +104,82 @@ it('atomically updates an active Dream merge and archives its sources', async ()
         assert.equal(storedTarget?.isConsolidated, false)
         assert.equal(entryById.get(source1.id)?.isConsolidated, false)
         assert.equal(entryById.get(source2.id)?.isConsolidated, false)
+        assert.deepEqual(
+            await repository.listActiveMemorySpeakerLinks(scope.presetId, [
+                'target-speaker',
+                'source-1-speaker',
+                'source-2-speaker',
+                'replacement-speaker'
+            ]),
+            [
+                {
+                    speakerKey: 'replacement-speaker',
+                    memoryId: target.id
+                }
+            ]
+        )
+    })
+})
+
+it('maintains active memory speaker links across memory lifecycle changes', async () => {
+    await withRepository(async (_ctx, repository) => {
+        const memory = await createMemory(repository, 'memory', 'active')
+        assert.deepEqual(
+            await repository.listActiveMemorySpeakerKeys(scope.presetId),
+            ['memory-speaker']
+        )
+
+        await repository.updateMemory(memory.id, {
+            speakerKeys: ['replacement-speaker']
+        })
+        assert.deepEqual(
+            await repository.listActiveMemorySpeakerLinks(scope.presetId, [
+                'memory-speaker',
+                'replacement-speaker'
+            ]),
+            [
+                {
+                    speakerKey: 'replacement-speaker',
+                    memoryId: memory.id
+                }
+            ]
+        )
+
+        await repository.archiveActiveEntries(scope.presetId, [memory.id])
+        assert.deepEqual(
+            await repository.listActiveMemorySpeakerKeys(scope.presetId),
+            []
+        )
+
+        await repository.updateMemory(memory.id, { status: 'active' })
+        assert.deepEqual(
+            await repository.listActiveMemorySpeakerKeys(scope.presetId),
+            ['replacement-speaker']
+        )
+
+        await repository.deleteMemory(memory.id)
+        assert.deepEqual(
+            await repository.listActiveMemorySpeakerKeys(scope.presetId),
+            []
+        )
+    })
+})
+
+it('backfills active memory speaker links once', async () => {
+    await withRepository(async (ctx, repository) => {
+        const active = await createMemory(repository, 'active', 'active')
+        await createMemory(repository, 'archived', 'archived')
+        await ctx.database.remove('living_memory_entry_speaker', {})
+
+        assert.equal(await repository.migrateActiveMemorySpeakers(), 1)
+        assert.deepEqual(
+            await repository.listActiveMemorySpeakerLinks(scope.presetId, [
+                'active-speaker',
+                'archived-speaker'
+            ]),
+            [{ speakerKey: 'active-speaker', memoryId: active.id }]
+        )
+        assert.equal(await repository.migrateActiveMemorySpeakers(), 0)
     })
 })
 
@@ -121,7 +197,21 @@ it('defines the pending Dream query index', () => {
                 isConsolidated: 'asc',
                 createdAt: 'asc',
                 id: 'asc'
+            },
+            {
+                presetId: 'asc',
+                status: 'asc',
+                updatedAt: 'asc'
             }
+        ]
+    )
+    assert.deepEqual(
+        ctx.model.tables.living_memory_entry_speaker.indexes.map(
+            (index) => index.keys
+        ),
+        [
+            { presetId: 'asc', speakerKey: 'asc' },
+            { presetId: 'asc', memoryId: 'asc' }
         ]
     )
 })

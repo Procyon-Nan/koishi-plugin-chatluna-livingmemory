@@ -4,7 +4,10 @@ import type {
     PresetSpeakerRecord,
     UserProfileRecord
 } from '../../contracts/memory'
-import type { PresetSpeakerTableRecord } from './types'
+import type {
+    LivingMemoryEntrySpeakerRecord,
+    PresetSpeakerTableRecord
+} from './types'
 import {
     normalizeMemoryImportance,
     normalizeMemoryStatus,
@@ -50,6 +53,23 @@ export const createPresetSpeakerId = (presetId: string, speakerKey: string) => {
     return createHash('sha256')
         .update(`${presetId}\u0000${speakerKey}`)
         .digest('hex')
+}
+
+export const createActiveMemorySpeakerRows = (
+    entry: Pick<MemoryEntryRecord, 'id' | 'presetId' | 'speakerKeys' | 'status'>
+): LivingMemoryEntrySpeakerRecord[] => {
+    if (entry.status !== 'active') {
+        return []
+    }
+
+    return normalizeSpeakerKeys(entry.speakerKeys).map((speakerKey) => ({
+        id: createHash('sha256')
+            .update(`${entry.id}\u0000${speakerKey}`)
+            .digest('hex'),
+        presetId: entry.presetId,
+        speakerKey,
+        memoryId: entry.id
+    }))
 }
 
 export const createPresetImportId = (

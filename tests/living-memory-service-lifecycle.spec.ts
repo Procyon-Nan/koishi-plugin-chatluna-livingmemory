@@ -19,11 +19,19 @@ const createService = (options: {
         repository: {
             value: {
                 migrateMemorySourceOriginsArray: async () => 0,
+                migrateActiveMemorySpeakers: async () => 0,
                 markStaleRunningJobsAsFailed: async () => []
             }
         },
         validateConfig: {
             value: () => []
+        },
+        archivedMemoryCleanup: {
+            value: Promise.resolve(),
+            writable: true
+        },
+        queueExpiredArchivedMemoryCleanup: {
+            value: () => {}
         },
         vectorIndex: {
             value: {

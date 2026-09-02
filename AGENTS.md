@@ -174,6 +174,9 @@ chatluna-livingmemory/
    - `src/service/persistence/` 负责表定义和表级仓库，
      `LivingMemoryRepository` 是上层持久化门面。工作流不得直接操作 Koishi
      数据库表。
+   - `living_memory_entry.speakerKeys` 是用户关联事实；
+     `living_memory_entry_speaker` 只索引活跃记忆，并与记忆状态及用户关联变更
+     在同一事务中维护。不得增加独立计数字段或为归档记忆保留关联行。
    - schema 变更必须同步更新公共契约、表定义、normalizer、仓库、迁移兼容
      和受影响的 RPC/客户端类型。
    - 记忆正文、摘要或关键词变化时必须使旧 embedding 失效并安排索引同步；

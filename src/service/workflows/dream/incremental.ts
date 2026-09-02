@@ -13,11 +13,12 @@ import {
     resolveAssistantLabel,
     resolvePresetPrompt
 } from '../../memory/helpers'
-import { isModelConfigured } from '../../shared/utils'
+import { isModelConfigured, summarizeError } from '../../shared/utils'
 import { addStats, createEmptyStats } from './stats'
 import type { DreamOperationStats, DreamRunResult } from './types'
-import { DreamUnitProcessor } from './unit_processor'
+import { type DreamUnitInput, DreamUnitProcessor } from './unit_processor'
 import type { LivingMemoryLogger } from '../../logging/logger'
+import type { LivingMemoryUserProfileService } from '../../user_profile'
 
 type IncrementalDreamConfig = Pick<LivingMemoryConfig, 'mainModel'>
 
@@ -35,6 +36,17 @@ export interface IncrementalDreamRepository {
 }
 
 const INCREMENTAL_DREAM_TOP_K = 30
+
+const addSpeakerKeys = (
+    target: Set<string>,
+    entries: Pick<MemoryEntryRecord, 'speakerKeys'>[]
+) => {
+    for (const entry of entries) {
+        for (const speakerKey of entry.speakerKeys) {
+            target.add(speakerKey)
+        }
+    }
+}
 
 export interface IncrementalDreamRunResult extends DreamRunResult {
     selectedCount: number
@@ -65,7 +77,8 @@ export class LivingMemoryIncrementalDreamService {
         private readonly config: IncrementalDreamConfig,
         private readonly repository: IncrementalDreamRepository,
         private readonly mutations: DreamMemoryRepository,
-        private readonly neighborSearch: IncrementalDreamNeighborSearch
+        private readonly neighborSearch: IncrementalDreamNeighborSearch,
+        private readonly userProfiles: LivingMemoryUserProfileService
     ) {
         this.unitProcessor = new DreamUnitProcessor(mutations)
     }
@@ -99,82 +112,132 @@ export class LivingMemoryIncrementalDreamService {
         const assistantLabel = resolveAssistantLabel(presetId)
         const presetPrompt = await resolvePresetPrompt(this.ctx, presetId)
         const speakers = await this.repository.listPresetSpeakers(presetId)
+        const affectedSpeakerKeys = new Set<string>()
 
-        state.clusterCount++
-        const firstRoundResult = await this.unitProcessor.process({
-            presetId,
-            assistantLabel,
-            presetPrompt,
-            cluster: {
-                id: 'cluster-batch',
-                reason: 'memory group',
-                entries: batch
-            },
-            speakers,
-            model,
-            touchedMemoryIds: new Set(),
-            consolidationMode: 'incremental-batch',
-            logger
-        })
-        addStats(state.stats, firstRoundResult)
-        addStats(state.firstRoundStats, firstRoundResult)
-        if (firstRoundResult.success === false) {
-            state.errors.push(`first-round: ${firstRoundResult.error}`)
-            return this.createResult(presetId, batch, state)
-        }
-
-        const batchIds = batch.map((entry) => entry.id)
-        const seeds = await this.loadSeeds(presetId, batch)
-        state.seedCount = seeds.length
-
-        for (const seed of seeds) {
-            const nearestIds =
-                await this.neighborSearch.findConsolidatedNeighbors({
-                    presetId,
-                    seedMemoryId: seed.id,
-                    excludedMemoryIds: batchIds,
-                    limit: INCREMENTAL_DREAM_TOP_K
-                })
-            const nearest = await this.loadNeighbors(presetId, nearestIds)
-            if (nearest.length === 0) {
-                await this.mutations.setMemoryConsolidation(
-                    presetId,
-                    [seed.id],
-                    true
-                )
-                state.successfulSeedCount++
-                state.noCandidateSeedCount++
-                continue
-            }
-
+        let result: IncrementalDreamRunResult
+        try {
             state.clusterCount++
-            const result = await this.unitProcessor.process({
-                presetId,
-                assistantLabel,
-                presetPrompt,
-                cluster: {
-                    id: `cluster-${seed.id}`,
-                    reason: 'memory group',
-                    entries: [seed, ...nearest]
+            const firstRoundResult = await this.processUnit(
+                {
+                    presetId,
+                    assistantLabel,
+                    presetPrompt,
+                    cluster: {
+                        id: 'cluster-batch',
+                        reason: 'memory group',
+                        entries: batch
+                    },
+                    speakers,
+                    model,
+                    touchedMemoryIds: new Set(),
+                    consolidationMode: 'incremental-batch',
+                    logger
                 },
-                speakers,
-                model,
-                touchedMemoryIds: new Set(),
-                consolidationMode: 'incremental-seed',
-                focusMemoryId: seed.id,
-                logger
-            })
-            addStats(state.stats, result)
-            addStats(state.secondRoundStats, result)
-            if (result.success === true) {
-                state.successfulSeedCount++
+                affectedSpeakerKeys
+            )
+            addStats(state.stats, firstRoundResult)
+            addStats(state.firstRoundStats, firstRoundResult)
+            if (firstRoundResult.success === false) {
+                state.errors.push(`first-round: ${firstRoundResult.error}`)
             } else {
-                state.failedSeedCount++
-                state.errors.push(`seed ${seed.id}: ${result.error}`)
+                addSpeakerKeys(affectedSpeakerKeys, batch)
+                const batchIds = batch.map((entry) => entry.id)
+                const seeds = await this.loadSeeds(presetId, batch)
+                state.seedCount = seeds.length
+
+                for (const seed of seeds) {
+                    const nearestIds =
+                        await this.neighborSearch.findConsolidatedNeighbors({
+                            presetId,
+                            seedMemoryId: seed.id,
+                            excludedMemoryIds: batchIds,
+                            limit: INCREMENTAL_DREAM_TOP_K
+                        })
+                    const nearest = await this.loadNeighbors(
+                        presetId,
+                        nearestIds
+                    )
+                    if (nearest.length === 0) {
+                        await this.mutations.setMemoryConsolidation(
+                            presetId,
+                            [seed.id],
+                            true
+                        )
+                        state.successfulSeedCount++
+                        state.noCandidateSeedCount++
+                        continue
+                    }
+
+                    state.clusterCount++
+                    const clusterEntries = [seed, ...nearest]
+                    const result = await this.processUnit(
+                        {
+                            presetId,
+                            assistantLabel,
+                            presetPrompt,
+                            cluster: {
+                                id: `cluster-${seed.id}`,
+                                reason: 'memory group',
+                                entries: clusterEntries
+                            },
+                            speakers,
+                            model,
+                            touchedMemoryIds: new Set(),
+                            consolidationMode: 'incremental-seed',
+                            focusMemoryId: seed.id,
+                            logger
+                        },
+                        affectedSpeakerKeys
+                    )
+                    addStats(state.stats, result)
+                    addStats(state.secondRoundStats, result)
+                    if (result.success === true) {
+                        state.successfulSeedCount++
+                    } else {
+                        state.failedSeedCount++
+                        state.errors.push(`seed ${seed.id}: ${result.error}`)
+                    }
+                }
             }
+            result = await this.createResult(presetId, batch, state)
+        } catch (error) {
+            await this.regenerateUserProfiles(
+                presetId,
+                model,
+                affectedSpeakerKeys,
+                logger
+            )
+            throw error
         }
 
-        return this.createResult(presetId, batch, state)
+        const profileDetail = await this.regenerateUserProfiles(
+            presetId,
+            model,
+            affectedSpeakerKeys,
+            logger
+        )
+        return profileDetail == null
+            ? result
+            : { ...result, detail: `${result.detail}\n${profileDetail}` }
+    }
+
+    private async processUnit(
+        input: DreamUnitInput,
+        affectedSpeakerKeys: Set<string>
+    ) {
+        try {
+            const result = await this.unitProcessor.process(input)
+            addSpeakerKeys(
+                affectedSpeakerKeys,
+                input.cluster.entries.filter((entry) =>
+                    result.mutatedMemoryIds.has(entry.id)
+                )
+            )
+            return result
+        } catch (error) {
+            addSpeakerKeys(affectedSpeakerKeys, input.cluster.entries)
+            throw error
+        }
     }
 
     private async createChatModel(): Promise<ChatLunaChatModel> {
@@ -230,6 +293,37 @@ export class LivingMemoryIncrementalDreamService {
             }
             return entry.status === 'active' ? [entry] : []
         })
+    }
+
+    private async regenerateUserProfiles(
+        presetId: string,
+        model: ChatLunaChatModel,
+        speakerKeys: Set<string>,
+        logger?: LivingMemoryLogger
+    ) {
+        if (speakerKeys.size === 0) {
+            return null
+        }
+
+        try {
+            return (
+                await this.userProfiles.regenerate(
+                    presetId,
+                    [...speakerKeys],
+                    model,
+                    logger
+                )
+            ).detail
+        } catch (error) {
+            const errorSummary = summarizeError(error)
+            const detail = `user profiles failed: ${
+                error instanceof Error ? error.message : errorSummary
+            }`
+            logger?.diagnostic('dream.user-profile.failed', {
+                error: errorSummary
+            })
+            return detail
+        }
     }
 
     private async createResult(

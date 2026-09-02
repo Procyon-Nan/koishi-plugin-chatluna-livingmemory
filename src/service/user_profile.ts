@@ -18,6 +18,7 @@ import {
 import { summarizeError } from './shared/utils'
 import { invokeStructuredOutput } from './workflows/structured_output'
 import type { LivingMemoryLogger } from './logging/logger'
+import { normalizeSpeakerKeys } from './memory/speaker_identity'
 
 export const normalizeManualUserProfileContent = (content: string) => {
     const normalized = content.trim()
@@ -81,7 +82,7 @@ export class LivingMemoryUserProfileService {
 
     async regenerate(
         presetId: string,
-        activeEntries: DreamMemoryEntryRecord[],
+        speakerKeys: string[],
         model: ChatLunaChatModel,
         logger?: LivingMemoryLogger
     ): Promise<UserProfileGenerationResult> {
@@ -94,7 +95,79 @@ export class LivingMemoryUserProfileService {
             }
         }
 
-        const memoryGroups = this.buildGroups(activeEntries)
+        const requestedSpeakerKeys = normalizeSpeakerKeys(speakerKeys)
+        const links = await this.repository.listActiveMemorySpeakerLinks(
+            presetId,
+            requestedSpeakerKeys
+        )
+        const memoryIdsBySpeakerKey = new Map<string, string[]>()
+        for (const link of links) {
+            const memoryIds = memoryIdsBySpeakerKey.get(link.speakerKey)
+            if (memoryIds == null) {
+                memoryIdsBySpeakerKey.set(link.speakerKey, [link.memoryId])
+            } else {
+                memoryIds.push(link.memoryId)
+            }
+        }
+        const eligibleMemoryGroups = [...memoryIdsBySpeakerKey].filter(
+            ([, memoryIds]) =>
+                memoryIds.length >= this.config.userProfileMinMemoryCount
+        )
+        const memoryIds = [
+            ...new Set(
+                eligibleMemoryGroups.flatMap(([, relatedIds]) => relatedIds)
+            )
+        ]
+        const activeEntryById = new Map(
+            (
+                await this.repository.getEntriesByPresetAndIds(
+                    presetId,
+                    memoryIds
+                )
+            )
+                .filter((entry) => entry.status === 'active')
+                .map((entry) => [entry.id, entry])
+        )
+        const memoryGroups = eligibleMemoryGroups
+            .flatMap(([speakerKey, relatedIds]) => {
+                const entries = relatedIds.flatMap((memoryId) => {
+                    const entry = activeEntryById.get(memoryId)
+                    return entry?.speakerKeys.includes(speakerKey) === true
+                        ? [entry]
+                        : []
+                })
+                if (entries.length < this.config.userProfileMinMemoryCount) {
+                    return []
+                }
+
+                return [
+                    {
+                        speakerKey,
+                        entries: entries
+                            .sort((left, right) => {
+                                const importanceDelta =
+                                    (right.importance ?? 0.5) -
+                                    (left.importance ?? 0.5)
+                                return (
+                                    importanceDelta ||
+                                    +right.updatedAt - +left.updatedAt
+                                )
+                            })
+                            .slice(0, this.config.userProfileMemoryLimit),
+                        matchedEntryCount: entries.length
+                    }
+                ]
+            })
+            .sort(
+                (left, right) =>
+                    right.matchedEntryCount - left.matchedEntryCount ||
+                    Math.max(
+                        ...right.entries.map((entry) => +entry.updatedAt)
+                    ) -
+                        Math.max(
+                            ...left.entries.map((entry) => +entry.updatedAt)
+                        )
+            )
         if (memoryGroups.length === 0) {
             return {
                 generated: 0,
@@ -141,7 +214,10 @@ export class LivingMemoryUserProfileService {
         }
 
         const existingProfiles =
-            await this.repository.listUserProfilesByPreset(presetId)
+            await this.repository.listUserProfilesBySpeakerKeys(
+                presetId,
+                profileGroups.map((group) => group.speakerKey)
+            )
         const existingProfileByKey = new Map(
             existingProfiles.map((profile) => [profile.speakerKey, profile])
         )
@@ -338,61 +414,6 @@ export class LivingMemoryUserProfileService {
                     `${profile.speakerLabel}的人物画像：\n${profile.content}`
             )
             .join('\n\n')
-    }
-
-    private buildGroups(activeEntries: DreamMemoryEntryRecord[]) {
-        const entriesBySpeakerKey = new Map<
-            string,
-            DreamMemoryEntryRecord[]
-        >()
-
-        for (const entry of activeEntries) {
-            for (const speakerKey of entry.speakerKeys) {
-                const entries = entriesBySpeakerKey.get(speakerKey)
-                if (entries == null) {
-                    entriesBySpeakerKey.set(speakerKey, [entry])
-                } else {
-                    entries.push(entry)
-                }
-            }
-        }
-
-        return Array.from(entriesBySpeakerKey)
-            .filter(
-                ([, entries]) =>
-                    entries.length >=
-                    this.config.userProfileMinMemoryCount
-            )
-            .map(([speakerKey, entries]) => ({
-                speakerKey,
-                entries: entries
-                    .sort((left, right) => {
-                        const importanceDelta =
-                            (right.importance ?? 0.5) -
-                            (left.importance ?? 0.5)
-                        if (importanceDelta !== 0) {
-                            return importanceDelta
-                        }
-
-                        return +right.updatedAt - +left.updatedAt
-                    })
-                    .slice(0, this.config.userProfileMemoryLimit),
-                matchedEntryCount: entries.length
-            }))
-            .sort((left, right) => {
-                if (right.matchedEntryCount !== left.matchedEntryCount) {
-                    return right.matchedEntryCount - left.matchedEntryCount
-                }
-
-                return (
-                    this.latestTimestamp(right.entries) -
-                    this.latestTimestamp(left.entries)
-                )
-            })
-    }
-
-    private latestTimestamp(entries: DreamMemoryEntryRecord[]) {
-        return Math.max(...entries.map((entry) => +entry.updatedAt))
     }
 
     private toOrderedSpeakerKeys(speakerKeys: string[]) {

@@ -159,14 +159,16 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             this.mutations,
             this.vectorIndex,
             this.dreamWorker,
-            this.memoryLogger
+            this.memoryLogger,
+            this.userProfiles
         )
         const incrementalDream = new LivingMemoryIncrementalDreamService(
             ctx,
             config,
             this.repository,
             this.mutations,
-            this.vectorIndex
+            this.vectorIndex,
+            this.userProfiles
         )
 
         const jobTracker = new LivingMemoryJobTracker(this.repository)
@@ -232,6 +234,14 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
                 workflow: 'maintenance',
                 operation: 'repair-source-origins',
                 repaired
+            })
+        }
+        const indexed = await this.repository.migrateActiveMemorySpeakers()
+        if (indexed > 0) {
+            this.memoryLogger.info('startup.migration.completed', {
+                workflow: 'maintenance',
+                operation: 'index-active-memory-speakers',
+                indexed
             })
         }
 
@@ -457,7 +467,8 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
                 (memory) =>
                     memory.status === 'active' &&
                     (memory.content.toLowerCase().includes(query) ||
-                        memory.summary?.toLowerCase().includes(query) === true ||
+                        memory.summary?.toLowerCase().includes(query) ===
+                            true ||
                         memory.keywords.some((keyword) =>
                             keyword.toLowerCase().includes(query)
                         ))
@@ -471,13 +482,11 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         userId: string
     ) {
         const speakerKey = createUserProfileSpeakerKey(platform, userId)
-        return (await this.repository.listEntriesByPreset(presetId))
-            .filter(
-                (memory) =>
-                    memory.status === 'active' &&
-                    memory.speakerKeys.includes(speakerKey)
-            )
-            .map((memory) => memory.id)
+        return (
+            await this.repository.listActiveMemorySpeakerLinks(presetId, [
+                speakerKey
+            ])
+        ).map((link) => link.memoryId)
     }
 
     async findUserProfileIdByUser(
@@ -658,12 +667,15 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
                 deleted += result.deleted
             }
             if (deleted > 0) {
-                this.memoryLogger.info('maintenance.archive-cleanup.completed', {
-                    workflow: 'maintenance',
-                    operation: 'cleanup-expired-archived-memories',
-                    trigger,
-                    deleted
-                })
+                this.memoryLogger.info(
+                    'maintenance.archive-cleanup.completed',
+                    {
+                        workflow: 'maintenance',
+                        operation: 'cleanup-expired-archived-memories',
+                        trigger,
+                        deleted
+                    }
+                )
             }
         } catch (error) {
             this.memoryLogger.warn(

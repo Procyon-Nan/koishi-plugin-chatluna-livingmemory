@@ -8,7 +8,16 @@ export interface LivingMemoryEntryTableRecord extends MemoryEntryRecord {
     embeddingModelId: string | null
 }
 
-export interface PresetSpeakerTableRecord
-    extends Omit<PresetSpeakerRecord, 'speakerAliases'> {
+export interface LivingMemoryEntrySpeakerRecord {
+    id: string
+    presetId: string
+    speakerKey: string
+    memoryId: string
+}
+
+export interface PresetSpeakerTableRecord extends Omit<
+    PresetSpeakerRecord,
+    'speakerAliases'
+> {
     speakerAliases: string[] | null
 }

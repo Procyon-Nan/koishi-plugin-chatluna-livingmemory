@@ -14,6 +14,7 @@ import { dreamResultToolName } from '../src/service/prompts/schema'
 import type { ChatLunaModelCallOptions } from 'koishi-plugin-chatluna/llm-core/platform/model'
 import type { DreamRepository } from '../src/service/workflows/dream'
 import { LivingMemoryDreamService } from '../src/service/workflows/dream'
+import type { LivingMemoryUserProfileService } from '../src/service/user_profile'
 import { partitionDreamEntries } from '../src/service/workflows/dream/partitioning'
 import type { DreamWorkerRunner } from '../src/service/workflows/dream/worker/protocol'
 import {
@@ -98,15 +99,14 @@ const createDreamHarness = (
         ctx,
         {
             mainModel: 'test-model',
-            enableUserProfileInjection: false,
-            userProfileMinMemoryCount: 3,
-            userProfileMemoryLimit: 20
+            enableUserProfileInjection: false
         },
         repository,
         repository as unknown as DreamMemoryRepository,
         vectors,
         worker,
-        captured.logger
+        captured.logger,
+        {} as LivingMemoryUserProfileService
     )
 
     return { debugMessages: captured.info, model, service }

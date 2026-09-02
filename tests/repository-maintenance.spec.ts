@@ -10,10 +10,14 @@ const createPresetData = async (
         conversationId: `${presetId}-conversation`,
         presetId
     }
-    await repository.createMemory(scope, {
-        type: 'fact',
-        content: `${presetId} memory`
-    })
+    await repository.createMemory(
+        scope,
+        {
+            type: 'fact',
+            content: `${presetId} memory`
+        },
+        [`${presetId}-speaker`]
+    )
     await repository.upsertSnapshot(
         scope,
         'embedding-rerank',
@@ -55,6 +59,9 @@ it('lists stored presets and clears only the selected preset', async () => {
             ctx.database.get('living_memory_entry', {
                 presetId: 'preset-clear'
             }),
+            ctx.database.get('living_memory_entry_speaker', {
+                presetId: 'preset-clear'
+            }),
             ctx.database.get('living_memory_snapshot', {
                 presetId: 'preset-clear'
             }),
@@ -72,6 +79,9 @@ it('lists stored presets and clears only the selected preset', async () => {
 
         const retainedCounts = await Promise.all([
             ctx.database.get('living_memory_entry', {
+                presetId: 'preset-keep'
+            }),
+            ctx.database.get('living_memory_entry_speaker', {
                 presetId: 'preset-keep'
             }),
             ctx.database.get('living_memory_snapshot', {

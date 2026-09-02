@@ -9,6 +9,7 @@ import type {
 import type { LivingMemoryConsoleEvents } from '../contracts/rpc'
 import type { ChatLunaLivingMemoryService } from '../service/app/living_memory_service'
 import type {
+    LivingMemoryEntrySpeakerRecord,
     LivingMemoryEntryTableRecord,
     PresetSpeakerTableRecord
 } from '../service/persistence/types'
@@ -20,6 +21,7 @@ declare module 'koishi' {
 
     interface Tables {
         living_memory_entry: LivingMemoryEntryTableRecord
+        living_memory_entry_speaker: LivingMemoryEntrySpeakerRecord
         living_memory_migration: LivingMemoryMigrationRecord
         living_memory_snapshot: MemorySnapshotRecord
         living_memory_job: MemoryJobRecord

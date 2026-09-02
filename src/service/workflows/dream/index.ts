@@ -4,8 +4,7 @@ import type { ManualDreamVectorReader } from '../../../contracts/vector_index'
 import type {
     DreamMemoryEntryRecord,
     DreamMemoryRepository,
-    LivingMemoryConfig,
-    UserProfileRepository
+    LivingMemoryConfig
 } from '../../../contracts/workflows'
 import type { PresetSpeakerRecord } from '../../../contracts/memory'
 import { isModelConfigured, summarizeError } from '../../shared/utils'
@@ -15,7 +14,7 @@ import {
 } from '../../memory/helpers'
 import { DreamClusterer } from './clustering'
 import type { DreamWorkerRunner } from './worker/protocol'
-import { LivingMemoryUserProfileService } from '../../user_profile'
+import type { LivingMemoryUserProfileService } from '../../user_profile'
 import { addStats, createEmptyStats, formatDreamDetail } from './stats'
 import type { DreamRunResult } from './types'
 import { DreamUnitProcessor } from './unit_processor'
@@ -25,22 +24,20 @@ export type { DreamRunResult } from './types'
 
 type LivingMemoryDreamConfig = Pick<
     LivingMemoryConfig,
-    | 'mainModel'
-    | 'enableUserProfileInjection'
-    | 'userProfileMinMemoryCount'
-    | 'userProfileMemoryLimit'
+    'mainModel' | 'enableUserProfileInjection'
 >
 
-export interface DreamRepository extends UserProfileRepository {
+export interface DreamRepository {
     listDreamEntriesByPreset(
         presetId: string
     ): Promise<DreamMemoryEntryRecord[]>
+    listActiveMemorySpeakerKeys(presetId: string): Promise<string[]>
+    listPresetSpeakers(presetId: string): Promise<PresetSpeakerRecord[]>
 }
 
 export class LivingMemoryDreamService {
     private readonly clusterer: DreamClusterer
     private readonly unitProcessor: DreamUnitProcessor
-    private readonly userProfiles: LivingMemoryUserProfileService
 
     constructor(
         private readonly ctx: Context,
@@ -49,16 +46,11 @@ export class LivingMemoryDreamService {
         private readonly mutations: DreamMemoryRepository,
         vectors: ManualDreamVectorReader,
         worker: DreamWorkerRunner,
-        private readonly logger: LivingMemoryLogger
+        private readonly logger: LivingMemoryLogger,
+        private readonly userProfiles: LivingMemoryUserProfileService
     ) {
         this.clusterer = new DreamClusterer(vectors, worker)
         this.unitProcessor = new DreamUnitProcessor(mutations)
-        this.userProfiles = new LivingMemoryUserProfileService(
-            ctx,
-            config,
-            repository,
-            logger
-        )
     }
 
     async run(
@@ -72,11 +64,21 @@ export class LivingMemoryDreamService {
                 presetId
             })
         const entries = await this.repository.listDreamEntriesByPreset(presetId)
-        if (entries.length < 2) {
-            await this.consolidateSingleEntry(presetId, entries)
+        if (entries.length === 0) {
             return this.createResult(entries.length, 0, {
                 detail: `dream skipped: only ${entries.length} memories`
             })
+        }
+
+        let singleEntryResult: DreamRunResult | undefined
+        if (entries.length === 1) {
+            await this.consolidateSingleEntry(presetId, entries)
+            singleEntryResult = this.createResult(1, 0, {
+                detail: 'dream skipped: only 1 memories'
+            })
+            if (!this.config.enableUserProfileInjection) {
+                return singleEntryResult
+            }
         }
 
         if (!isModelConfigured(this.config.mainModel)) {
@@ -97,18 +99,21 @@ export class LivingMemoryDreamService {
         }
 
         const chatModel = model.value
-        const assistantLabel = resolveAssistantLabel(presetId)
-        const presetPrompt = await resolvePresetPrompt(this.ctx, presetId)
-        const speakers = await this.repository.listPresetSpeakers(presetId)
-        const result = await this.processEntries(
-            presetId,
-            assistantLabel,
-            presetPrompt,
-            entries,
-            speakers,
-            chatModel,
-            runLogger
-        )
+        let result = singleEntryResult
+        if (result === undefined) {
+            const assistantLabel = resolveAssistantLabel(presetId)
+            const presetPrompt = await resolvePresetPrompt(this.ctx, presetId)
+            const speakers = await this.repository.listPresetSpeakers(presetId)
+            result = await this.processEntries(
+                presetId,
+                assistantLabel,
+                presetPrompt,
+                entries,
+                speakers,
+                chatModel,
+                runLogger
+            )
+        }
         const profileDetail = await this.regenerateUserProfilesAfterDream(
             presetId,
             chatModel,
@@ -138,16 +143,12 @@ export class LivingMemoryDreamService {
         model: ChatLunaChatModel,
         logger?: LivingMemoryLogger
     ) {
-        if (!this.config.enableUserProfileInjection) {
-            return 'user profiles skipped: disabled'
-        }
-
         try {
-            const finalEntries =
-                await this.repository.listDreamEntriesByPreset(presetId)
+            const speakerKeys =
+                await this.repository.listActiveMemorySpeakerKeys(presetId)
             const result = await this.userProfiles.regenerate(
                 presetId,
-                finalEntries,
+                speakerKeys,
                 model,
                 logger
             )
@@ -176,17 +177,6 @@ export class LivingMemoryDreamService {
         logger?.diagnostic('dream.processing.started', {
             entries: entries.length
         })
-        if (entries.length < 2) {
-            await this.consolidateSingleEntry(presetId, entries)
-            return this.createResult(entries.length, 0, {
-                detail: formatDreamDetail(
-                    entries.length,
-                    0,
-                    createEmptyStats()
-                )
-            })
-        }
-
         const clusters = await this.clusterer.buildClusters(
             presetId,
             entries,
@@ -226,11 +216,7 @@ export class LivingMemoryDreamService {
             entryCount: entries.length,
             clusterCount: clusters.length,
             ...stats,
-            detail: formatDreamDetail(
-                entries.length,
-                clusters.length,
-                stats
-            )
+            detail: formatDreamDetail(entries.length, clusters.length, stats)
         }
     }
 

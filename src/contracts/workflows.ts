@@ -121,8 +121,10 @@ export interface ExtractedMemoryItem {
     speakerLabels: string[]
 }
 
-export interface AttributedMemoryItem
-    extends Omit<ExtractedMemoryItem, 'speakerLabels'> {
+export interface AttributedMemoryItem extends Omit<
+    ExtractedMemoryItem,
+    'speakerLabels'
+> {
     speakerKeys: string[]
 }
 
@@ -249,6 +251,14 @@ export interface ExtractionRepository {
 }
 
 export interface UserProfileRepository {
+    getEntriesByPresetAndIds(
+        presetId: string,
+        ids: string[]
+    ): Promise<MemoryEntryRecord[]>
+    listActiveMemorySpeakerLinks(
+        presetId: string,
+        speakerKeys: string[]
+    ): Promise<Array<{ speakerKey: string; memoryId: string }>>
     listPresetSpeakers(presetId: string): Promise<PresetSpeakerRecord[]>
     upsertPresetSpeaker(input: PresetSpeakerInput): Promise<void>
     listUserProfilesByPreset(presetId: string): Promise<UserProfileRecord[]>

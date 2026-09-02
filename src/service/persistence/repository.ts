@@ -33,9 +33,13 @@ import type {
     SnapshotRepository,
     UserProfileRepository
 } from '../../contracts/workflows'
-import { LivingMemoryEntryRepository } from './entries'
+import { LivingMemoryEntryRepository, type EntryTransaction } from './entries'
 import { LivingMemoryJobRepository } from './jobs'
-import { createPresetImportId, createPresetSpeakerId } from './normalizers'
+import {
+    createActiveMemorySpeakerRows,
+    createPresetImportId,
+    createPresetSpeakerId
+} from './normalizers'
 import { LivingMemorySnapshotRepository } from './snapshots'
 import { defineLivingMemoryTables } from './tables'
 import { LivingMemoryUserProfileRepository } from './user_profiles'
@@ -85,9 +89,13 @@ export class LivingMemoryRepository
     private readonly jobs: LivingMemoryJobRepository
     private readonly snapshots: LivingMemorySnapshotRepository
     private readonly userProfiles: LivingMemoryUserProfileRepository
+    // 单连接数据库无法并发开启事务，记忆事实与关联索引统一串行提交。
+    private transactionTail = Promise.resolve()
 
     constructor(private readonly ctx: Context) {
-        this.entries = new LivingMemoryEntryRepository(ctx)
+        this.entries = new LivingMemoryEntryRepository(ctx, (callback) =>
+            this.runTransaction(callback)
+        )
         this.jobs = new LivingMemoryJobRepository(ctx)
         this.snapshots = new LivingMemorySnapshotRepository(ctx)
         this.userProfiles = new LivingMemoryUserProfileRepository(ctx)
@@ -97,8 +105,27 @@ export class LivingMemoryRepository
         defineLivingMemoryTables(this.ctx)
     }
 
+    private runTransaction<T>(
+        callback: (database: EntryTransaction) => Promise<T>
+    ) {
+        return this.runSerialized(() => this.ctx.database.transact(callback))
+    }
+
+    private runSerialized<T>(task: () => Promise<T>) {
+        const operation = this.transactionTail.then(task)
+        this.transactionTail = operation.then(
+            () => undefined,
+            () => undefined
+        )
+        return operation
+    }
+
     migrateMemorySourceOriginsArray(): Promise<number> {
         return this.entries.migrateMemorySourceOriginsArray()
+    }
+
+    migrateActiveMemorySpeakers(): Promise<number> {
+        return this.entries.migrateActiveMemorySpeakers()
     }
 
     hasMigratedLegacyEmbeddings(): Promise<boolean> {
@@ -121,6 +148,14 @@ export class LivingMemoryRepository
         presetId: string
     ): Promise<DreamMemoryEntryRecord[]> {
         return this.entries.listDreamEntriesByPreset(presetId)
+    }
+
+    listActiveMemorySpeakerKeys(presetId: string): Promise<string[]> {
+        return this.entries.listActiveMemorySpeakerKeys(presetId)
+    }
+
+    listActiveMemorySpeakerLinks(presetId: string, speakerKeys: string[]) {
+        return this.entries.listActiveMemorySpeakerLinks(presetId, speakerKeys)
     }
 
     listEntryIndexSourcePage(
@@ -341,7 +376,9 @@ export class LivingMemoryRepository
     }
 
     reconcilePresetSpeaker(input: PresetSpeakerInput): Promise<void> {
-        return reconcilePresetSpeaker(this.ctx.database, input)
+        return this.runSerialized(() =>
+            reconcilePresetSpeaker(this.ctx.database, input)
+        )
     }
 
     listUserProfilesByPreset(presetId: string): Promise<UserProfileRecord[]> {
@@ -377,17 +414,14 @@ export class LivingMemoryRepository
     }
 
     async clearAllByPreset(presetId: string) {
-        await Promise.all([
-            this.ctx.database.remove('living_memory_entry', { presetId }),
-            this.ctx.database.remove('living_memory_snapshot', { presetId }),
-            this.ctx.database.remove('living_memory_job', { presetId }),
-            this.ctx.database.remove('living_memory_user_profile', {
-                presetId
-            }),
-            this.ctx.database.remove('living_memory_preset_speaker', {
-                presetId
-            })
-        ])
+        await this.runTransaction(async (database) => {
+            await database.remove('living_memory_entry', { presetId })
+            await database.remove('living_memory_entry_speaker', { presetId })
+            await database.remove('living_memory_snapshot', { presetId })
+            await database.remove('living_memory_job', { presetId })
+            await database.remove('living_memory_user_profile', { presetId })
+            await database.remove('living_memory_preset_speaker', { presetId })
+        })
     }
 
     async exportPresetData(
@@ -446,12 +480,29 @@ export class LivingMemoryRepository
     ): Promise<LivingMemoryPresetImportSummary> {
         const rows = this.buildPresetImportRows(targetPresetId, data)
 
-        await this.ctx.database.withTransaction(async (database) => {
+        await this.runTransaction(async (database) => {
             await runPresetImportBatches(
                 'entries',
                 rows.entryRows,
                 async (batch) => {
                     await database.upsert('living_memory_entry', batch)
+                }
+            )
+            await runPresetImportBatches(
+                'entry speaker cleanup',
+                rows.entryRows,
+                async (batch) => {
+                    await database.remove('living_memory_entry_speaker', {
+                        presetId: targetPresetId,
+                        memoryId: { $in: batch.map((entry) => entry.id) }
+                    })
+                }
+            )
+            await runPresetImportBatches(
+                'entry speakers',
+                rows.entrySpeakerRows,
+                async (batch) => {
+                    await database.upsert('living_memory_entry_speaker', batch)
                 }
             )
 
@@ -532,7 +583,7 @@ export class LivingMemoryRepository
             createdAt: new Date(entry.createdAt),
             updatedAt: new Date(entry.updatedAt)
         })
-        let entryRows
+        let entryRows: MemoryEntryRecord[]
         if (data.version === 1) {
             entryRows = data.entries.map((entry) =>
                 createEntryRow(entry, false, [])
@@ -579,7 +630,16 @@ export class LivingMemoryRepository
             updatedAt: new Date(speaker.updatedAt)
         }))
 
-        return { entryRows, speakerKeys, userProfileRows, presetSpeakerRows }
+        const entrySpeakerRows = entryRows.flatMap(
+            createActiveMemorySpeakerRows
+        )
+        return {
+            entryRows,
+            entrySpeakerRows,
+            speakerKeys,
+            userProfileRows,
+            presetSpeakerRows
+        }
     }
 
     async listDistinctPresetIds(): Promise<string[]> {
