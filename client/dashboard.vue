@@ -591,6 +591,8 @@ const runDreamJob = async () => {
             ElMessage.success('Dream 任务已触发')
         } else if (result.reason === 'preset-locked') {
             ElMessage.info('Dream 任务正在运行')
+        } else if (result.reason === 'insufficient-memories') {
+            ElMessage.warning('活跃记忆数量不足，未执行 Dream')
         }
         await refreshTabs(
             [memoriesTab.value, profilesTab.value, jobsTab.value],

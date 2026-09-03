@@ -146,6 +146,9 @@ chatluna-livingmemory/
 6. Dream 与用户画像
    - Dream 只处理活跃记忆。归档记忆不参与聚类、增量邻居查询、整理或用户
      画像生成。
+   - 预设活跃记忆少于一个整理单元（30 条）时两种触发都不启动任务：手动触发
+     返回 `insufficient-memories` 供 WebUI 提示，自动触发只写跳过日志。用户
+     画像只在 Dream 内生成，该门槛同时推迟小预设的画像生成。
    - `archive` 可将当前活跃记忆归档；`merge` 原子更新目标记忆并归档来源
      记忆。合并必须通过 `applyDreamMerge()` 完成，不得拆成多个独立写操作。
    - Dream 的 update 与 merge 结果完整覆盖模型生成的 `speakerKeys` 和其余

@@ -386,6 +386,17 @@ export class LivingMemoryEntryRepository
         return entries.map((entry) => entry.presetId).sort()
     }
 
+    countActiveEntries(presetId: string) {
+        return this.ctx.database.eval(
+            'living_memory_entry',
+            (entry) => $.count(entry.id),
+            {
+                presetId,
+                status: 'active'
+            }
+        )
+    }
+
     countPendingEntries(presetId: string) {
         return this.ctx.database.eval(
             'living_memory_entry',

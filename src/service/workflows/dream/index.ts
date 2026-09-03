@@ -40,7 +40,7 @@ export class LivingMemoryDreamService {
         private readonly ctx: Context,
         private readonly config: LivingMemoryDreamConfig,
         private readonly repository: DreamRepository,
-        private readonly mutations: DreamMemoryRepository,
+        mutations: DreamMemoryRepository,
         vectors: ManualDreamVectorReader,
         worker: DreamWorkerRunner,
         private readonly logger: LivingMemoryLogger,
@@ -61,58 +61,30 @@ export class LivingMemoryDreamService {
                 presetId
             })
         const entries = await this.repository.listDreamEntriesByPreset(presetId)
-        if (entries.length === 0) {
-            return this.createResult(entries.length, 0, {
-                detail: `dream skipped: only ${entries.length} memories`
-            })
-        }
-
-        let singleEntryResult: DreamRunResult | undefined
-        if (entries.length === 1) {
-            await this.consolidateSingleEntry(presetId, entries)
-            singleEntryResult = this.createResult(1, 0, {
-                detail: 'dream skipped: only 1 memories'
-            })
-            if (!this.userProfiles.enabled) {
-                return singleEntryResult
-            }
-        }
-
         if (!isModelConfigured(this.config.mainModel)) {
-            return this.createModelSkipResult(
-                entries.length,
-                'model-not-configured',
-                singleEntryResult
-            )
+            return this.createSkipResult(entries.length, 'model-not-configured')
         }
 
         const model = await this.ctx.chatluna.createChatModel(
             this.config.mainModel
         )
         if (model.value === undefined) {
-            return this.createModelSkipResult(
-                entries.length,
-                'model-unavailable',
-                singleEntryResult
-            )
+            return this.createSkipResult(entries.length, 'model-unavailable')
         }
 
         const chatModel = model.value
-        let result = singleEntryResult
-        if (result === undefined) {
-            const assistantLabel = resolveAssistantLabel(presetId)
-            const presetPrompt = await resolvePresetPrompt(this.ctx, presetId)
-            const speakers = await this.repository.listPresetSpeakers(presetId)
-            result = await this.processEntries(
-                presetId,
-                assistantLabel,
-                presetPrompt,
-                entries,
-                speakers,
-                chatModel,
-                runLogger
-            )
-        }
+        const assistantLabel = resolveAssistantLabel(presetId)
+        const presetPrompt = await resolvePresetPrompt(this.ctx, presetId)
+        const speakers = await this.repository.listPresetSpeakers(presetId)
+        const result = await this.processEntries(
+            presetId,
+            assistantLabel,
+            presetPrompt,
+            entries,
+            speakers,
+            chatModel,
+            runLogger
+        )
         const profileDetail = await this.regenerateUserProfilesAfterDream(
             presetId,
             chatModel,
@@ -121,20 +93,6 @@ export class LivingMemoryDreamService {
         const detail = [result.detail, profileDetail].join('\n')
 
         return { ...result, detail }
-    }
-
-    /** 不足聚簇规模时，唯一一条记忆直接标记为已固化。 */
-    private async consolidateSingleEntry(
-        presetId: string,
-        entries: DreamMemoryEntryRecord[]
-    ) {
-        if (entries.length === 1) {
-            await this.mutations.setMemoryConsolidation(
-                presetId,
-                [entries[0].id],
-                true
-            )
-        }
     }
 
     /**
@@ -228,49 +186,20 @@ export class LivingMemoryDreamService {
         }
     }
 
-    private createResult(
+    private createSkipResult(
         entryCount: number,
-        clusterCount: number,
-        options: {
-            detail: string
-            skippedReason?: string
-        }
+        skippedReason: 'model-not-configured' | 'model-unavailable'
     ): DreamRunResult {
         return {
             entryCount,
-            clusterCount,
+            clusterCount: 0,
             kept: 0,
             merged: 0,
             updated: 0,
             archived: 0,
             skipped: 0,
-            skippedReason: options.skippedReason,
-            detail: options.detail
-        }
-    }
-
-    /**
-     * 模型不可用时的返回。单条记忆分支已经写库固化，它的结果不能被丢弃，
-     * 只把画像阶段的跳过原因并入 detail。与画像阶段其余跳过原因一致，这里
-     * 不写 skippedReason，该字段只表达整理阶段自身的跳过。
-     */
-    private createModelSkipResult(
-        entryCount: number,
-        skippedReason: 'model-not-configured' | 'model-unavailable',
-        singleEntryResult: DreamRunResult | undefined
-    ): DreamRunResult {
-        if (singleEntryResult === undefined) {
-            return this.createResult(entryCount, 0, {
-                skippedReason,
-                detail: `dream skipped: ${skippedReason}`
-            })
-        }
-        return {
-            ...singleEntryResult,
-            detail: [
-                singleEntryResult.detail,
-                `user profiles skipped: ${skippedReason}`
-            ].join('\n')
+            skippedReason,
+            detail: `dream skipped: ${skippedReason}`
         }
     }
 }

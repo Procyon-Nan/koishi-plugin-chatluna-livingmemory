@@ -7,6 +7,14 @@ import type {
 } from '../../../contracts/workflows'
 import type { MemoryScope } from '../../../contracts/memory'
 
+/**
+ * 启动 Dream 所需的最少活跃记忆条数。低于一个整理单元的规模时可归并的材料太
+ * 少，整理收益抵不上一轮聚类与模型调用，因此两种触发方式都不启动任务。取值与
+ * 手动 Dream 的单元簇上限 DREAM_CLUSTER_UNIT_MAX_SIZE、增量 Dream 每个种子的
+ * 邻居数上限 INCREMENTAL_DREAM_TOP_K 一致。
+ */
+const DREAM_MIN_ACTIVE_MEMORY_COUNT = 30
+
 type LivingMemoryDreamCoordinatorConfig = Pick<
     LivingMemoryConfig,
     'autoDreamMemoryGrowthThreshold' | 'enableAutoDream'
@@ -24,6 +32,7 @@ export type DreamCoordinatorRepository = Pick<
     JobRepository,
     'createJob' | 'markStaleRunningJobsAsFailed'
 > & {
+    countActiveEntries(presetId: string): Promise<number>
     countPendingEntries(presetId: string): Promise<number>
 }
 
@@ -59,6 +68,18 @@ export class LivingMemoryDreamCoordinator {
             return
         }
 
+        const activeCount = await this.repository.countActiveEntries(presetId)
+        if (activeCount < DREAM_MIN_ACTIVE_MEMORY_COUNT) {
+            this.logger.diagnostic('dream.automatic.skipped', {
+                workflow: 'dream',
+                presetId,
+                active: activeCount,
+                minimum: DREAM_MIN_ACTIVE_MEMORY_COUNT,
+                reason: 'insufficient-memories'
+            })
+            return
+        }
+
         this.logger.diagnostic('dream.automatic.threshold-reached', {
             workflow: 'dream',
             presetId,
@@ -68,8 +89,16 @@ export class LivingMemoryDreamCoordinator {
         await this.startJob(presetId, 'automatic')
     }
 
-    runManual(presetId: string): Promise<DreamTriggerResult> {
-        return this.startJob(presetId, 'manual')
+    async runManual(presetId: string): Promise<DreamTriggerResult> {
+        const activeCount = await this.repository.countActiveEntries(presetId)
+        if (activeCount < DREAM_MIN_ACTIVE_MEMORY_COUNT) {
+            return {
+                success: true,
+                started: false,
+                reason: 'insufficient-memories'
+            }
+        }
+        return await this.startJob(presetId, 'manual')
     }
 
     private async startJob(

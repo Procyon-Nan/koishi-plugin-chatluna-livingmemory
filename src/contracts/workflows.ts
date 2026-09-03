@@ -22,7 +22,7 @@ import type { MemoryVectorIndexStatus } from './vector_index'
 export interface DreamTriggerResult {
     success: true
     started: boolean
-    reason?: 'preset-locked'
+    reason?: 'preset-locked' | 'insufficient-memories'
     runningJobId?: string
 }
 

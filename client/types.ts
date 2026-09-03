@@ -158,7 +158,7 @@ export interface PresetSpeakerRecord {
 export interface DreamTriggerResult {
     success: true
     started: boolean
-    reason?: 'preset-locked'
+    reason?: 'preset-locked' | 'insufficient-memories'
     runningJobId?: string
 }
 

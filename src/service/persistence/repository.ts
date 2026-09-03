@@ -204,6 +204,10 @@ export class LivingMemoryRepository
         return this.entries.listEntryPresetIds()
     }
 
+    countActiveEntries(presetId: string): Promise<number> {
+        return this.entries.countActiveEntries(presetId)
+    }
+
     countPendingEntries(presetId: string): Promise<number> {
         return this.entries.countPendingEntries(presetId)
     }

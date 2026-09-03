@@ -48,10 +48,13 @@ import {
 const createDreamCoordinatorRepository = (
     jobStore: ReturnType<typeof createJobStore>,
     countPendingEntries: DreamCoordinatorRepository['countPendingEntries'] = async () =>
-        0
+        0,
+    countActiveEntries: DreamCoordinatorRepository['countActiveEntries'] = async () =>
+        30
 ): DreamCoordinatorRepository => ({
     createJob: jobStore.createJob,
     markStaleRunningJobsAsFailed: jobStore.markStaleRunningJobsAsFailed,
+    countActiveEntries,
     countPendingEntries
 })
 
@@ -306,35 +309,7 @@ it('does not start post-Dream user profile generation when disabled', async () =
     ])
 })
 
-it('marks a single-memory manual Dream as consolidated', async () => {
-    const entry = createMemoryEntry('only-memory')
-    const consolidatedIds: string[] = []
-    const repository = {
-        listDreamEntriesByPreset: async () => [entry],
-        setMemoryConsolidation: async (_presetId: string, ids: string[]) => {
-            consolidatedIds.push(...ids)
-        }
-    } as unknown as DreamRepository
-    const service = new LivingMemoryDreamService(
-        {} as Context,
-        { mainModel: 'dream-model' },
-        repository as unknown as DreamRepository,
-        repository as unknown as DreamMemoryRepository,
-        {
-            readVectors: async () => new Map()
-        },
-        dreamWorker,
-        logger,
-        { enabled: false } as unknown as LivingMemoryUserProfileService
-    )
-
-    const result = await service.run(scope.presetId)
-
-    assert.equal(result.entryCount, 1)
-    assert.deepEqual(consolidatedIds, [entry.id])
-})
-
-it('updates the related user profile after a single-memory Dream', async () => {
+it('regenerates the related user profile after Dream', async () => {
     const entry = {
         ...createMemoryEntry('only-memory'),
         speakerKeys: ['speaker-1']
@@ -343,11 +318,18 @@ it('updates the related user profile after a single-memory Dream', async () => {
     const repository = {
         listDreamEntriesByPreset: async () => [entry],
         listActiveMemorySpeakerKeys: async () => ['speaker-1'],
+        listPresetSpeakers: async () => [],
         setMemoryConsolidation: async () => {}
     } as unknown as DreamRepository
     const ctx = {
         chatluna: {
-            createChatModel: async () => ({ value: {} })
+            createChatModel: async () => ({ value: {} }),
+            preset: {
+                getPreset: () => ({ value: {} })
+            },
+            promptRenderer: {
+                renderPresetTemplate: async () => ({ messages: [] })
+            }
         }
     } as unknown as Context
     const userProfiles = {
@@ -664,6 +646,78 @@ it('skips auto Dream when pending memories are below the threshold', async () =>
 
     await coordinator.queueAutoIfThresholdReached(scope.presetId)
 
+    assert.equal(dreamCalls, 0)
+    assert.equal(jobStore.jobs.length, 0)
+})
+
+it('skips auto Dream when active memories are below the minimum', async () => {
+    const jobStore = createJobStore()
+    let incrementalCalls = 0
+    const captured = createCapturedLogger()
+    const coordinator = createDreamCoordinator(
+        {
+            enableAutoDream: true,
+            autoDreamMemoryGrowthThreshold: 3
+        },
+        { run: async () => createDreamRunResult() },
+        {
+            run: async () => {
+                incrementalCalls += 1
+                return createIncrementalDreamRunResult()
+            }
+        },
+        createDreamCoordinatorRepository(
+            jobStore,
+            async () => 3,
+            async () => 29
+        ),
+        { clearByPreset: () => {} },
+        new LivingMemoryJobTracker(jobStore),
+        captured.logger
+    )
+
+    await coordinator.queueAutoIfThresholdReached(scope.presetId)
+
+    assert.equal(incrementalCalls, 0)
+    assert.equal(jobStore.jobs.length, 0)
+    assert.ok(
+        captured.info.some((message) =>
+            /event=dream.automatic.skipped .*active=29 minimum=30 reason=insufficient-memories/u.test(
+                message
+            )
+        )
+    )
+})
+
+it('skips manual Dream when active memories are below the minimum', async () => {
+    const jobStore = createJobStore()
+    let dreamCalls = 0
+    const coordinator = createDreamCoordinator(
+        {
+            enableAutoDream: false,
+            autoDreamMemoryGrowthThreshold: 3
+        },
+        {
+            run: async () => {
+                dreamCalls += 1
+                return createDreamRunResult()
+            }
+        },
+        incrementalDream,
+        createDreamCoordinatorRepository(
+            jobStore,
+            async () => 0,
+            async () => 29
+        ),
+        { clearByPreset: () => {} },
+        new LivingMemoryJobTracker(jobStore),
+        logger
+    )
+
+    const result = await coordinator.runManual(scope.presetId)
+
+    assert.equal(result.started, false)
+    assert.equal(result.reason, 'insufficient-memories')
     assert.equal(dreamCalls, 0)
     assert.equal(jobStore.jobs.length, 0)
 })
