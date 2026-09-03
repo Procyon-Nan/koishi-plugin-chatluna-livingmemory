@@ -1,4 +1,3 @@
-import type { Context } from 'koishi'
 import type {
     PresetSpeakerInput,
     PresetSpeakerRecord,
@@ -14,8 +13,7 @@ import {
     normalizePresetSpeakerRecord,
     normalizeUserProfileRecord
 } from './normalizers'
-
-type LivingMemoryDatabase = Context['database']
+import type { LivingMemoryTransaction } from './types'
 
 const uniqueAliases = (aliases: string[]) => {
     const result: string[] = []
@@ -44,7 +42,7 @@ const earliestCreatedAt = (speakers: PresetSpeakerRecord[], fallback: Date) =>
     )
 
 const removeByIds = async (
-    database: LivingMemoryDatabase,
+    database: LivingMemoryTransaction,
     table: 'living_memory_user_profile' | 'living_memory_preset_speaker',
     ids: string[]
 ) => {
@@ -53,117 +51,128 @@ const removeByIds = async (
     }
 }
 
-export const reconcilePresetSpeaker = async (
-    database: LivingMemoryDatabase,
+export interface PresetSpeakerIdentity {
+    presetId: string
+    speakerKey: string
+    speakerLabel: string
+    speakerId: string
+    platform: string
+}
+
+/**
+ * 归一化并校验稳定身份。缺少任一必要字段时返回 `null`，由调用方据此完全跳过
+ * 协调，避免为无效输入开启事务。
+ */
+export const resolvePresetSpeakerIdentity = (
     input: PresetSpeakerInput
-) => {
-    const identity = {
-        presetId: input.presetId.trim(),
-        speakerKey: input.speakerKey.trim(),
-        speakerLabel: normalizeUserProfileSpeakerLabel(input.speakerLabel),
-        speakerId: normalizeOptionalString(input.speakerId),
-        platform: normalizeOptionalString(input.platform)
-    }
+): PresetSpeakerIdentity | null => {
+    const presetId = input.presetId.trim()
+    const speakerKey = input.speakerKey.trim()
+    const speakerLabel = normalizeUserProfileSpeakerLabel(input.speakerLabel)
+    const speakerId = normalizeOptionalString(input.speakerId)
+    const platform = normalizeOptionalString(input.platform)
     if (
-        identity.presetId.length === 0 ||
-        identity.speakerKey.length === 0 ||
-        identity.speakerLabel.length === 0 ||
-        identity.speakerId == null ||
-        identity.platform == null
+        presetId.length === 0 ||
+        speakerKey.length === 0 ||
+        speakerLabel.length === 0 ||
+        speakerId == null ||
+        platform == null
     ) {
-        return
+        return null
     }
-    const speakerId = identity.speakerId
-    const platform = identity.platform
+    return { presetId, speakerKey, speakerLabel, speakerId, platform }
+}
 
-    await database.withTransaction(async (transaction) => {
-        const stableId = createPresetSpeakerId(
-            identity.presetId,
-            identity.speakerKey
-        )
-        const rows = [
-            ...(await transaction.get('living_memory_preset_speaker', {
-                presetId: identity.presetId,
-                speakerId
-            })),
-            ...(await transaction.get('living_memory_preset_speaker', {
-                id: stableId
-            }))
-        ]
-        const speakers = [...new Map(rows.map((row) => [row.id, row])).values()]
-            .map(normalizePresetSpeakerRecord)
-            .filter(
-                (speaker) =>
-                    speaker.speakerKey === identity.speakerKey ||
-                    (speaker.speakerId === speakerId &&
-                        (speaker.platform == null ||
-                            speaker.platform === platform))
-            )
-        const aliases = uniqueAliases([
-            ...speakers.flatMap((speaker) => [
-                ...speaker.speakerAliases,
-                speaker.speakerLabel
-            ]),
-            identity.speakerLabel
-        ])
-        const candidateKeys = new Set([
-            identity.speakerKey,
-            ...speakers.map((speaker) => speaker.speakerKey),
-            ...speakers.flatMap((speaker) =>
-                speaker.speakerAliases.map(normalizeUserProfileSpeakerAliasKey)
-            )
-        ])
-        const profiles = (
-            await transaction.get('living_memory_user_profile', {
-                presetId: identity.presetId,
-                speakerKey: { $in: [...candidateKeys] }
-            })
-        )
-            .map(normalizeUserProfileRecord)
-            .sort(compareProfilesByFreshness)
-        const currentProfile = profiles[0]
-        if (currentProfile != null) {
-            await transaction.set(
-                'living_memory_user_profile',
-                { id: currentProfile.id },
-                {
-                    presetId: identity.presetId,
-                    speakerKey: identity.speakerKey,
-                    speakerLabel: identity.speakerLabel,
-                    content: currentProfile.content,
-                    sourceMemoryIds: [
-                        ...new Set(
-                            profiles.flatMap(
-                                (profile) => profile.sourceMemoryIds
-                            )
-                        )
-                    ],
-                    updatedAt: currentProfile.updatedAt
-                }
-            )
-            await removeByIds(
-                transaction,
-                'living_memory_user_profile',
-                profiles.slice(1).map((profile) => profile.id)
-            )
-        }
+export const reconcilePresetSpeaker = async (
+    database: LivingMemoryTransaction,
+    identity: PresetSpeakerIdentity
+) => {
+    const { speakerId, platform } = identity
 
-        const now = new Date()
-        await transaction.upsert('living_memory_preset_speaker', [
+    const stableId = createPresetSpeakerId(
+        identity.presetId,
+        identity.speakerKey
+    )
+    const rows = [
+        ...(await database.get('living_memory_preset_speaker', {
+            presetId: identity.presetId,
+            speakerId
+        })),
+        ...(await database.get('living_memory_preset_speaker', {
+            id: stableId
+        }))
+    ]
+    const speakers = [...new Map(rows.map((row) => [row.id, row])).values()]
+        .map(normalizePresetSpeakerRecord)
+        .filter(
+            (speaker) =>
+                speaker.speakerKey === identity.speakerKey ||
+                (speaker.speakerId === speakerId &&
+                    (speaker.platform == null ||
+                        speaker.platform === platform))
+        )
+    const aliases = uniqueAliases([
+        ...speakers.flatMap((speaker) => [
+            ...speaker.speakerAliases,
+            speaker.speakerLabel
+        ]),
+        identity.speakerLabel
+    ])
+    const candidateKeys = new Set([
+        identity.speakerKey,
+        ...speakers.map((speaker) => speaker.speakerKey),
+        ...speakers.flatMap((speaker) =>
+            speaker.speakerAliases.map(normalizeUserProfileSpeakerAliasKey)
+        )
+    ])
+    const profiles = (
+        await database.get('living_memory_user_profile', {
+            presetId: identity.presetId,
+            speakerKey: { $in: [...candidateKeys] }
+        })
+    )
+        .map(normalizeUserProfileRecord)
+        .sort(compareProfilesByFreshness)
+    const currentProfile = profiles[0]
+    if (currentProfile != null) {
+        await database.set(
+            'living_memory_user_profile',
+            { id: currentProfile.id },
             {
-                id: stableId,
-                ...identity,
-                speakerAliases: aliases,
-                createdAt: earliestCreatedAt(speakers, now),
-                updatedAt: now
+                presetId: identity.presetId,
+                speakerKey: identity.speakerKey,
+                speakerLabel: identity.speakerLabel,
+                content: currentProfile.content,
+                sourceMemoryIds: [
+                    ...new Set(
+                        profiles.flatMap((profile) => profile.sourceMemoryIds)
+                    )
+                ],
+                updatedAt: currentProfile.updatedAt
             }
-        ])
-        await removeByIds(
-            transaction,
-            'living_memory_preset_speaker',
-            speakers
-                .filter((speaker) => speaker.id !== stableId)
-                .map((speaker) => speaker.id)
         )
-    })
+        await removeByIds(
+            database,
+            'living_memory_user_profile',
+            profiles.slice(1).map((profile) => profile.id)
+        )
+    }
+
+    const now = new Date()
+    await database.upsert('living_memory_preset_speaker', [
+        {
+            id: stableId,
+            ...identity,
+            speakerAliases: aliases,
+            createdAt: earliestCreatedAt(speakers, now),
+            updatedAt: now
+        }
+    ])
+    await removeByIds(
+        database,
+        'living_memory_preset_speaker',
+        speakers
+            .filter((speaker) => speaker.id !== stableId)
+            .map((speaker) => speaker.id)
+    )
 }

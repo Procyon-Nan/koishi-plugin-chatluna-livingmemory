@@ -174,9 +174,17 @@ chatluna-livingmemory/
    - `src/service/persistence/` 负责表定义和表级仓库，
      `LivingMemoryRepository` 是上层持久化门面。工作流不得直接操作 Koishi
      数据库表。
+   - 一次逻辑写入需要多于一条语句、且中间状态对并发读者非法时必须使用事务；
+     单语句写入本身原子，不需要事务。不满足事务条件的多语句写入必须在代码中
+     写明依据。
+   - 事务只能通过 `LivingMemoryRepository` 的串行入口开启。持久化子模块通过
+     构造注入的 `transact` 取得事务句柄，不得直接调用 `ctx.database.transact`
+     或 `withTransaction`。单连接数据库无法并发开启事务，绕过该入口的失效方式
+     是死锁或索引漂移，类型检查和测试都不会暴露。
    - `living_memory_entry.speakerKeys` 是用户关联事实；
-     `living_memory_entry_speaker` 只索引活跃记忆，并与记忆状态及用户关联变更
-     在同一事务中维护。不得增加独立计数字段或为归档记忆保留关联行。
+     `living_memory_entry_speaker` 只索引活跃记忆。`status` 或 `speakerKeys`
+     变更必须与关联行重写在同一事务内提交。不得增加独立计数字段或为归档记忆
+     保留关联行。
    - schema 变更必须同步更新公共契约、表定义、normalizer、仓库、迁移兼容
      和受影响的 RPC/客户端类型。
    - 记忆正文、摘要或关键词变化时必须使旧 embedding 失效并安排索引同步；

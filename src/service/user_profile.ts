@@ -218,9 +218,14 @@ export class LivingMemoryUserProfileService {
                 presetId,
                 profileGroups.map((group) => group.speakerKey)
             )
-        const existingProfileByKey = new Map(
-            existingProfiles.map((profile) => [profile.speakerKey, profile])
-        )
+        // 仓储按规范行顺序返回，重复行下首个即 replaceUserProfile 的写入目标，
+        // 因此这里取首次出现者，保证读到的画像与写入的是同一行。
+        const existingProfileByKey = new Map<string, UserProfileRecord>()
+        for (const profile of existingProfiles) {
+            if (!existingProfileByKey.has(profile.speakerKey)) {
+                existingProfileByKey.set(profile.speakerKey, profile)
+            }
+        }
         for (const group of profileGroups) {
             group.existingProfile = existingProfileByKey.get(group.speakerKey)
         }

@@ -23,7 +23,7 @@ import type {
 import { Time } from 'koishi'
 import type { LivingMemoryRepository } from '../persistence/repository'
 import { DEFAULT_MEMORY_IMPORTANCE } from '../memory/entry_fields'
-import { PresetTaskQueue } from '../shared/preset_task_queue'
+import { SerialTaskQueue } from '../shared/serial_task_queue'
 import { summarizeError } from '../shared/utils'
 import { LivingMemoryFactsCommittedError } from '../vector_index/errors'
 import type { LivingMemoryLogger } from '../logging/logger'
@@ -55,7 +55,7 @@ const ARCHIVED_MEMORY_DECAY_PERIOD = 180 * Time.day
 export class LivingMemoryMutationService
     implements ExtractionRepository, DreamMemoryRepository
 {
-    private readonly queue = new PresetTaskQueue()
+    private readonly queue = new SerialTaskQueue()
 
     constructor(
         private readonly repository: MemoryFactRepository,

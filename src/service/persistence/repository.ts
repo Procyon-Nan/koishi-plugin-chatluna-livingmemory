@@ -33,7 +33,7 @@ import type {
     SnapshotRepository,
     UserProfileRepository
 } from '../../contracts/workflows'
-import { LivingMemoryEntryRepository, type EntryTransaction } from './entries'
+import { LivingMemoryEntryRepository } from './entries'
 import { LivingMemoryJobRepository } from './jobs'
 import {
     createActiveMemorySpeakerRows,
@@ -43,9 +43,15 @@ import {
 import { LivingMemorySnapshotRepository } from './snapshots'
 import { defineLivingMemoryTables } from './tables'
 import { LivingMemoryUserProfileRepository } from './user_profiles'
-import { reconcilePresetSpeaker } from './speaker_reconciliation'
+import {
+    reconcilePresetSpeaker,
+    resolvePresetSpeakerIdentity
+} from './speaker_reconciliation'
+import type { LivingMemoryTransaction } from './types'
+import { SerialTaskQueue } from '../shared/serial_task_queue'
 
 const PRESET_IMPORT_BATCH_SIZE = 100
+const TRANSACTION_QUEUE_KEY = 'living-memory-transaction'
 
 const runPresetImportBatches = async <T>(
     stage: string,
@@ -89,8 +95,7 @@ export class LivingMemoryRepository
     private readonly jobs: LivingMemoryJobRepository
     private readonly snapshots: LivingMemorySnapshotRepository
     private readonly userProfiles: LivingMemoryUserProfileRepository
-    // 单连接数据库无法并发开启事务，记忆事实与关联索引统一串行提交。
-    private transactionTail = Promise.resolve()
+    private readonly transactions = new SerialTaskQueue()
 
     constructor(private readonly ctx: Context) {
         this.entries = new LivingMemoryEntryRepository(ctx, (callback) =>
@@ -98,26 +103,27 @@ export class LivingMemoryRepository
         )
         this.jobs = new LivingMemoryJobRepository(ctx)
         this.snapshots = new LivingMemorySnapshotRepository(ctx)
-        this.userProfiles = new LivingMemoryUserProfileRepository(ctx)
+        this.userProfiles = new LivingMemoryUserProfileRepository(
+            ctx,
+            (callback) => this.runTransaction(callback)
+        )
     }
 
     defineTables() {
         defineLivingMemoryTables(this.ctx)
     }
 
+    /**
+     * 全部事务的唯一入口。单连接数据库无法并发开启事务，因此所有事务共用一条
+     * 串行链；这是驱动限制的变通，不是一致性机制本身——一致性来自事务边界，
+     * 上层的预设级串行队列不得因此被移除。
+     */
     private runTransaction<T>(
-        callback: (database: EntryTransaction) => Promise<T>
+        callback: (database: LivingMemoryTransaction) => Promise<T>
     ) {
-        return this.runSerialized(() => this.ctx.database.transact(callback))
-    }
-
-    private runSerialized<T>(task: () => Promise<T>) {
-        const operation = this.transactionTail.then(task)
-        this.transactionTail = operation.then(
-            () => undefined,
-            () => undefined
+        return this.transactions.run(TRANSACTION_QUEUE_KEY, () =>
+            this.ctx.database.transact(callback)
         )
-        return operation
     }
 
     migrateMemorySourceOriginsArray(): Promise<number> {
@@ -375,9 +381,13 @@ export class LivingMemoryRepository
         return this.userProfiles.upsertPresetSpeaker(input)
     }
 
-    reconcilePresetSpeaker(input: PresetSpeakerInput): Promise<void> {
-        return this.runSerialized(() =>
-            reconcilePresetSpeaker(this.ctx.database, input)
+    async reconcilePresetSpeaker(input: PresetSpeakerInput): Promise<void> {
+        const identity = resolvePresetSpeakerIdentity(input)
+        if (identity == null) {
+            return
+        }
+        await this.runTransaction((database) =>
+            reconcilePresetSpeaker(database, identity)
         )
     }
 

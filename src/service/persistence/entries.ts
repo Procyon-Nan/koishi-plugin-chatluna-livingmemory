@@ -34,6 +34,7 @@ import {
     createActiveMemorySpeakerRows,
     normalizeEntryRecord
 } from './normalizers'
+import type { LivingMemoryTransact, LivingMemoryTransaction } from './types'
 import {
     createUserProfileSpeakerKey,
     normalizeSpeakerKeys
@@ -94,12 +95,8 @@ const recallEntryFields: (keyof MemoryEntryRecord)[] = [
     'updatedAt'
 ]
 
-export type EntryTransaction = Parameters<
-    Parameters<Context['database']['transact']>[0]
->[0]
-
 interface DreamMergeContext {
-    database: EntryTransaction
+    database: LivingMemoryTransaction
     input: DreamMergeInput
     sourceIds: string[]
     target: MemoryEntryRecord
@@ -113,9 +110,7 @@ export class LivingMemoryEntryRepository
 {
     constructor(
         private readonly ctx: Context,
-        private readonly transact: <T>(
-            callback: (database: EntryTransaction) => Promise<T>
-        ) => Promise<T>
+        private readonly transact: LivingMemoryTransact
     ) {}
 
     async migrateActiveMemorySpeakers(): Promise<number> {
@@ -155,34 +150,36 @@ export class LivingMemoryEntryRepository
     }
 
     async migrateMemorySourceOriginsArray(): Promise<number> {
-        const applied = await this.ctx.database.get('living_memory_migration', {
-            id: sourceOriginsArrayMigrationId
+        return await this.transact(async (database) => {
+            const applied = await database.get('living_memory_migration', {
+                id: sourceOriginsArrayMigrationId
+            })
+            if (applied.length > 0) {
+                return 0
+            }
+
+            const entries = await database.get('living_memory_entry', {}, [
+                'id',
+                'sourceOrigins'
+            ])
+            const invalidIds = entries
+                .filter((entry) => !Array.isArray(entry.sourceOrigins))
+                .map((entry) => entry.id)
+
+            if (invalidIds.length > 0) {
+                await database.set(
+                    'living_memory_entry',
+                    { id: { $in: invalidIds } },
+                    { sourceOrigins: [] }
+                )
+            }
+
+            await database.create('living_memory_migration', {
+                id: sourceOriginsArrayMigrationId,
+                appliedAt: new Date()
+            })
+            return invalidIds.length
         })
-        if (applied.length > 0) {
-            return 0
-        }
-
-        const entries = await this.ctx.database.get('living_memory_entry', {}, [
-            'id',
-            'sourceOrigins'
-        ])
-        const invalidIds = entries
-            .filter((entry) => !Array.isArray(entry.sourceOrigins))
-            .map((entry) => entry.id)
-
-        if (invalidIds.length > 0) {
-            await this.ctx.database.set(
-                'living_memory_entry',
-                { id: { $in: invalidIds } },
-                { sourceOrigins: [] }
-            )
-        }
-
-        await this.ctx.database.create('living_memory_migration', {
-            id: sourceOriginsArrayMigrationId,
-            appliedAt: new Date()
-        })
-        return invalidIds.length
     }
 
     async hasMigratedLegacyEmbeddings() {
@@ -606,6 +603,11 @@ export class LivingMemoryEntryRepository
         })
     }
 
+    /**
+     * 只改 `isConsolidated`，不涉及 `status` 与 `speakerKeys`，因此无需重写
+     * `living_memory_entry_speaker`；`set` 本身是单语句原子操作，回读仅用于向量
+     * 索引同步。这是记忆写路径中唯一不需要事务的分支。
+     */
     async setMemoryConsolidation(
         presetId: string,
         ids: string[],
@@ -677,7 +679,7 @@ export class LivingMemoryEntryRepository
     }
 
     private async loadDreamMergeState(
-        database: EntryTransaction,
+        database: LivingMemoryTransaction,
         input: DreamMergeInput,
         sourceIds: string[]
     ): Promise<DreamMergeContext> {
@@ -840,7 +842,7 @@ export class LivingMemoryEntryRepository
     }
 
     private async replaceActiveMemorySpeakers(
-        database: EntryTransaction,
+        database: LivingMemoryTransaction,
         entries: Pick<
             MemoryEntryRecord,
             'id' | 'presetId' | 'speakerKeys' | 'status'

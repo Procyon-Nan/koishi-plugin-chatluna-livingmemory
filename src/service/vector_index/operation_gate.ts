@@ -1,4 +1,4 @@
-import { PresetTaskQueue } from '../shared/preset_task_queue'
+import { SerialTaskQueue } from '../shared/serial_task_queue'
 
 const createDeferred = () => {
     let resolvePromise = () => {}
@@ -93,7 +93,7 @@ export class VectorIndexOperationGate {
 }
 
 export class VectorIndexPresetMutationQueue {
-    private readonly queue = new PresetTaskQueue()
+    private readonly queue = new SerialTaskQueue()
 
     constructor(private readonly gate: VectorIndexOperationGate) {}
 
