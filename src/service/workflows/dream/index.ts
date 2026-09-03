@@ -79,20 +79,22 @@ export class LivingMemoryDreamService {
         }
 
         if (!isModelConfigured(this.config.mainModel)) {
-            return this.createResult(entries.length, 0, {
-                skippedReason: 'model-not-configured',
-                detail: 'dream skipped: model-not-configured'
-            })
+            return this.createModelSkipResult(
+                entries.length,
+                'model-not-configured',
+                singleEntryResult
+            )
         }
 
         const model = await this.ctx.chatluna.createChatModel(
             this.config.mainModel
         )
         if (model.value === undefined) {
-            return this.createResult(entries.length, 0, {
-                skippedReason: 'model-unavailable',
-                detail: 'dream skipped: model-unavailable'
-            })
+            return this.createModelSkipResult(
+                entries.length,
+                'model-unavailable',
+                singleEntryResult
+            )
         }
 
         const chatModel = model.value
@@ -135,6 +137,12 @@ export class LivingMemoryDreamService {
         }
     }
 
+    /**
+     * 整理阶段成功后重算画像。候选用户取全部活跃用户，而非本次受影响的用户，
+     * 因此整理阶段抛错时不必在此补算：下一次手动 Dream 依然覆盖全部用户，
+     * 画像陈旧性判据只会重算输入变过的那些。自动增量流程按累积的受影响用户
+     * 集合触发，该集合随本次运行结束即丢失，所以那侧必须在抛错前补算。
+     */
     private async regenerateUserProfilesAfterDream(
         presetId: string,
         model: ChatLunaChatModel,
@@ -238,6 +246,31 @@ export class LivingMemoryDreamService {
             skipped: 0,
             skippedReason: options.skippedReason,
             detail: options.detail
+        }
+    }
+
+    /**
+     * 模型不可用时的返回。单条记忆分支已经写库固化，它的结果不能被丢弃，
+     * 只把画像阶段的跳过原因并入 detail。与画像阶段其余跳过原因一致，这里
+     * 不写 skippedReason，该字段只表达整理阶段自身的跳过。
+     */
+    private createModelSkipResult(
+        entryCount: number,
+        skippedReason: 'model-not-configured' | 'model-unavailable',
+        singleEntryResult: DreamRunResult | undefined
+    ): DreamRunResult {
+        if (singleEntryResult === undefined) {
+            return this.createResult(entryCount, 0, {
+                skippedReason,
+                detail: `dream skipped: ${skippedReason}`
+            })
+        }
+        return {
+            ...singleEntryResult,
+            detail: [
+                singleEntryResult.detail,
+                `user profiles skipped: ${skippedReason}`
+            ].join('\n')
         }
     }
 }
