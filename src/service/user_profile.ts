@@ -182,6 +182,19 @@ export class LivingMemoryUserProfileService {
         for (const group of profileGroups) {
             group.existingProfile = existingProfileByKey.get(group.speakerKey)
         }
+        const pendingGroups = profileGroups.filter(
+            (group) => !this.isProfileUpToDate(group)
+        )
+        if (pendingGroups.length === 0) {
+            return {
+                generated: 0,
+                skippedReason: 'unchanged',
+                detail:
+                    'user profiles skipped: unchanged ' +
+                    `matched=${profileGroups.length}`
+            }
+        }
+
         const assistantLabel = resolveAssistantLabel(presetId)
         const presetPrompt = await resolvePresetPrompt(this.ctx, presetId)
         const matchedEntryCount = profileGroups.reduce(
@@ -196,7 +209,7 @@ export class LivingMemoryUserProfileService {
         let failed = 0
         let empty = 0
 
-        for (const group of profileGroups) {
+        for (const group of pendingGroups) {
             const outcome = await this.generateProfileForGroup(
                 presetId,
                 group,
@@ -225,6 +238,7 @@ export class LivingMemoryUserProfileService {
                 `matchedMemories=${matchedEntryCount}`,
                 `selectedMemories=${selectedEntryCount}`,
                 `minimumMemories=${this.config.userProfileMinMemoryCount}`,
+                `unchanged=${profileGroups.length - pendingGroups.length}`,
                 `empty=${empty}`,
                 `failed=${failed}`
             ].join(' ')
@@ -290,6 +304,29 @@ export class LivingMemoryUserProfileService {
 
     private latestTimestamp(entries: DreamMemoryEntryRecord[]) {
         return Math.max(...entries.map((entry) => +entry.updatedAt))
+    }
+
+    /**
+     * 画像输入是否与上次生成时相同。判据为选中记忆集合未变，且画像写入时刻
+     * 严格晚于组内全部记忆的更新时刻；同刻按已变化处理。相同输入的模型调用是
+     * 确定的空操作，跳过它不改变结果。
+     *
+     * 判据不覆盖 prompt 侧变化：模型输入还包含 assistantLabel 与 presetPrompt，
+     * 改预设人设或升级画像模板都不会被判为需要重算。这类重算由既有的删除画像
+     * 通道兜底——画像删除后 existingProfile 为空，下一次 Dream 必然重建。
+     */
+    private isProfileUpToDate(group: UserProfileGroup) {
+        const existingProfile = group.existingProfile
+        if (existingProfile == null) {
+            return false
+        }
+
+        const sourceMemoryIds = new Set(existingProfile.sourceMemoryIds)
+        return (
+            sourceMemoryIds.size === group.entries.length &&
+            group.entries.every((entry) => sourceMemoryIds.has(entry.id)) &&
+            +existingProfile.updatedAt > this.latestTimestamp(group.entries)
+        )
     }
 
     /**

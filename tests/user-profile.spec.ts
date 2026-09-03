@@ -48,6 +48,7 @@ const createHarness = (
         speakerAliases?: string[]
         userProfileMinMemoryCount?: number
         existingSourceMemoryIds?: string[]
+        existingProfileUpdatedAt?: Date
     } = {}
 ) => {
     const savedProfiles: UserProfileInput[] = []
@@ -64,7 +65,7 @@ const createHarness = (
                       content: '旧画像',
                       sourceMemoryIds: options.existingSourceMemoryIds,
                       createdAt: now,
-                      updatedAt: now
+                      updatedAt: options.existingProfileUpdatedAt ?? now
                   }
               ]
     const repository: UserProfileRepository & UserProfileMemoryRepository = {
@@ -181,6 +182,35 @@ it('skips profile generation below the active memory threshold', async () => {
     assert.equal(result.generated, 0)
     assert.equal(result.skippedReason, 'insufficient-related-memories')
     assert.equal(model.invocations.length, 0)
+})
+
+it('skips regeneration when the profile input is unchanged', async () => {
+    const harness = createHarness({
+        existingSourceMemoryIds: [memory.id],
+        existingProfileUpdatedAt: new Date(+now + 1)
+    })
+    const { model, result } = await harness.run([
+        createProfileCall({ content: '不应生成。' })
+    ])
+
+    assert.equal(result.generated, 0)
+    assert.equal(result.skippedReason, 'unchanged')
+    assert.equal(model.invocations.length, 0)
+    assert.equal(harness.savedProfiles.length, 0)
+})
+
+it('regenerates when the profile is not newer than its memories', async () => {
+    const harness = createHarness({
+        existingSourceMemoryIds: [memory.id],
+        existingProfileUpdatedAt: now
+    })
+    const { model, result } = await harness.run([
+        createProfileCall(baseProfileOutput)
+    ])
+
+    assert.equal(result.generated, 1)
+    assert.equal(model.invocations.length, 1)
+    assert.match(result.detail, /unchanged=0/u)
 })
 
 const baseProfileOutput = {
