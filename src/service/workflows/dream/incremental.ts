@@ -140,6 +140,9 @@ export class LivingMemoryIncrementalDreamService {
             if (firstRoundResult.success === false) {
                 state.errors.push(`first-round: ${firstRoundResult.error}`)
             } else {
+                // batch 是本轮新抽取的记忆，首轮成功即意味着这些用户有新记忆
+                // 需要纳入画像，与模型是否产生合并/更新操作无关，因此这里不看
+                // mutatedMemoryIds——此时它可能为空。
                 addSpeakerKeys(affectedSpeakerKeys, batch)
                 const batchIds = batch.map((entry) => entry.id)
                 const seeds = await this.loadSeeds(presetId, batch)
@@ -170,7 +173,7 @@ export class LivingMemoryIncrementalDreamService {
 
                     state.clusterCount++
                     const clusterEntries = [seed, ...nearest]
-                    const result = await this.processUnit(
+                    const seedResult = await this.processUnit(
                         {
                             presetId,
                             assistantLabel,
@@ -189,13 +192,15 @@ export class LivingMemoryIncrementalDreamService {
                         },
                         affectedSpeakerKeys
                     )
-                    addStats(state.stats, result)
-                    addStats(state.secondRoundStats, result)
-                    if (result.success === true) {
+                    addStats(state.stats, seedResult)
+                    addStats(state.secondRoundStats, seedResult)
+                    if (seedResult.success === true) {
                         state.successfulSeedCount++
                     } else {
                         state.failedSeedCount++
-                        state.errors.push(`seed ${seed.id}: ${result.error}`)
+                        state.errors.push(
+                            `seed ${seed.id}: ${seedResult.error}`
+                        )
                     }
                 }
             }

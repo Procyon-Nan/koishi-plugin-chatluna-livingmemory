@@ -250,7 +250,8 @@ export interface ExtractionRepository {
     deleteMemory(id: string): Promise<MemoryEntryRecord | null>
 }
 
-export interface UserProfileRepository {
+/** 按消费方命名：画像生成需要的记忆查询，实现在记忆仓储。 */
+export interface UserProfileMemoryRepository {
     getEntriesByPresetAndIds(
         presetId: string,
         ids: string[]
@@ -259,6 +260,9 @@ export interface UserProfileRepository {
         presetId: string,
         speakerKeys: string[]
     ): Promise<Array<{ speakerKey: string; memoryId: string }>>
+}
+
+export interface UserProfileRepository {
     listPresetSpeakers(presetId: string): Promise<PresetSpeakerRecord[]>
     upsertPresetSpeaker(input: PresetSpeakerInput): Promise<void>
     listUserProfilesByPreset(presetId: string): Promise<UserProfileRecord[]>

@@ -22,10 +22,7 @@ import type { LivingMemoryLogger } from '../../logging/logger'
 
 export type { DreamRunResult } from './types'
 
-type LivingMemoryDreamConfig = Pick<
-    LivingMemoryConfig,
-    'mainModel' | 'enableUserProfileInjection'
->
+type LivingMemoryDreamConfig = Pick<LivingMemoryConfig, 'mainModel'>
 
 export interface DreamRepository {
     listDreamEntriesByPreset(
@@ -76,7 +73,7 @@ export class LivingMemoryDreamService {
             singleEntryResult = this.createResult(1, 0, {
                 detail: 'dream skipped: only 1 memories'
             })
-            if (!this.config.enableUserProfileInjection) {
+            if (!this.userProfiles.enabled) {
                 return singleEntryResult
             }
         }
@@ -144,8 +141,11 @@ export class LivingMemoryDreamService {
         logger?: LivingMemoryLogger
     ) {
         try {
-            const speakerKeys =
-                await this.repository.listActiveMemorySpeakerKeys(presetId)
+            // 画像阶段不会执行时无需查询候选用户；此时 regenerate 在读取
+            // speakerKeys 之前即返回 disabled，由它统一给出跳过说明。
+            const speakerKeys = this.userProfiles.enabled
+                ? await this.repository.listActiveMemorySpeakerKeys(presetId)
+                : []
             const result = await this.userProfiles.regenerate(
                 presetId,
                 speakerKeys,

@@ -97,10 +97,7 @@ const createDreamHarness = (
     }
     const service = new LivingMemoryDreamService(
         ctx,
-        {
-            mainModel: 'test-model',
-            enableUserProfileInjection: false
-        },
+        { mainModel: 'test-model' },
         repository,
         repository as unknown as DreamMemoryRepository,
         vectors,

@@ -17,7 +17,8 @@ import type {
     DreamMergeInput,
     DreamMemoryMutation,
     ExtractionRepository,
-    RecallRepository
+    RecallRepository,
+    UserProfileMemoryRepository
 } from '../../contracts/workflows'
 import {
     normalizeMemoryImportance,
@@ -106,7 +107,10 @@ interface DreamMergeContext {
 }
 
 export class LivingMemoryEntryRepository
-    implements RecallRepository, ExtractionRepository
+    implements
+        RecallRepository,
+        ExtractionRepository,
+        UserProfileMemoryRepository
 {
     constructor(
         private readonly ctx: Context,

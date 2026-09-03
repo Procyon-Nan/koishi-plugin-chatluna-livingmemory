@@ -6,6 +6,7 @@ import type {
 } from '../src/contracts/memory'
 import type {
     DreamMemoryRepository,
+    UserProfileMemoryRepository,
     UserProfileRepository
 } from '../src/contracts/workflows'
 import {
@@ -235,15 +236,13 @@ const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
             userProfileMinMemoryCount: 1,
             userProfileMemoryLimit: 20
         },
-        repository as unknown as UserProfileRepository,
+        repository as unknown as UserProfileRepository &
+            UserProfileMemoryRepository,
         captured.logger
     )
     const service = new LivingMemoryDreamService(
         ctx,
-        {
-            mainModel: 'dream-model',
-            enableUserProfileInjection
-        },
+        { mainModel: 'dream-model' },
         repository as unknown as DreamRepository,
         repository as unknown as DreamMemoryRepository,
         {
@@ -318,10 +317,7 @@ it('marks a single-memory manual Dream as consolidated', async () => {
     } as unknown as DreamRepository
     const service = new LivingMemoryDreamService(
         {} as Context,
-        {
-            mainModel: 'dream-model',
-            enableUserProfileInjection: false
-        },
+        { mainModel: 'dream-model' },
         repository as unknown as DreamRepository,
         repository as unknown as DreamMemoryRepository,
         {
@@ -329,7 +325,7 @@ it('marks a single-memory manual Dream as consolidated', async () => {
         },
         dreamWorker,
         logger,
-        {} as LivingMemoryUserProfileService
+        { enabled: false } as unknown as LivingMemoryUserProfileService
     )
 
     const result = await service.run(scope.presetId)
@@ -355,6 +351,7 @@ it('updates the related user profile after a single-memory Dream', async () => {
         }
     } as unknown as Context
     const userProfiles = {
+        enabled: true,
         regenerate: async (_presetId: string, speakerKeys: string[]) => {
             regenerated.push(speakerKeys)
             return { generated: 1, detail: 'user profiles generated: 1' }
@@ -362,10 +359,7 @@ it('updates the related user profile after a single-memory Dream', async () => {
     } as unknown as LivingMemoryUserProfileService
     const service = new LivingMemoryDreamService(
         ctx,
-        {
-            mainModel: 'dream-model',
-            enableUserProfileInjection: true
-        },
+        { mainModel: 'dream-model' },
         repository,
         repository as unknown as DreamMemoryRepository,
         { readVectors: async () => new Map() },

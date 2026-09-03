@@ -12,6 +12,7 @@ import {
     normalizePresetSpeakerRecord,
     normalizeUserProfileRecord
 } from './normalizers'
+import type { UserProfileRepository } from '../../contracts/workflows'
 import type { LivingMemoryTransact } from './types'
 
 /** 规范行排在最前：createdAt 最早者胜，同刻按 id 定序保证结果稳定。 */
@@ -20,7 +21,9 @@ const compareProfilesByCanonicalOrder = (
     right: UserProfileRecord
 ) => +left.createdAt - +right.createdAt || left.id.localeCompare(right.id)
 
-export class LivingMemoryUserProfileRepository {
+export class LivingMemoryUserProfileRepository
+    implements UserProfileRepository
+{
     constructor(
         private readonly ctx: Context,
         private readonly transact: LivingMemoryTransact

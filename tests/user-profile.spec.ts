@@ -6,7 +6,10 @@ import type {
     MemoryEntryRecord,
     UserProfileInput
 } from '../src/contracts/memory'
-import type { UserProfileRepository } from '../src/contracts/workflows'
+import type {
+    UserProfileMemoryRepository,
+    UserProfileRepository
+} from '../src/contracts/workflows'
 import { characterPresetSuffix } from '../src/service/memory/helpers'
 import { userProfileResultToolName } from '../src/service/prompts/schema'
 import {
@@ -64,7 +67,7 @@ const createHarness = (
                       updatedAt: now
                   }
               ]
-    const repository: UserProfileRepository = {
+    const repository: UserProfileRepository & UserProfileMemoryRepository = {
         getEntriesByPresetAndIds: async () => [memory],
         listActiveMemorySpeakerLinks: async () => [
             { speakerKey: '张三', memoryId: memory.id }

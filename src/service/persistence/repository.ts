@@ -31,6 +31,7 @@ import type {
     JobRepository,
     RecallRepository,
     SnapshotRepository,
+    UserProfileMemoryRepository,
     UserProfileRepository
 } from '../../contracts/workflows'
 import { LivingMemoryEntryRepository } from './entries'
@@ -89,6 +90,7 @@ export class LivingMemoryRepository
         SnapshotRepository,
         JobRepository,
         ExtractionRepository,
+        UserProfileMemoryRepository,
         UserProfileRepository
 {
     private readonly entries: LivingMemoryEntryRepository
