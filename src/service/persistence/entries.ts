@@ -44,6 +44,11 @@ import {
 const sourceOriginsArrayMigrationId = 'source-origins-array-v1'
 const legacyEmbeddingMigrationId = 'legacy-embedding-vector-index-v1'
 const activeMemorySpeakersMigrationId = 'active-memory-speakers-v1'
+/**
+ * 回填按页读取记忆、按批写入关联行。一条记忆展开出多条关联行，两者不是同一
+ * 量纲，因此各自设界。
+ */
+const ACTIVE_MEMORY_SPEAKER_PAGE_SIZE = 500
 const ACTIVE_MEMORY_SPEAKER_BATCH_SIZE = 500
 const memoryEntryFields: (keyof MemoryEntryRecord)[] = [
     'id',
@@ -117,6 +122,11 @@ export class LivingMemoryEntryRepository
         private readonly transact: LivingMemoryTransact
     ) {}
 
+    /**
+     * 回填活跃记忆的用户关联行。读取按 id 游标分页，峰值内存只与单页记忆条数
+     * 相关；分页与写入同处一个事务，保持要么整体生效要么不生效的语义与迁移
+     * 标记的幂等性。
+     */
     async migrateActiveMemorySpeakers(): Promise<number> {
         return await this.transact(async (database) => {
             const applied = await database.get('living_memory_migration', {
@@ -126,31 +136,59 @@ export class LivingMemoryEntryRepository
                 return 0
             }
 
-            const entries = await database.get(
-                'living_memory_entry',
-                { status: 'active' },
-                ['id', 'presetId', 'speakerKeys', 'status']
-            )
-            const rows = entries.flatMap(createActiveMemorySpeakerRows)
-            for (
-                let offset = 0;
-                offset < rows.length;
-                offset += ACTIVE_MEMORY_SPEAKER_BATCH_SIZE
-            ) {
-                await database.upsert(
-                    'living_memory_entry_speaker',
-                    rows.slice(
-                        offset,
-                        offset + ACTIVE_MEMORY_SPEAKER_BATCH_SIZE
-                    )
+            let cursor: string | null = null
+            let rowCount = 0
+            do {
+                const entries = await this.selectActiveMemorySpeakerPage(
+                    database,
+                    cursor,
+                    ACTIVE_MEMORY_SPEAKER_PAGE_SIZE
                 )
-            }
+                if (entries.length === 0) {
+                    break
+                }
+
+                const rows = entries.flatMap(createActiveMemorySpeakerRows)
+                for (
+                    let offset = 0;
+                    offset < rows.length;
+                    offset += ACTIVE_MEMORY_SPEAKER_BATCH_SIZE
+                ) {
+                    await database.upsert(
+                        'living_memory_entry_speaker',
+                        rows.slice(
+                            offset,
+                            offset + ACTIVE_MEMORY_SPEAKER_BATCH_SIZE
+                        )
+                    )
+                }
+                rowCount += rows.length
+                cursor = entries[entries.length - 1].id
+            } while (true)
+
             await database.create('living_memory_migration', {
                 id: activeMemorySpeakersMigrationId,
                 appliedAt: new Date()
             })
-            return rows.length
+            return rowCount
         })
+    }
+
+    private async selectActiveMemorySpeakerPage(
+        database: LivingMemoryTransaction,
+        afterId: string | null,
+        limit: number
+    ) {
+        const selection = database.select('living_memory_entry', {
+            status: 'active'
+        })
+        if (afterId !== null) {
+            selection.where({ id: { $gt: afterId } })
+        }
+        return await selection
+            .orderBy('id', 'asc')
+            .limit(limit)
+            .execute(['id', 'presetId', 'speakerKeys', 'status'])
     }
 
     async migrateMemorySourceOriginsArray(): Promise<number> {
