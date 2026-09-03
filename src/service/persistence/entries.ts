@@ -852,10 +852,25 @@ export class LivingMemoryEntryRepository
             return
         }
 
-        await database.remove('living_memory_entry_speaker', {
-            presetId: entries[0].presetId,
-            memoryId: { $in: entries.map((entry) => entry.id) }
-        })
+        // 按 presetId 分组删除：入参每条记录自带 presetId，写入侧也按各自的
+        // presetId 生成关联行，删除侧必须保持同一口径，否则跨预设批次会残留
+        // 旧关联行。删除条件保留 presetId 以命中 (presetId, memoryId) 索引。
+        const memoryIdsByPreset = new Map<string, string[]>()
+        for (const entry of entries) {
+            const memoryIds = memoryIdsByPreset.get(entry.presetId)
+            if (memoryIds == null) {
+                memoryIdsByPreset.set(entry.presetId, [entry.id])
+            } else {
+                memoryIds.push(entry.id)
+            }
+        }
+        for (const [presetId, memoryIds] of memoryIdsByPreset) {
+            await database.remove('living_memory_entry_speaker', {
+                presetId,
+                memoryId: { $in: memoryIds }
+            })
+        }
+
         const rows = entries.flatMap(createActiveMemorySpeakerRows)
         if (rows.length > 0) {
             await database.upsert('living_memory_entry_speaker', rows)

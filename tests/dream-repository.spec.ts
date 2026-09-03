@@ -2,7 +2,10 @@ import assert from 'node:assert/strict'
 import { Context } from 'koishi'
 import SQLiteDriver from '@koishijs/plugin-database-sqlite'
 import type { MemoryEntryStatus } from '../src/contracts/memory'
-import type { DreamMemoryMutation } from '../src/contracts/workflows'
+import type {
+    AttributedMemoryItem,
+    DreamMemoryMutation
+} from '../src/contracts/workflows'
 import { LivingMemoryRepository } from '../src/service/persistence/repository'
 import { createTestContext } from './persistence-test-utils'
 
@@ -19,6 +22,19 @@ const createMergePatch = (): DreamMemoryMutation => ({
     summary: 'merged summary',
     sentiment: 'neutral',
     importance: 0.9
+})
+
+const createExtractedItem = (
+    label: string,
+    speakerKeys: string[]
+): AttributedMemoryItem => ({
+    type: 'fact',
+    content: `${label} content`,
+    keywords: [label],
+    summary: `${label} summary`,
+    sentiment: 'neutral',
+    importance: 0.5,
+    speakerKeys
 })
 
 const createMemory = (
@@ -122,7 +138,7 @@ it('atomically updates an active Dream merge and archives its sources', async ()
 })
 
 it('maintains active memory speaker links across memory lifecycle changes', async () => {
-    await withRepository(async (_ctx, repository) => {
+    await withRepository(async (ctx, repository) => {
         const memory = await createMemory(repository, 'memory', 'active')
         assert.deepEqual(
             await repository.listActiveMemorySpeakerKeys(scope.presetId),
@@ -161,6 +177,48 @@ it('maintains active memory speaker links across memory lifecycle changes', asyn
         assert.deepEqual(
             await repository.listActiveMemorySpeakerKeys(scope.presetId),
             []
+        )
+
+        // Extraction 写入同样维护关联索引：多用户记忆按用户逐行建立，
+        // speakerKeys 为空的记忆不产生关联行。
+        const [shared, solo, anonymous] = await repository.appendMemories(
+            scope,
+            [],
+            [
+                createExtractedItem('shared', ['speaker-a', 'speaker-b']),
+                createExtractedItem('solo', ['speaker-a']),
+                createExtractedItem('anonymous', [])
+            ]
+        )
+        assert.deepEqual(
+            await repository.listActiveMemorySpeakerKeys(scope.presetId),
+            ['speaker-a', 'speaker-b']
+        )
+        assert.deepEqual(
+            (
+                await repository.listActiveMemorySpeakerLinks(scope.presetId, [
+                    'speaker-a'
+                ])
+            ).map((link) => link.memoryId),
+            [shared.id, solo.id].sort((left, right) =>
+                left.localeCompare(right)
+            )
+        )
+        assert.deepEqual(
+            await repository.listActiveMemorySpeakerLinks(scope.presetId, [
+                'speaker-b'
+            ]),
+            [{ speakerKey: 'speaker-b', memoryId: shared.id }]
+        )
+        const links = await ctx.database.get(
+            'living_memory_entry_speaker',
+            {},
+            ['memoryId']
+        )
+        assert.equal(links.length, 3)
+        assert.equal(
+            links.some((link) => link.memoryId === anonymous.id),
+            false
         )
     })
 })
