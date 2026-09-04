@@ -18,7 +18,11 @@ export const defineLivingMemoryTables = (ctx: Context) => {
             },
             content: 'text',
             keywords: 'json',
-            summary: 'text',
+            summary: {
+                type: 'text',
+                nullable: true,
+                initial: null
+            },
             sentiment: {
                 type: 'text',
                 nullable: true,

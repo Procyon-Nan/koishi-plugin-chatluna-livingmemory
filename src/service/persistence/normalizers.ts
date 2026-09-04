@@ -22,6 +22,7 @@ export const normalizeEntryRecord = (
     ...record,
     speakerKeys: normalizeSpeakerKeys(record.speakerKeys),
     status: normalizeMemoryStatus(record.status),
+    summary: normalizeOptionalMemoryText(record.summary),
     sentiment: normalizeOptionalMemoryText(record.sentiment),
     importance: normalizeMemoryImportance(record.importance),
     sourceOrigins: normalizeMemorySourceOrigins(
