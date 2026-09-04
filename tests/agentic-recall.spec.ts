@@ -98,6 +98,7 @@ const createSearchResult = (id: string): LivingMemorySearchResult => ({
     content: `content-${id}`,
     keywords: ['记忆'],
     summary: `summary-${id}`,
+    sentiment: '平静',
     importance: 0.8,
     createdAt: new Date('2026-07-01T00:00:00.000Z'),
     updatedAt: new Date('2026-07-01T00:00:00.000Z')
@@ -236,9 +237,15 @@ it('runs one search through AgentRunner and preserves preset-scoped trace data',
     )
     assert.ok(trace.prompt.systemPrompt.length > 0)
     assert.ok(trace.prompt.inputPrompt.length > 0)
-    assert.match(
+    assert.equal(
         String(toolMessages(harness.boundInvocations[1])[0]?.content),
-        /memory-1/u
+        [
+            'type=fact',
+            'updatedAt=2026-07-01T00:00:00.000Z',
+            'sentiment=平静',
+            'content:',
+            'content-memory-1'
+        ].join('\n')
     )
     assert.ok(
         harness.debugMessages.some(
@@ -523,6 +530,10 @@ it('returns no result when the final text has no matched memories', async () => 
     const trace = await harness.run()
 
     assert.equal(trace, null)
+    assert.equal(
+        String(toolMessages(harness.boundInvocations[1])[0]?.content),
+        '没有找到相关记忆。'
+    )
 })
 
 it('allows a second successful search with different arguments', async () => {

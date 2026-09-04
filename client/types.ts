@@ -30,6 +30,7 @@ export interface LivingMemorySearchDetailedResult {
     content: string
     keywords: string[]
     summary: string | null
+    sentiment: string | null
     importance: number | null
     createdAt: Date
     updatedAt: Date
@@ -101,6 +102,7 @@ export interface AgenticMemorySnapshotMemoryItem {
     content: string
     keywords: string[]
     summary: string | null
+    sentiment: string | null
     importance: number | null
     createdAt: Date
     updatedAt: Date

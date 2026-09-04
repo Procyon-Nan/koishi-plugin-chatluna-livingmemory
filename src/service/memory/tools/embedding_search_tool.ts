@@ -1,6 +1,8 @@
 import { StructuredTool } from '@langchain/core/tools'
 import type { ToolRunnableConfig } from '@langchain/core/tools'
+import type { LivingMemorySearchResult } from '../../../contracts/memory'
 import type { LivingMemorySearchProvider } from '../../../contracts/workflows'
+import { renderMemoriesForModel } from '../../prompts/memory_entries'
 import {
     formatSearchTextLengthRange,
     livingMemorySearchInputSchema,
@@ -32,21 +34,25 @@ export const livingMemorySearchToolDescription = [
     '- 本工具返回的记忆条目依照计算后的相关度得分排序。'
 ].join('\n')
 
+const noMemoryFoundMessage = '没有找到相关记忆。'
+
 export class LivingMemorySearchTool extends StructuredTool {
     name = livingMemorySearchToolName
     description = livingMemorySearchToolDescription
 
     schema = livingMemorySearchInputSchema
 
-    constructor(private readonly searchProvider: LivingMemorySearchProvider) {
+    constructor(
+        private readonly searchProvider: LivingMemorySearchProvider,
+        private readonly includeMemoryIds: boolean
+    ) {
         super({ verboseParsingErrors: true })
     }
 
-    async _call(
+    async runSearch(
         input: LivingMemorySearchToolInput,
-        _runManager: unknown,
         runConfig?: ToolRunnableConfig
-    ) {
+    ): Promise<{ results: LivingMemorySearchResult[]; output: string }> {
         const configurable = getLivingMemoryToolConfigurable(runConfig)
         const presetIdResolution = resolveToolMemoryPresetId(configurable)
         if (presetIdResolution.ok === false) {
@@ -60,6 +66,25 @@ export class LivingMemorySearchTool extends StructuredTool {
             { ...input, memoryTypes: ['all'] }
         )
 
-        return JSON.stringify(results, null, 2)
+        return { results, output: this.formatResults(results) }
+    }
+
+    async _call(
+        input: LivingMemorySearchToolInput,
+        _runManager: unknown,
+        runConfig?: ToolRunnableConfig
+    ) {
+        const { output } = await this.runSearch(input, runConfig)
+        return output
+    }
+
+    private formatResults(results: LivingMemorySearchResult[]) {
+        if (results.length === 0) {
+            return noMemoryFoundMessage
+        }
+
+        return renderMemoriesForModel(results, {
+            includeId: this.includeMemoryIds
+        })
     }
 }

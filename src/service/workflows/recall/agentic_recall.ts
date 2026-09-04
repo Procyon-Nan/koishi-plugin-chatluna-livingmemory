@@ -21,6 +21,7 @@ import type {
     AgenticMemorySearchToolCallSummary,
     AgenticMemorySnapshotItem,
     AgenticMemorySnapshotMemoryItem,
+    LivingMemorySearchResult,
     LivingMemoryTranscriptMessage,
     MemoryScope
 } from '../../../contracts/memory'
@@ -54,7 +55,7 @@ type LivingMemoryAgenticRecallConfig = Pick<
 interface RecordedAgenticSearchCall {
     inputKey: string
     input: LivingMemorySearchToolInput
-    output: string
+    results: LivingMemorySearchResult[]
 }
 
 type AgenticRecallDecision = AgentAction | AgentAction[] | AgentFinish
@@ -114,61 +115,35 @@ const aggregateToolCallSummary = (
     }
 }
 
-const copyMatchedMemory = (
-    item: AgenticMemorySnapshotMemoryItem
+const toSnapshotMemoryItem = (
+    result: LivingMemorySearchResult
 ): AgenticMemorySnapshotMemoryItem => ({
-    type: item.type,
-    content: item.content,
-    keywords: [...item.keywords],
-    summary: item.summary,
-    importance: item.importance,
-    createdAt: new Date(item.createdAt),
-    updatedAt: new Date(item.updatedAt)
+    type: result.type,
+    content: result.content,
+    keywords: [...result.keywords],
+    summary: result.summary,
+    sentiment: result.sentiment,
+    importance: result.importance,
+    createdAt: result.createdAt,
+    updatedAt: result.updatedAt
 })
 
-const uniqueMatchedMemories = (
-    items: AgenticMemorySnapshotMemoryItem[]
+const uniqueSnapshotMemoryItems = (
+    results: LivingMemorySearchResult[]
 ): AgenticMemorySnapshotMemoryItem[] => {
     const seen = new Set<string>()
-    const result: AgenticMemorySnapshotMemoryItem[] = []
+    const items: AgenticMemorySnapshotMemoryItem[] = []
 
-    for (const item of items) {
-        const key = [
-            item.type,
-            item.content,
-            new Date(item.createdAt).toISOString()
-        ].join('\n')
-
-        if (seen.has(key)) {
+    for (const result of results) {
+        if (seen.has(result.id)) {
             continue
         }
 
-        seen.add(key)
-        result.push(copyMatchedMemory(item))
+        seen.add(result.id)
+        items.push(toSnapshotMemoryItem(result))
     }
 
-    return result
-}
-
-const parseMatchedMemories = (
-    output: string
-): AgenticMemorySnapshotMemoryItem[] => {
-    const parsed = JSON.parse(output)
-    if (!Array.isArray(parsed)) {
-        return []
-    }
-
-    return parsed.map((item) =>
-        copyMatchedMemory(item as AgenticMemorySnapshotMemoryItem)
-    )
-}
-
-const toToolOutputText = (output: unknown) => {
-    if (typeof output === 'string') {
-        return output
-    }
-
-    return JSON.stringify(output)
+    return items
 }
 
 const createSearchInputKey = (input: unknown) => {
@@ -221,7 +196,7 @@ class RecordingLivingMemorySearchTool extends StructuredTool {
 
     async _call(
         input: LivingMemorySearchToolInput,
-        runManager: unknown,
+        _runManager: unknown,
         runConfig?: ToolRunnableConfig
     ) {
         // AgentRunner 会复制 RunnableConfig，显式复用本次 run 的 agentContext，
@@ -233,19 +208,20 @@ class RecordingLivingMemorySearchTool extends StructuredTool {
                 agentContext: this.agentContext
             }
         } as ToolRunnableConfig
-        const output = toToolOutputText(
-            await this.delegate._call(input, runManager, delegateConfig)
+        const { results, output } = await this.delegate.runSearch(
+            input,
+            delegateConfig
         )
         this.calls.push({
             inputKey: createSearchInputKey(input),
             input: { ...input },
-            output
+            results
         })
         this.logger.diagnostic('recall.agentic.search.results', {}, () => [
             {
                 title: 'memories',
                 key: 'memories',
-                value: JSON.parse(output)
+                value: results
             }
         ])
         return output
@@ -295,7 +271,7 @@ export class LivingMemoryAgenticRecallExecutor {
         }
         const recordedSearchCalls: RecordedAgenticSearchCall[] = []
         const searchTool = new RecordingLivingMemorySearchTool(
-            new LivingMemorySearchTool(this.embeddingSearchEngine),
+            new LivingMemorySearchTool(this.embeddingSearchEngine, false),
             recordedSearchCalls,
             agentContext,
             runLogger
@@ -322,13 +298,12 @@ export class LivingMemoryAgenticRecallExecutor {
         if (hasExhaustedModelCalls()) {
             throw new Error(agenticRecallExhaustedMessage)
         }
-        const { toolCallSummaries, matchedMemories } =
-            this.collectSearchResults(
-                recordedSearchCalls,
-                result.intermediateSteps
-            )
+        const { toolCallSummaries, matchedResults } = this.collectSearchResults(
+            recordedSearchCalls,
+            result.intermediateSteps
+        )
         const finalText = result.output.trim()
-        const uniqueMemories = uniqueMatchedMemories(matchedMemories)
+        const uniqueMemories = uniqueSnapshotMemoryItems(matchedResults)
         if (
             finalText.length === 0 ||
             finalText === '<NO_MEMORY>' ||
@@ -448,7 +423,7 @@ export class LivingMemoryAgenticRecallExecutor {
         intermediateSteps: AgentStep[] | undefined
     ) {
         const toolCallSummaries: AgenticMemorySearchToolCallSummary[] = []
-        const matchedMemories: AgenticMemorySnapshotMemoryItem[] = []
+        const matchedResults: LivingMemorySearchResult[] = []
         const orderedSearchCalls = orderRecordedSearchCalls(
             recordedSearchCalls,
             intermediateSteps
@@ -462,10 +437,10 @@ export class LivingMemoryAgenticRecallExecutor {
                 )
             )
 
-            matchedMemories.push(...parseMatchedMemories(call.output))
+            matchedResults.push(...call.results)
         }
 
-        return { toolCallSummaries, matchedMemories }
+        return { toolCallSummaries, matchedResults }
     }
 
 }

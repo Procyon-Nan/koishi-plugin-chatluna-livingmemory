@@ -163,15 +163,21 @@ chatluna-livingmemory/
 7. 模型工具、提示词与结构化输出
    - `src/service/prompts/` 是工作流提示词和 Zod schema 的唯一来源；字段说明
      优先放在结果工具参数描述中，不在 prompt 正文重复维护。
-   - 用户画像提示词只向模型提供记忆的 type、updatedAt、sentiment 与正文，并在
-     记忆列表前说明关联记忆总数与实际送入条数；不提供记忆 ID 与 importance：
-     画像输出只有正文，没有操作引用记忆 ID，送入的记忆也一律等权使用。
+   - 送入模型阅读的记忆视图由 `prompts/memory_entries.ts` 的
+     `renderMemoriesForModel` 统一渲染，只包含 type、updatedAt、sentiment 和
+     正文，sentiment 为空时省略该字段；用户画像提示词与 `living_memory_search`
+     共用该视图，都不提供 keywords、summary 与 importance。记忆 ID 只在模型需要
+     引用记忆时渲染：`living_memory_search` 作为对话工具渲染 ID 供
+     `living_memory_get_messages` 使用，Agentic Recall 与用户画像不渲染 ID。
+   - 用户画像提示词在记忆列表前说明关联记忆总数与实际送入条数；画像输出只有
+     正文，没有操作引用记忆 ID，送入的记忆也一律等权使用。
    - 动态文本经 `prompt_format.ts` 负责的 XML 块转义和 System/Human 消息
      组合进入模型。不得在各工作流中复制 XML 拼接或转义逻辑。
    - 结构化结果工具是单次调用内部工具。工具 schema、提示词规则、校验、
      纠错次数和工作流失败处理必须保持一致。
-   - `living_memory_search` 只查询活跃记忆；`living_memory_get_messages` 根据
-     已返回的记忆 ID 全量返回其来源消息；主动创建工具允许 speaker 关联为空。
+   - `living_memory_search` 只查询活跃记忆，没有命中时返回
+     `没有找到相关记忆。`；`living_memory_get_messages` 根据已返回的记忆 ID
+     全量返回其来源消息；主动创建工具允许 speaker 关联为空。
    - Agentic Recall 在找不到相关记忆时输出 `<NO_MEMORY>`；解析到该结果时不
      更新快照。工具参数持续错误达到上限时直接终止本次召回，不再发起额外
      finalization 调用。

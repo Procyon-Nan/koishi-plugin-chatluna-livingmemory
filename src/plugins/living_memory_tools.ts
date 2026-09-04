@@ -70,7 +70,10 @@ export function apply(ctx: Context, config: LivingMemoryConfig) {
                 tags: ['living-memory', 'search'],
                 createTool: () =>
                     toChatLunaStructuredTool(
-                        new LivingMemorySearchTool(ctx.chatluna_living_memory)
+                        new LivingMemorySearchTool(
+                            ctx.chatluna_living_memory,
+                            true
+                        )
                     )
             }
         )

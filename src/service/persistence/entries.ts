@@ -96,6 +96,7 @@ const recallEntryFields: (keyof MemoryEntryRecord)[] = [
     'content',
     'keywords',
     'summary',
+    'sentiment',
     'importance',
     'createdAt',
     'updatedAt'

@@ -44,6 +44,7 @@ export class LivingMemoryEmbeddingSearchEngine implements LivingMemorySearchProv
             content: entry.content,
             keywords: [...entry.keywords],
             summary: entry.summary,
+            sentiment: entry.sentiment,
             importance: entry.importance,
             createdAt: entry.createdAt,
             updatedAt: entry.updatedAt
@@ -76,6 +77,7 @@ export class LivingMemoryEmbeddingSearchEngine implements LivingMemorySearchProv
                 content: entry.content,
                 keywords: [...entry.keywords],
                 summary: entry.summary,
+                sentiment: entry.sentiment,
                 importance: entry.importance,
                 createdAt: entry.createdAt,
                 updatedAt: entry.updatedAt,

@@ -33,7 +33,7 @@ const mockEngine = {
     searchMemories: async () => []
 } as unknown as LivingMemoryEmbeddingSearchEngine
 
-const searchTool = new LivingMemorySearchTool(mockEngine)
+const searchTool = new LivingMemorySearchTool(mockEngine, true)
 const getMessagesTool = new LivingMemoryGetMessagesTool(context)
 
 const createRecordingSearchProvider = () => {
@@ -286,7 +286,7 @@ it('queries the suffixed preset from the search tool in Character sessions', asy
     const chatluna = createRecordingSearchProvider()
     const character = createRecordingSearchProvider()
 
-    await new LivingMemorySearchTool(chatluna.provider).invoke(
+    await new LivingMemorySearchTool(chatluna.provider, true).invoke(
         { searchTexts: ['我们一起聊过的事情'] },
         toolConfig({
             preset: 'default',
@@ -298,7 +298,7 @@ it('queries the suffixed preset from the search tool in Character sessions', asy
             session: { userId: 'user-1', isDirect: true }
         })
     )
-    await new LivingMemorySearchTool(character.provider).invoke(
+    await new LivingMemorySearchTool(character.provider, true).invoke(
         { searchTexts: ['我们一起聊过的事情'] },
         toolConfig({
             preset: '史尔特里',
@@ -313,4 +313,42 @@ it('queries the suffixed preset from the search tool in Character sessions', asy
 
     assert.deepEqual(chatluna.presetIds, ['default'])
     assert.deepEqual(character.presetIds, ['史尔特里（Character）'])
+})
+
+it('renders search observations with memory ids and reports empty results', async () => {
+    const provider = {
+        searchMemories: async () => [
+            {
+                id: 'memory-1',
+                type: 'fact',
+                content: '我们在上周一起去看了展览。',
+                keywords: ['展览'],
+                summary: '看展览',
+                sentiment: '愉快',
+                importance: 0.8,
+                createdAt: new Date('2026-07-01T00:00:00.000Z'),
+                updatedAt: new Date('2026-07-02T00:00:00.000Z')
+            }
+        ]
+    } as unknown as LivingMemoryEmbeddingSearchEngine
+    const config = toolConfig({ preset: 'default', source: 'chatluna' })
+
+    assert.equal(
+        await new LivingMemorySearchTool(provider, true).invoke(
+            { searchTexts: ['我们一起聊过的事情'] },
+            config
+        ),
+        [
+            'id=memory-1',
+            'type=fact',
+            'updatedAt=2026-07-02T00:00:00.000Z',
+            'sentiment=愉快',
+            'content:',
+            '我们在上周一起去看了展览。'
+        ].join('\n')
+    )
+    assert.equal(
+        await searchTool.invoke({ searchTexts: ['没有记录的事情'] }, config),
+        '没有找到相关记忆。'
+    )
 })

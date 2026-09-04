@@ -193,6 +193,7 @@ export const createAgenticTrace = (
                     content: 'matched memory',
                     keywords: ['memory'],
                     summary: 'matched summary',
+                    sentiment: '平静',
                     importance: 0.5,
                     createdAt: new Date('2026-07-01T00:00:00.000Z'),
                     updatedAt: new Date('2026-07-01T00:00:00.000Z')
