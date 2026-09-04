@@ -71,8 +71,7 @@
     line-height: 1.7;
 }
 
-.snapshot-tool-summary,
-.snapshot-match-texts {
+.snapshot-tool-summary {
     display: flex;
     flex-wrap: wrap;
     gap: 8px 16px;

@@ -156,11 +156,9 @@ it('formats importance values and distinguishes snapshot strategies', () => {
                         summary: null,
                         importance: 0.8,
                         createdAt: new Date('2026-07-01T00:00:00.000Z'),
-                        updatedAt: new Date('2026-07-01T00:00:00.000Z'),
-                        matchedSearchTexts: []
+                        updatedAt: new Date('2026-07-01T00:00:00.000Z')
                     }
-                ],
-                matchedSearchTexts: []
+                ]
             }
         ],
         resolvedItems: []

@@ -104,13 +104,11 @@ export interface AgenticMemorySnapshotMemoryItem {
     importance: number | null
     createdAt: Date
     updatedAt: Date
-    matchedSearchTexts: string[]
 }
 
 export interface AgenticMemorySnapshotItem {
     finalText: string
     toolCallSummary: AgenticMemorySearchToolCallSummary
-    matchedSearchTexts: string[]
     matchedMemories: AgenticMemorySnapshotMemoryItem[]
 }
 

@@ -101,15 +101,6 @@
                             >
                                 摘要：{{ memory.summary }}
                             </div>
-                            <div class="snapshot-match-texts">
-                                <span>
-                                    命中查询：{{
-                                        formatSearchTexts(
-                                            memory.matchedSearchTexts
-                                        )
-                                    }}
-                                </span>
-                            </div>
                             <el-space
                                 v-if="memory.keywords.length > 0"
                                 wrap
