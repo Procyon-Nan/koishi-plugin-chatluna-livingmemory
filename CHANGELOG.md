@@ -2,7 +2,8 @@
 
 ## 2026-09-04 version:0.20.3
 
-- pending: 修正 `living_memory_entry` 待处理记忆组合索引在 MySQL 下无法创建的问题。该索引原先使用 minato 按列名拼接的默认名，长 69 字符，超出 MySQL 64 字符的标识符上限，`createIndex` 抛出的异常会留在 minato 的 prepareTasks 中使 `Database.prepared()` 始终拒绝，而所有查询在执行前都要等待它，导致整个 Koishi 实例的数据库访问全部失败。现显式指定索引名 `index:living_memory_entry:dream_pending`，并在服务启动时删除与该索引同列但名字不同的历史索引（SQLite 保留旧全名、PostgreSQL 截断至 63 字符，minato 都不会自动清理），同时补充索引名长度不超过 64 字符与旧索引清理的测试。
+- pending: 更新插件版本至 0.20.3。
+- 76833ff: 修正 `living_memory_entry` 待处理记忆组合索引在 MySQL 下无法创建的问题。该索引原先使用 minato 按列名拼接的默认名，长 69 字符，超出 MySQL 64 字符的标识符上限，`createIndex` 抛出的异常会留在 minato 的 prepareTasks 中使 `Database.prepared()` 始终拒绝，而所有查询在执行前都要等待它，导致整个 Koishi 实例的数据库访问全部失败。现显式指定索引名 `index:living_memory_entry:dream_pending`，并在服务启动时删除与该索引同列但名字不同的历史索引（SQLite 保留旧全名、PostgreSQL 截断至 63 字符，minato 都不会自动清理），同时补充索引名长度不超过 64 字符与旧索引清理的测试。
 
 ## 2026-09-04 version:0.20.2
 
