@@ -23,17 +23,21 @@
         </template>
 
         <el-form class="memory-editor-body" label-position="top">
-            <el-form-item label="摘要">
+            <el-form-item label="摘要" required>
                 <el-input
                     v-model="form.summary"
                     type="textarea"
                     resize="none"
                     :autosize="{ minRows: 2, maxRows: 4 }"
-                    placeholder="可选，简要概括该记忆"
+                    placeholder="简要概括该记忆"
                 />
             </el-form-item>
 
-            <el-form-item class="memory-editor-content-field" label="记忆内容">
+            <el-form-item
+                class="memory-editor-content-field"
+                label="记忆内容"
+                required
+            >
                 <el-input
                     ref="contentInput"
                     v-model="form.content"
@@ -93,7 +97,7 @@
                     </el-select>
                 </el-form-item>
 
-                <el-form-item label="重要度">
+                <el-form-item label="重要度" required>
                     <el-input-number
                         v-model="form.importance"
                         :min="0"
@@ -107,7 +111,7 @@
             </div>
 
             <div class="memory-editor-grid memory-editor-detail-grid">
-                <el-form-item label="情绪">
+                <el-form-item label="情绪" required>
                     <el-input
                         v-model="form.sentiment"
                         placeholder="例如：担心、亲近、愉快、中性"
@@ -205,6 +209,9 @@ const canSubmit = computed(
     () =>
         props.presetId.trim().length > 0 &&
         form.content.trim().length > 0 &&
+        form.summary.trim().length > 0 &&
+        form.sentiment.trim().length > 0 &&
+        form.importance != null &&
         !submitPending.value
 )
 
@@ -237,13 +244,6 @@ const loadSpeakers = async () => {
     }
 }
 
-const normalizeImportanceInput = (value: number | null): number | null => {
-    if (value == null || !Number.isFinite(value)) {
-        return null
-    }
-    return Math.min(1, Math.max(0, value))
-}
-
 const submit = async () => {
     const presetId = props.presetId.trim()
     if (presetId.length === 0) {
@@ -257,14 +257,32 @@ const submit = async () => {
         return
     }
 
+    const summary = form.summary.trim()
+    if (summary.length === 0) {
+        ElMessage.warning('摘要不能为空')
+        return
+    }
+
+    const sentiment = form.sentiment.trim()
+    if (sentiment.length === 0) {
+        ElMessage.warning('情绪不能为空')
+        return
+    }
+
+    const importance = form.importance
+    if (importance == null) {
+        ElMessage.warning('重要度不能为空')
+        return
+    }
+
     const mutation: MemoryMutationInput = {
         type: form.type,
         status: form.status,
         content,
         keywords: form.keywords,
-        summary: form.summary.trim() || null,
-        sentiment: form.sentiment.trim() || null,
-        importance: normalizeImportanceInput(form.importance)
+        summary,
+        sentiment,
+        importance
     }
 
     submitPending.value = true
