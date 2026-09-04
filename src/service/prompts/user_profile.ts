@@ -13,6 +13,7 @@ export interface UserProfilePromptInput {
     group: {
         speakerLabel: string
         entries: DreamMemoryEntryRecord[]
+        matchedEntryCount: number
         existingProfile?: UserProfileRecord
     }
 }
@@ -56,6 +57,9 @@ export const buildUserProfilePrompt = (
         '</output_contract>'
     ].join('\n')
 
+    const memoryCountNotice =
+        `你总共有 ${input.group.matchedEntryCount} 条与${escapedSpeakerLabel}` +
+        `相关的记忆，下面是其中最重要的 ${input.group.entries.length} 条。`
     const inputPrompt = [
         '<user_profile_input>',
         ...formatXmlBlock(
@@ -63,16 +67,17 @@ export const buildUserProfilePrompt = (
             input.group.existingProfile?.content ?? '无'
         ),
         '',
+        memoryCountNotice,
         ...formatXmlBlock(
             'memory_entries',
             input.group.entries
                 .map((entry) =>
                     [
-                        `id=${entry.id}`,
                         `type=${entry.type}`,
-                        `createdAt=${entry.createdAt.toISOString()}`,
                         `updatedAt=${entry.updatedAt.toISOString()}`,
-                        `sentiment=${entry.sentiment ?? ''}`,
+                        ...(entry.sentiment == null
+                            ? []
+                            : [`sentiment=${entry.sentiment}`]),
                         'content:',
                         entry.content
                     ].join('\n')

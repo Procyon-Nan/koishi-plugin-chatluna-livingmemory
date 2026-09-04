@@ -1,16 +1,11 @@
 import type { DreamMemoryEntryRecord } from '../../contracts/workflows'
 
-const toIsoString = (value: Date | string | number) => {
-    const date = new Date(value)
-    return Number.isFinite(+date) ? date.toISOString() : ''
-}
-
 export const formatMemoryEntryForPrompt = (entry: DreamMemoryEntryRecord) => {
     return [
         `id=${entry.id}`,
         `type=${entry.type}`,
-        `createdAt=${toIsoString(entry.createdAt)}`,
-        `updatedAt=${toIsoString(entry.updatedAt)}`,
+        `createdAt=${entry.createdAt.toISOString()}`,
+        `updatedAt=${entry.updatedAt.toISOString()}`,
         `sentiment=${entry.sentiment ?? ''}`,
         `importance=${entry.importance ?? ''}`,
         `keywords=${entry.keywords.join('、')}`,

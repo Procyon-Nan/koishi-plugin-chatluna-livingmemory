@@ -178,7 +178,8 @@ it('uses the memory entry format and user profile result schema', () => {
         presetPrompt: '你是助手。',
         group: {
             speakerLabel: '张三',
-            entries: [memoryEntry]
+            entries: [memoryEntry],
+            matchedEntryCount: 4
         }
     })
     assert.equal(
@@ -191,8 +192,13 @@ it('uses the memory entry format and user profile result schema', () => {
         userProfileResultSchema.safeParse({ content: null }).success,
         true
     )
-    assert.match(prompt.inputPrompt, /id=memory-1/u)
-    assert.match(prompt.inputPrompt, /createdAt=2026-07-15T12:00:00.000Z/u)
+    assert.match(prompt.inputPrompt, /updatedAt=2026-07-15T12:30:00.000Z/u)
+    assert.match(
+        prompt.inputPrompt,
+        /你总共有 4 条与张三相关的记忆，下面是其中最重要的 1 条。/u
+    )
+    assert.doesNotMatch(prompt.inputPrompt, /id=memory-1/u)
+    assert.doesNotMatch(prompt.inputPrompt, /createdAt=/u)
     assert.match(
         prompt.systemPrompt,
         new RegExp(userProfileResultToolName, 'u')
@@ -283,6 +289,7 @@ it('separates Dream and user profile rules from escaped dynamic inputs', () => {
         group: {
             speakerLabel: '张三<&',
             entries: [unsafeMemory],
+            matchedEntryCount: 1,
             existingProfile
         }
     })

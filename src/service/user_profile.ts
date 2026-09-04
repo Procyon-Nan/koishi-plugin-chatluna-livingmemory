@@ -343,13 +343,13 @@ export class LivingMemoryUserProfileService {
         logger: LivingMemoryLogger | undefined,
         runLogger: LivingMemoryLogger
     ): Promise<'generated' | 'failed' | 'empty'> {
-        const prompt = buildUserProfilePrompt({
-            assistantLabel,
-            presetPrompt,
-            group
-        })
         let structuredResult
         try {
+            const prompt = buildUserProfilePrompt({
+                assistantLabel,
+                presetPrompt,
+                group
+            })
             structuredResult = await invokeStructuredOutput({
                 model,
                 prompt,

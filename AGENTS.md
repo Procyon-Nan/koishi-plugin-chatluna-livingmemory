@@ -163,6 +163,9 @@ chatluna-livingmemory/
 7. 模型工具、提示词与结构化输出
    - `src/service/prompts/` 是工作流提示词和 Zod schema 的唯一来源；字段说明
      优先放在结果工具参数描述中，不在 prompt 正文重复维护。
+   - 用户画像提示词只向模型提供记忆的 type、updatedAt、sentiment 与正文，并在
+     记忆列表前说明关联记忆总数与实际送入条数；不提供记忆 ID 与 importance：
+     画像输出只有正文，没有操作引用记忆 ID，送入的记忆也一律等权使用。
    - 动态文本经 `prompt_format.ts` 负责的 XML 块转义和 System/Human 消息
      组合进入模型。不得在各工作流中复制 XML 拼接或转义逻辑。
    - 结构化结果工具是单次调用内部工具。工具 schema、提示词规则、校验、
