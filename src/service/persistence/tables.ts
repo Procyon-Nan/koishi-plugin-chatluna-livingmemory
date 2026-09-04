@@ -1,5 +1,21 @@
 import type { Context } from 'koishi'
 
+/**
+ * 待处理记忆查询索引。minato 由列名拼接的默认名为
+ * `index:living_memory_entry:presetId+status+isConsolidated+createdAt+id`，
+ * 长 69 字符，超出 MySQL 64 字符的标识符上限，故显式指定短名。
+ */
+export const dreamPendingIndex = {
+    name: 'index:living_memory_entry:dream_pending',
+    keys: {
+        presetId: 'asc',
+        status: 'asc',
+        isConsolidated: 'asc',
+        createdAt: 'asc',
+        id: 'asc'
+    }
+} as const
+
 export const defineLivingMemoryTables = (ctx: Context) => {
     ctx.model.extend(
         'living_memory_entry',
@@ -57,10 +73,7 @@ export const defineLivingMemoryTables = (ctx: Context) => {
         {
             autoInc: false,
             primary: 'id',
-            indexes: [
-                ['presetId', 'status', 'isConsolidated', 'createdAt', 'id'],
-                ['presetId', 'status', 'updatedAt']
-            ]
+            indexes: [dreamPendingIndex, ['presetId', 'status', 'updatedAt']]
         }
     )
 

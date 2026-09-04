@@ -1,8 +1,12 @@
 # CHANGELOG
 
+## 2026-09-04 version:0.20.3
+
+- pending: 修正 `living_memory_entry` 待处理记忆组合索引在 MySQL 下无法创建的问题。该索引原先使用 minato 按列名拼接的默认名，长 69 字符，超出 MySQL 64 字符的标识符上限，`createIndex` 抛出的异常会留在 minato 的 prepareTasks 中使 `Database.prepared()` 始终拒绝，而所有查询在执行前都要等待它，导致整个 Koishi 实例的数据库访问全部失败。现显式指定索引名 `index:living_memory_entry:dream_pending`，并在服务启动时删除与该索引同列但名字不同的历史索引（SQLite 保留旧全名、PostgreSQL 截断至 63 字符，minato 都不会自动清理），同时补充索引名长度不超过 64 字符与旧索引清理的测试。
+
 ## 2026-09-04 version:0.20.2
 
-- pending: 更新插件版本至 0.20.2。
+- 98943b4: 更新插件版本至 0.20.2。
 - 1b4e668: 统一记忆 `summary` 字段的空值口径，表定义改为与 `sentiment` 一致的可空且默认 null，记录读取规范化补上 `summary` 的空串折叠。
 - b293c3a: 记忆编辑界面的关键词改为必填，并按 `MAX_MEMORY_KEYWORDS` 限制最多可选数量，避免超出上限的关键词在服务端被静默截断。
 - f184fdd: 记忆编辑界面将摘要、情绪与重要度改为必填，标注必填星号并在提交前校验，不再把空白摘要与情绪提交为 null，同时移除重复的重要度裁剪。

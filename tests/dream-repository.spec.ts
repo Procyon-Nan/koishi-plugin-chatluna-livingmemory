@@ -272,6 +272,56 @@ it('defines the pending Dream query index', () => {
             { presetId: 'asc', memoryId: 'asc' }
         ]
     )
+    // MySQL 标识符上限为 64 字符，索引名超限会中断整个数据库的准备流程
+    assert.deepEqual(
+        Object.entries(ctx.model.tables)
+            .filter(([table]) => table.startsWith('living_memory'))
+            .flatMap(([, model]) => model.indexes)
+            .map((index) => index.name)
+            .filter((name) => (name?.length ?? 0) > 64),
+        []
+    )
+})
+
+it('drops legacy pending Dream query indexes', async () => {
+    await withRepository(async (ctx, repository) => {
+        await ctx.database.prepared()
+        const { driver } = ctx.database.select('living_memory_entry')
+        // 旧默认名在 SQLite 上原样保留，在 PostgreSQL 上被截断至 63 字符
+        const legacyNames = [
+            'index:living_memory_entry:presetId+status+isConsolidated+createdAt+id',
+            'index:living_memory_entry:presetId+status+isConsolidated+created'
+        ]
+        for (const name of legacyNames) {
+            await driver.createIndex('living_memory_entry', {
+                name,
+                unique: false,
+                keys: {
+                    presetId: 'asc',
+                    status: 'asc',
+                    isConsolidated: 'asc',
+                    createdAt: 'asc',
+                    id: 'asc'
+                }
+            })
+        }
+
+        assert.deepEqual(
+            await repository.dropLegacyPendingIndexes(),
+            legacyNames
+        )
+        assert.deepEqual(
+            (await driver.getIndexes('living_memory_entry')).map(
+                (index) => index.name
+            ),
+            [
+                'sqlite_autoindex_living_memory_entry_1',
+                'index:living_memory_entry:dream_pending',
+                'index:living_memory_entry:presetId+status+updatedAt'
+            ]
+        )
+        assert.deepEqual(await repository.dropLegacyPendingIndexes(), [])
+    })
 })
 
 it('counts pending memories and selects the earliest stable batch', async () => {

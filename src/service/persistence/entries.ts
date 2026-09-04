@@ -36,6 +36,7 @@ import {
     normalizeEntryRecord
 } from './normalizers'
 import type { LivingMemoryTransact, LivingMemoryTransaction } from './types'
+import { dreamPendingIndex } from './tables'
 import {
     createUserProfileSpeakerKey,
     normalizeSpeakerKeys
@@ -190,6 +191,32 @@ export class LivingMemoryEntryRepository
             .orderBy('id', 'asc')
             .limit(limit)
             .execute(['id', 'presetId', 'speakerKeys', 'status'])
+    }
+
+    /**
+     * 删除与待处理记忆索引同列但名字不同的历史索引。0.20.3 之前该索引使用
+     * minato 按列名拼接的默认名，SQLite 保留原名、PostgreSQL 截断至 63 字符，
+     * 而 minato 只按名字匹配既有索引、不清理未声明的索引，因此改名后旧索引会
+     * 与新索引并存。索引现状本身即幂等判据，无需迁移标记；DROP INDEX 为单条
+     * DDL，不纳入事务入口。
+     */
+    async dropLegacyPendingIndexes(): Promise<string[]> {
+        const table = 'living_memory_entry'
+        const { driver } = this.ctx.database.select(table)
+        const pendingIndexKeys = Object.keys(dreamPendingIndex.keys).join()
+        const legacyNames = (await driver.getIndexes(table))
+            .filter(
+                (index) =>
+                    index.name !== dreamPendingIndex.name &&
+                    Object.keys(index.keys).join() === pendingIndexKeys
+            )
+            .flatMap((index) => index.name ?? [])
+
+        for (const name of legacyNames) {
+            await driver.dropIndex(table, name)
+        }
+
+        return legacyNames
     }
 
     async migrateMemorySourceOriginsArray(): Promise<number> {

@@ -20,6 +20,7 @@ const createService = (options: {
             value: {
                 migrateMemorySourceOriginsArray: async () => 0,
                 migrateActiveMemorySpeakers: async () => 0,
+                dropLegacyPendingIndexes: async () => [],
                 markStaleRunningJobsAsFailed: async () => []
             }
         },

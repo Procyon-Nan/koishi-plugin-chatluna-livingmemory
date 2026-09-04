@@ -136,6 +136,10 @@ export class LivingMemoryRepository
         return this.entries.migrateActiveMemorySpeakers()
     }
 
+    dropLegacyPendingIndexes(): Promise<string[]> {
+        return this.entries.dropLegacyPendingIndexes()
+    }
+
     hasMigratedLegacyEmbeddings(): Promise<boolean> {
         return this.entries.hasMigratedLegacyEmbeddings()
     }

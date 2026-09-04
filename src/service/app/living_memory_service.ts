@@ -244,6 +244,14 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
                 indexed
             })
         }
+        const droppedIndexes = await this.repository.dropLegacyPendingIndexes()
+        if (droppedIndexes.length > 0) {
+            this.memoryLogger.info('startup.migration.completed', {
+                workflow: 'maintenance',
+                operation: 'drop-legacy-pending-index',
+                dropped: droppedIndexes
+            })
+        }
 
         try {
             const recovered =
