@@ -13,6 +13,9 @@ export const memoryEntryTypes = [
 
 export type MemoryEntryType = (typeof memoryEntryTypes)[number]
 
+// 与 src/service/memory/entry_fields.ts 的 MAX_MEMORY_KEYWORDS 保持同步
+export const MAX_MEMORY_KEYWORDS = 12
+
 export type MemoryEntryStatus = 'active' | 'archived'
 export type MemoryRecallStrategy = 'embedding-rerank' | 'agentic-recall'
 

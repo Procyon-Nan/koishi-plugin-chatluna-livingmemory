@@ -118,17 +118,22 @@
                     />
                 </el-form-item>
 
-                <el-form-item class="memory-editor-keywords" label="关键词">
+                <el-form-item
+                    class="memory-editor-keywords"
+                    label="关键词"
+                    required
+                >
                     <el-select
                         v-model="form.keywords"
                         multiple
                         collapse-tags
                         collapse-tags-tooltip
                         :max-collapse-tags="3"
+                        :multiple-limit="MAX_MEMORY_KEYWORDS"
                         filterable
                         allow-create
                         default-first-option
-                        placeholder="输入后按回车添加"
+                        :placeholder="keywordsPlaceholder"
                         :popper-class="selectPopperClass"
                     />
                 </el-form-item>
@@ -155,6 +160,7 @@ import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import * as api from '../api'
 import {
+    MAX_MEMORY_KEYWORDS,
     memoryEntryTypes,
     type MemoryEntryRecord,
     type MemoryEntryStatus,
@@ -177,6 +183,7 @@ const emit = defineEmits<{
 }>()
 
 const memoryTypes = memoryEntryTypes
+const keywordsPlaceholder = `输入后按回车添加，最多 ${MAX_MEMORY_KEYWORDS} 个`
 const submitPending = ref(false)
 const speakersPending = ref(false)
 const speakers = ref<PresetSpeakerRecord[]>([])
@@ -211,6 +218,7 @@ const canSubmit = computed(
         form.content.trim().length > 0 &&
         form.summary.trim().length > 0 &&
         form.sentiment.trim().length > 0 &&
+        form.keywords.length > 0 &&
         form.importance != null &&
         !submitPending.value
 )
@@ -272,6 +280,11 @@ const submit = async () => {
     const importance = form.importance
     if (importance == null) {
         ElMessage.warning('重要度不能为空')
+        return
+    }
+
+    if (form.keywords.length === 0) {
+        ElMessage.warning('关键词不能为空')
         return
     }
 
