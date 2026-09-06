@@ -111,7 +111,7 @@ export const reconcileVectorIndexPreset = async (options: {
         indexedCount = inventory.size
         let cursor: string | null = null
         let completed = 0
-        do {
+        while (true) {
             if (shouldStop()) {
                 throw new Error('vector index service is stopping')
             }
@@ -168,7 +168,7 @@ export const reconcileVectorIndexPreset = async (options: {
             completed += sources.length
             await onProgress({ presetId, completed, total })
             cursor = sources[sources.length - 1].id
-        } while (true)
+        }
 
         if (inventory.size > 0) {
             const mutation = await worker.applyMutation({

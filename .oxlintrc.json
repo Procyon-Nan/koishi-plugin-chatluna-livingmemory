@@ -17,13 +17,6 @@
                 "typescript/no-base-to-string": "off",
                 "typescript/unbound-method": "off"
             }
-        },
-        {
-            "files": [
-                "src/service/vector_index/rebuild.ts",
-                "src/service/vector_index/reconcile.ts"
-            ],
-            "rules": { "no-constant-condition": "off" }
         }
     ],
     "options": {

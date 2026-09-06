@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2026-09-06 version:0.21.1
+
+- pending: 将 `entries.ts`、`rebuild.ts` 与 `reconcile.ts` 三处游标分页循环由 `do...while (true)` 改写为语义等价的 `while (true)` 形式，恢复 `yarn lint` 的 `no-constant-condition` 基线通过，并删除 `.oxlintrc.json` 中针对 `rebuild.ts`/`reconcile.ts` 的该规则豁免；oxlint 默认放行裸 `while (true)` 而始终拒绝 `do...while (true)`，统一写法后新的游标分页无需再逐文件豁免。
+
 ## 2026-09-06 version:0.21.0
 
 - 7b8aab9: 新增自动记忆提取白名单配置。开启 `enableExtractionWhitelist` 后只有 `extractionWhitelist` 列出的会话会自动提取记忆，群聊比对群号、私聊比对用户 id，两者都取自平台原始 id，因此 ChatLuna 主插件与 Character 两条接入路径共用同一份列表。未命中的会话在进入轮次缓冲前返回，不累计轮次也不占用缓冲；白名单只约束自动提取，召回、快照与用户画像注入以及 `living_memory_create_memory` 均不受影响。

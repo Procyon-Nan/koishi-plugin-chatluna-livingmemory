@@ -140,7 +140,7 @@ export class LivingMemoryEntryRepository
 
             let cursor: string | null = null
             let rowCount = 0
-            do {
+            while (true) {
                 const entries = await this.selectActiveMemorySpeakerPage(
                     database,
                     cursor,
@@ -166,7 +166,7 @@ export class LivingMemoryEntryRepository
                 }
                 rowCount += rows.length
                 cursor = entries[entries.length - 1].id
-            } while (true)
+            }
 
             await database.create('living_memory_migration', {
                 id: activeMemorySpeakersMigrationId,

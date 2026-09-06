@@ -126,7 +126,7 @@ export const rebuildVectorIndex = async (options: {
         const startedAt = performance.now()
         let completed = 0
         let cursor: string | null = null
-        do {
+        while (true) {
             if (shouldStop()) {
                 throw new Error('vector index service is stopping')
             }
@@ -186,7 +186,7 @@ export const rebuildVectorIndex = async (options: {
                 totalDuration: finishedAt - startedAt
             })
             cursor = sources[sources.length - 1].id
-        } while (true)
+        }
 
         return await finalize(() => {
             cleanupOwnedByFinalize = true
