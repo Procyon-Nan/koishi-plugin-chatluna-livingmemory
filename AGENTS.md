@@ -7,89 +7,40 @@
 插件，位于 `koishi-dev` 工作区的 `external/chatluna-livingmemory`。本地运行
 环境由工作区根目录的 Koishi 实例提供。
 
-本项目负责将 ChatLuna 与 Character 对话转换为长期记忆，完成记忆提取、
-召回、Dream 整理、用户画像、持久化向量索引、管理指令和 Console WebUI。
-长期记忆按预设隔离；召回快照在预设隔离的基础上继续按会话隔离。
-
-本项目不承载以下职责：
-
-1. 模型供应商适配、通用模型调用基础设施与 ChatLuna 核心会话管理。
-2. Character 预设的存储、会话调度与基础提示词渲染。
-3. Koishi 数据库驱动和 Console 框架本身的实现。
-4. 多进程共享同一个运行中 PGlite 索引目录；向量索引所有权只保证遵循
-   本插件协议的同机进程互斥。
+模型供应商适配、ChatLuna 核心会话管理、Character 预设存储与调度、Koishi
+数据库驱动和 Console 框架本身都不属于本项目职责。
 
 ## 代码文件结构
-
-以下结构只列出需要维护的源码和工程文件；`node_modules/`、`lib/`、
-`dist/`、`tmp/`、`.codegraph/` 等依赖、构建产物、索引或临时目录不属于
-代码结构。
 
 ```text
 chatluna-livingmemory/
 ├── src/
-│   ├── contracts/                       # 记忆、工作流、向量索引与 RPC 公共契约
-│   ├── integrations/
-│   │   └── koishi-augmentations.ts      # Koishi 服务、事件与 Console 类型合并
-│   ├── plugins/
-│   │   ├── character_middleware.ts      # Character 生命周期、快照/画像注入与提取接线
-│   │   ├── chat_middleware.ts           # ChatLuna before/after-chat 接线与会话清理
-│   │   ├── commands.ts                  # livingmemory 管理指令与删除确认流程
-│   │   ├── living_memory_tools.ts       # 模型查询、原文读取与主动创建工具注册
-│   │   └── webui.ts                     # Console 入口与 RPC 监听器
+│   ├── contracts/               # 记忆、工作流、向量索引与 RPC 公共契约
+│   ├── integrations/            # Koishi 服务、事件与 Console 类型合并
+│   ├── plugins/                 # 中间件、管理指令、模型工具与 Console 入口
 │   ├── service/
-│   │   ├── app/                         # 应用门面、作用域、配置状态与变更编排
-│   │   ├── logging/                     # 诊断事件与模型调用日志
-│   │   ├── memory/                      # 记忆字段、来源、speaker、快照和工具实现
-│   │   ├── persistence/                 # Koishi 表定义、分表仓库与持久化门面
-│   │   ├── prompts/                     # 工作流提示词、结构化输出 schema 与 XML 格式
-│   │   ├── shared/                      # 预设队列、轮次及少量共享工具
-│   │   ├── transcript/                  # ChatLuna/Character 聊天记录适配与渲染
-│   │   ├── vector_index/                # PGlite/pgvector 索引服务、重建与 Worker 协议
-│   │   │   ├── worker/                  # PGlite 连接、查询、变更、schema 与所有权端点
-│   │   │   └── worker_protocol.ts       # 主线程与向量索引 Worker 的消息契约
-│   │   ├── workflows/
-│   │   │   ├── dream/                   # 聚类、增量整理、动作执行与 Dream Worker
-│   │   │   ├── extraction/              # 对话轮次缓冲与记忆提取
-│   │   │   ├── recall/                  # embedding-rerank 与 agentic-recall
-│   │   │   ├── job_tracker.ts           # 后台工作流任务状态
-│   │   │   └── structured_output.ts     # 调用级结果工具、校验与纠错
-│   │   └── user_profile.ts              # 用户画像分组、生成与渲染
-│   ├── index.ts                         # 插件入口、配置 schema 与可选集成装配
-│   ├── query.ts                         # 对外查询辅助接口
-│   ├── types.ts                         # 公共类型兼容导出
-│   └── worker_artifacts.ts              # Worker 构建产物定位
-├── client/
-│   ├── components/                      # 记忆、画像、快照、任务与检索测试界面
-│   ├── composables/                     # 分页资源、选择状态与记忆列表状态
-│   ├── styles/                          # Dashboard 与弹窗的分域样式
-│   ├── api.ts                           # Console RPC 客户端
-│   ├── dashboard.vue                    # Living Memory 主页面
-│   ├── index.ts                         # Console 客户端入口
-│   └── types.ts                         # 浏览器侧 RPC 与展示契约镜像
-├── tests/                               # Vitest 工作流、持久化、集成与客户端测试
-├── docs/                                # WebUI 与模型配置用户文档
-├── .github/
-│   └── workflows/
-│       └── publish.yml                  # 包版本变更后的 npm 自动构建与发布
-├── scripts/
-│   ├── build-workers.mjs                # 构建向量索引与 Dream Worker
-│   └── vector-index-benchmark*.mjs      # 向量索引基准脚本及支持代码
-├── .oxfmtrc.json                        # oxfmt 格式配置
-├── .oxlintrc.json                       # oxlint 静态检查配置
-├── AGENTS.md                            # 项目结构与开发规范
-├── CHANGELOG.md                         # 版本变更记录
-├── README.md                            # 面向用户的功能与使用说明
-├── package.json                         # 包元数据、依赖与工程脚本
-├── package-lock.json                    # 独立仓库 CI 使用的 npm 依赖锁定
-├── tsconfig.json                        # 服务端 TypeScript 配置
-├── vitest.config.ts                     # Vitest 配置
-└── yakumo.yml                           # yakumo 构建配置
+│   │   ├── app/                 # 应用门面、作用域、配置状态与变更编排
+│   │   ├── logging/             # 诊断事件与模型调用日志
+│   │   ├── memory/              # 记忆字段、来源、speaker、快照和工具实现
+│   │   ├── persistence/         # Koishi 表定义、分表仓库与持久化门面
+│   │   ├── prompts/             # 工作流提示词、结构化输出 schema 与 XML 格式
+│   │   ├── shared/              # 预设队列、轮次及少量共享工具
+│   │   ├── transcript/          # ChatLuna/Character 聊天记录适配与渲染
+│   │   ├── vector_index/        # PGlite/pgvector 索引服务、重建与 Worker
+│   │   ├── workflows/           # extraction、recall、dream 与任务状态
+│   │   └── user_profile.ts      # 用户画像分组、生成与渲染
+│   ├── index.ts                 # 插件入口、配置 schema 与可选集成装配
+│   ├── query.ts                 # 对外查询辅助接口
+│   ├── types.ts                 # 公共类型兼容导出
+│   └── worker_artifacts.ts      # Worker 构建产物定位
+├── client/                      # Console 页面、组件、composable 与契约镜像
+├── tests/                       # Vitest 工作流、持久化、集成与客户端测试
+├── docs/                        # WebUI 与模型配置用户文档
+└── scripts/                     # Worker 构建与向量索引基准脚本
 ```
 
-新增、删除、移动或重命名源码目录、主要模块、测试目录、脚本目录或工程配置
-文件时，必须在同一次变更中同步更新本节。不得提交与实际仓库结构不一致的
-说明。
+新增、删除、移动或重命名源码目录、测试目录或脚本目录时，必须在同一次变更中
+同步更新本节。目录内新增或重命名单个文件不需要更新。
 
 ## 设计约束
 
@@ -168,10 +119,8 @@ chatluna-livingmemory/
    - `src/service/prompts/` 是工作流提示词和 Zod schema 的唯一来源；字段说明
      优先放在结果工具参数描述中，不在 prompt 正文重复维护。
    - 送入模型阅读的记忆视图由 `prompts/memory_entries.ts` 的
-     `renderMemoriesForModel` 统一渲染，只包含 type、updatedAt、sentiment 和
-     正文，sentiment 为空时省略该字段；用户画像提示词与 `living_memory_search`
-     共用该视图，都不提供 keywords、summary 与 importance。记忆 ID 只在模型需要
-     引用记忆时渲染：`living_memory_search` 作为对话工具渲染 ID 供
+     `renderMemoriesForModel` 统一渲染，各工作流不得自行拼装记忆视图。记忆 ID
+     只在模型需要引用记忆时渲染：`living_memory_search` 渲染 ID 供
      `living_memory_get_messages` 使用，Agentic Recall 与用户画像不渲染 ID。
    - 用户画像提示词在记忆列表前说明关联记忆总数与实际送入条数；画像输出只有
      正文，没有操作引用记忆 ID，送入的记忆也一律等权使用。
@@ -179,9 +128,8 @@ chatluna-livingmemory/
      组合进入模型。不得在各工作流中复制 XML 拼接或转义逻辑。
    - 结构化结果工具是单次调用内部工具。工具 schema、提示词规则、校验、
      纠错次数和工作流失败处理必须保持一致。
-   - `living_memory_search` 只查询活跃记忆，没有命中时返回
-     `没有找到相关记忆。`；`living_memory_get_messages` 根据已返回的记忆 ID
-     全量返回其来源消息；主动创建工具允许 speaker 关联为空。
+   - `living_memory_search` 只查询活跃记忆；`living_memory_get_messages` 根据
+     已返回的记忆 ID 全量返回其来源消息；主动创建工具允许 speaker 关联为空。
    - Agentic Recall 在找不到相关记忆时输出 `<NO_MEMORY>`；解析到该结果时不
      更新快照。工具参数持续错误达到上限时直接终止本次召回，不再发起额外
      finalization 调用。
@@ -215,6 +163,8 @@ chatluna-livingmemory/
      向量索引必须能够据此 reconcile 或 rebuild。
    - PGlite 连接和目录所有权端点由同一个向量索引 Worker 持有。Worker 先
      取得所有权再打开数据库，关闭时先关闭 PGlite 再释放所有权。
+   - 所有权只保证遵循本插件协议的同机进程互斥，不支持多进程共享同一个运行中
+     的索引目录。
    - Windows 使用命名管道、Linux 使用抽象 Unix Socket，以规范化目录的
      稳定哈希作为端点标识；不得重新引入锁文件、PID、mtime、心跳或
      `fs-native-extensions`。
@@ -248,21 +198,9 @@ chatluna-livingmemory/
 
 ## 工程原则
 
-1. 遵循本仓库现有 TypeScript ESM 风格：无分号、单引号、无尾逗号、
-   4 空格缩进、80 列，具体以 `.oxfmtrc.json` 与 `.oxlintrc.json` 为准。
-2. 所有文本文件统一使用 LF 换行。
-3. 变更保持最小范围。优先改善现有接口和职责，不为单一调用创建多层包装、
-   兼容链或推测性 fallback。
-4. 复用 transcript adapter、prompt helper、字段 normalizer、工具契约、预设
-   队列和仓库能力；只有存在真实共享契约时才提取公共抽象。
-5. 不确定 Koishi、ChatLuna、Character、PGlite 或模型工具行为时，先核对本地
-   源码、类型或官方文档，不得凭经验猜测。
-6. 错误处理保留足够上下文和既有失败语义，不静默吞掉异常，也不把底层原始
-   错误直接暴露给最终用户。
-7. 注释只解释不直观的约束或原因；复杂说明使用中文，不添加复述代码的注释。
-8. `lib/` 与 `dist/` 是生成产物，除非任务明确要求，不得手工编辑。
-9. 每项代码变更记录在 `CHANGELOG.md`，未提交时使用 `pending`，并随下一次
-   版本更新将其替换为真实短提交哈希；不得伪造提交哈希。
+1. TypeScript ESM 风格以 `.oxfmtrc.json` 与 `.oxlintrc.json` 为准。
+2. 注释只解释不直观的约束或原因，使用中文，不添加复述代码的注释。
+3. `lib/` 与 `dist/` 是生成产物，除非任务明确要求，不得手工编辑。
 
 ## 验证要求
 
@@ -272,30 +210,5 @@ chatluna-livingmemory/
    `yarn atsc -p tsconfig.json --noEmit`。
 4. 客户端或 Console 变更：另运行 `yarn build:client`。
 5. 服务端构建、Worker 或包边界变更：运行 `yarn build:server`；同时涉及客户
-   端时运行完整 `yarn build`。
-6. 只在变更影响既有测试契约时调整相关测试；除非任务明确要求，不为简单
-   变更新增专项测试或扩大验证范围。
-7. 自动化检查只证明源码、类型和构建层结果，不得表述为真实 Koishi、模型
-   供应商或跨平台运行验收。
-
-## 发布流程
-
-1. `main` 分支的 `package.json` 变更由
-   `.github/workflows/publish.yml` 触发自动发布；工作流自身变更也会触发一次，
-   并支持从 GitHub Actions 手工运行。
-2. 发布前先查询 npm 是否已存在当前 `name + version`。版本已存在时正常跳过，
-   不重复执行安装、构建或发布。
-3. 发布环境使用 GitHub 托管的 Ubuntu Runner、Node 24 和 `npm ci`，随后运行
-   `npm run build` 与 `npm publish --access public`。
-4. npm 认证只使用 Trusted Publisher 提供的 OIDC 临时凭据。工作流必须保留
-   `id-token: write`，不得提交 npm token 或在日志中输出认证信息。
-5. npm 包的 Trusted Publisher 必须绑定仓库
-   `Procyon-Nan/koishi-plugin-chatluna-livingmemory` 与工作流文件
-   `publish.yml`。修改工作流文件名时必须同步更新 npm 侧配置。
-
-## CodeGraph
-
-仓库存在 `.codegraph/`。定位源码、分析调用路径和评估影响范围时，应先使用
-CodeGraph，再按需读取文件或使用 `rg`。常用入口包括 `src/index.ts`、
-`ChatLunaLivingMemoryService`、ChatLuna/Character 中间件、Recall、Extraction、
-Dream、`LivingMemoryRepository`、向量索引 Worker 和 `src/plugins/webui.ts`。
+   端时运行完整 `yarn build`。构建脚本依赖 win32-only 二进制，在 WSL 下无法
+   执行，此时如实说明该级验证未完成。

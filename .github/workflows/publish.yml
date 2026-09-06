@@ -1,3 +1,8 @@
+# npm 侧的 Trusted Publisher 绑定了仓库
+# `Procyon-Nan/koishi-plugin-chatluna-livingmemory` 与本文件名 `publish.yml`，
+# 重命名本文件必须同步更新 npm 配置，否则发布会因凭据签发失败而中断。
+# 认证只使用 Trusted Publisher 的 OIDC 临时凭据，因此必须保留下方的
+# `id-token: write`，也不得提交 npm token 或在日志中输出认证信息。
 name: Publish package
 
 on:

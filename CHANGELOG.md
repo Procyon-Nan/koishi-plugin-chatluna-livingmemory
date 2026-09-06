@@ -3,6 +3,7 @@
 ## 2026-09-06 version:0.21.0
 
 - pending: 新增自动记忆提取白名单配置。开启 `enableExtractionWhitelist` 后只有 `extractionWhitelist` 列出的会话会自动提取记忆，群聊比对群号、私聊比对用户 id，两者都取自平台原始 id，因此 ChatLuna 主插件与 Character 两条接入路径共用同一份列表。未命中的会话在进入轮次缓冲前返回，不累计轮次也不占用缓冲；白名单只约束自动提取，召回、快照与用户画像注入以及 `living_memory_create_memory` 均不受影响。
+- pending: 精简 `AGENTS.md`，删除与全局工程规范重复、可由代码或配置直接读出的条目，代码结构说明收敛到目录粒度并相应放宽同步义务；npm Trusted Publisher 与仓库、工作流文件名的绑定关系移入 `publish.yml` 顶部注释，保留在改名者实际会看到的位置。
 
 ## 2026-09-04 version:0.20.3
 
