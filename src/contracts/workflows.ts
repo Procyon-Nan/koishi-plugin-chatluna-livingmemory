@@ -160,6 +160,8 @@ export interface LivingMemoryConfig {
     rerankModel: string
     extractionRounds: number
     extractionInterval: number
+    enableExtractionWhitelist: boolean
+    extractionWhitelist: string[]
     recallTopK: number
     memorySearchToolMaxResults: number
     memorySearchMinSimilarity: number

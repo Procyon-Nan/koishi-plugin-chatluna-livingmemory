@@ -67,6 +67,17 @@ export const Config: Schema<Config> = Schema.intersect([
                 '每隔多少轮对话触发一次记忆提取；设为 0 时不执行自动记忆提取。'
             )
             .default(10),
+        enableExtractionWhitelist: Schema.boolean()
+            .description(
+                '开启自动记忆提取白名单；开启后只有白名单内的会话才会自动提取记忆，关闭时白名单列表不生效。'
+            )
+            .default(false),
+        extractionWhitelist: Schema.array(Schema.string())
+            .role('table')
+            .description(
+                '自动记忆提取白名单，填入群号（群聊）或用户 QQ 号（私聊）；开启白名单但列表为空时不会自动提取任何记忆。'
+            )
+            .default([]),
         debug: Schema.boolean()
             .description(
                 '输出 Recall、Extraction、Dream 的完整模型 Prompt、原始响应与诊断事件；包含对话、预设提示词和记忆正文，仅应在访问受控环境启用。'

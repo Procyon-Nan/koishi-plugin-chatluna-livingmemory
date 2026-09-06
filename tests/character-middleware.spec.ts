@@ -24,6 +24,8 @@ const testConfig: LivingMemoryConfig = {
     rerankModel: 'test-model',
     extractionRounds: 1,
     extractionInterval: 0,
+    enableExtractionWhitelist: false,
+    extractionWhitelist: [],
     recallInterval: 5,
     recallTopK: 1,
     memorySearchToolMaxResults: 1,

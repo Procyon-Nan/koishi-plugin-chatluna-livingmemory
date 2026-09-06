@@ -20,7 +20,10 @@ import type { LivingMemoryLogger } from '../../logging/logger'
 
 type LivingMemoryExtractionConfig = Pick<
     LivingMemoryConfig,
-    'extractionInterval' | 'extractionRounds'
+    | 'extractionInterval'
+    | 'extractionRounds'
+    | 'enableExtractionWhitelist'
+    | 'extractionWhitelist'
 >
 
 type ExtractionFormatter = Pick<
@@ -57,6 +60,7 @@ export type ExtractionMemoryWriter = Pick<
 export class LivingMemoryExtractionCoordinator {
     private readonly stateByScope = new Map<string, ExtractionScopeState>()
     private readonly runningScopeKeys = new Set<string>()
+    private readonly whitelist: Set<string>
 
     constructor(
         private readonly config: LivingMemoryExtractionConfig,
@@ -66,7 +70,13 @@ export class LivingMemoryExtractionCoordinator {
         private readonly extractor: ExtractionModel,
         private readonly queueAutoDream: (presetId: string) => void,
         private readonly logger: LivingMemoryLogger
-    ) {}
+    ) {
+        this.whitelist = new Set(
+            config.extractionWhitelist
+                .map((item) => item.trim())
+                .filter((item) => item.length > 0)
+        )
+    }
 
     clearAll() {
         this.stateByScope.clear()
@@ -102,6 +112,22 @@ export class LivingMemoryExtractionCoordinator {
                 reason: 'disabled'
             })
             return
+        }
+
+        // 白名单未命中的会话不进入轮次缓冲：既不累计轮次也不触发提取，
+        // 避免后续把该会话加入白名单时立刻消费历史积压轮次。
+        if (this.config.enableExtractionWhitelist) {
+            const sessionId = this.resolveWhitelistId(scope)
+            if (sessionId == null || !this.whitelist.has(sessionId)) {
+                this.logger.diagnostic('extraction.skipped', {
+                    workflow: 'extraction',
+                    conversationId: scope.conversationId,
+                    presetId: scope.presetId,
+                    sessionId,
+                    reason: 'not-whitelisted'
+                })
+                return
+            }
         }
 
         const hasUser = completedRound.messages.some(
@@ -144,6 +170,13 @@ export class LivingMemoryExtractionCoordinator {
         this.stateByScope.set(key, state)
 
         this.tryStart(key, state)
+    }
+
+    /**
+     * 白名单以用户可直接填写的平台 id 为准：群聊比对群号，私聊比对用户 id。
+     */
+    private resolveWhitelistId(scope: MemoryScope) {
+        return scope.isDirect === true ? scope.userId : scope.guildId
     }
 
     private tryStart(key: string, state: ExtractionScopeState) {

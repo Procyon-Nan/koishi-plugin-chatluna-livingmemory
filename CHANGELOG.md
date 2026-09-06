@@ -1,8 +1,12 @@
 # CHANGELOG
 
+## 2026-09-06 version:0.21.0
+
+- pending: 新增自动记忆提取白名单配置。开启 `enableExtractionWhitelist` 后只有 `extractionWhitelist` 列出的会话会自动提取记忆，群聊比对群号、私聊比对用户 id，两者都取自平台原始 id，因此 ChatLuna 主插件与 Character 两条接入路径共用同一份列表。未命中的会话在进入轮次缓冲前返回，不累计轮次也不占用缓冲；白名单只约束自动提取，召回、快照与用户画像注入以及 `living_memory_create_memory` 均不受影响。
+
 ## 2026-09-04 version:0.20.3
 
-- pending: 更新插件版本至 0.20.3。
+- 5baf5b4: 更新插件版本至 0.20.3。
 - 76833ff: 修正 `living_memory_entry` 待处理记忆组合索引在 MySQL 下无法创建的问题。该索引原先使用 minato 按列名拼接的默认名，长 69 字符，超出 MySQL 64 字符的标识符上限，`createIndex` 抛出的异常会留在 minato 的 prepareTasks 中使 `Database.prepared()` 始终拒绝，而所有查询在执行前都要等待它，导致整个 Koishi 实例的数据库访问全部失败。现显式指定索引名 `index:living_memory_entry:dream_pending`，并在服务启动时删除与该索引同列但名字不同的历史索引（SQLite 保留旧全名、PostgreSQL 截断至 63 字符，minato 都不会自动清理），同时补充索引名长度不超过 64 字符与旧索引清理的测试。
 
 ## 2026-09-04 version:0.20.2

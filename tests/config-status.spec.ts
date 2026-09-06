@@ -20,6 +20,8 @@ const createConfig = (
     rerankModel: '',
     extractionRounds: 10,
     extractionInterval: 0,
+    enableExtractionWhitelist: false,
+    extractionWhitelist: [],
     recallInterval: 5,
     recallTopK: 5,
     memorySearchToolMaxResults: 30,

@@ -139,6 +139,10 @@ chatluna-livingmemory/
      串行执行和触发边界消费语义。
    - `extractionInterval = 0` 时关闭自动提取；触发时只消费已达到边界的轮次，
      不得重复处理或在失败后错误丢弃未消费轮次。
+   - `enableExtractionWhitelist` 开启时只有白名单会话进入提取：群聊比对
+     `scope.guildId`，私聊比对 `scope.userId`，均为原始平台 id。未命中的会话在
+     进入轮次缓冲前返回，不累计轮次；白名单只约束自动提取，召回、快照与画像
+     注入以及 `living_memory_create_memory` 不受其影响。
    - 提取必须取得对应预设提示词，并使用本次聊天记录附带的 speaker 映射。
    - 模型输出经结构化结果工具校验后才能写入；模型格式错误遵循统一纠错
      流程，不得在 Extraction 内另写一套解析或兜底。

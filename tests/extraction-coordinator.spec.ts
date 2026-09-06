@@ -62,6 +62,8 @@ interface ExtractionCoordinatorOptions {
     trace?: LivingMemoryExtractionTrace
     extractionInterval?: number
     extractionRounds?: number
+    enableExtractionWhitelist?: boolean
+    extractionWhitelist?: string[]
     extractWithTrace?: () => Promise<LivingMemoryExtractionTrace>
     createFailedJob?: ExtractionJobRepository['createFailedJob']
     queueAutoDream?: (presetId: string) => void
@@ -128,7 +130,10 @@ const createExtractionCoordinator = (
     const coordinator = new LivingMemoryExtractionCoordinator(
         {
             extractionInterval: options.extractionInterval ?? 1,
-            extractionRounds: options.extractionRounds ?? 1
+            extractionRounds: options.extractionRounds ?? 1,
+            enableExtractionWhitelist:
+                options.enableExtractionWhitelist ?? false,
+            extractionWhitelist: options.extractionWhitelist ?? []
         },
         repository,
         repository,
