@@ -31,7 +31,7 @@ yarn clone https://github.com/Procyon-Nan/koishi-plugin-chatluna-livingmemory.gi
 2. 在本地 Koishi 项目的根目录中构建：
 
 ```bash
-yarn build chatluna-livingmemory
+yarn workspace koishi-plugin-chatluna-livingmemory build
 ```
 
 ## 使用
