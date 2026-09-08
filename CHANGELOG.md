@@ -1,14 +1,14 @@
 # CHANGELOG
 
-## 2026-09-08 version:0.21.1
+## 2026-09-08 version:0.21.2
 
-- pending: 修复创建记忆、搜索记忆和读取来源消息工具仍从顶层 source 判断预设来源的问题，统一读取 agentContext.source，确保同名 ChatLuna 与 Character 预设分别访问各自记忆库；Character 创建记忆继续使用群聊/私聊会话键，并在来源分支前拒绝子代理创建记忆。
+- a0010fd: 修复创建记忆、搜索记忆和读取来源消息工具仍从顶层 source 判断预设来源的问题，统一读取 agentContext.source，确保同名 ChatLuna 与 Character 预设分别访问各自记忆库；Character 创建记忆继续使用群聊/私聊会话键，并在来源分支前拒绝子代理创建记忆。
 
 ## 2026-09-06 version:0.21.1
 
 - 5706b90: 将 `entries.ts`、`rebuild.ts` 与 `reconcile.ts` 三处游标分页循环由 `do...while (true)` 改写为语义等价的 `while (true)` 形式，恢复 `yarn lint` 的 `no-constant-condition` 基线通过，并删除 `.oxlintrc.json` 中针对 `rebuild.ts`/`reconcile.ts` 的该规则豁免；oxlint 默认放行裸 `while (true)` 而始终拒绝 `do...while (true)`，统一写法后新的游标分页无需再逐文件豁免。
 - bcbd4ea: 修正 README 本地开发的构建命令为 `yarn workspace koishi-plugin-chatluna-livingmemory build`。原命令 `yarn build chatluna-livingmemory` 只执行 yakumo 共享构建管道，不运行包内脚本，产物缺少 `lib/vector-index-worker.mjs` 与 `lib/dream-hdbscan-worker.mjs`，插件启动后向量索引会因找不到 Worker 报 `MODULE_NOT_FOUND`；新命令运行本包完整构建链（服务端、Worker 与 Console 客户端）。
-- pending: 更新插件版本至 0.21.1。
+- 2e50e53: 更新插件版本至 0.21.1。
 
 ## 2026-09-06 version:0.21.0
 
