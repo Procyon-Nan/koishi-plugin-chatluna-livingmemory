@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2026-09-08 version:0.21.1
+
+- pending: 修复创建记忆、搜索记忆和读取来源消息工具仍从顶层 source 判断预设来源的问题，统一读取 agentContext.source，确保同名 ChatLuna 与 Character 预设分别访问各自记忆库；Character 创建记忆继续使用群聊/私聊会话键，并在来源分支前拒绝子代理创建记忆。
+
 ## 2026-09-06 version:0.21.1
 
 - 5706b90: 将 `entries.ts`、`rebuild.ts` 与 `reconcile.ts` 三处游标分页循环由 `do...while (true)` 改写为语义等价的 `while (true)` 形式，恢复 `yarn lint` 的 `no-constant-condition` 基线通过，并删除 `.oxlintrc.json` 中针对 `rebuild.ts`/`reconcile.ts` 的该规则豁免；oxlint 默认放行裸 `while (true)` 而始终拒绝 `do...while (true)`，统一写法后新的游标分页无需再逐文件豁免。

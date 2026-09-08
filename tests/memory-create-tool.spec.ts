@@ -15,21 +15,31 @@ import {
 
 const chatlunaConfigurable = {
     preset: 'default',
-    agentContext: { kind: 'main', conversationId: 'conversation-1' },
-    source: 'chatluna',
+    agentContext: {
+        kind: 'main',
+        source: 'chatluna',
+        conversationId: 'conversation-1'
+    },
     session: { userId: 'user-1', channelId: 'c-1', isDirect: true }
 }
 
 const subagentConfigurable = {
     preset: 'default',
-    agentContext: { kind: 'subagent', conversationId: 'subagent:task-1' },
-    source: 'chatluna',
+    agentContext: {
+        kind: 'subagent',
+        source: 'chatluna',
+        conversationId: 'subagent:task-1'
+    },
     session: { userId: 'user-1', channelId: 'c-1', isDirect: true }
 }
 
 const characterConfigurable = {
     preset: '史尔特里',
-    source: 'character',
+    agentContext: {
+        kind: 'main',
+        source: 'character',
+        conversationId: 'onebot:guild:guild-1'
+    },
     session: { userId: 'user-1', guildId: 'guild-1', isDirect: false }
 }
 

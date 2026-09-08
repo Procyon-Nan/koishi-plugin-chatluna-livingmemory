@@ -11,7 +11,6 @@ import { toNonEmptyString } from '../../shared/utils'
 export type LivingMemoryToolConfigurable = {
     preset?: unknown
     agentContext?: unknown
-    source?: unknown
     session?: unknown
 }
 
@@ -47,7 +46,10 @@ const toToolSessionFields = (
 const isCharacterToolSource = (
     configurable: LivingMemoryToolConfigurable | undefined
 ) => {
-    return configurable?.source === 'character'
+    return (
+        toAgentRunContextFields(configurable?.agentContext)?.source ===
+        'character'
+    )
 }
 
 export type LivingMemoryToolPresetIdResolution =
@@ -59,7 +61,7 @@ export type LivingMemoryToolPresetIdResolution =
  *
  * ChatLuna 主链路传入原始 preset；Character 链路传入未加后缀的
  * presetName，而 Character 记忆统一存于带 characterPresetSuffix 的
- * 预设下，因此此处按 source 判别补后缀。
+ * 预设下，因此此处按 agentContext.source 判别补后缀。
  */
 export const resolveToolMemoryPresetId = (
     configurable: LivingMemoryToolConfigurable | undefined
@@ -104,6 +106,11 @@ export const resolveToolMemoryScopeConfigurable = (
         return presetIdResolution
     }
 
+    const agentContext = toAgentRunContextFields(configurable?.agentContext)
+    if (isSubagentRunContext(agentContext)) {
+        return { ok: false, reason: 'subagent-tool-call' }
+    }
+
     const session = toToolSessionFields(configurable?.session)
 
     if (isCharacterToolSource(configurable)) {
@@ -129,11 +136,6 @@ export const resolveToolMemoryScopeConfigurable = (
                 platform: session.platform
             }
         }
-    }
-
-    const agentContext = toAgentRunContextFields(configurable?.agentContext)
-    if (isSubagentRunContext(agentContext)) {
-        return { ok: false, reason: 'subagent-tool-call' }
     }
 
     const conversationId = toNonEmptyString(agentContext?.conversationId)

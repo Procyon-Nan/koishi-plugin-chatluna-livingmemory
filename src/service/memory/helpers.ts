@@ -73,6 +73,7 @@ export const toCharacterMemoryPresetId = (presetName: string) => {
  */
 export interface AgentRunContextFields {
     kind?: unknown
+    source?: unknown
     conversationId?: unknown
 }
 

@@ -91,7 +91,7 @@ it('resolves the raw preset for ChatLuna tool calls', () => {
     assert.deepEqual(
         resolveToolMemoryPresetId({
             preset: 'default',
-            source: undefined
+            agentContext: { kind: 'main', source: 'chatluna' }
         }),
         { ok: true, presetId: 'default' }
     )
@@ -101,7 +101,7 @@ it('appends the Character suffix to the preset for Character tool calls', () => 
     assert.deepEqual(
         resolveToolMemoryPresetId({
             preset: '史尔特里',
-            source: 'character'
+            agentContext: { kind: 'main', source: 'character' }
         }),
         { ok: true, presetId: '史尔特里（Character）' }
     )
@@ -151,7 +151,7 @@ it('rebuilds the Character group and private scope from the session', () => {
     assert.deepEqual(
         resolveToolMemoryScopeConfigurable({
             preset: '史尔特里',
-            source: 'character',
+            agentContext: { kind: 'main', source: 'character' },
             session: {
                 platform: 'onebot',
                 userId: 'user-1',
@@ -177,7 +177,7 @@ it('rebuilds the Character group and private scope from the session', () => {
     assert.deepEqual(
         resolveToolMemoryScopeConfigurable({
             preset: '史尔特里',
-            source: 'character',
+            agentContext: { kind: 'main', source: 'character' },
             session: {
                 platform: 'onebot',
                 userId: 'user-1',
@@ -204,7 +204,7 @@ it('rejects Character tool calls without a session or session key', () => {
     assert.deepEqual(
         resolveToolMemoryScopeConfigurable({
             preset: '史尔特里',
-            source: 'character'
+            agentContext: { kind: 'main', source: 'character' }
         }),
         { ok: false, reason: 'missing-session' }
     )
@@ -212,7 +212,7 @@ it('rejects Character tool calls without a session or session key', () => {
     assert.deepEqual(
         resolveToolMemoryScopeConfigurable({
             preset: '史尔特里',
-            source: 'character',
+            agentContext: { kind: 'main', source: 'character' },
             session: { userId: 'user-1', isDirect: false }
         }),
         { ok: false, reason: 'missing-session-key' }
@@ -292,9 +292,9 @@ it('queries the suffixed preset from the search tool in Character sessions', asy
             preset: 'default',
             agentContext: {
                 kind: 'main',
+                source: 'chatluna',
                 conversationId: 'conversation-1'
             },
-            source: 'chatluna',
             session: { userId: 'user-1', isDirect: true }
         })
     )
@@ -302,7 +302,7 @@ it('queries the suffixed preset from the search tool in Character sessions', asy
         { searchTexts: ['我们一起聊过的事情'] },
         toolConfig({
             preset: '史尔特里',
-            source: 'character',
+            agentContext: { kind: 'main', source: 'character' },
             session: {
                 userId: 'user-1',
                 guildId: 'guild-1',
@@ -331,7 +331,10 @@ it('renders search observations with memory ids and reports empty results', asyn
             }
         ]
     } as unknown as LivingMemoryEmbeddingSearchEngine
-    const config = toolConfig({ preset: 'default', source: 'chatluna' })
+    const config = toolConfig({
+        preset: 'default',
+        agentContext: { kind: 'main', source: 'chatluna' }
+    })
 
     assert.equal(
         await new LivingMemorySearchTool(provider, true).invoke(
