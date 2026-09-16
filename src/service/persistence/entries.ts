@@ -827,6 +827,10 @@ export class LivingMemoryEntryRepository
 
     private async updateDreamMergeTarget(merge: DreamMergeContext) {
         const { database, input, target, sources } = merge
+        const sameSourceConversation = sources.every(
+            (source) =>
+                source.sourceConversationId === target.sourceConversationId
+        )
         const targetResult = await database.set(
             'living_memory_entry',
             {
@@ -837,6 +841,10 @@ export class LivingMemoryEntryRepository
             {
                 ...this.buildMemoryUpdatePatch(target, input.patch),
                 sourceOrigins: mergeMemorySourceOrigins([target, ...sources]),
+                sourceConversationId: sameSourceConversation
+                    ? target.sourceConversationId
+                    : null,
+                sourceLabel: sameSourceConversation ? target.sourceLabel : null,
                 isConsolidated: input.targetIsConsolidated,
                 updatedAt: merge.updatedAt
             }

@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 2026-09-17 version:0.21.2
+
+- pending: WebUI 导入校验支持 v4 备份，恢复当前版本导出文件的界面导入能力。
+- pending: Dream 合并按来源会话键统一处理 sourceConversationId 与 sourceLabel；全部参与记忆的会话键相等时（包括全部为 null）保留目标的会话键和标签，否则在同一事务内将两者清空。null 表示无会话归属，约定为预设内全局可见，当前召回尚未实现会话过滤。来源原始消息仍完整合并，昵称或群名变化不影响会话归属判断。
+
 ## 2026-09-16 version:0.21.2
 
 - pending: 统一记忆来源会话键的空值口径。`sourceConversationId` 表列改为可空，null 成为「无会话归属、全局可见」的单一判定；WebUI 手工创建记忆不再写入 `webui:{presetId}` 占位键，落库为 null；读取边界把空串与历史 `webui:` 前缀旧值折叠为 null，导出与后续会话隔离过滤看到的口径一致。旧值写回迁移机制备忘见 `docs/webui-legacy-conversation-keys.md`。
