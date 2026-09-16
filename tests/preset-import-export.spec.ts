@@ -58,8 +58,8 @@ it('copies preset data without moving source records', async () => {
         )
 
         const exported = await repository.exportPresetData(sourcePresetId)
-        if (exported.version !== 3) {
-            throw new Error('expected version 3 preset export')
+        if (exported.version !== 4) {
+            throw new Error('expected version 4 preset export')
         }
         const sourceProfile = exported.userProfiles[0]
 
@@ -141,8 +141,8 @@ it('preserves consolidation only for same-preset version 3 restores', async () =
         )
         await repository.setMemoryConsolidation(presetId, [memory.id], true)
         const exported = await repository.exportPresetData(presetId)
-        if (exported.version !== 3) {
-            throw new Error('expected version 3 preset export')
+        if (exported.version !== 4) {
+            throw new Error('expected version 4 preset export')
         }
 
         assert.equal(exported.entries[0].isConsolidated, true)
@@ -174,6 +174,52 @@ it('normalizes missing version 1 consolidation state to pending', async () => {
             (await repository.listEntriesByPreset(targetPresetId))[0]
                 .isConsolidated,
             false
+        )
+    })
+})
+
+it('round-trips memory source labels through version 4 exports', async () => {
+    await withLivingMemoryRepository(async (_ctx, repository) => {
+        const sourcePresetId = 'preset-source-label'
+        const targetPresetId = 'preset-target-label'
+        const sourceLabel = '来源于「测试群」（群聊 ID：10000）的群聊'
+        const [memory] = await repository.appendMemories(
+            { conversationId: 'group:10000', presetId: sourcePresetId },
+            [],
+            [
+                {
+                    type: 'fact',
+                    content: 'group memory',
+                    keywords: ['group'],
+                    summary: 'group summary',
+                    sentiment: 'neutral',
+                    importance: 0.5,
+                    speakerKeys: []
+                }
+            ],
+            sourceLabel
+        )
+        assert.equal(memory.sourceLabel, sourceLabel)
+
+        const exported = await repository.exportPresetData(sourcePresetId)
+        if (exported.version !== 4) {
+            throw new Error('expected version 4 preset export')
+        }
+        assert.equal(exported.entries[0].sourceLabel, sourceLabel)
+
+        await repository.importPresetData(targetPresetId, exported)
+        assert.equal(
+            (await repository.listEntriesByPreset(targetPresetId))[0]
+                .sourceLabel,
+            sourceLabel
+        )
+
+        const legacy: LivingMemoryPresetExport = { ...exported, version: 3 }
+        await repository.importPresetData(sourcePresetId, legacy)
+        assert.equal(
+            (await repository.listEntriesByPreset(sourcePresetId))[0]
+                .sourceLabel,
+            null
         )
     })
 })

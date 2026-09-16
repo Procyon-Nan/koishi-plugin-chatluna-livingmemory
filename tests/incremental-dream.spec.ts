@@ -39,6 +39,7 @@ const createEntry = (
     sentiment: 'neutral',
     importance: 0.5,
     sourceConversationId: 'conversation-1',
+    sourceLabel: null,
     sourceOrigins: [],
     isConsolidated: false,
     createdAt: now,

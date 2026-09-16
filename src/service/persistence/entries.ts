@@ -63,6 +63,7 @@ const memoryEntryFields: (keyof MemoryEntryRecord)[] = [
     'sentiment',
     'importance',
     'sourceConversationId',
+    'sourceLabel',
     'sourceOrigins',
     'isConsolidated',
     'createdAt',
@@ -88,6 +89,7 @@ const dreamEntryFields: (keyof MemoryEntryRecord)[] = [
     'summary',
     'sentiment',
     'importance',
+    'sourceLabel',
     'createdAt',
     'updatedAt'
 ]
@@ -99,6 +101,7 @@ const recallEntryFields: (keyof MemoryEntryRecord)[] = [
     'summary',
     'sentiment',
     'importance',
+    'sourceLabel',
     'createdAt',
     'updatedAt'
 ]
@@ -525,7 +528,8 @@ export class LivingMemoryEntryRepository
     async appendMemories(
         scope: MemoryScope,
         sourceOriginMessages: MemorySourceMessage[],
-        extracted: AttributedMemoryItem[]
+        extracted: AttributedMemoryItem[],
+        sourceLabel?: string | null
     ) {
         if (extracted.length === 0) {
             return []
@@ -534,11 +538,13 @@ export class LivingMemoryEntryRepository
         const now = new Date()
         const sourceOrigins =
             createSourceOriginsFromMessages(sourceOriginMessages)
+        const normalizedSourceLabel = normalizeOptionalMemoryText(sourceLabel)
         const records = extracted.map((item) =>
             this.buildMemoryEntry(
                 scope,
                 item,
                 sourceOrigins,
+                normalizedSourceLabel,
                 now,
                 item.speakerKeys
             )
@@ -559,6 +565,7 @@ export class LivingMemoryEntryRepository
             scope,
             input,
             [],
+            null,
             new Date(),
             speakerKeys ?? this.resolveScopeSpeakerKeys(scope)
         )
@@ -573,6 +580,7 @@ export class LivingMemoryEntryRepository
         scope: MemoryScope,
         fields: MemoryMutationInput,
         sourceOrigins: MemoryEntryRecord['sourceOrigins'],
+        sourceLabel: string | null,
         createdAt: Date,
         speakerKeys: string[]
     ): MemoryEntryRecord {
@@ -588,6 +596,7 @@ export class LivingMemoryEntryRepository
             sentiment: normalizeOptionalMemoryText(fields.sentiment),
             importance: normalizeMemoryImportance(fields.importance),
             sourceConversationId: scope.conversationId,
+            sourceLabel,
             sourceOrigins,
             isConsolidated: false,
             createdAt,

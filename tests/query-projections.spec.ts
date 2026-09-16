@@ -24,6 +24,7 @@ const createMemory = (
     sentiment: null,
     importance: 0.5,
     sourceConversationId: 'conversation-1',
+    sourceLabel: null,
     sourceOrigins: [],
     isConsolidated: false,
     createdAt: new Date('2026-07-01T00:00:00.000Z'),

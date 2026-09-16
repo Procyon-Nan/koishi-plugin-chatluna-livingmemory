@@ -52,6 +52,7 @@ export interface LivingMemorySearchResult extends Pick<
     | 'summary'
     | 'sentiment'
     | 'importance'
+    | 'sourceLabel'
     | 'createdAt'
     | 'updatedAt'
 > {}
@@ -166,6 +167,7 @@ export interface MemoryEntryRecord {
     sentiment: string | null
     importance: number | null
     sourceConversationId: string | null
+    sourceLabel: string | null
     sourceOrigins: MemorySourceOrigin[]
     isConsolidated: boolean
     createdAt: Date
@@ -287,6 +289,10 @@ export interface LivingMemoryPresetExportEntryV3 extends LivingMemoryPresetExpor
     speakerKeys: string[]
 }
 
+export interface LivingMemoryPresetExportEntryV4 extends LivingMemoryPresetExportEntryV3 {
+    sourceLabel: string | null
+}
+
 export interface LivingMemoryPresetExportUserProfile {
     id: string
     speakerKey: string
@@ -329,10 +335,16 @@ export interface LivingMemoryPresetExportV3 extends LivingMemoryPresetExportBase
     entries: LivingMemoryPresetExportEntryV3[]
 }
 
+export interface LivingMemoryPresetExportV4 extends LivingMemoryPresetExportBase {
+    version: 4
+    entries: LivingMemoryPresetExportEntryV4[]
+}
+
 export type LivingMemoryPresetExport =
     | LivingMemoryPresetExportV1
     | LivingMemoryPresetExportV2
     | LivingMemoryPresetExportV3
+    | LivingMemoryPresetExportV4
 
 export interface LivingMemoryPresetImportSummary {
     entries: number

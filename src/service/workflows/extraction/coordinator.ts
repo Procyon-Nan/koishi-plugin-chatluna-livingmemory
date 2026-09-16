@@ -4,6 +4,7 @@ import type {
     LivingMemoryExtractor
 } from './extractor'
 import type { LivingMemoryMessageFormatter } from '../../transcript/message_formatter'
+import type { MemoryTranscriptOrigin } from '../../transcript/origin_context'
 import { type QueueExtractionOptions, scopeKey } from '../../memory/helpers'
 import type {
     ExtractionPayload,
@@ -34,7 +35,7 @@ type ExtractionModel = Pick<LivingMemoryExtractor, 'extractWithTrace'>
 interface ExtractionRoundRequest {
     scope: MemoryScope
     resolvePresetPrompt: () => Promise<string>
-    resolveTranscriptHeader: () => Promise<string>
+    resolveTranscriptOrigin: () => Promise<MemoryTranscriptOrigin>
 }
 
 interface BufferedExtractionRound {
@@ -164,7 +165,7 @@ export class LivingMemoryExtractionCoordinator {
             state.triggerRequests.set(state.lastCompletedSequence, {
                 scope,
                 resolvePresetPrompt: options.resolvePresetPrompt,
-                resolveTranscriptHeader: options.resolveTranscriptHeader
+                resolveTranscriptOrigin: options.resolveTranscriptOrigin
             })
         }
         this.stateByScope.set(key, state)
@@ -248,7 +249,7 @@ export class LivingMemoryExtractionCoordinator {
             request.scope,
             rounds,
             request.resolvePresetPrompt,
-            request.resolveTranscriptHeader,
+            request.resolveTranscriptOrigin,
             runLogger
         )
             .catch((error) => {
@@ -298,18 +299,20 @@ export class LivingMemoryExtractionCoordinator {
         scope: MemoryScope,
         messages: LivingMemoryTranscriptMessage[],
         resolvePresetPrompt: () => Promise<string>,
-        resolveTranscriptHeader: () => Promise<string>,
+        resolveTranscriptOrigin: () => Promise<MemoryTranscriptOrigin>,
         logger: LivingMemoryLogger
     ) {
         const startedAt = new Date()
         let input = ''
         let payload: ExtractionPayload
         let trace: LivingMemoryExtractionTrace
+        let origin: MemoryTranscriptOrigin
 
         try {
             payload = this.formatter.toExtractionPayload(messages)
             input = payload.input
-            input = `${await resolveTranscriptHeader()}\n\n${input}`
+            origin = await resolveTranscriptOrigin()
+            input = `${origin.header}\n\n${input}`
 
             logger.diagnostic('extraction.input.prepared', {
                 sourceOriginMessages: payload.sourceOriginMessages.length,
@@ -360,7 +363,8 @@ export class LivingMemoryExtractionCoordinator {
                 await this.memoryWriter.appendMemories(
                     scope,
                     payload.sourceOriginMessages,
-                    extracted
+                    extracted,
+                    origin.sourceLabel
                 )
             }
         } catch (error) {

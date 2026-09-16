@@ -24,6 +24,7 @@ const createMemory = (
         sentiment: null,
         importance: null,
         sourceConversationId: null,
+        sourceLabel: null,
         sourceOrigins: [],
         isConsolidated: false,
         createdAt,

@@ -25,6 +25,7 @@ export const normalizeEntryRecord = (
     summary: normalizeOptionalMemoryText(record.summary),
     sentiment: normalizeOptionalMemoryText(record.sentiment),
     importance: normalizeMemoryImportance(record.importance),
+    sourceLabel: normalizeOptionalMemoryText(record.sourceLabel),
     sourceOrigins: normalizeMemorySourceOrigins(
         (record as { sourceOrigins?: unknown }).sourceOrigins
     ),

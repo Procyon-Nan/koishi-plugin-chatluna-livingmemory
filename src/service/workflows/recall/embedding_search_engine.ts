@@ -46,6 +46,7 @@ export class LivingMemoryEmbeddingSearchEngine implements LivingMemorySearchProv
             summary: entry.summary,
             sentiment: entry.sentiment,
             importance: entry.importance,
+            sourceLabel: entry.sourceLabel,
             createdAt: entry.createdAt,
             updatedAt: entry.updatedAt
         }))
@@ -79,6 +80,7 @@ export class LivingMemoryEmbeddingSearchEngine implements LivingMemorySearchProv
                 summary: entry.summary,
                 sentiment: entry.sentiment,
                 importance: entry.importance,
+                sourceLabel: entry.sourceLabel,
                 createdAt: entry.createdAt,
                 updatedAt: entry.updatedAt,
                 cosineScore: hit.cosineScore,

@@ -129,6 +129,7 @@ it('applies shared field rules to Dream mutations', async () => {
         sentiment: 'old sentiment',
         importance: 0.5,
         sourceConversationId: 'conversation-1',
+        sourceLabel: null,
         sourceOrigins: [],
         isConsolidated: false,
         createdAt: now,

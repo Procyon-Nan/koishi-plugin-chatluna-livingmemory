@@ -66,13 +66,15 @@ export class LivingMemoryMutationService
     async appendMemories(
         scope: MemoryScope,
         sourceOriginMessages: MemorySourceMessage[],
-        extracted: AttributedMemoryItem[]
+        extracted: AttributedMemoryItem[],
+        sourceLabel?: string | null
     ) {
         return this.runPresetMutation(scope.presetId, async () => {
             const records = await this.repository.appendMemories(
                 scope,
                 sourceOriginMessages,
-                extracted
+                extracted,
+                sourceLabel
             )
             if (records.length === 0) {
                 return records

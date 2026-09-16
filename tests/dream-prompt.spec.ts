@@ -44,6 +44,7 @@ const createMemory = (id: string, content: string): DreamMemoryEntryRecord => ({
     summary: `张三准备考试 ${id}`,
     sentiment: '关心',
     importance: 0.7,
+    sourceLabel: null,
     createdAt: now,
     updatedAt: now
 })

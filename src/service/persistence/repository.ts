@@ -245,12 +245,14 @@ export class LivingMemoryRepository
     appendMemories(
         scope: MemoryScope,
         sourceOriginMessages: MemorySourceMessage[],
-        extracted: AttributedMemoryItem[]
+        extracted: AttributedMemoryItem[],
+        sourceLabel?: string | null
     ): Promise<MemoryEntryRecord[]> {
         return this.entries.appendMemories(
             scope,
             sourceOriginMessages,
-            extracted
+            extracted,
+            sourceLabel
         )
     }
 
@@ -454,7 +456,7 @@ export class LivingMemoryRepository
         ])
 
         return {
-            version: 3,
+            version: 4,
             exportedAt: new Date().toISOString(),
             sourcePresetId: presetId,
             entries: entries.map((entry) => ({
@@ -468,6 +470,7 @@ export class LivingMemoryRepository
                 sentiment: entry.sentiment,
                 importance: entry.importance,
                 sourceConversationId: entry.sourceConversationId,
+                sourceLabel: entry.sourceLabel,
                 sourceOrigins: entry.sourceOrigins,
                 isConsolidated: entry.isConsolidated,
                 createdAt: entry.createdAt.toISOString(),
@@ -585,7 +588,8 @@ export class LivingMemoryRepository
         const createEntryRow = (
             entry: LivingMemoryPresetExportEntry,
             isConsolidated: boolean,
-            speakerKeys: string[]
+            speakerKeys: string[],
+            sourceLabel: string | null
         ) => ({
             id: resolveEntryImportId(entry.id),
             presetId: targetPresetId,
@@ -598,6 +602,7 @@ export class LivingMemoryRepository
             sentiment: entry.sentiment,
             importance: entry.importance,
             sourceConversationId: entry.sourceConversationId,
+            sourceLabel,
             sourceOrigins: entry.sourceOrigins,
             isConsolidated,
             createdAt: new Date(entry.createdAt),
@@ -606,14 +611,24 @@ export class LivingMemoryRepository
         let entryRows: MemoryEntryRecord[]
         if (data.version === 1) {
             entryRows = data.entries.map((entry) =>
-                createEntryRow(entry, false, [])
+                createEntryRow(entry, false, [], null)
             )
         } else if (data.version === 2) {
             entryRows = data.entries.map((entry) =>
                 createEntryRow(
                     entry,
                     isCrossPresetImport ? false : entry.isConsolidated,
-                    []
+                    [],
+                    null
+                )
+            )
+        } else if (data.version === 3) {
+            entryRows = data.entries.map((entry) =>
+                createEntryRow(
+                    entry,
+                    isCrossPresetImport ? false : entry.isConsolidated,
+                    entry.speakerKeys,
+                    null
                 )
             )
         } else {
@@ -621,7 +636,8 @@ export class LivingMemoryRepository
                 createEntryRow(
                     entry,
                     isCrossPresetImport ? false : entry.isConsolidated,
-                    entry.speakerKeys
+                    entry.speakerKeys,
+                    entry.sourceLabel
                 )
             )
         }

@@ -2,11 +2,12 @@ import { BaseMessage } from '@langchain/core/messages'
 import type { Context, Session } from 'koishi'
 import type { PresetTemplate } from 'koishi-plugin-chatluna/llm-core/prompt'
 import type { MemoryScope } from '../../contracts/memory'
+import type { MemoryTranscriptOrigin } from '../transcript/origin_context'
 import { toNonEmptyString } from '../shared/utils'
 
 export interface QueueExtractionOptions {
     resolvePresetPrompt: () => Promise<string>
-    resolveTranscriptHeader: () => Promise<string>
+    resolveTranscriptOrigin: () => Promise<MemoryTranscriptOrigin>
 }
 
 export interface CharacterPresetPromptSource {

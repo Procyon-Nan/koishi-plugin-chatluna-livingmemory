@@ -22,6 +22,7 @@ export interface ModelMemoryView {
     type: MemoryEntryType
     content: string
     sentiment: string | null
+    sourceLabel: string | null
     updatedAt: Date
 }
 
@@ -40,6 +41,9 @@ export const renderMemoriesForModel = (
                 ...(entry.sentiment == null
                     ? []
                     : [`sentiment=${entry.sentiment}`]),
+                ...(entry.sourceLabel == null
+                    ? []
+                    : [`source=${entry.sourceLabel}`]),
                 'content:',
                 entry.content
             ].join('\n')

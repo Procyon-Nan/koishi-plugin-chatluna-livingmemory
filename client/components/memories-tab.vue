@@ -197,6 +197,13 @@
                                         >
                                             {{ label }}
                                         </span>
+                                        <span
+                                            v-if="memory.sourceLabel"
+                                            class="memory-source"
+                                            :title="memory.sourceLabel"
+                                        >
+                                            {{ memory.sourceLabel }}
+                                        </span>
                                     </div>
                                     <p
                                         v-if="memory.summary"

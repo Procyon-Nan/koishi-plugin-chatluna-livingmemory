@@ -300,6 +300,22 @@
     line-height: 1.3;
 }
 
+.memory-source {
+    display: inline-flex;
+    align-items: center;
+    max-width: 220px;
+    padding: 2px 8px;
+    border: 1px solid var(--lm-border);
+    border-radius: 999px;
+    background-color: var(--lm-bg-secondary);
+    color: var(--lm-text-secondary);
+    font-size: 12px;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .memory-card-summary {
     margin: 8px 0 0;
     color: var(--lm-text-primary);

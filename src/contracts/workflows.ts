@@ -36,6 +36,7 @@ export interface DreamMemoryEntryRecord {
     summary: string | null
     sentiment: string | null
     importance: number | null
+    sourceLabel: string | null
     createdAt: Date
     updatedAt: Date
 }
@@ -239,7 +240,8 @@ export interface ExtractionRepository {
     appendMemories(
         scope: MemoryScope,
         sourceOriginMessages: MemorySourceMessage[],
-        extracted: AttributedMemoryItem[]
+        extracted: AttributedMemoryItem[],
+        sourceLabel?: string | null
     ): Promise<MemoryEntryRecord[]>
     createMemory(
         scope: MemoryScope,

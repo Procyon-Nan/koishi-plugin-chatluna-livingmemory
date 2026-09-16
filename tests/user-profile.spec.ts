@@ -34,6 +34,7 @@ const memory: MemoryEntryRecord = {
     sentiment: '关心',
     importance: 0.7,
     sourceConversationId: 'conversation-1',
+    sourceLabel: null,
     sourceOrigins: [],
     isConsolidated: true,
     createdAt: now,

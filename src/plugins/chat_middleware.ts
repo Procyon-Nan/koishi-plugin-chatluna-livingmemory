@@ -16,6 +16,7 @@ import {
     toChatLunaTranscriptMessages
 } from '../service/transcript/chatluna_transcript_adapter'
 import type { UserSpeakerCache } from '../service/transcript/user_speaker'
+import { buildMemoryTranscriptOrigin } from '../service/transcript/origin_context'
 import { collectUserProfileSpeakerKeys } from '../service/user_profile'
 import {
     renderChatLunaPresetPrompt,
@@ -413,15 +414,24 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 scope,
                 completedRound,
                 {
-                    resolveTranscriptHeader: async () => {
+                    resolveTranscriptOrigin: async () => {
                         if (session.isDirect) {
-                            return `以下是你与${sourceTranscript.message.speakerLabel}（用户 ID：${scope.speakerId}）的聊天记录：`
+                            return buildMemoryTranscriptOrigin({
+                                isDirect: true,
+                                speakerLabel:
+                                    sourceTranscript.message.speakerLabel,
+                                speakerId: scope.speakerId
+                            })
                         }
 
                         const guild = await session.bot.getGuild(
                             scope.guildId!
                         )
-                        return `以下是你在「${guild.name}」（群聊 ID：${scope.guildId}）中的聊天记录：`
+                        return buildMemoryTranscriptOrigin({
+                            isDirect: false,
+                            guildName: guild.name,
+                            guildId: scope.guildId!
+                        })
                     },
                     resolvePresetPrompt: async () =>
                         await renderChatLunaPresetPrompt(

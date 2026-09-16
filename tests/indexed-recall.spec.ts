@@ -22,6 +22,7 @@ const createEntry = (id: string): MemoryEntryRecord => ({
     sentiment: 'neutral',
     importance: 0.5,
     sourceConversationId: null,
+    sourceLabel: null,
     sourceOrigins: [],
     isConsolidated: false,
     createdAt: new Date('2026-08-08T00:00:00.000Z'),

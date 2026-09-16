@@ -162,6 +162,7 @@ export const createMemoryEntry = (
         sentiment: 'neutral',
         importance: 0.5,
         sourceConversationId: scope.conversationId,
+        sourceLabel: null,
         sourceOrigins: [],
         isConsolidated: false,
         createdAt: now,

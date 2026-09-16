@@ -95,6 +95,7 @@ const createRecordingProvider = (
                 sentiment: input.sentiment ?? null,
                 importance: input.importance ?? null,
                 sourceConversationId: scope.conversationId,
+                sourceLabel: null,
                 sourceOrigins: [],
                 isConsolidated: false,
                 createdAt: new Date(),

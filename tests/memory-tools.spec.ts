@@ -326,6 +326,7 @@ it('renders search observations with memory ids and reports empty results', asyn
                 summary: '看展览',
                 sentiment: '愉快',
                 importance: 0.8,
+                sourceLabel: '来源于「摸鱼群」（群聊 ID：10001）的群聊',
                 createdAt: new Date('2026-07-01T00:00:00.000Z'),
                 updatedAt: new Date('2026-07-02T00:00:00.000Z')
             }
@@ -346,6 +347,7 @@ it('renders search observations with memory ids and reports empty results', asyn
             'type=fact',
             'updatedAt=2026-07-02T00:00:00.000Z',
             'sentiment=愉快',
+            'source=来源于「摸鱼群」（群聊 ID：10001）的群聊',
             'content:',
             '我们在上周一起去看了展览。'
         ].join('\n')

@@ -11,6 +11,7 @@ import {
 } from '../service/transcript/character_transcript_adapter'
 import { collectUserProfileSpeakerKeys } from '../service/user_profile'
 import type { UserSpeakerCache } from '../service/transcript/user_speaker'
+import { buildMemoryTranscriptOrigin } from '../service/transcript/origin_context'
 import {
     type CharacterPresetPromptSource,
     renderCharacterPresetPrompt,
@@ -365,15 +366,25 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 scope,
                 completedRound.round,
                 {
-                    resolveTranscriptHeader: async () => {
+                    resolveTranscriptOrigin: async () => {
                         if (payload.session.isDirect) {
-                            return `以下是你与${completedRound.round.messages[0].speakerLabel}（用户 ID：${scope.speakerId}）的聊天记录：`
+                            return buildMemoryTranscriptOrigin({
+                                isDirect: true,
+                                speakerLabel:
+                                    completedRound.round.messages[0]
+                                        .speakerLabel,
+                                speakerId: scope.speakerId
+                            })
                         }
 
                         const guild = await payload.session.bot.getGuild(
                             scope.guildId!
                         )
-                        return `以下是你在「${guild.name}」（群聊 ID：${scope.guildId}）中的聊天记录：`
+                        return buildMemoryTranscriptOrigin({
+                            isDirect: false,
+                            guildName: guild.name,
+                            guildId: scope.guildId!
+                        })
                     },
                     resolvePresetPrompt: async () =>
                         await renderCharacterPresetPrompt(ctx, payload.preset, {

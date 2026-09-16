@@ -32,6 +32,7 @@ const memoryEntry: MemoryEntryRecord = {
     sentiment: '关心',
     importance: 0.7,
     sourceConversationId: 'conversation-1',
+    sourceLabel: null,
     sourceOrigins: [],
     isConsolidated: false,
     createdAt: new Date('2026-07-15T12:00:00.000Z'),

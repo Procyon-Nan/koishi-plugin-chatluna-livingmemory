@@ -82,6 +82,7 @@ const createExtractionCoordinator = (
         scope: MemoryScope
         sourceOriginMessages: MemorySourceMessage[]
         extracted: AttributedMemoryItem[]
+        sourceLabel?: string | null
     }[] = []
     const captured = createCapturedLogger()
     const debugMessages = captured.info
@@ -118,11 +119,17 @@ const createExtractionCoordinator = (
         createFailedJob: options.createFailedJob ?? jobStore.createFailedJob,
         appendMemories:
             options.appendMemories ??
-            (async (entryScope, sourceOriginMessages, extracted) => {
+            (async (
+                entryScope,
+                sourceOriginMessages,
+                extracted,
+                sourceLabel
+            ) => {
                 appended.push({
                     scope: entryScope,
                     sourceOriginMessages,
-                    extracted
+                    extracted,
+                    sourceLabel
                 })
                 return []
             })
@@ -159,7 +166,10 @@ const queueExtraction = async (
 ) => {
     const options = {
         resolvePresetPrompt,
-        resolveTranscriptHeader: async () => '以下是聊天记录：'
+        resolveTranscriptOrigin: async () => ({
+            header: '以下是聊天记录：',
+            sourceLabel: '来源于「测试群」（群聊 ID：guild-1）的群聊'
+        })
     }
     for (let index = 0; index < completedRoundCount; index++) {
         await coordinator.queue(
@@ -178,7 +188,10 @@ it('counts the first completed round and extracts immediately at interval one', 
         { messages: createExtractionMessages() },
         {
             resolvePresetPrompt: async () => '你是测试助手。',
-            resolveTranscriptHeader: async () => '以下是聊天记录：'
+            resolveTranscriptOrigin: async () => ({
+                header: '以下是聊天记录：',
+                sourceLabel: '来源于「测试群」（群聊 ID：guild-1）的群聊'
+            })
         }
     )
     await waitFor(() => getExtractorCalls() === 1, 'first extraction')
@@ -225,7 +238,10 @@ it('rejects an invalid completed-round contract', async () => {
     await assert.rejects(
         coordinator.queue(scope, userOnlyRound, {
             resolvePresetPrompt: async () => '你是测试助手。',
-            resolveTranscriptHeader: async () => '以下是聊天记录：'
+            resolveTranscriptOrigin: async () => ({
+                header: '以下是聊天记录：',
+                sourceLabel: '来源于「测试群」（群聊 ID：guild-1）的群聊'
+            })
         }),
         /must contain both user and assistant messages/u
     )
@@ -253,7 +269,10 @@ it('preserves completed rounds while an extraction is in flight', async () => {
         })
     const options = {
         resolvePresetPrompt: async () => '你是测试助手。',
-        resolveTranscriptHeader: async () => '以下是聊天记录：'
+        resolveTranscriptOrigin: async () => ({
+            header: '以下是聊天记录：',
+            sourceLabel: '来源于「测试群」（群聊 ID：guild-1）的群聊'
+        })
     }
 
     await coordinator.queue(
@@ -305,7 +324,10 @@ it('uses only the configured number of recent completed rounds', async () => {
             { messages: round },
             {
                 resolvePresetPrompt: async () => '你是测试助手。',
-                resolveTranscriptHeader: async () => '以下是聊天记录：'
+                resolveTranscriptOrigin: async () => ({
+                    header: '以下是聊天记录：',
+                    sourceLabel: '来源于「测试群」（群聊 ID：guild-1）的群聊'
+                })
             }
         )
     }
@@ -374,7 +396,10 @@ it('keeps separate trigger boundaries when multiple intervals arrive in flight',
     })
     const options = {
         resolvePresetPrompt: async () => '你是测试助手。',
-        resolveTranscriptHeader: async () => '以下是聊天记录：'
+        resolveTranscriptOrigin: async () => ({
+            header: '以下是聊天记录：',
+            sourceLabel: '来源于「测试群」（群聊 ID：guild-1）的群聊'
+        })
     }
 
     for (let index = 1; index <= 6; index++) {
@@ -414,6 +439,10 @@ it('writes extracted memories and queues auto Dream without persisting a job', a
 
     assert.equal(jobStore.jobs.length, 0)
     assert.deepEqual(appended[0]?.extracted, extracted)
+    assert.equal(
+        appended[0]?.sourceLabel,
+        '来源于「测试群」（群聊 ID：guild-1）的群聊'
+    )
     assert.deepEqual(autoDreamPresets, [scope.presetId])
     assert.ok(
         debugMessages.some(
