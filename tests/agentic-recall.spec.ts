@@ -9,9 +9,7 @@ import type { ToolCall } from '@langchain/core/messages/tool'
 import { type RunnableConfig, RunnableLambda } from '@langchain/core/runnables'
 import type { Context } from 'koishi'
 import { LivingMemoryLogger } from '../src/service/logging/logger'
-import type {
-    ChatLunaChatModel
-} from 'koishi-plugin-chatluna/llm-core/platform/model'
+import type { ChatLunaChatModel } from 'koishi-plugin-chatluna/llm-core/platform/model'
 import type {
     LivingMemorySearchInput,
     LivingMemorySearchResult,
@@ -100,6 +98,7 @@ const createSearchResult = (id: string): LivingMemorySearchResult => ({
     summary: `summary-${id}`,
     sentiment: '平静',
     importance: 0.8,
+    sourceLabel: null,
     createdAt: new Date('2026-07-01T00:00:00.000Z'),
     updatedAt: new Date('2026-07-01T00:00:00.000Z')
 })
@@ -471,10 +470,7 @@ it('fails after six invalid tool calls without updating a recall result', async 
         )
     })
 
-    await assert.rejects(
-        harness.run(),
-        /did not finish within 6 model calls/u
-    )
+    await assert.rejects(harness.run(), /did not finish within 6 model calls/u)
     assert.equal(harness.boundInvocations.length, 6)
     assert.equal(harness.searchInvocations.length, 0)
 })
@@ -498,10 +494,7 @@ it('accepts a normal final response on the sixth model call', async () => {
     const trace = await harness.run()
 
     assert.ok(trace)
-    assert.equal(
-        trace.item.finalText,
-        '我记得在多次查询中确认的事实。'
-    )
+    assert.equal(trace.item.finalText, '我记得在多次查询中确认的事实。')
     assert.equal(trace.item.matchedMemories.length, 5)
     assert.equal(harness.boundInvocations.length, 6)
     assert.equal(
