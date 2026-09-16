@@ -221,7 +221,7 @@ class RecordingLivingMemorySearchTool extends StructuredTool {
             {
                 title: 'memories',
                 key: 'memories',
-                value: results
+                value: output
             }
         ])
         return output

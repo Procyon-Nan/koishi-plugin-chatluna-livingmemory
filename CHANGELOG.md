@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2026-09-13 version:0.21.2
+
+- pending: 将 Agentic Recall 的搜索结果日志改为记录工具实际返回给模型的格式化内容，避免日志展示模型不可见的记忆字段。
+
 ## 2026-09-08 version:0.21.2
 
 - a0010fd: 修复创建记忆、搜索记忆和读取来源消息工具仍从顶层 source 判断预设来源的问题，统一读取 agentContext.source，确保同名 ChatLuna 与 Character 预设分别访问各自记忆库；Character 创建记忆继续使用群聊/私聊会话键，并在来源分支前拒绝子代理创建记忆。

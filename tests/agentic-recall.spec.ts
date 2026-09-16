@@ -260,13 +260,12 @@ it('runs one search through AgentRunner and preserves preset-scoped trace data',
         ).length,
         1
     )
-    assert.ok(
-        harness.debugMessages.some(
-            (message) =>
-                message.includes('event=recall.agentic.search.results') &&
-                message.includes('content-memory-1')
-        )
+    const searchResultsLog = harness.debugMessages.find((message) =>
+        message.includes('event=recall.agentic.search.results')
     )
+    assert.ok(searchResultsLog?.includes('content-memory-1'))
+    assert.doesNotMatch(searchResultsLog ?? '', /summary-memory-1/u)
+    assert.doesNotMatch(searchResultsLog ?? '', /"id"/u)
     assert.ok(
         harness.debugMessages.every(
             (message) =>
