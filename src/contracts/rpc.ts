@@ -65,7 +65,8 @@ export interface MemoryListResult extends PageResult<MemoryEntryRecord> {
 }
 
 export interface CreateMemoryRequest {
-    conversationId: string
+    /** 缺省表示手工创建无会话归属，记忆全局可见。 */
+    conversationId?: string
     presetId: string
     userId?: string
     channelId?: string

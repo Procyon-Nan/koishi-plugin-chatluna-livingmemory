@@ -81,7 +81,7 @@ export function apply(ctx: Context, _config?: LivingMemoryConfig) {
 
         return await service(ctx).createMemory(
             service(ctx).createScope(
-                payload.conversationId,
+                payload.conversationId ?? '',
                 payload.presetId,
                 payload.userId,
                 payload.channelId

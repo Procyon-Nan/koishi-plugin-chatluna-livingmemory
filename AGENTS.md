@@ -35,7 +35,7 @@ chatluna-livingmemory/
 │   └── worker_artifacts.ts      # Worker 构建产物定位
 ├── client/                      # Console 页面、组件、composable 与契约镜像
 ├── tests/                       # Vitest 工作流、持久化、集成与客户端测试
-├── docs/                        # WebUI 与模型配置用户文档
+├── docs/                        # WebUI 与模型配置用户文档及内部设计备忘
 └── scripts/                     # Worker 构建与向量索引基准脚本
 ```
 

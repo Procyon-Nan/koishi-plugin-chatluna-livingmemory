@@ -49,7 +49,12 @@ export const defineLivingMemoryTables = (ctx: Context) => {
                 nullable: true,
                 initial: null
             },
-            sourceConversationId: 'string(255)',
+            sourceConversationId: {
+                type: 'string',
+                length: 255,
+                nullable: true,
+                initial: null
+            },
             sourceLabel: {
                 type: 'text',
                 nullable: true,

@@ -91,7 +91,6 @@ export async function createMemory(
     speakerKeys: string[]
 ): Promise<MemoryEntryRecord> {
     return await sendLivingMemory('living-memory/createMemory', {
-        conversationId: `webui:${presetId}`,
         presetId,
         memory,
         speakerKeys

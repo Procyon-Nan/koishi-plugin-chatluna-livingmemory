@@ -362,7 +362,7 @@ export interface LivingMemoryClientEvents {
         memoryId: string
     ) => MemoryEntryRecord | undefined
     'living-memory/createMemory': (input: {
-        conversationId: string
+        conversationId?: string
         presetId: string
         userId?: string
         channelId?: string

@@ -595,7 +595,9 @@ export class LivingMemoryEntryRepository
             summary: normalizeOptionalMemoryText(fields.summary),
             sentiment: normalizeOptionalMemoryText(fields.sentiment),
             importance: normalizeMemoryImportance(fields.importance),
-            sourceConversationId: scope.conversationId,
+            // 空串表示无会话上下文（WebUI 手工创建），落库归一为 null，
+            // 使「全局可见」只依赖 sourceConversationId == null 单一判定。
+            sourceConversationId: scope.conversationId.trim() || null,
             sourceLabel,
             sourceOrigins,
             isConsolidated: false,

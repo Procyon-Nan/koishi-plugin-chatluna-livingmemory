@@ -16,6 +16,22 @@ import {
 import { normalizeMemorySourceOrigins } from '../memory/origins/source_origins'
 import { normalizeSpeakerKeys } from '../memory/speaker_identity'
 
+// WebUI 手工创建在历史版本写入的伪会话键前缀，读取时折叠为 null（无会话归属、
+// 全局可见）；数据库旧值的写回清理机制见 docs/webui-legacy-conversation-keys.md。
+const legacyWebuiConversationPrefix = 'webui:'
+
+const normalizeSourceConversationId = (value: string | null) => {
+    const normalized = value?.trim()
+    if (
+        normalized == null ||
+        normalized.length === 0 ||
+        normalized.startsWith(legacyWebuiConversationPrefix)
+    ) {
+        return null
+    }
+    return normalized
+}
+
 export const normalizeEntryRecord = (
     record: MemoryEntryRecord
 ): MemoryEntryRecord => ({
@@ -25,6 +41,9 @@ export const normalizeEntryRecord = (
     summary: normalizeOptionalMemoryText(record.summary),
     sentiment: normalizeOptionalMemoryText(record.sentiment),
     importance: normalizeMemoryImportance(record.importance),
+    sourceConversationId: normalizeSourceConversationId(
+        record.sourceConversationId
+    ),
     sourceLabel: normalizeOptionalMemoryText(record.sourceLabel),
     sourceOrigins: normalizeMemorySourceOrigins(
         (record as { sourceOrigins?: unknown }).sourceOrigins

@@ -1,9 +1,13 @@
 # CHANGELOG
 
+## 2026-09-16 version:0.21.2
+
+- pending: 统一记忆来源会话键的空值口径。`sourceConversationId` 表列改为可空，null 成为「无会话归属、全局可见」的单一判定；WebUI 手工创建记忆不再写入 `webui:{presetId}` 占位键，落库为 null；读取边界把空串与历史 `webui:` 前缀旧值折叠为 null，导出与后续会话隔离过滤看到的口径一致。旧值写回迁移机制备忘见 `docs/webui-legacy-conversation-keys.md`。
+
 ## 2026-09-13 version:0.21.2
 
-- pending: 将 Agentic Recall 的搜索结果日志改为记录工具实际返回给模型的格式化内容，避免日志展示模型不可见的记忆字段。
-- pending: 记忆条目新增 sourceLabel 来源标签字段。两条集成路径的提取流程与输入头部共用同一来源短语解析（私聊记录对话对象昵称与用户 ID，群聊记录群名与群 ID），解析结果随提取记忆落库；living_memory_search 与用户画像共用的模型记忆视图在标签非空时渲染 source= 行，WebUI 记忆卡片同步展示；导入导出格式升至 v4，v3 及更早备份导入后该字段为空。sourceConversationId 机器键保持不变。
+- e30f2c7: 将 Agentic Recall 的搜索结果日志改为记录工具实际返回给模型的格式化内容，避免日志展示模型不可见的记忆字段。
+- 2473549: 记忆条目新增 sourceLabel 来源标签字段。两条集成路径的提取流程与输入头部共用同一来源短语解析（私聊记录对话对象昵称与用户 ID，群聊记录群名与群 ID），解析结果随提取记忆落库；living_memory_search 与用户画像共用的模型记忆视图在标签非空时渲染 source= 行，WebUI 记忆卡片同步展示；导入导出格式升至 v4，v3 及更早备份导入后该字段为空。sourceConversationId 机器键保持不变。
 
 ## 2026-09-08 version:0.21.2
 
