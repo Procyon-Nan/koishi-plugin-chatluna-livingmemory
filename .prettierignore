@@ -1,0 +1,2 @@
+# oxfmt 默认读取 .gitignore 与 .prettierignore；markdown 保持手写排版，不参与格式门禁
+*.md

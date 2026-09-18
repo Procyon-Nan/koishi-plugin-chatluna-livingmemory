@@ -62,9 +62,7 @@ export const renderMemorySourceMessagesForModel = (
 ) => {
     const header = [
         `id=${memory.id}`,
-        ...(memory.sourceLabel == null
-            ? []
-            : [`source=${memory.sourceLabel}`])
+        ...(memory.sourceLabel == null ? [] : [`source=${memory.sourceLabel}`])
     ]
 
     if (memory.sourceOrigins.length === 0) {

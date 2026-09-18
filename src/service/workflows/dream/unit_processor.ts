@@ -14,11 +14,7 @@ import {
 import { resolveSpeakerKeysByLabels } from '../../memory/speaker_identity'
 import { DreamExecutor, getDreamOperationMemoryIds } from './executor'
 import { createEmptyStats } from './stats'
-import type {
-    DreamCluster,
-    DreamOperation,
-    DreamUnitResult
-} from './types'
+import type { DreamCluster, DreamOperation, DreamUnitResult } from './types'
 import type { LivingMemoryLogger } from '../../logging/logger'
 
 interface DreamUnitBaseInput {

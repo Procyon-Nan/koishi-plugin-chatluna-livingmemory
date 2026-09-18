@@ -424,9 +424,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                             })
                         }
 
-                        const guild = await session.bot.getGuild(
-                            scope.guildId!
-                        )
+                        const guild = await session.bot.getGuild(scope.guildId!)
                         return buildMemoryTranscriptOrigin({
                             isDirect: false,
                             guildName: guild.name,

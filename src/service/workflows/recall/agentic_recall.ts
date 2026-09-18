@@ -67,8 +67,7 @@ type AgenticRecallToolAgentInput = ChainValues & {
 }
 
 const agenticRecallMaxModelCalls = 6
-const agenticRecallExhaustedMessage =
-    `agentic recall did not finish within ${agenticRecallMaxModelCalls} model calls`
+const agenticRecallExhaustedMessage = `agentic recall did not finish within ${agenticRecallMaxModelCalls} model calls`
 
 const agenticRecallPromptTemplate = ChatPromptTemplate.fromMessages([
     ['system', '{systemPrompt}'],
@@ -447,5 +446,4 @@ export class LivingMemoryAgenticRecallExecutor {
 
         return { toolCallSummaries, matchedResults }
     }
-
 }

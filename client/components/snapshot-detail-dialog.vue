@@ -88,9 +88,7 @@
                                 {{ memory.content }}
                             </div>
                             <div class="snapshot-memory-meta">
-                                <span>
-                                    情绪：{{ memory.sentiment || '-' }}
-                                </span>
+                                <span>情绪：{{ memory.sentiment || '-' }}</span>
                                 <span>
                                     记录于：{{ formatTime(memory.createdAt) }}
                                 </span>

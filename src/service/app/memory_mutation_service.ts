@@ -207,14 +207,10 @@ export class LivingMemoryMutationService
                 start < uniqueIds.length;
                 start += MEMORY_DELETE_BATCH_SIZE
             ) {
-                const records =
-                    await this.repository.archiveActiveEntries(
-                        presetId,
-                        uniqueIds.slice(
-                            start,
-                            start + MEMORY_DELETE_BATCH_SIZE
-                        )
-                    )
+                const records = await this.repository.archiveActiveEntries(
+                    presetId,
+                    uniqueIds.slice(start, start + MEMORY_DELETE_BATCH_SIZE)
+                )
                 if (records.length === 0) {
                     continue
                 }

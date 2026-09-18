@@ -147,6 +147,4 @@ export class LivingMemoryDreamJobRunner {
 }
 
 const hasMemoryChanges = (result: DreamRunResult) =>
-    result.merged > 0 ||
-    result.updated > 0 ||
-    result.archived > 0
+    result.merged > 0 || result.updated > 0 || result.archived > 0

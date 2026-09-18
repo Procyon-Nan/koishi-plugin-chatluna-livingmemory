@@ -7,10 +7,7 @@ import {
     createLivingMemoryTranscriptMessageResult,
     toLivingMemoryDate
 } from './transcript_message'
-import {
-    resolveUserSpeaker,
-    type UserSpeakerCache
-} from './user_speaker'
+import { resolveUserSpeaker, type UserSpeakerCache } from './user_speaker'
 
 export const livingMemoryRawContentKey = 'living_memory_raw_content'
 

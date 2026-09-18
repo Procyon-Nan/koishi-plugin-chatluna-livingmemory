@@ -191,7 +191,9 @@
                                             {{ memory.sentiment }}
                                         </span>
                                         <span
-                                            v-for="label in getMemorySpeakerLabels(memory)"
+                                            v-for="label in getMemorySpeakerLabels(
+                                                memory
+                                            )"
                                             :key="label"
                                             class="memory-speaker"
                                         >

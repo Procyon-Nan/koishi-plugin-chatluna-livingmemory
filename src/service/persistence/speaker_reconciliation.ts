@@ -108,8 +108,7 @@ export const reconcilePresetSpeaker = async (
             (speaker) =>
                 speaker.speakerKey === identity.speakerKey ||
                 (speaker.speakerId === speakerId &&
-                    (speaker.platform == null ||
-                        speaker.platform === platform))
+                    (speaker.platform == null || speaker.platform === platform))
         )
     const aliases = uniqueAliases([
         ...speakers.flatMap((speaker) => [

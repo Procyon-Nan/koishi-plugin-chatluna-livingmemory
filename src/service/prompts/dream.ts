@@ -22,9 +22,7 @@ export interface DreamPromptInput {
 /**
  * 构建 Dream 整理提示词。
  */
-export const buildDreamPrompt = (
-    input: DreamPromptInput
-): PromptMessages => {
+export const buildDreamPrompt = (input: DreamPromptInput): PromptMessages => {
     const { assistantLabel, presetPrompt, cluster, speakers } = input
 
     const systemPrompt = [

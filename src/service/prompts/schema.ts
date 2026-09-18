@@ -15,17 +15,19 @@ export const extractionResultToolName = 'living_memory_extraction_result'
 
 export const generatedMemorySchema = z
     .object({
-        type: z.enum(memoryEntryTypes).describe(
-            [
-                `必须取以下之一（${memoryEntryTypes.join('|')}）：`,
-                '- identity：用户或是你自己的稳定身份信息，如身份、角色、长期属性。',
-                '- preference：用户或是你自己的长期偏好、习惯、喜恶。',
-                '- fact：已确认的客观事实，如事件、需求、状态，通常关联具体昵称与时间。',
-                '- plan：尚未发生、面向未来的计划、约定或待办。',
-                '- context：当前对话的背景或短期情境，参考价值随时间衰减。',
-                '- other：无法归入以上类别但仍值得长期记住的信息。'
-            ].join('\n')
-        ),
+        type: z
+            .enum(memoryEntryTypes)
+            .describe(
+                [
+                    `必须取以下之一（${memoryEntryTypes.join('|')}）：`,
+                    '- identity：用户或是你自己的稳定身份信息，如身份、角色、长期属性。',
+                    '- preference：用户或是你自己的长期偏好、习惯、喜恶。',
+                    '- fact：已确认的客观事实，如事件、需求、状态，通常关联具体昵称与时间。',
+                    '- plan：尚未发生、面向未来的计划、约定或待办。',
+                    '- context：当前对话的背景或短期情境，参考价值随时间衰减。',
+                    '- other：无法归入以上类别但仍值得长期记住的信息。'
+                ].join('\n')
+            ),
         content: requiredText(
             '记忆正文。必须使用你的第一人称视角，体现你的人格、语气、关注点与关系态度，口语化且自然地描述你的认识，或与某个人之间的互动、关系、事实或偏好，追求详略得当，避免流水账；字数保持在 300 字以内。'
         ),
@@ -71,19 +73,13 @@ export const dreamResultSchema = z.object({
             z.object({
                 action: z.literal('keep'),
                 memoryIds: z
-                    .array(
-                        requiredText(
-                            '来自当前 memory_entries 的记忆 id'
-                        )
-                    )
+                    .array(requiredText('来自当前 memory_entries 的记忆 id'))
                     .min(1),
                 reason: requiredText('执行该操作的简短原因')
             }),
             z.object({
                 action: z.literal('update'),
-                memoryId: requiredText(
-                    '来自当前 memory_entries 的记忆 id'
-                ),
+                memoryId: requiredText('来自当前 memory_entries 的记忆 id'),
                 memory: generatedMemorySchema,
                 reason: requiredText('执行该操作的简短原因')
             }),
@@ -93,20 +89,14 @@ export const dreamResultSchema = z.object({
                     '来自当前 memory_entries 的记忆 id'
                 ),
                 sourceMemoryIds: z
-                    .array(
-                        requiredText(
-                            '来自当前 memory_entries 的记忆 id'
-                        )
-                    )
+                    .array(requiredText('来自当前 memory_entries 的记忆 id'))
                     .min(1),
                 memory: generatedMemorySchema,
                 reason: requiredText('执行该操作的简短原因')
             }),
             z.object({
                 action: z.literal('archive'),
-                memoryId: requiredText(
-                    '来自当前 memory_entries 的记忆 id'
-                ),
+                memoryId: requiredText('来自当前 memory_entries 的记忆 id'),
                 reason: requiredText('执行该操作的简短原因')
             })
         ])

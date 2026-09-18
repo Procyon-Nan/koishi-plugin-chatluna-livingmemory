@@ -21,9 +21,7 @@ const compareProfilesByCanonicalOrder = (
     right: UserProfileRecord
 ) => +left.createdAt - +right.createdAt || left.id.localeCompare(right.id)
 
-export class LivingMemoryUserProfileRepository
-    implements UserProfileRepository
-{
+export class LivingMemoryUserProfileRepository implements UserProfileRepository {
     constructor(
         private readonly ctx: Context,
         private readonly transact: LivingMemoryTransact

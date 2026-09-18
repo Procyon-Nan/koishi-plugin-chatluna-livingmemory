@@ -6,10 +6,7 @@ import type {
 import { resolveScopeAssistantLabel } from '../memory/helpers'
 import { toNonEmptyString } from '../shared/utils'
 import { createLivingMemoryTranscriptMessageResult } from './transcript_message'
-import {
-    resolveUserSpeaker,
-    type UserSpeakerCache
-} from './user_speaker'
+import { resolveUserSpeaker, type UserSpeakerCache } from './user_speaker'
 
 export interface CharacterTranscriptSourceMessage {
     content: string

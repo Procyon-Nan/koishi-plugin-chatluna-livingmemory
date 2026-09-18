@@ -368,10 +368,7 @@ it('reads first-pass partitions and global noise in bounded batches', async () =
     })
     const clusterer = new DreamClusterer(vectors.reader, worker)
 
-    const clusters = await clusterer.buildClusters(
-        'preset-1',
-        entries
-    )
+    const clusters = await clusterer.buildClusters('preset-1', entries)
 
     assert.deepEqual(
         vectors.calls.map((ids) => ids.length),
@@ -458,10 +455,7 @@ it('splits an oversized cluster into units within the size cap', async () => {
         createDreamWorker(async ({ entryCount }) => new Int32Array(entryCount))
     )
 
-    const clusters = await clusterer.buildClusters(
-        'preset-1',
-        entries
-    )
+    const clusters = await clusterer.buildClusters('preset-1', entries)
 
     assert.deepEqual(
         clusters.map((cluster) => cluster.id),
@@ -498,10 +492,7 @@ it('keeps clusters within the cap intact and splits oversized ones', async () =>
         )
     )
 
-    const clusters = await clusterer.buildClusters(
-        'preset-1',
-        entries
-    )
+    const clusters = await clusterer.buildClusters('preset-1', entries)
 
     assert.deepEqual(
         clusters
@@ -650,11 +641,7 @@ it('emits batch summaries without worker progress callbacks', async () => {
         })
     )
 
-    await clusterer.buildClusters(
-        'preset-1',
-        entries,
-        captured.logger
-    )
+    await clusterer.buildClusters('preset-1', entries, captured.logger)
 
     assert.deepEqual(progressFlags, [false])
     assert.deepEqual(captured.info, [

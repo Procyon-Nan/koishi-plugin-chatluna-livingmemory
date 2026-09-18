@@ -229,11 +229,9 @@ export class DreamExecutor {
         entry: DreamMemoryEntryRecord,
         touchedMemoryIds: Set<string>
     ) {
-        await this.repository.updateMemoryForDream(
-            entry.presetId,
-            entry.id,
-            { status: 'archived' }
-        )
+        await this.repository.updateMemoryForDream(entry.presetId, entry.id, {
+            status: 'archived'
+        })
         touchedMemoryIds.add(entry.id)
     }
 
