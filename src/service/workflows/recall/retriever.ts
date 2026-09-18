@@ -39,6 +39,7 @@ export class LivingMemoryRetriever {
             conversationId,
             searchTexts: [input],
             memoryTypes: null,
+            memoryStatus: 'active',
             maxCandidates: candidateCount
         })
         const entries = await loadIndexedMemoryEntries(

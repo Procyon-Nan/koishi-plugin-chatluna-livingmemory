@@ -181,10 +181,16 @@ const mergeHybridHits = (groups, limit) => {
         .slice(0, limit)
 }
 
+const toStatusValues = (memoryStatus) =>
+    memoryStatus === 'all' ? ['active', 'archived'] : [memoryStatus]
+
 const appendFilters = (input, alias = '') => {
     const prefix = alias.length === 0 ? '' : `${alias}.`
-    const conditions = [`${prefix}preset_id = $1`, `${prefix}status = $2`]
-    const parameters = [input.presetId, input.status]
+    const conditions = [
+        `${prefix}preset_id = $1`,
+        `${prefix}status = ANY($2::text[])`
+    ]
+    const parameters = [input.presetId, toStatusValues(input.memoryStatus)]
     if (input.types !== null) {
         conditions.push(
             `${prefix}type = ANY($${parameters.length + 1}::text[])`
@@ -226,7 +232,7 @@ const listKeywordCandidateIds = async (database, input) => {
 const createWorkloadInput = (name, options, limit) => {
     const baseInput = {
         presetId: 'benchmark-preset-0',
-        status: 'active',
+        memoryStatus: 'active',
         types: null,
         isConsolidated: null,
         limit

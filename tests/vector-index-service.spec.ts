@@ -307,6 +307,7 @@ it('builds the index once and reuses its manifest after restart', async () => {
             presetId: 'preset-a',
             searchTexts: ['content memory-a'],
             memoryTypes: ['fact'],
+            memoryStatus: 'active',
             maxCandidates: 2
         })
         assert.deepEqual(
@@ -318,6 +319,7 @@ it('builds the index once and reuses its manifest after restart', async () => {
             searchTexts: ['content memory-a'],
             keywords: ['memory-b'],
             memoryTypes: null,
+            memoryStatus: 'active',
             maxCandidates: 2,
             minSimilarity: 0
         })

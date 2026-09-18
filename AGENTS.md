@@ -173,8 +173,11 @@ chatluna-livingmemory/
    - 服务停止时先停止接收新操作，再排空在途操作并等待 Worker 完整退出；
      关闭失败时才终止 Worker。新 HMR generation 必须等待旧 generation 的
      Worker 结束后启动。
-   - 索引查询只返回活跃记忆。归档向量可保留，以便 WebUI 重新激活记忆时
-     复用，但不得提供归档向量检索入口。
+   - 索引查询按调用方声明的 `memoryStatus` 过滤。主对话注册的
+     `living_memory_search` 以必填参数允许模型检索活跃、归档或全部记忆；
+     召回检索（embedding-rerank）、agentic recall 内部搜索和 Dream 邻居
+     查询固定只查活跃记忆。归档向量随 rebuild 与 reconcile 完整维护，
+     WebUI 重新激活记忆时可直接复用。
 
 10. WebUI 与 RPC
    - Console RPC 变更必须同步更新 `src/contracts/rpc.ts`、Koishi declaration

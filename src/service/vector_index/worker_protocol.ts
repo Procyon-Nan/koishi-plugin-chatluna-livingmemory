@@ -1,4 +1,8 @@
-import type { MemoryEntryStatus, MemoryEntryType } from '../../contracts/memory'
+import type {
+    MemoryEntryStatus,
+    MemoryEntryType,
+    MemorySearchStatus
+} from '../../contracts/memory'
 import type {
     MemoryVectorIndexManifest,
     MemoryVectorIndexPresetStatus,
@@ -59,6 +63,7 @@ export interface VectorIndexFilter {
     conversationId?: string
     types: MemoryEntryType[] | null
     isConsolidated: boolean | null
+    memoryStatus: MemorySearchStatus
 }
 
 export interface VectorIndexKnnQuery extends VectorIndexFilter {

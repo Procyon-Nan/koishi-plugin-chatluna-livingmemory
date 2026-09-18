@@ -28,10 +28,19 @@ interface KeywordRow {
     matchCount: string
 }
 
+const toStatusValues = (memoryStatus: VectorIndexKnnQuery['memoryStatus']) =>
+    memoryStatus === 'all' ? ['active', 'archived'] : [memoryStatus]
+
 const appendFilters = (query: VectorIndexKnnQuery, alias = '') => {
     const prefix = alias.length > 0 ? `${alias}.` : ''
-    const conditions = [`${prefix}preset_id = $1`, `${prefix}status = $2`]
-    const parameters: unknown[] = [query.presetId, 'active']
+    const conditions = [
+        `${prefix}preset_id = $1`,
+        `${prefix}status = ANY($2::text[])`
+    ]
+    const parameters: unknown[] = [
+        query.presetId,
+        toStatusValues(query.memoryStatus)
+    ]
     if (query.conversationId !== undefined) {
         conditions.push(
             `(${prefix}source_conversation_id = $${parameters.length + 1} OR ${prefix}source_conversation_id IS NULL)`

@@ -10,12 +10,15 @@ import {
 } from '../src/service/memory/tools/get_messages_tool'
 import {
     livingMemorySearchInputSchema,
+    livingMemorySearchToolInputSchema,
     livingMemoryGetMessagesInputSchema
 } from '../src/service/memory/tools/search_contract'
 import {
     livingMemorySearchToolDescription,
+    livingMemorySearchToolWithStatusDescription,
     LivingMemorySearchTool
 } from '../src/service/memory/tools/embedding_search_tool'
+import type { LivingMemorySearchInput } from '../src/contracts/memory'
 import type { LivingMemoryEmbeddingSearchEngine } from '../src/service/workflows/recall/embedding_search_engine'
 import { resolveMainRunConversationId } from '../src/service/memory/helpers'
 import {
@@ -79,6 +82,37 @@ it('exposes the strict search schema directly to the model-facing tool', async (
     )
 })
 
+it('exposes the required status filter only on the main-chat search tool', async () => {
+    const inputs: LivingMemorySearchInput[] = []
+    const provider = {
+        searchMemories: async (
+            _presetId: string,
+            input: LivingMemorySearchInput
+        ) => {
+            inputs.push(input)
+            return []
+        }
+    } as unknown as LivingMemoryEmbeddingSearchEngine
+
+    const mainTool = new LivingMemorySearchTool(provider, true, false, true)
+    assert.equal(mainTool.schema, livingMemorySearchToolInputSchema)
+    assert.match(
+        livingMemorySearchToolWithStatusDescription,
+        /memoryStatus：必填字符串/u
+    )
+    assert.doesNotMatch(livingMemorySearchToolDescription, /memoryStatus/u)
+    assert.equal(searchTool.schema, livingMemorySearchInputSchema)
+
+    await mainTool.invoke(
+        { searchTexts: ['我们聊过的事情'], memoryStatus: 'archived' },
+        toolConfig({
+            preset: 'default',
+            agentContext: { kind: 'main', source: 'chatluna' }
+        })
+    )
+    assert.equal(inputs[0].memoryStatus, 'archived')
+})
+
 it('exposes the single-memory source-message schema', async () => {
     assert.equal(getMessagesTool.schema, livingMemoryGetMessagesInputSchema)
     assert.match(
@@ -93,8 +127,7 @@ it('renders source messages as the original transcript of one memory', async () 
             memoryId === 'memory-1'
                 ? {
                       id: 'memory-1',
-                      sourceLabel:
-                          '来源于「摸鱼群」（群聊 ID：10001）的群聊',
+                      sourceLabel: '来源于「摸鱼群」（群聊 ID：10001）的群聊',
                       sourceOrigins: [
                           {
                               messages: [
@@ -128,9 +161,10 @@ it('renders source messages as the original transcript of one memory', async () 
     })
 
     assert.equal(
-        await new LivingMemoryGetMessagesTool(
-            createContext(service)
-        ).invoke({ memoryId: 'memory-1' }, config),
+        await new LivingMemoryGetMessagesTool(createContext(service)).invoke(
+            { memoryId: 'memory-1' },
+            config
+        ),
         [
             'id=memory-1',
             'source=来源于「摸鱼群」（群聊 ID：10001）的群聊',

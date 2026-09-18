@@ -42,18 +42,22 @@ export const formatSearchTextLengthError = (rule: SearchFieldRule) => {
 }
 
 const createSearchFieldSchema = (rule: SearchFieldRule) =>
-    z.string().refine(
-        (value) => {
-            const length = countSearchTextCharacters(value)
-            return length >= rule.minLength && length <= rule.maxLength
-        },
-        {
-            message: formatSearchTextLengthError(rule)
-        }
-    ).refine(
-        (value) => !/^\s*\[.*\]\s*$/u.test(value),
-        { message: `${rule.fieldName} 必须直接传递数组。` }
-    )
+    z
+        .string()
+        .refine(
+            (value) => {
+                const length = countSearchTextCharacters(value)
+                return length >= rule.minLength && length <= rule.maxLength
+            },
+            {
+                message: formatSearchTextLengthError(rule)
+            }
+        )
+        // ChatLuna AgentRunner 的入参修复会把「字段级字符串」包成单元素数组，
+        // 该校验是唯一阻止字符串化数组被静默修复执行的边界。
+        .refine((value) => !/^\s*\[.*\]\s*$/u.test(value), {
+            message: `${rule.fieldName} 必须直接传递数组。`
+        })
 
 const searchTextDescription =
     `用于语义检索的第一人称查询短语。提供 1 到 ${memorySearchMaxTextCount} 条短语，` +
@@ -69,7 +73,7 @@ const searchKeywordDescription =
 
 export type LivingMemorySearchToolInput = Pick<
     LivingMemorySearchInput,
-    'searchTexts' | 'searchKeywords'
+    'searchTexts' | 'searchKeywords' | 'memoryStatus'
 >
 
 export const livingMemorySearchInputSchema = z.object({
@@ -84,6 +88,18 @@ export const livingMemorySearchInputSchema = z.object({
         .optional()
         .describe(searchKeywordDescription)
 })
+
+const memoryStatusDescription =
+    '要检索的记忆状态。active 为当前活跃的记忆，通常使用它；' +
+    'archived 为已归档（被整理或合并）的旧记忆；all 为两者全部。'
+
+// 主对话工具实例专用：模型显式声明检索范围；召回内部实例不暴露该参数。
+export const livingMemorySearchToolInputSchema =
+    livingMemorySearchInputSchema.extend({
+        memoryStatus: z
+            .enum(['active', 'archived', 'all'])
+            .describe(memoryStatusDescription)
+    })
 
 const memoryIdDescription =
     '要查看来源对话的记忆 ID。使用 living_memory_search 结果中返回的 ID。'

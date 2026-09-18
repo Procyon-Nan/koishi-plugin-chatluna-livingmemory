@@ -21,10 +21,13 @@ export type MemoryRecallStrategy = 'embedding-rerank' | 'agentic-recall'
 
 export type LivingMemorySearchMemoryType = MemoryEntryType | 'all'
 
+export type MemorySearchStatus = MemoryEntryStatus | 'all'
+
 export interface LivingMemorySearchInput {
     searchTexts: string[]
     searchKeywords?: string[]
     memoryTypes: LivingMemorySearchMemoryType[]
+    memoryStatus?: MemorySearchStatus
 }
 
 export interface LivingMemorySearchDetailedResult {

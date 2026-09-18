@@ -37,10 +37,13 @@ export const livingMemorySearchMemoryTypes = [
 export type LivingMemorySearchMemoryType =
     (typeof livingMemorySearchMemoryTypes)[number]
 
+export type MemorySearchStatus = MemoryEntryStatus | 'all'
+
 export interface LivingMemorySearchInput {
     searchTexts: string[]
     searchKeywords?: string[]
     memoryTypes: LivingMemorySearchMemoryType[]
+    memoryStatus?: MemorySearchStatus
 }
 
 export interface LivingMemorySearchResult extends Pick<

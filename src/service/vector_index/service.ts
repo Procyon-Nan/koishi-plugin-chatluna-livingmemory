@@ -149,9 +149,7 @@ export class LivingMemoryVectorIndexService
                 ? this.databaseDirectory.toLowerCase()
                 : this.databaseDirectory
         try {
-            this.generation = await acquireVectorIndexGeneration(
-                generationKey
-            )
+            this.generation = await acquireVectorIndexGeneration(generationKey)
         } catch (error) {
             const failure = toError(error)
             this.status.markFailure('unavailable', failure.message)
@@ -269,6 +267,7 @@ export class LivingMemoryVectorIndexService
                     conversationId: input.conversationId,
                     types: input.memoryTypes,
                     isConsolidated: null,
+                    memoryStatus: input.memoryStatus,
                     limit: input.maxCandidates,
                     vector
                 })
@@ -306,6 +305,7 @@ export class LivingMemoryVectorIndexService
                     conversationId: input.conversationId,
                     types: input.memoryTypes,
                     isConsolidated: null,
+                    memoryStatus: input.memoryStatus,
                     limit: input.maxCandidates,
                     vector,
                     keywords: input.keywords,
@@ -352,6 +352,7 @@ export class LivingMemoryVectorIndexService
                     presetId: input.presetId,
                     types: null,
                     isConsolidated: true,
+                    memoryStatus: 'active',
                     limit: input.limit + excludedMemoryIds.size,
                     vector: seed.vector
                 })
@@ -376,8 +377,9 @@ export class LivingMemoryVectorIndexService
             await this.waitForMaintenance()
             await this.runPresetMutation(batch.presetId, async () => {
                 this.assertPresetReady(batch.presetId)
-                let indexedCount =
-                    this.status.getPresetIndexedCount(batch.presetId)
+                let indexedCount = this.status.getPresetIndexedCount(
+                    batch.presetId
+                )
                 try {
                     const mutation = await buildVectorIndexWorkerMutation(
                         batch,
@@ -475,9 +477,7 @@ export class LivingMemoryVectorIndexService
         void this.rebuild(reason)
     }
 
-    private async initialize(
-        inspection: VectorIndexInspection
-    ) {
+    private async initialize(inspection: VectorIndexInspection) {
         if (this.workerFailure !== null) {
             throw new LivingMemoryVectorIndexError(
                 'worker-unavailable',

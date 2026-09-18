@@ -15,7 +15,8 @@ import { PGlite } from '@electric-sql/pglite'
 import { vector } from '@electric-sql/pglite-pgvector'
 import type {
     MemoryEntryStatus,
-    MemoryEntryType
+    MemoryEntryType,
+    MemorySearchStatus
 } from '../src/contracts/memory'
 import type { MemoryVectorIndexManifest } from '../src/contracts/vector_index'
 import { LivingMemoryVectorIndexDatabase } from '../src/service/vector_index/worker/database'
@@ -91,12 +92,14 @@ const query = (
         presetId?: string
         types?: MemoryEntryType[] | null
         isConsolidated?: boolean | null
+        memoryStatus?: MemorySearchStatus
         limit?: number
     } = {}
 ) => ({
     presetId: options.presetId ?? 'preset-a',
     types: options.types ?? null,
     isConsolidated: options.isConsolidated ?? null,
+    memoryStatus: options.memoryStatus ?? 'active',
     limit: options.limit ?? 30,
     vector: new Float32Array(vector)
 })
@@ -236,6 +239,21 @@ it('runs typed vector index worker mutations and filtered searches', async () =>
         ]
     )
 
+    const archivedHits = await client.queryKnn(
+        query([1, 0, 0], { memoryStatus: 'archived' })
+    )
+    assert.deepEqual(
+        archivedHits.map((hit) => hit.memoryId),
+        ['memory-c']
+    )
+    const allHits = await client.queryKnn(
+        query([1, 0, 0], { memoryStatus: 'all' })
+    )
+    assert.deepEqual(
+        allHits.map((hit) => hit.memoryId),
+        ['memory-a', 'memory-c', 'memory-b']
+    )
+
     const archivedA = createDocument('memory-a', {
         status: 'archived',
         keywords: ['Alpha', 'Shared']
@@ -254,6 +272,13 @@ it('runs typed vector index worker mutations and filtered searches', async () =>
     assert.deepEqual(
         activeAfterArchive.map((hit) => hit.memoryId),
         ['memory-b']
+    )
+    const archivedAfterArchive = await client.queryKnn(
+        query([1, 0, 0], { memoryStatus: 'archived' })
+    )
+    assert.deepEqual(
+        archivedAfterArchive.map((hit) => hit.memoryId),
+        ['memory-a', 'memory-c']
     )
     await client.applyMutation({
         presetId: 'preset-a',

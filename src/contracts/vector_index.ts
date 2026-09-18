@@ -2,7 +2,8 @@ import type {
     MemoryEntryRecord,
     MemoryEntryStatus,
     MemoryEntryType,
-    MemoryJobRecord
+    MemoryJobRecord,
+    MemorySearchStatus
 } from './memory'
 
 export const memoryVectorIndexStates = [
@@ -103,6 +104,7 @@ export interface MemorySemanticSearchInput {
     conversationId?: string
     searchTexts: string[]
     memoryTypes: MemoryEntryType[] | null
+    memoryStatus: MemorySearchStatus
     maxCandidates: number
 }
 
