@@ -3,12 +3,12 @@
 ## 2026-09-17 version:0.21.2
 
 - pending: 新增默认关闭的 enableConversationIsolation，开启后两种召回策略和 living_memory_search 按当前会话及全局记忆过滤。来源会话作为索引元数据同步，语义与关键词检索均在候选截断前过滤；v3 索引原地升级至 v4 并通过启动对账补齐来源，保留已有向量。用户画像、Dream、来源消息工具、旧快照和管理操作沿用既定范围，具体方案与验证记录见 docs/conversation-isolation-plan.md。
-- pending: WebUI 导入校验支持 v4 备份，恢复当前版本导出文件的界面导入能力。
-- pending: Dream 合并按来源会话键统一处理 sourceConversationId 与 sourceLabel；全部参与记忆的会话键相等时（包括全部为 null）保留目标的会话键和标签，否则在同一事务内将两者清空。null 表示无会话归属，约定为预设内全局可见，当前召回尚未实现会话过滤。来源原始消息仍完整合并，昵称或群名变化不影响会话归属判断。
+- b2b1a19: WebUI 导入校验支持 v4 备份，恢复当前版本导出文件的界面导入能力。
+- b2b1a19: Dream 合并按来源会话键统一处理 sourceConversationId 与 sourceLabel；全部参与记忆的会话键相等时（包括全部为 null）保留目标的会话键和标签，否则在同一事务内将两者清空。null 表示无会话归属，约定为预设内全局可见。来源原始消息仍完整合并，昵称或群名变化不影响会话归属判断。
 
 ## 2026-09-16 version:0.21.2
 
-- pending: 统一记忆来源会话键的空值口径。`sourceConversationId` 表列改为可空，null 成为「无会话归属、全局可见」的单一判定；WebUI 手工创建记忆不再写入 `webui:{presetId}` 占位键，落库为 null；读取边界把空串与历史 `webui:` 前缀旧值折叠为 null，导出与后续会话隔离过滤看到的口径一致。旧值写回迁移机制备忘见 `docs/webui-legacy-conversation-keys.md`。
+- 3a2e557: 统一记忆来源会话键的空值口径。`sourceConversationId` 表列改为可空，null 成为「无会话归属、全局可见」的单一判定；WebUI 手工创建记忆不再写入 `webui:{presetId}` 占位键，落库为 null；读取边界把空串与历史 `webui:` 前缀旧值折叠为 null，导出与后续会话隔离过滤看到的口径一致。旧值写回迁移机制备忘见 `docs/webui-legacy-conversation-keys.md`。
 
 ## 2026-09-13 version:0.21.2
 

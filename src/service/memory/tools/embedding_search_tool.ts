@@ -56,13 +56,7 @@ export class LivingMemorySearchTool extends StructuredTool {
         runConfig?: ToolRunnableConfig
     ): Promise<{ results: LivingMemorySearchResult[]; output: string }> {
         const configurable = getLivingMemoryToolConfigurable(runConfig)
-        const presetIdResolution = resolveToolMemoryPresetId(configurable)
-        if (presetIdResolution.ok === false) {
-            throw new Error(
-                describeLivingMemoryToolScopeFailure(presetIdResolution.reason)
-            )
-        }
-
+        let presetId: string
         let conversationId: string | undefined
         if (this.enableConversationIsolation) {
             const resolution = resolveToolMemoryScopeConfigurable(configurable)
@@ -71,11 +65,22 @@ export class LivingMemorySearchTool extends StructuredTool {
                     describeLivingMemoryToolScopeFailure(resolution.reason)
                 )
             }
+            presetId = resolution.scope.presetId
             conversationId = resolution.scope.conversationId
+        } else {
+            const presetIdResolution = resolveToolMemoryPresetId(configurable)
+            if (presetIdResolution.ok === false) {
+                throw new Error(
+                    describeLivingMemoryToolScopeFailure(
+                        presetIdResolution.reason
+                    )
+                )
+            }
+            presetId = presetIdResolution.presetId
         }
 
         const results = await this.searchProvider.searchMemories(
-            presetIdResolution.presetId,
+            presetId,
             { ...input, memoryTypes: ['all'] },
             conversationId
         )
