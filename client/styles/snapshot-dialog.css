@@ -1,3 +1,17 @@
+/* Console 宿主样式把 .el-overlay-dialog 改写为居中 flex 列布局，超高的弹窗会被压缩到
+   视口高度、再被 .lm-dialog 的 overflow: hidden 裁剪且无处可滚；改为弹窗限高、正文内滚。 */
+:global(.snapshot-dialog) {
+    display: flex;
+    flex-direction: column;
+    max-height: 84vh;
+}
+
+:global(.snapshot-dialog .el-dialog__body) {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
 /* Snapshot dialog detail contents */
 .snapshot-dialog-meta {
     display: grid;
@@ -27,14 +41,14 @@
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: var(--lm-text-tertiary) !important;
+    color: var(--lm-text-tertiary);
     font-family: var(--lm-font-mono);
 }
 
 .snapshot-dialog-meta span:last-child {
     font-family: var(--lm-font-mono);
     font-size: 12px;
-    color: var(--lm-text-primary) !important;
+    color: var(--lm-text-primary);
 }
 
 .snapshot-dialog-query {
@@ -45,9 +59,9 @@
 }
 
 .snapshot-dialog-query span:last-child {
-    font-family: var(--lm-font-mono) !important;
-    font-size: 12px !important;
-    line-height: 1.4 !important;
+    font-family: var(--lm-font-mono);
+    font-size: 12px;
+    line-height: 1.4;
 }
 
 .snapshot-memory-list {
@@ -66,7 +80,7 @@
     padding: 12px;
     border-radius: 4px;
     background-color: var(--lm-bg-secondary);
-    color: var(--lm-text-primary) !important;
+    color: var(--lm-text-primary);
     white-space: pre-wrap;
     line-height: 1.7;
 }
@@ -75,19 +89,19 @@
     display: flex;
     flex-wrap: wrap;
     gap: 8px 16px;
-    color: var(--lm-text-tertiary) !important;
-    font-size: 12px !important;
+    color: var(--lm-text-tertiary);
+    font-size: 12px;
     font-family: var(--lm-font-mono);
 }
 
 .snapshot-memory-item {
-    border: 1px solid var(--lm-border) !important;
-    border-radius: 4px !important;
-    background-color: var(--lm-bg-primary) !important;
-    padding: 14px !important;
+    border: 1px solid var(--lm-border);
+    border-radius: 4px;
+    background-color: var(--lm-bg-primary);
+    padding: 14px;
     display: flex;
     flex-direction: column;
-    gap: 10px !important;
+    gap: 10px;
 }
 
 .snapshot-memory-header {
@@ -101,39 +115,39 @@
 .snapshot-memory-id {
     font-family: var(--lm-font-mono);
     font-weight: 600;
-    color: var(--lm-text-secondary) !important;
+    color: var(--lm-text-secondary);
     font-size: 12px;
 }
 
 .snapshot-memory-score {
     margin-left: auto;
     font-family: var(--lm-font-mono);
-    color: var(--lm-primary) !important;
-    font-size: 12px !important;
+    color: var(--lm-primary);
+    font-size: 12px;
     font-weight: 600;
 }
 
 .snapshot-memory-content {
-    font-size: 13px !important;
-    line-height: 1.5 !important;
-    color: var(--lm-text-primary) !important;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--lm-text-primary);
 }
 
 .snapshot-memory-meta {
     display: flex;
     flex-wrap: wrap;
-    gap: 16px !important;
-    font-size: 11px !important;
-    color: var(--lm-text-tertiary) !important;
+    gap: 16px;
+    font-size: 11px;
+    color: var(--lm-text-tertiary);
     font-family: var(--lm-font-mono);
 }
 
 .snapshot-memory-summary {
-    font-size: 12px !important;
-    background-color: var(--lm-bg-secondary) !important;
+    font-size: 12px;
+    background-color: var(--lm-bg-secondary);
     border-left: 2px solid var(--lm-primary);
-    padding: 6px 10px !important;
-    color: var(--lm-text-secondary) !important;
+    padding: 6px 10px;
+    color: var(--lm-text-secondary);
     border-radius: 0 4px 4px 0;
 }
 

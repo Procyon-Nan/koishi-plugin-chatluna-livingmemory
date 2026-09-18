@@ -8,7 +8,7 @@
             'lm-dialog',
             isDark ? 'lm-theme-dark' : 'lm-theme-light'
         ]"
-        modal-class="snapshot-dialog-overlay"
+        modal-class="lm-dialog-overlay"
     >
         <template v-if="snapshot != null">
             <div class="snapshot-dialog-meta">
