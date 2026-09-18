@@ -63,6 +63,9 @@ const execute = async (
             case 'inspect':
                 result = await database.inspect()
                 break
+            case 'upgradeSchema':
+                result = await database.upgradeSchema()
+                break
             case 'queryKnn':
                 result = await database.queryKnn(command)
                 break

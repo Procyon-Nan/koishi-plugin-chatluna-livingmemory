@@ -5,6 +5,7 @@ import { validateLivingMemoryConfig } from '../src/service/app/config_status'
 const createConfig = (
     overrides: Partial<LivingMemoryConfig> = {}
 ): LivingMemoryConfig => ({
+    enableConversationIsolation: false,
     enableSnapshotInjection: true,
     enableUserProfileInjection: false,
     recallStrategy: 'embedding-rerank',

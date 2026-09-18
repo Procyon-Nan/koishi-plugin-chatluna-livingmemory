@@ -42,6 +42,7 @@ interface AgenticRecallHarnessOptions {
 }
 
 const config = {
+    enableConversationIsolation: false,
     subModel: 'test/model',
     embeddingModel: 'test-embedding',
     debug: false,

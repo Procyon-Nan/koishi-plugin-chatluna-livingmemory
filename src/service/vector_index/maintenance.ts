@@ -93,9 +93,13 @@ export class LivingMemoryVectorIndexMaintenance {
         const reuseLegacyEmbeddings =
             !(await this.options.repository.hasMigratedLegacyEmbeddings())
         const { embeddings, dimension } = await this.createEmbeddingContext()
+        const upgradeSchema =
+            inspection.manifest?.schemaVersion === 3 &&
+            this.options.schemaVersion === 4
         const rebuildReason = this.resolveRebuildReason(
             inspection,
-            dimension
+            dimension,
+            upgradeSchema
         )
         if (rebuildReason !== null) {
             await this.runRebuildJob(
@@ -105,7 +109,7 @@ export class LivingMemoryVectorIndexMaintenance {
                 reuseLegacyEmbeddings
             )
         } else {
-            await this.runReconcileJob(embeddings, dimension)
+            await this.runReconcileJob(embeddings, dimension, upgradeSchema)
         }
         await this.options.repository.completeLegacyEmbeddingMigration()
     }
@@ -181,7 +185,8 @@ export class LivingMemoryVectorIndexMaintenance {
 
     private resolveRebuildReason(
         inspection: VectorIndexInspection,
-        dimension: number
+        dimension: number,
+        upgradeSchema: boolean
     ) {
         const { config, schemaVersion } = this.options
         if (inspection.manifest === null) {
@@ -207,7 +212,7 @@ export class LivingMemoryVectorIndexMaintenance {
         }
 
         const manifest = inspection.manifest
-        if (manifest.schemaVersion !== schemaVersion) {
+        if (manifest.schemaVersion !== schemaVersion && !upgradeSchema) {
             return (
                 `schema version changed: expected=${schemaVersion}, ` +
                 `actual=${manifest.schemaVersion}`
@@ -331,16 +336,20 @@ export class LivingMemoryVectorIndexMaintenance {
 
     private async runReconcileJob(
         embeddings: EmbeddingsLike,
-        dimension: number
+        dimension: number,
+        upgradeSchema: boolean
     ) {
         await this.jobRunner.run(
             GLOBAL_INDEX_JOB_PRESET,
             'reconcile: startup',
             async (job) => {
                 this.options.onBuilding(job.id)
-                await this.options.operationGate.runExclusive(() =>
-                    this.reconcileAllPresets(embeddings, dimension, job)
-                )
+                await this.options.operationGate.runExclusive(async () => {
+                    if (upgradeSchema) {
+                        await this.options.worker().upgradeSchema()
+                    }
+                    await this.reconcileAllPresets(embeddings, dimension, job)
+                })
                 const inspection = await this.options.worker().inspect()
                 this.options.onInspection(inspection)
                 return formatJobCompletedDetail(

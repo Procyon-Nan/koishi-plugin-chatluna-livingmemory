@@ -434,6 +434,7 @@ export class LivingMemoryMutationService
         return {
             id: record.id,
             presetId: record.presetId,
+            sourceConversationId: record.sourceConversationId,
             status: record.status,
             type: record.type,
             isConsolidated: record.isConsolidated,

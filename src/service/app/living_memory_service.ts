@@ -529,8 +529,16 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         return await this.searchEngine.searchMemoriesDetailed(presetId, input)
     }
 
-    async searchMemories(presetId: string, input: LivingMemorySearchInput) {
-        return await this.searchEngine.searchMemories(presetId, input)
+    async searchMemories(
+        presetId: string,
+        input: LivingMemorySearchInput,
+        conversationId?: string
+    ) {
+        return await this.searchEngine.searchMemories(
+            presetId,
+            input,
+            conversationId
+        )
     }
 
     async getMemorySourceMessages(presetId: string, memoryIds: string[]) {

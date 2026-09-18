@@ -28,15 +28,24 @@ interface KeywordRow {
     matchCount: string
 }
 
-const appendFilters = (query: VectorIndexKnnQuery) => {
-    const conditions = ['preset_id = $1', 'status = $2']
+const appendFilters = (query: VectorIndexKnnQuery, alias = '') => {
+    const prefix = alias.length > 0 ? `${alias}.` : ''
+    const conditions = [`${prefix}preset_id = $1`, `${prefix}status = $2`]
     const parameters: unknown[] = [query.presetId, 'active']
+    if (query.conversationId !== undefined) {
+        conditions.push(
+            `(${prefix}source_conversation_id = $${parameters.length + 1} OR ${prefix}source_conversation_id IS NULL)`
+        )
+        parameters.push(query.conversationId)
+    }
     if (query.types !== null) {
-        conditions.push(`type = ANY($${parameters.length + 1}::text[])`)
+        conditions.push(
+            `${prefix}type = ANY($${parameters.length + 1}::text[])`
+        )
         parameters.push(query.types)
     }
     if (query.isConsolidated !== null) {
-        conditions.push(`is_consolidated = $${parameters.length + 1}`)
+        conditions.push(`${prefix}is_consolidated = $${parameters.length + 1}`)
         parameters.push(query.isConsolidated)
     }
     return { conditions, parameters }
@@ -84,7 +93,7 @@ export const queryVectorIndexHybrid = async (
     )
     const keywords = normalizeIndexKeywords(query.keywords)
     if (keywords.length > 0) {
-        const { conditions, parameters } = appendFilters(query)
+        const { conditions, parameters } = appendFilters(query, 'm')
         parameters.push(
             keywords,
             toPgVector(query.vector),
@@ -105,7 +114,7 @@ export const queryVectorIndexHybrid = async (
                     COUNT(*)::text AS "matchCount"
                  FROM lm_index_keywords AS k
                  JOIN lm_index_memory AS m ON m.memory_id = k.memory_id
-                 WHERE ${conditions.map((condition) => `m.${condition}`).join(' AND ')}
+                 WHERE ${conditions.join(' AND ')}
                    AND k.keyword = ANY($${keywordParameter}::text[])
                  GROUP BY m.memory_id, m.embedding`,
                 parameters
@@ -227,6 +236,7 @@ export const readVectorIndexInventoryPage = async (
             `SELECT
                 memory_id AS "memoryId",
                 preset_id AS "presetId",
+                source_conversation_id AS "sourceConversationId",
                 status,
                 type,
                 is_consolidated AS "isConsolidated",

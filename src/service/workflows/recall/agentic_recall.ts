@@ -50,6 +50,7 @@ type LivingMemoryAgenticRecallConfig = Pick<
     | 'debug'
     | 'memorySearchToolMaxResults'
     | 'recallHistoryWindowRounds'
+    | 'enableConversationIsolation'
 >
 
 interface RecordedAgenticSearchCall {
@@ -262,6 +263,7 @@ export class LivingMemoryAgenticRecallExecutor {
             historyMessages
         )
         const agentContext = {
+            conversationId: scope.conversationId,
             requestId: [
                 'agentic-recall',
                 scope.presetId,
@@ -271,7 +273,11 @@ export class LivingMemoryAgenticRecallExecutor {
         }
         const recordedSearchCalls: RecordedAgenticSearchCall[] = []
         const searchTool = new RecordingLivingMemorySearchTool(
-            new LivingMemorySearchTool(this.embeddingSearchEngine, false),
+            new LivingMemorySearchTool(
+                this.embeddingSearchEngine,
+                false,
+                this.config.enableConversationIsolation
+            ),
             recordedSearchCalls,
             agentContext,
             runLogger
@@ -288,7 +294,6 @@ export class LivingMemoryAgenticRecallExecutor {
                 configurable: {
                     model: chatModel,
                     preset: scope.presetId,
-                    conversationId: scope.conversationId,
                     userId: scope.userId,
                     source: 'agentic-recall',
                     agentContext

@@ -266,6 +266,7 @@ export class LivingMemoryVectorIndexService
             for (const vector of vectors) {
                 const hits = await this.requireWorker().queryKnn({
                     presetId: input.presetId,
+                    conversationId: input.conversationId,
                     types: input.memoryTypes,
                     isConsolidated: null,
                     limit: input.maxCandidates,
@@ -302,6 +303,7 @@ export class LivingMemoryVectorIndexService
             for (const vector of vectors) {
                 const hits = await this.requireWorker().queryHybrid({
                     presetId: input.presetId,
+                    conversationId: input.conversationId,
                     types: input.memoryTypes,
                     isConsolidated: null,
                     limit: input.maxCandidates,

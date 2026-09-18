@@ -37,6 +37,7 @@ const createSource = (
 ): MemoryIndexSourceRecord => ({
     id,
     presetId: 'preset-a',
+    sourceConversationId: null,
     status: 'active',
     type: 'fact',
     isConsolidated: false,

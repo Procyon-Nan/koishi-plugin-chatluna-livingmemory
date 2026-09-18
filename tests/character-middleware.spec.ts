@@ -9,6 +9,7 @@ const setTestService = (ctx: Context, name: string, service: unknown) =>
     ctx.set(name, service)
 
 const testConfig: LivingMemoryConfig = {
+    enableConversationIsolation: false,
     enableSnapshotInjection: false,
     enableUserProfileInjection: false,
     recallStrategy: 'embedding-rerank',

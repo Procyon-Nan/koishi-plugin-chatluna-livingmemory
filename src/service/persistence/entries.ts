@@ -33,7 +33,8 @@ import {
 } from '../memory/origins/source_origins'
 import {
     createActiveMemorySpeakerRows,
-    normalizeEntryRecord
+    normalizeEntryRecord,
+    normalizeSourceConversationId
 } from './normalizers'
 import type { LivingMemoryTransact, LivingMemoryTransaction } from './types'
 import { dreamPendingIndex } from './tables'
@@ -72,6 +73,7 @@ const memoryEntryFields: (keyof MemoryEntryRecord)[] = [
 const indexSourceFields: (keyof MemoryEntryRecord)[] = [
     'id',
     'presetId',
+    'sourceConversationId',
     'status',
     'type',
     'isConsolidated',
@@ -373,10 +375,16 @@ export class LivingMemoryEntryRepository
         if (afterId !== null) {
             selection.where({ id: { $gt: afterId } })
         }
-        return await selection
+        const records = await selection
             .orderBy('id', 'asc')
             .limit(limit)
             .execute(indexSourceFields)
+        return records.map((record) => ({
+            ...record,
+            sourceConversationId: normalizeSourceConversationId(
+                record.sourceConversationId
+            )
+        }))
     }
 
     async listLegacyEmbeddingPage(

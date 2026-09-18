@@ -43,6 +43,7 @@ const requiresMetadataUpdate = (
 ) => {
     return (
         inventory.keywordsHash !== document.keywordsHash ||
+        inventory.sourceConversationId !== document.sourceConversationId ||
         inventory.status !== document.status ||
         inventory.type !== document.type ||
         inventory.isConsolidated !== document.isConsolidated ||

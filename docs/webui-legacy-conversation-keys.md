@@ -12,18 +12,21 @@
 ## 现行口径
 
 - 表列改为可空，`sourceConversationId == null` 是「无会话归属、全局
-  可见」的单一判定；未来的会话隔离读取侧过滤只依赖这一条规则。
+  可见」的单一判定；开启会话隔离时，全局记忆和当前会话记忆共同参与检索。
 - WebUI 手工创建不再发送 conversationId，落库为 null。
 - `normalizeEntryRecord` 在读取边界把空串与 `webui:` 前缀折叠为 null，
   因此导出、列表与后续隔离谓词看到的旧值已经是 null。
+- 向量索引的源记录分页投影复用同一规范化函数；v4 索引的来源列通过启动
+  对账补齐，历史伪会话键在索引中保存为 null。日常索引写入同步规范化后的
+  来源字段，语义与关键词检索在取候选前应用来源条件。
 
 ## 待办：写回迁移
 
 读时折叠不改动数据库行，`webui:` 旧值会一直留在库里。任何绕过
 normalizer 的原始查询都会看到幽灵键，且数据口径长期依赖代码补偿。
 
-- 时机：随会话隔离特性（recall 策略重写）一并实现，避免为一次性
-  清洗单独引入数据迁移机制。
+- 时机：留待主库历史数据清理时实施。本次会话隔离复用读取规范化，
+  仅升级 PGlite 索引结构，不额外迁移主库历史行。
 - 形态：服务启动时的一次性迁移，等价于
   `UPDATE living_memory_entry SET sourceConversationId = NULL WHERE sourceConversationId LIKE 'webui:%'`，
   覆盖活跃与归档行；MySQL / PostgreSQL / SQLite 语法一致。

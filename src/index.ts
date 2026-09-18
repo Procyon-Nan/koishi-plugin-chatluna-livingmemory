@@ -169,6 +169,11 @@ export const Config: Schema<Config> = Schema.intersect([
             .default(20)
     }).description('用户画像配置'),
     Schema.object({
+        enableConversationIsolation: Schema.boolean()
+            .description(
+                '自动召回和 living_memory_search 仅检索当前会话及预设内全局记忆；用户画像与 Dream 仍在预设内共享。'
+            )
+            .default(false),
         recallStrategy: Schema.union([
             'embedding-rerank',
             'agentic-recall'

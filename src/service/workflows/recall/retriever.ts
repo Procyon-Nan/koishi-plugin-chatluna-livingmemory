@@ -27,7 +27,8 @@ export class LivingMemoryRetriever {
         presetId: string,
         input: string,
         limit: number,
-        logger: LivingMemoryLogger = this.logger
+        logger: LivingMemoryLogger = this.logger,
+        conversationId?: string
     ): Promise<RetrievedMemoryItem[]> {
         const hasReranker = isModelConfigured(this.config.rerankModel)
         const candidateCount = hasReranker
@@ -35,6 +36,7 @@ export class LivingMemoryRetriever {
             : limit
         const hits = await this.vectorSearch.searchSemantic({
             presetId,
+            conversationId,
             searchTexts: [input],
             memoryTypes: null,
             maxCandidates: candidateCount

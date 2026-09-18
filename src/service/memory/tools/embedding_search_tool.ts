@@ -16,7 +16,8 @@ import {
 import {
     describeLivingMemoryToolScopeFailure,
     getLivingMemoryToolConfigurable,
-    resolveToolMemoryPresetId
+    resolveToolMemoryPresetId,
+    resolveToolMemoryScopeConfigurable
 } from './tool_runtime'
 export const livingMemorySearchToolDescription = [
     '在你的记忆库中搜索记忆。',
@@ -44,7 +45,8 @@ export class LivingMemorySearchTool extends StructuredTool {
 
     constructor(
         private readonly searchProvider: LivingMemorySearchProvider,
-        private readonly includeMemoryIds: boolean
+        private readonly includeMemoryIds: boolean,
+        private readonly enableConversationIsolation = false
     ) {
         super({ verboseParsingErrors: true })
     }
@@ -61,9 +63,21 @@ export class LivingMemorySearchTool extends StructuredTool {
             )
         }
 
+        let conversationId: string | undefined
+        if (this.enableConversationIsolation) {
+            const resolution = resolveToolMemoryScopeConfigurable(configurable)
+            if (resolution.ok === false) {
+                throw new Error(
+                    describeLivingMemoryToolScopeFailure(resolution.reason)
+                )
+            }
+            conversationId = resolution.scope.conversationId
+        }
+
         const results = await this.searchProvider.searchMemories(
             presetIdResolution.presetId,
-            { ...input, memoryTypes: ['all'] }
+            { ...input, memoryTypes: ['all'] },
+            conversationId
         )
 
         return { results, output: this.formatResults(results) }

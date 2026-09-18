@@ -37,6 +37,7 @@ it('completes embedding-rerank recall without persisting a successful job', asyn
     }
     const coordinator = new LivingMemoryRecallCoordinator(
         {
+            enableConversationIsolation: false,
             recallStrategy: 'embedding-rerank',
             recallTopK: 3,
             recallInterval: 1
@@ -112,6 +113,7 @@ it('does not read recalled memory content for logging', async () => {
     let hydrated = false
     const coordinator = new LivingMemoryRecallCoordinator(
         {
+            enableConversationIsolation: false,
             recallStrategy: 'embedding-rerank',
             recallTopK: 1,
             recallInterval: 1
@@ -156,6 +158,7 @@ it('keeps the previous snapshot when embedding recall returns no results', async
     const captured = createCapturedLogger()
     const coordinator = new LivingMemoryRecallCoordinator(
         {
+            enableConversationIsolation: false,
             recallStrategy: 'embedding-rerank',
             recallTopK: 3,
             recallInterval: 1
@@ -202,7 +205,12 @@ it('completes agentic recall without persisting a successful job', async () => {
         }
     }
     const coordinator = new LivingMemoryRecallCoordinator(
-        { recallStrategy: 'agentic-recall', recallTopK: 3, recallInterval: 1 },
+        {
+            enableConversationIsolation: false,
+            recallStrategy: 'agentic-recall',
+            recallTopK: 3,
+            recallInterval: 1
+        },
         repository,
         { resolve: async () => createRecallQueryResult() },
         { retrieve: async () => [] },
@@ -233,7 +241,12 @@ it('keeps the previous snapshot without persisting a job for <NO_MEMORY>', async
         }
     }
     const coordinator = new LivingMemoryRecallCoordinator(
-        { recallStrategy: 'agentic-recall', recallTopK: 3, recallInterval: 1 },
+        {
+            enableConversationIsolation: false,
+            recallStrategy: 'agentic-recall',
+            recallTopK: 3,
+            recallInterval: 1
+        },
         repository,
         { resolve: async () => createRecallQueryResult() },
         { retrieve: async () => [] },
@@ -265,6 +278,7 @@ it('serializes recall runs for the same scope without persisted running state', 
     })
     const coordinator = new LivingMemoryRecallCoordinator(
         {
+            enableConversationIsolation: false,
             recallStrategy: 'embedding-rerank',
             recallTopK: 3,
             recallInterval: 1
@@ -306,6 +320,7 @@ it('persists one failed recall job when query construction throws', async () => 
     const jobStore = createJobStore()
     const coordinator = new LivingMemoryRecallCoordinator(
         {
+            enableConversationIsolation: false,
             recallStrategy: 'embedding-rerank',
             recallTopK: 3,
             recallInterval: 1
@@ -339,6 +354,7 @@ it('logs recall scope and preserves the original background error', async () => 
     const captured = createCapturedLogger()
     const coordinator = new LivingMemoryRecallCoordinator(
         {
+            enableConversationIsolation: false,
             recallStrategy: 'embedding-rerank',
             recallTopK: 3,
             recallInterval: 1
@@ -377,6 +393,7 @@ it('persists one failed recall job when retrieval throws', async () => {
     const jobStore = createJobStore()
     const coordinator = new LivingMemoryRecallCoordinator(
         {
+            enableConversationIsolation: false,
             recallStrategy: 'embedding-rerank',
             recallTopK: 3,
             recallInterval: 1
@@ -411,6 +428,7 @@ it('persists one failed recall job when snapshot hydration throws', async () => 
     const jobStore = createJobStore()
     const coordinator = new LivingMemoryRecallCoordinator(
         {
+            enableConversationIsolation: false,
             recallStrategy: 'embedding-rerank',
             recallTopK: 3,
             recallInterval: 1
@@ -446,6 +464,7 @@ it('does not persist a recall job when the query is skipped', async () => {
     let retrieverCalls = 0
     const coordinator = new LivingMemoryRecallCoordinator(
         {
+            enableConversationIsolation: false,
             recallStrategy: 'embedding-rerank',
             recallTopK: 3,
             recallInterval: 1
@@ -487,6 +506,7 @@ it('does not persist a recall job when the final query is empty', async () => {
     let retrieverCalls = 0
     const coordinator = new LivingMemoryRecallCoordinator(
         {
+            enableConversationIsolation: false,
             recallStrategy: 'embedding-rerank',
             recallTopK: 3,
             recallInterval: 1
@@ -527,6 +547,7 @@ it('continues recall with empty history without persisting a job', async () => {
     const captured = createCapturedLogger()
     const coordinator = new LivingMemoryRecallCoordinator(
         {
+            enableConversationIsolation: false,
             recallStrategy: 'embedding-rerank',
             recallTopK: 3,
             recallInterval: 1
@@ -573,7 +594,12 @@ it('continues recall with empty history without persisting a job', async () => {
 it('persists one failed agentic recall job when its executor throws', async () => {
     const jobStore = createJobStore()
     const coordinator = new LivingMemoryRecallCoordinator(
-        { recallStrategy: 'agentic-recall', recallTopK: 3, recallInterval: 1 },
+        {
+            enableConversationIsolation: false,
+            recallStrategy: 'agentic-recall',
+            recallTopK: 3,
+            recallInterval: 1
+        },
         {
             createFailedJob: jobStore.createFailedJob,
             upsertSnapshot: async () => {}

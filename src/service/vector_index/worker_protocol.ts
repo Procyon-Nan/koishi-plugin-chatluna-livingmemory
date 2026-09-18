@@ -20,6 +20,7 @@ export interface VectorIndexInspection {
 export interface VectorIndexInventoryItem {
     memoryId: string
     presetId: string
+    sourceConversationId: string | null
     status: MemoryEntryStatus
     type: MemoryEntryType
     isConsolidated: boolean
@@ -55,6 +56,7 @@ export interface VectorIndexMutation {
 
 export interface VectorIndexFilter {
     presetId: string
+    conversationId?: string
     types: MemoryEntryType[] | null
     isConsolidated: boolean | null
 }
@@ -107,6 +109,10 @@ export interface VectorIndexWorkerCommandMap {
     inspect: {
         input: Record<never, never>
         result: VectorIndexInspection
+    }
+    upgradeSchema: {
+        input: Record<never, never>
+        result: { schemaVersion: number }
     }
     queryKnn: {
         input: VectorIndexKnnQuery

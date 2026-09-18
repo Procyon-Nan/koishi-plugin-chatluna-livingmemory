@@ -38,7 +38,7 @@ it.skipIf(process.platform !== 'win32')(
 
             await worker.open(activePath, previousPath)
             await worker.createRebuildFile(rebuildPath, {
-                schemaVersion: 3,
+                schemaVersion: 4,
                 embeddingModelId: 'model-a',
                 dimension: 3,
                 storageEngine: 'pglite-pgvector',

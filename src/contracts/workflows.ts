@@ -145,6 +145,7 @@ export interface ExtractionPayload {
 }
 
 export interface LivingMemoryConfig {
+    enableConversationIsolation: boolean
     enableSnapshotInjection: boolean
     enableUserProfileInjection: boolean
     recallStrategy: MemoryRecallStrategy
@@ -181,7 +182,8 @@ export interface RecallRepository {
 export interface LivingMemorySearchProvider {
     searchMemories(
         presetId: string,
-        input: LivingMemorySearchInput
+        input: LivingMemorySearchInput,
+        conversationId?: string
     ): Promise<LivingMemorySearchResult[]>
 }
 

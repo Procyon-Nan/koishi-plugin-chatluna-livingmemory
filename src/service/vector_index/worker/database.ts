@@ -31,7 +31,8 @@ import {
 import {
     analyzeVectorIndex,
     createVectorIndexSchema,
-    hasVectorIndexSchema
+    hasVectorIndexSchema,
+    upgradeVectorIndexSchema
 } from './schema'
 import { LivingMemoryVectorIndexOwnershipEndpoint } from './ownership_endpoint'
 
@@ -154,6 +155,10 @@ export class LivingMemoryVectorIndexDatabase {
             )
         }
         return inspection
+    }
+
+    async upgradeSchema() {
+        return upgradeVectorIndexSchema(this.requireDatabase())
     }
 
     async inspect(): Promise<VectorIndexInspection> {

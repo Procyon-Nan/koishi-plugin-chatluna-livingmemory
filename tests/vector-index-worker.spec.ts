@@ -44,7 +44,7 @@ afterAll(async () => {
 })
 
 const createManifest = (): MemoryVectorIndexManifest => ({
-    schemaVersion: 3,
+    schemaVersion: 4,
     embeddingModelId: 'test-embedding-model',
     dimension: 3,
     storageEngine: 'pglite-pgvector',
@@ -66,6 +66,7 @@ const createDocument = (
 ): VectorIndexDocument => ({
     memoryId,
     presetId: options.presetId ?? 'preset-a',
+    sourceConversationId: null,
     status: options.status ?? 'active',
     type: options.type ?? 'fact',
     isConsolidated: options.isConsolidated ?? true,

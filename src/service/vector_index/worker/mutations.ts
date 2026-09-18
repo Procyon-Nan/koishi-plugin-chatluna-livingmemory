@@ -66,6 +66,7 @@ export const applyVectorIndexMutation = async (
             const rows = replacements.map(({ document, vector }) => ({
                 memory_id: document.memoryId,
                 preset_id: document.presetId,
+                source_conversation_id: document.sourceConversationId,
                 status: document.status,
                 type: document.type,
                 is_consolidated: document.isConsolidated,
@@ -78,6 +79,7 @@ export const applyVectorIndexMutation = async (
                 `INSERT INTO lm_index_memory (
                     memory_id,
                     preset_id,
+                    source_conversation_id,
                     status,
                     type,
                     is_consolidated,
@@ -89,6 +91,7 @@ export const applyVectorIndexMutation = async (
                 SELECT
                     memory_id,
                     preset_id,
+                    source_conversation_id,
                     status,
                     type,
                     is_consolidated,
@@ -99,6 +102,7 @@ export const applyVectorIndexMutation = async (
                 FROM jsonb_to_recordset($1::jsonb) AS input(
                     memory_id text,
                     preset_id text,
+                    source_conversation_id text,
                     status text,
                     type text,
                     is_consolidated boolean,
@@ -109,6 +113,7 @@ export const applyVectorIndexMutation = async (
                 )
                     ON CONFLICT (memory_id) DO UPDATE SET
                         preset_id = excluded.preset_id,
+                        source_conversation_id = excluded.source_conversation_id,
                         status = excluded.status,
                         type = excluded.type,
                         is_consolidated = excluded.is_consolidated,
@@ -124,6 +129,7 @@ export const applyVectorIndexMutation = async (
             const rows = preserves.map(({ document }) => ({
                 memory_id: document.memoryId,
                 preset_id: document.presetId,
+                source_conversation_id: document.sourceConversationId,
                 status: document.status,
                 type: document.type,
                 is_consolidated: document.isConsolidated,
@@ -134,6 +140,7 @@ export const applyVectorIndexMutation = async (
             const result = await transaction.query<{ memoryId: string }>(
                 `UPDATE lm_index_memory AS memory
                  SET preset_id = input.preset_id,
+                     source_conversation_id = input.source_conversation_id,
                      status = input.status,
                      type = input.type,
                      is_consolidated = input.is_consolidated,
@@ -143,6 +150,7 @@ export const applyVectorIndexMutation = async (
                  FROM jsonb_to_recordset($1::jsonb) AS input(
                     memory_id text,
                     preset_id text,
+                    source_conversation_id text,
                     status text,
                     type text,
                     is_consolidated boolean,

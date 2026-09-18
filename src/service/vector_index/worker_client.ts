@@ -118,6 +118,10 @@ export class LivingMemoryVectorIndexWorkerClient {
         return this.request({ type: 'inspect' })
     }
 
+    upgradeSchema() {
+        return this.request({ type: 'upgradeSchema' })
+    }
+
     queryKnn(query: VectorIndexKnnQuery) {
         return this.request({ type: 'queryKnn', ...query })
     }

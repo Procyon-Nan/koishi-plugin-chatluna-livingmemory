@@ -45,6 +45,7 @@ export type MemoryIndexSourceRecord = Pick<
     MemoryEntryRecord,
     | 'id'
     | 'presetId'
+    | 'sourceConversationId'
     | 'status'
     | 'type'
     | 'isConsolidated'
@@ -62,6 +63,7 @@ export interface LegacyMemoryEmbeddingRecord {
 export interface MemoryIndexDocument {
     id: string
     presetId: string
+    sourceConversationId: string | null
     status: MemoryEntryStatus
     type: MemoryEntryType
     isConsolidated: boolean
@@ -98,6 +100,7 @@ export interface MemoryHybridSearchHit extends MemoryVectorSearchHit {
 
 export interface MemorySemanticSearchInput {
     presetId: string
+    conversationId?: string
     searchTexts: string[]
     memoryTypes: MemoryEntryType[] | null
     maxCandidates: number

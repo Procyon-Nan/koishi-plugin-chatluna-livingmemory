@@ -20,7 +20,7 @@ import { normalizeSpeakerKeys } from '../memory/speaker_identity'
 // 全局可见）；数据库旧值的写回清理机制见 docs/webui-legacy-conversation-keys.md。
 const legacyWebuiConversationPrefix = 'webui:'
 
-const normalizeSourceConversationId = (value: string | null) => {
+export const normalizeSourceConversationId = (value: string | null) => {
     const normalized = value?.trim()
     if (
         normalized == null ||

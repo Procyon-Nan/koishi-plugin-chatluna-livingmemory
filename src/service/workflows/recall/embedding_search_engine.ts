@@ -35,9 +35,14 @@ export class LivingMemoryEmbeddingSearchEngine implements LivingMemorySearchProv
 
     async searchMemories(
         presetId: string,
-        input: LivingMemorySearchInput
+        input: LivingMemorySearchInput,
+        conversationId?: string
     ): Promise<LivingMemorySearchResult[]> {
-        const detailed = await this.searchMemoriesDetailed(presetId, input)
+        const detailed = await this.searchMemoriesDetailed(
+            presetId,
+            input,
+            conversationId
+        )
         return detailed.map((entry) => ({
             id: entry.id,
             type: entry.type,
@@ -54,10 +59,12 @@ export class LivingMemoryEmbeddingSearchEngine implements LivingMemorySearchProv
 
     async searchMemoriesDetailed(
         presetId: string,
-        input: LivingMemorySearchInput
+        input: LivingMemorySearchInput,
+        conversationId?: string
     ): Promise<LivingMemorySearchDetailedResult[]> {
         const hits = await this.vectorSearch.searchHybrid({
             presetId,
+            conversationId,
             searchTexts: input.searchTexts,
             keywords: input.searchKeywords ?? [],
             memoryTypes: resolveMemoryTypes(input),

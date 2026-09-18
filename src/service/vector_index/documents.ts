@@ -7,6 +7,7 @@ export const createVectorIndexDocument = (
 ): VectorIndexDocument => ({
     memoryId: source.id,
     presetId: source.presetId,
+    sourceConversationId: source.sourceConversationId,
     status: source.status,
     type: source.type,
     isConsolidated: source.isConsolidated,

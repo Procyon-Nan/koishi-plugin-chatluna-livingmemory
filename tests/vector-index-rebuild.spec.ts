@@ -21,6 +21,7 @@ const createSource = (
 ): MemoryIndexSourceRecord => ({
     id,
     presetId: 'preset-a',
+    sourceConversationId: null,
     status: 'active',
     type: 'fact',
     isConsolidated: false,
@@ -102,7 +103,7 @@ const createManifest = (
     generation: string,
     dimension = 3
 ): MemoryVectorIndexManifest => ({
-    schemaVersion: 3,
+    schemaVersion: 4,
     embeddingModelId: 'model-a',
     dimension,
     storageEngine: 'pglite-pgvector',

@@ -1,7 +1,7 @@
 import type { PGlite } from '@electric-sql/pglite'
 import type { MemoryVectorIndexManifest } from '../../../contracts/vector_index'
 
-export const VECTOR_INDEX_SCHEMA_VERSION = 3
+export const VECTOR_INDEX_SCHEMA_VERSION = 4
 
 const assertDimension = (dimension: number) => {
     if (!Number.isInteger(dimension) || dimension < 1) {
@@ -39,6 +39,7 @@ export const createVectorIndexSchema = async (
         CREATE TABLE lm_index_memory (
             memory_id text PRIMARY KEY,
             preset_id text NOT NULL,
+            source_conversation_id text,
             status text NOT NULL,
             type text NOT NULL,
             is_consolidated boolean NOT NULL,
@@ -54,6 +55,10 @@ export const createVectorIndexSchema = async (
         CREATE INDEX lm_index_memory_consolidated_filter
         ON lm_index_memory (preset_id, status)
         WHERE is_consolidated = true;
+
+        CREATE INDEX lm_index_memory_conversation_filter
+        ON lm_index_memory (preset_id, source_conversation_id)
+        WHERE status = 'active';
 
         CREATE TABLE lm_index_keywords (
             memory_id text NOT NULL REFERENCES lm_index_memory(memory_id)
@@ -95,6 +100,28 @@ export const createVectorIndexSchema = async (
             manifest.builtAt
         ]
     )
+}
+
+export const upgradeVectorIndexSchema = async (database: PGlite) => {
+    await database.transaction(async (transaction) => {
+        const { rows } = await transaction.query<{ schemaVersion: number }>(
+            'SELECT schema_version AS "schemaVersion" FROM lm_index_manifest WHERE singleton = 1'
+        )
+        if (rows[0]?.schemaVersion !== 3) {
+            throw new Error(
+                'source conversation migration requires index schema v3'
+            )
+        }
+        await transaction.exec(`
+            ALTER TABLE lm_index_memory ADD COLUMN source_conversation_id text;
+            CREATE INDEX lm_index_memory_conversation_filter
+            ON lm_index_memory (preset_id, source_conversation_id)
+            WHERE status = 'active';
+            UPDATE lm_index_manifest SET schema_version = 4 WHERE singleton = 1;
+            UPDATE lm_index_preset_state SET state = 'building';
+        `)
+    })
+    return { schemaVersion: VECTOR_INDEX_SCHEMA_VERSION }
 }
 
 export const analyzeVectorIndex = async (database: PGlite) => {

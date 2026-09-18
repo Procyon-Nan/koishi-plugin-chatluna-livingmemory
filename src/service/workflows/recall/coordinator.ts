@@ -20,7 +20,10 @@ import type {
 
 type LivingMemoryRecallCoordinatorConfig = Pick<
     LivingMemoryConfig,
-    'recallStrategy' | 'recallTopK' | 'recallInterval'
+    | 'recallStrategy'
+    | 'recallTopK'
+    | 'recallInterval'
+    | 'enableConversationIsolation'
 >
 
 type RecallQueryBuilder = Pick<LivingMemoryRecallQueryBuilder, 'resolve'>
@@ -202,7 +205,10 @@ export class LivingMemoryRecallCoordinator {
                 scope.presetId,
                 input,
                 this.config.recallTopK,
-                logger
+                logger,
+                this.config.enableConversationIsolation
+                    ? scope.conversationId
+                    : undefined
             )
             logger.diagnostic('recall.retrieval.completed', {
                 queryLength: input.length,

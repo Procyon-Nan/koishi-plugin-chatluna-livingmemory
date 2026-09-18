@@ -72,7 +72,8 @@ export function apply(ctx: Context, config: LivingMemoryConfig) {
                     toChatLunaStructuredTool(
                         new LivingMemorySearchTool(
                             ctx.chatluna_living_memory,
-                            true
+                            true,
+                            config.enableConversationIsolation
                         )
                     )
             }
