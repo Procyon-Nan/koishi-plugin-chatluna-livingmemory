@@ -116,7 +116,7 @@ export interface MemorySourceMessage {
     speakerLabel?: string
     contentLines?: string[]
     createdAt?: string
-    transcriptLines?: string[]
+    transcriptLines: string[]
     content: string
 }
 
@@ -124,23 +124,10 @@ export interface MemorySourceOrigin {
     messages: MemorySourceMessage[]
 }
 
-export interface LivingMemoryGetMessagesSourceOrigin {
-    originIndex: number
-    messages: MemorySourceMessage[]
-}
-
-export interface LivingMemoryGetMessagesMemory extends Pick<
-    MemoryEntryRecord,
-    'id' | 'type' | 'content' | 'keywords' | 'summary' | 'importance'
-> {
-    createdAt: string
-    updatedAt: string
-    sourceOrigins: LivingMemoryGetMessagesSourceOrigin[]
-}
-
-export interface LivingMemoryGetMessagesOutput {
-    memories: LivingMemoryGetMessagesMemory[]
-    notFoundMemoryIds: string[]
+export interface LivingMemoryGetMessagesMemory {
+    id: string
+    sourceLabel: string | null
+    sourceOrigins: MemorySourceOrigin[]
 }
 
 export interface LivingMemoryTranscriptMessage {

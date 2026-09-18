@@ -3,6 +3,7 @@
 ## 2026-09-18 version:0.22.1
 
 - 071822e: 修复 WebUI 快照详情弹窗命中记忆较多时超出部分被裁剪且无法滚动的问题。Console 宿主样式把弹窗容器改为居中 flex 列布局，超高的弹窗会被压缩到视口高度、再被弹窗自身的 overflow: hidden 裁剪；现对快照弹窗限高并让正文内部滚动，标题栏保持固定。同时修正该弹窗遮罩类名的笔误以恢复遮罩背景样式，并移除其样式文件中没有竞争规则的 !important。
+- pending: living_memory_get_messages 改为单条查看并输出渲染文本。输入从 memoryIds 数组改为单个 memoryId，一次只查看一条记忆的来源对话；输出从 pretty JSON 改为复用来源消息已存的 transcriptLines 按原始聊天记录格式渲染，多段来源分组编号，头部仅保留 id 与 sourceLabel（此前推迟的 source= 渲染随本条落地），去除与 living_memory_search 结果重复的记忆元信息和同正文三重冗余；记忆不存在时明确提示。契约、投影与服务签名同步瘦身。来源消息 transcriptLines 随之改为必填字段：类型收紧为 string[]，读取边界对缺失或非字符串数组的消息、空 messages 来源组一律抛错，畸形手工导入文件不再被静默导入为半空消息，渲染层兜底随之移除。
 
 ## 2026-09-18 version:0.22.0
 

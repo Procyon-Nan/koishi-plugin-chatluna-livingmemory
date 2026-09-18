@@ -97,7 +97,8 @@ const createExtractionCoordinator = (
                     {
                         role: 'user' as const,
                         speakerLabel: '用户',
-                        content: '用户消息'
+                        content: '用户消息',
+                        transcriptLines: ['用户说：用户消息']
                     }
                 ],
                 speakers: [

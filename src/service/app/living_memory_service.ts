@@ -541,11 +541,11 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         )
     }
 
-    async getMemorySourceMessages(presetId: string, memoryIds: string[]) {
+    async getMemorySourceMessages(presetId: string, memoryId: string) {
         return await loadMemorySourceMessages(
             this.repository,
             presetId,
-            memoryIds
+            memoryId
         )
     }
 

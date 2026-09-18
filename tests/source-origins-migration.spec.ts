@@ -86,7 +86,13 @@ it('migrates legacy sourceOrigins objects once and preserves arrays', async () =
             ctx,
             createEntry('current', [
                 {
-                    messages: [{ role: 'user', content: 'hello' }]
+                    messages: [
+                        {
+                            role: 'user',
+                            content: 'hello',
+                            transcriptLines: ['Alice说：hello']
+                        }
+                    ]
                 }
             ])
         )
@@ -98,7 +104,13 @@ it('migrates legacy sourceOrigins objects once and preserves arrays', async () =
         assert.deepEqual(entryById.get('legacy')?.sourceOrigins, [])
         assert.deepEqual(entryById.get('current')?.sourceOrigins, [
             {
-                messages: [{ role: 'user', content: 'hello' }]
+                messages: [
+                    {
+                        role: 'user',
+                        content: 'hello',
+                        transcriptLines: ['Alice说：hello']
+                    }
+                ]
             }
         ])
         assert.equal(await repository.migrateMemorySourceOriginsArray(), 0)

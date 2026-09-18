@@ -32,9 +32,9 @@ const createMemory = (
     ...overrides
 })
 
-it('projects source messages in request order without sharing mutable arrays', async () => {
-    const first = createMemory('memory-1')
-    const second = createMemory('memory-2', {
+it('projects the source messages of one memory without sharing mutable arrays', async () => {
+    const memory = createMemory('memory-1', {
+        sourceLabel: '来源于「摸鱼群」（群聊 ID：10001）的群聊',
         sourceOrigins: [
             {
                 messages: [
@@ -57,44 +57,44 @@ it('projects source messages in request order without sharing mutable arrays', a
         getEntriesByPresetAndIds: async (presetId, memoryIds) => {
             requestedPresetId = presetId
             requestedMemoryIds = memoryIds
-            return [first, second]
+            return [memory]
         },
         listSnapshotsByPreset: async () => []
     }
 
-    const result = await loadMemorySourceMessages(repository, 'preset-1', [
-        second.id,
-        'missing-memory',
-        first.id,
-        second.id
-    ])
+    const result = await loadMemorySourceMessages(
+        repository,
+        'preset-1',
+        'memory-1'
+    )
 
     assert.equal(requestedPresetId, 'preset-1')
-    assert.deepEqual(requestedMemoryIds, [
-        second.id,
-        'missing-memory',
-        first.id
-    ])
-    assert.deepEqual(
-        result.memories.map((memory) => memory.id),
-        [second.id, first.id]
-    )
-    assert.deepEqual(result.notFoundMemoryIds, ['missing-memory'])
-    assert.equal(result.memories[0].createdAt, second.createdAt.toISOString())
-    assert.deepEqual(result.memories[0].sourceOrigins, [
-        {
-            originIndex: 0,
-            messages: second.sourceOrigins[0].messages
-        }
-    ])
-    assert.notStrictEqual(result.memories[0].keywords, second.keywords)
+    assert.deepEqual(requestedMemoryIds, ['memory-1'])
+    assert.deepEqual(result, {
+        id: 'memory-1',
+        sourceLabel: '来源于「摸鱼群」（群聊 ID：10001）的群聊',
+        sourceOrigins: [{ messages: memory.sourceOrigins[0].messages }]
+    })
     assert.notStrictEqual(
-        result.memories[0].sourceOrigins[0].messages,
-        second.sourceOrigins[0].messages
+        result?.sourceOrigins[0].messages,
+        memory.sourceOrigins[0].messages
     )
     assert.notStrictEqual(
-        result.memories[0].sourceOrigins[0].messages[0].contentLines,
-        second.sourceOrigins[0].messages[0].contentLines
+        result?.sourceOrigins[0].messages[0].contentLines,
+        memory.sourceOrigins[0].messages[0].contentLines
+    )
+})
+
+it('returns null when the memory is absent from the preset', async () => {
+    const repository: LivingMemoryQueryProjectionRepository = {
+        getEntriesByIds: async () => [],
+        getEntriesByPresetAndIds: async () => [],
+        listSnapshotsByPreset: async () => []
+    }
+
+    assert.equal(
+        await loadMemorySourceMessages(repository, 'preset-1', 'missing'),
+        null
     )
 })
 

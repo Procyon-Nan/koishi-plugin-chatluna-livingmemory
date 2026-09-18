@@ -47,7 +47,7 @@ export interface MemorySourceMessage {
     speakerLabel?: string
     contentLines?: string[]
     createdAt?: string
-    transcriptLines?: string[]
+    transcriptLines: string[]
     content: string
 }
 

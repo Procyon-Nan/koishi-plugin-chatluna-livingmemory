@@ -49,20 +49,29 @@ const normalizeSourceMessage = (value: unknown): MemorySourceMessage => {
     if (value.createdAt != null && typeof value.createdAt !== 'string') {
         throw new Error('sourceOrigins message createdAt must be a string.')
     }
+    if (
+        !Array.isArray(value.transcriptLines) ||
+        !value.transcriptLines.every(
+            (item: unknown) => typeof item === 'string'
+        )
+    ) {
+        throw new Error(
+            'sourceOrigins message transcriptLines must be string[].'
+        )
+    }
 
     const speakerLabel =
         typeof value.speakerLabel === 'string' ? value.speakerLabel : undefined
     const createdAt =
         typeof value.createdAt === 'string' ? value.createdAt : undefined
     const contentLines = readOptionalStringArray(value, 'contentLines')
-    const transcriptLines = readOptionalStringArray(value, 'transcriptLines')
 
     return {
         role: value.role,
         ...(speakerLabel == null ? {} : { speakerLabel }),
         ...(contentLines == null ? {} : { contentLines }),
         ...(createdAt == null ? {} : { createdAt }),
-        ...(transcriptLines == null ? {} : { transcriptLines }),
+        transcriptLines: [...value.transcriptLines],
         content: value.content
     }
 }
@@ -78,9 +87,7 @@ export const cloneSourceMessage = (
         ? {}
         : { contentLines: cloneStringArray(message.contentLines) }),
     ...(message.createdAt == null ? {} : { createdAt: message.createdAt }),
-    ...(message.transcriptLines == null
-        ? {}
-        : { transcriptLines: cloneStringArray(message.transcriptLines) }),
+    transcriptLines: [...message.transcriptLines],
     content: message.content
 })
 
@@ -145,8 +152,10 @@ export const normalizeMemorySourceOrigins = (
         if (!isRecord(origin)) {
             throw new Error('sourceOrigins item must be an object.')
         }
-        if (!Array.isArray(origin.messages)) {
-            throw new Error('sourceOrigins item messages must be an array.')
+        if (!Array.isArray(origin.messages) || origin.messages.length === 0) {
+            throw new Error(
+                'sourceOrigins item messages must be a non-empty array.'
+            )
         }
 
         return {

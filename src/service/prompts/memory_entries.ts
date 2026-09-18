@@ -1,4 +1,7 @@
-import type { MemoryEntryType } from '../../contracts/memory'
+import type {
+    LivingMemoryGetMessagesMemory,
+    MemoryEntryType
+} from '../../contracts/memory'
 import type { DreamMemoryEntryRecord } from '../../contracts/workflows'
 
 export const formatMemoryEntryForPrompt = (entry: DreamMemoryEntryRecord) => {
@@ -49,4 +52,35 @@ export const renderMemoriesForModel = (
             ].join('\n')
         )
         .join(modelMemoryViewSeparator)
+}
+
+// transcriptLines 是提取工作流输入与 <chat_history> 注入共用的原始格式，
+// 由 source_serializer 无条件写入、类型与导入边界强制存在，直接作为来源
+// 对话的模型视图复用。
+export const renderMemorySourceMessagesForModel = (
+    memory: LivingMemoryGetMessagesMemory
+) => {
+    const header = [
+        `id=${memory.id}`,
+        ...(memory.sourceLabel == null
+            ? []
+            : [`source=${memory.sourceLabel}`])
+    ]
+
+    if (memory.sourceOrigins.length === 0) {
+        return [...header, '（该记忆没有记录来源消息）'].join('\n')
+    }
+
+    const originCount = memory.sourceOrigins.length
+    const blocks = memory.sourceOrigins.map((origin, index) => {
+        const lines = [
+            ...(originCount > 1
+                ? [`来源对话 ${index + 1}/${originCount}：`]
+                : []),
+            ...origin.messages.flatMap((message) => message.transcriptLines)
+        ]
+        return lines.join('\n')
+    })
+
+    return [...header, blocks.join('\n\n')].join('\n')
 }

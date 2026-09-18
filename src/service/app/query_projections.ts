@@ -1,5 +1,5 @@
 import type {
-    LivingMemoryGetMessagesOutput,
+    LivingMemoryGetMessagesMemory,
     MemoryEntryRecord,
     MemorySnapshotRecord,
     MemorySnapshotWithResolvedItems
@@ -21,42 +21,22 @@ export interface LivingMemoryQueryProjectionRepository {
 export async function loadMemorySourceMessages(
     repository: LivingMemoryQueryProjectionRepository,
     presetId: string,
-    memoryIds: string[]
-): Promise<LivingMemoryGetMessagesOutput> {
-    const orderedIds = [...new Set(memoryIds)]
-    const entries = await repository.getEntriesByPresetAndIds(
-        presetId,
-        orderedIds
-    )
-    const entryById = new Map(entries.map((entry) => [entry.id, entry]))
+    memoryId: string
+): Promise<LivingMemoryGetMessagesMemory | null> {
+    const entries = await repository.getEntriesByPresetAndIds(presetId, [
+        memoryId
+    ])
+    const entry = entries[0]
+    if (entry == null) {
+        return null
+    }
 
     return {
-        memories: orderedIds.flatMap((id) => {
-            const entry = entryById.get(id)
-            if (entry == null) {
-                return []
-            }
-
-            return [
-                {
-                    id: entry.id,
-                    type: entry.type,
-                    content: entry.content,
-                    keywords: [...entry.keywords],
-                    summary: entry.summary,
-                    importance: entry.importance,
-                    createdAt: entry.createdAt.toISOString(),
-                    updatedAt: entry.updatedAt.toISOString(),
-                    sourceOrigins: entry.sourceOrigins.map(
-                        (origin, originIndex) => ({
-                            originIndex,
-                            messages: origin.messages.map(cloneSourceMessage)
-                        })
-                    )
-                }
-            ]
-        }),
-        notFoundMemoryIds: orderedIds.filter((id) => !entryById.has(id))
+        id: entry.id,
+        sourceLabel: entry.sourceLabel,
+        sourceOrigins: entry.sourceOrigins.map((origin) => ({
+            messages: origin.messages.map(cloneSourceMessage)
+        }))
     }
 }
 

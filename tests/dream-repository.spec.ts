@@ -85,7 +85,8 @@ it('atomically updates an active Dream merge and archives its sources', async ()
                 messages: [
                     {
                         role: 'user' as const,
-                        content: 'merged source message'
+                        content: 'merged source message',
+                        transcriptLines: ['Alice说：merged source message']
                     }
                 ]
             }

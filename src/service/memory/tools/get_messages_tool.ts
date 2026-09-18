@@ -2,6 +2,7 @@ import { StructuredTool } from '@langchain/core/tools'
 import type { ToolRunnableConfig } from '@langchain/core/tools'
 import type { Context } from 'koishi'
 import type { z } from 'zod'
+import { renderMemorySourceMessagesForModel } from '../../prompts/memory_entries'
 import {
     livingMemoryGetMessagesInputSchema,
     livingMemoryGetMessagesToolName
@@ -13,15 +14,13 @@ import {
 } from './tool_runtime'
 
 export const livingMemoryGetMessagesToolDescription = [
-    '按记忆 ID 获取当前预设中记忆的来源对话消息。',
+    '查看单条记忆的来源对话消息。',
     '',
-    '当你需要查看特定记忆是否有来源对话消息支撑时使用此工具。',
-    '- memoryIds：必填 JSON 数组，包含至少一个来自 living_memory_search 结果的记忆 ID。',
-    '- 直接传递数组，禁止把数组编码成 JSON 字符串。',
-    '- 本工具仅读取当前预设拥有的记忆。',
-    '- 每条结果包含目标记忆 ID、类别（type）、内容（content）、摘要（summary）、关键词（keywords）、重要度（importance）、时间戳以及 sourceOrigins。',
-    '- sourceOrigins 以 originIndex 索引展示。缺失的来源表示该记忆没有记录的来源消息。',
-    '- 结果中还包含 notFoundMemoryIds，列出在当前预设中不存在的 ID。'
+    '当你需要确认某条记忆的原始对话依据时使用此工具。',
+    '- memoryId：必填字符串，来自 living_memory_search 结果的记忆 ID。',
+    '- 每次只查看一条记忆；结果按原始聊天记录格式渲染其全部来源对话，多段来源分组编号。',
+    '- 没有记录来源消息的记忆会明确说明。',
+    '- 本工具仅读取当前预设拥有的记忆。'
 ].join('\n')
 
 type LivingMemoryGetMessagesToolInput = z.infer<
@@ -55,11 +54,14 @@ export class LivingMemoryGetMessagesTool extends StructuredTool {
         if (!livingMemory) {
             throw new Error('Living Memory service not available')
         }
-        const result = await livingMemory.getMemorySourceMessages(
+        const memory = await livingMemory.getMemorySourceMessages(
             presetIdResolution.presetId,
-            input.memoryIds
+            input.memoryId
         )
 
-        return JSON.stringify(result, null, 2)
+        if (memory == null) {
+            return `记忆 ${input.memoryId} 不存在于当前预设。`
+        }
+        return renderMemorySourceMessagesForModel(memory)
     }
 }

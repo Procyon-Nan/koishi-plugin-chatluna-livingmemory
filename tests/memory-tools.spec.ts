@@ -25,9 +25,14 @@ import {
     type LivingMemoryToolConfigurable
 } from '../src/service/memory/tools/tool_runtime'
 
-const context = {
-    logger: () => ({ info: () => {}, warn: () => {} })
-} as unknown as Context
+const createContext = (livingMemory?: unknown) =>
+    ({
+        logger: () => ({ info: () => {}, warn: () => {} }),
+        get: (name: string) =>
+            name === 'chatluna_living_memory' ? livingMemory : undefined
+    }) as unknown as Context
+
+const context = createContext()
 
 const mockEngine = {
     searchMemories: async () => []
@@ -74,16 +79,74 @@ it('exposes the strict search schema directly to the model-facing tool', async (
     )
 })
 
-it('exposes the strict source-message schema and rejects stringified ids', async () => {
+it('exposes the single-memory source-message schema', async () => {
     assert.equal(getMessagesTool.schema, livingMemoryGetMessagesInputSchema)
-    assert.match(livingMemoryGetMessagesToolDescription, /必填 JSON 数组/u)
     assert.match(
         livingMemoryGetMessagesToolDescription,
-        /禁止把数组编码成 JSON 字符串/u
+        /memoryId：必填字符串/u
     )
+})
 
-    await rejectsStringifiedArray(
-        getMessagesTool.invoke({ memoryIds: '["memory-1"]' } as never)
+it('renders source messages as the original transcript of one memory', async () => {
+    const service = {
+        getMemorySourceMessages: async (_presetId: string, memoryId: string) =>
+            memoryId === 'memory-1'
+                ? {
+                      id: 'memory-1',
+                      sourceLabel:
+                          '来源于「摸鱼群」（群聊 ID：10001）的群聊',
+                      sourceOrigins: [
+                          {
+                              messages: [
+                                  {
+                                      role: 'user',
+                                      content: '展览你去看了吗',
+                                      transcriptLines: [
+                                          '[2026-07-01 12:00] Alice说：展览你去看了吗'
+                                      ]
+                                  }
+                              ]
+                          },
+                          {
+                              messages: [
+                                  {
+                                      role: 'assistant',
+                                      content: '下周再一起去',
+                                      transcriptLines: [
+                                          '[2026-07-03 15:00] Alice说：下周再一起去'
+                                      ]
+                                  }
+                              ]
+                          }
+                      ]
+                  }
+                : null
+    }
+    const config = toolConfig({
+        preset: 'default',
+        agentContext: { kind: 'main', source: 'chatluna' }
+    })
+
+    assert.equal(
+        await new LivingMemoryGetMessagesTool(
+            createContext(service)
+        ).invoke({ memoryId: 'memory-1' }, config),
+        [
+            'id=memory-1',
+            'source=来源于「摸鱼群」（群聊 ID：10001）的群聊',
+            '来源对话 1/2：',
+            '[2026-07-01 12:00] Alice说：展览你去看了吗',
+            '',
+            '来源对话 2/2：',
+            '[2026-07-03 15:00] Alice说：下周再一起去'
+        ].join('\n')
+    )
+    assert.equal(
+        await new LivingMemoryGetMessagesTool(createContext(service)).invoke(
+            { memoryId: 'missing' },
+            config
+        ),
+        '记忆 missing 不存在于当前预设。'
     )
 })
 

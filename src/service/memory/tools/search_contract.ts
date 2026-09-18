@@ -85,12 +85,9 @@ export const livingMemorySearchInputSchema = z.object({
         .describe(searchKeywordDescription)
 })
 
-const memoryIdsDescription =
-    '要查看的记忆 ID。提供至少一个来自 living_memory_search 结果的 ID。'
+const memoryIdDescription =
+    '要查看来源对话的记忆 ID。使用 living_memory_search 结果中返回的 ID。'
 
 export const livingMemoryGetMessagesInputSchema = z.object({
-    memoryIds: z
-        .array(z.string().trim().min(1))
-        .min(1)
-        .describe(memoryIdsDescription)
+    memoryId: z.string().trim().min(1).describe(memoryIdDescription)
 })
