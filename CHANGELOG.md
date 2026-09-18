@@ -6,6 +6,7 @@
 - b851d05: living_memory_get_messages 改为单条查看并输出渲染文本。输入从 memoryIds 数组改为单个 memoryId，一次只查看一条记忆的来源对话；输出从 pretty JSON 改为复用来源消息已存的 transcriptLines 按原始聊天记录格式渲染，多段来源分组编号，头部仅保留 id 与 sourceLabel（此前推迟的 source= 渲染随本条落地），去除与 living_memory_search 结果重复的记忆元信息和同正文三重冗余；记忆不存在时明确提示。契约、投影与服务签名同步瘦身。来源消息 transcriptLines 随之改为必填字段：类型收紧为 string[]，读取边界对缺失或非字符串数组的消息、空 messages 来源组一律抛错，畸形手工导入文件不再被静默导入为半空消息，渲染层兜底随之移除。
 - pending: living_memory_search 主对话工具新增必填 memoryStatus 参数（active/archived/all），允许模型显式检索归档记忆；工具 schema 与描述按实例区分，召回内部实例不暴露该参数。向量索引查询协议与 SQL 过滤同步参数化 status 条件，召回检索（embedding-rerank）、agentic recall 内部搜索与 Dream 邻居查询显式固定 active，行为不变；WebUI 检索 RPC 走引擎默认活跃，行为不变。客户端契约镜像同步 memoryStatus，基准脚本状态参数展开与 worker 语义对齐，AGENTS.md 索引约束相应改写。
 - pending: 全仓 oxfmt 格式化清偿存量格式偏差。格式化 16 个 src/tests TypeScript 文件与 2 个 client 组件，全部为折行重排与联合类型排版调整，语义零变化；新增 .prettierignore 排除 *.md，markdown 保持手写排版不参与格式化，AGENTS.md 等文档不受影响；oxfmt 默认尊重 .gitignore，lib/dist 生成产物不在覆盖范围。
+- pending: lint 门禁纳入 oxfmt --check。yarn lint 从仅运行 oxlint 改为 oxlint 加格式检查，格式偏差自此无法通过标准验证流程；AGENTS.md 验证要求同步注明。已做负向自检：注入格式偏差后 yarn lint 退出码 1，还原后通过。
 
 ## 2026-09-18 version:0.22.0
 

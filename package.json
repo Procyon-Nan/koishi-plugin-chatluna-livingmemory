@@ -86,7 +86,7 @@
         "bump": "yakumo version",
         "dep": "yakumo upgrade",
         "pub": "yakumo publish",
-        "lint": "oxlint",
+        "lint": "oxlint && oxfmt --check",
         "lint-fix": "oxlint --fix && oxfmt"
     },
     "koishi": {

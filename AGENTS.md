@@ -208,7 +208,8 @@ chatluna-livingmemory/
 ## 验证要求
 
 1. 仅文档变更：运行 `git diff --check`。
-2. 服务端源码变更：运行 `yarn lint` 与 `git diff --check`。
+2. 服务端源码变更：运行 `yarn lint`（oxlint 加 `oxfmt --check`，含格式
+   检查；`*.md` 经 `.prettierignore` 排除）与 `git diff --check`。
 3. 契约、持久化或 RPC 变更：另运行
    `yarn atsc -p tsconfig.json --noEmit`。
 4. 客户端或 Console 变更：另运行 `yarn build:client`。
