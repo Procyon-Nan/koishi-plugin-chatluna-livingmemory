@@ -118,7 +118,6 @@ export const upgradeVectorIndexSchema = async (database: PGlite) => {
             ON lm_index_memory (preset_id, source_conversation_id)
             WHERE status = 'active';
             UPDATE lm_index_manifest SET schema_version = 4 WHERE singleton = 1;
-            UPDATE lm_index_preset_state SET state = 'building';
         `)
     })
     return { schemaVersion: VECTOR_INDEX_SCHEMA_VERSION }

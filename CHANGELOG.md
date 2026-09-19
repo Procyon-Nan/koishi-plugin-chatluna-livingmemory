@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2026-09-19 version:0.23.1
+
+- pending: 修复向量索引全局状态被残留状态行永久拖在 building、召回持续失败且 WebUI 恒显「同步中」的问题，并重构索引状态机制。事故根因：`lm_index_preset_state` 中既无 DB 条目也无索引文档的孤儿状态行（历史版本对账中断残留或 v3→v4 升级全表置 building 产生）不在全量对账的预设集合内，永远不会被清除；旧门禁以聚合状态为先导检查，单个非 ready 行即可拦死所有预设的召回。机制整改：预设状态账本只落盘终态 ready/dirty，移除 reconcile 开头的 building 预写、rebuild 重建库内无读者的 building 进度标记、schema 升级的全表 SET building 与变更失败路径按错误瞬态（building/unavailable）落盘；全量对账预设集合扩为 DB 条目 ∪ 索引文档 ∪ 状态行，孤儿行经 total=0 的 clearPreset 删除，存量部署下次启动自愈；就绪门禁改为按预设独立判定，仅索引级条件（manifest 未建立、全局维护窗口进行中、worker 故障）拦截全部读取，A 预设非终态不再阻断 B 预设召回；主进程状态存储重构为 inspection 镜像加运行时 overlay 的单轨模型，启动时播种 worker 初检结果，维护窗口与按预设对账的展示标记互不覆盖。AGENTS.md 设计约束同步记录账本终态与门禁不变量。评审加固：全局维护窗口改为开方负责关窗（计数模型，任务通道的 setCurrentJob(null) 不再触碰窗口，重叠开窗时先结束的任务不得提前关窗）；markPresetState 协议输入收窄为终态 VectorIndexPresetStateMark，账本不变量由编译器承担，孤儿行回归 fixture 改为经 PGlite 直写模拟旧版遗留数据。
+
 ## 2026-09-18 version:0.23.0
 
 - b851d05: living_memory_get_messages 改为单条查看并输出渲染文本。输入从 memoryIds 数组改为单个 memoryId，一次只查看一条记忆的来源对话；输出从 pretty JSON 改为复用来源消息已存的 transcriptLines 按原始聊天记录格式渲染，多段来源分组编号，头部仅保留 id 与 sourceLabel（此前推迟的 source= 渲染随本条落地），去除与 living_memory_search 结果重复的记忆元信息和同正文三重冗余；记忆不存在时明确提示。契约、投影与服务签名同步瘦身。来源消息 transcriptLines 随之改为必填字段：类型收紧为 string[]，读取边界对缺失或非字符串数组的消息、空 messages 来源组一律抛错，畸形手工导入文件不再被静默导入为半空消息，渲染层兜底随之移除。

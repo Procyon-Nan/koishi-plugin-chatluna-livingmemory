@@ -373,6 +373,11 @@ export class LivingMemoryVectorIndexMaintenance {
         for (const inventory of inspection.inventory) {
             presetIds.add(inventory.presetId)
         }
+        // 状态行里的预设也要对账：只剩状态行的孤儿由 total=0 的 clearPreset 删除，
+        // 否则残留的非终态行会把全局状态永远拖在 building/dirty。
+        for (const preset of inspection.presets) {
+            presetIds.add(preset.presetId)
+        }
 
         for (const presetId of [...presetIds].sort()) {
             await reconcileVectorIndexPreset({

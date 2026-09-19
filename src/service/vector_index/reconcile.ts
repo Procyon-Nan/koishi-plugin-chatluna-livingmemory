@@ -97,15 +97,6 @@ export const reconcileVectorIndexPreset = async (options: {
         return 0
     }
 
-    await worker.markPresetState({
-        presetId,
-        state: 'building',
-        expectedCount: total,
-        indexedCount: 0,
-        lastError: null,
-        updatedAt: Date.now()
-    })
-
     let indexedCount = 0
     try {
         const inventory = await readPresetInventory(worker, presetId)

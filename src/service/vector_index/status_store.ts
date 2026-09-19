@@ -1,174 +1,169 @@
 import type {
+    MemoryVectorIndexManifest,
+    MemoryVectorIndexPresetStatus,
     MemoryVectorIndexState,
     MemoryVectorIndexStatus
 } from '../../contracts/vector_index'
 import { LivingMemoryVectorIndexError } from './errors'
 import type { VectorIndexInspection } from './worker_protocol'
 
-const createInitialStatus = (): MemoryVectorIndexStatus => ({
-    state: 'unavailable',
-    manifest: null,
-    presets: [],
-    currentJobId: null,
-    lastError: null
-})
-
-const resolveInspectionState = (
-    inspection: VectorIndexInspection
-): MemoryVectorIndexState => {
-    if (inspection.manifest === null) {
-        return 'building'
-    }
-    for (const state of ['dirty', 'building', 'unavailable'] as const) {
-        if (inspection.presets.some((preset) => preset.state === state)) {
-            return state
-        }
-    }
-    return 'ready'
+interface VectorIndexBuildingPreset {
+    expectedCount: number
+    updatedAt: number
 }
 
+interface VectorIndexStatusOverlay {
+    /**
+     * 已开启且尚未结束的全局维护窗口数（启动任务/手动重建）。
+     * 窗口由开启方 markStarting 负责 endMaintenance 结束，大于 0 时读一律拦截；
+     * 用计数而非布尔，避免重叠开窗时先结束的任务提前关掉后来者的窗口。
+     */
+    maintenanceDepth: number
+    /** 正在按预设对账的展示标记；只影响显示，不参与门禁。 */
+    readonly buildingPresets: Map<string, VectorIndexBuildingPreset>
+    /** worker 或索引启动失败的运行时消息，拦截一切读。 */
+    unavailableMessage: string | null
+    /** 维护任务失败的最近错误，仅展示。 */
+    runtimeError: string | null
+    currentJobId: string | null
+}
+
+/**
+ * inspection 镜像 + 运行时 overlay 的单轨状态存储：
+ * presets 与 manifest 只来自 applyInspection，mark 类只写 overlay，
+ * 两者互不覆盖。持久账本只应写入终态 ready/dirty。
+ */
 export class VectorIndexStatusStore {
-    private status = createInitialStatus()
+    private manifest: MemoryVectorIndexManifest | null = null
+    private readonly presets = new Map<string, MemoryVectorIndexPresetStatus>()
+    private readonly overlay: VectorIndexStatusOverlay = {
+        maintenanceDepth: 0,
+        buildingPresets: new Map(),
+        unavailableMessage: null,
+        runtimeError: null,
+        currentJobId: null
+    }
 
     reset() {
-        this.status = createInitialStatus()
+        this.manifest = null
+        this.presets.clear()
+        this.overlay.maintenanceDepth = 0
+        this.overlay.buildingPresets.clear()
+        this.overlay.unavailableMessage = null
+        this.overlay.runtimeError = null
+        this.overlay.currentJobId = null
     }
 
     snapshot(): MemoryVectorIndexStatus {
-        let manifest: MemoryVectorIndexStatus['manifest'] = null
-        if (this.status.manifest !== null) {
-            manifest = { ...this.status.manifest }
+        const presets: MemoryVectorIndexPresetStatus[] = []
+        for (const [presetId, preset] of this.presets) {
+            const building = this.overlay.buildingPresets.get(presetId)
+            presets.push(
+                building === undefined
+                    ? { ...preset }
+                    : {
+                          ...preset,
+                          state: 'building',
+                          expectedCount: building.expectedCount,
+                          updatedAt: building.updatedAt
+                      }
+            )
         }
+        for (const [presetId, building] of this.overlay.buildingPresets) {
+            if (this.presets.has(presetId)) {
+                continue
+            }
+            presets.push({
+                presetId,
+                state: 'building',
+                expectedCount: building.expectedCount,
+                indexedCount: 0,
+                lastError: null,
+                updatedAt: building.updatedAt
+            })
+        }
+        presets.sort((left, right) =>
+            left.presetId.localeCompare(right.presetId)
+        )
         return {
-            ...this.status,
-            manifest,
-            presets: this.status.presets.map((preset) => ({ ...preset }))
+            state: this.resolveState(presets),
+            manifest: this.manifest === null ? null : { ...this.manifest },
+            presets,
+            currentJobId: this.overlay.currentJobId,
+            lastError:
+                this.overlay.runtimeError ??
+                this.overlay.unavailableMessage ??
+                presets.find((preset) => preset.lastError !== null)
+                    ?.lastError ??
+                null
         }
     }
 
     setCurrentJob(jobId: string | null) {
-        this.status = { ...this.status, currentJobId: jobId }
+        this.overlay.currentJobId = jobId
     }
 
-    markStarting(lastError: string | null) {
-        this.status = { ...this.status, state: 'building', lastError }
+    markStarting() {
+        this.overlay.maintenanceDepth += 1
+        this.overlay.runtimeError = null
+    }
+
+    endMaintenance() {
+        this.overlay.maintenanceDepth -= 1
     }
 
     markBuilding(jobId: string) {
-        const updatedAt = Date.now()
-        this.status = {
-            ...this.status,
-            state: 'building',
-            presets: this.status.presets.map((preset) => ({
-                ...preset,
-                state: 'building',
-                lastError: null,
-                updatedAt
-            })),
-            currentJobId: jobId,
-            lastError: null
-        }
+        this.overlay.currentJobId = jobId
     }
 
     markPresetBuilding(presetId: string, jobId: string, expectedCount: number) {
-        const updatedAt = Date.now()
-        const presets = this.status.presets.map((preset) => {
-            if (preset.presetId !== presetId) {
-                return preset
-            }
-            return {
-                ...preset,
-                state: 'building' as const,
-                expectedCount,
-                lastError: null,
-                updatedAt
-            }
+        this.overlay.buildingPresets.set(presetId, {
+            expectedCount,
+            updatedAt: Date.now()
         })
-        if (!presets.some((preset) => preset.presetId === presetId)) {
-            presets.push({
-                presetId,
-                state: 'building',
-                expectedCount,
-                indexedCount: 0,
-                lastError: null,
-                updatedAt
-            })
-        }
-        this.status = {
-            ...this.status,
-            state: 'building',
-            presets,
-            currentJobId: jobId,
-            lastError: null
-        }
+        this.overlay.currentJobId = jobId
+    }
+
+    clearPresetBuilding(presetId: string) {
+        this.overlay.buildingPresets.delete(presetId)
     }
 
     applyInspection(inspection: VectorIndexInspection) {
-        const failedPreset = inspection.presets.find(
-            (preset) => preset.lastError !== null
-        )
-        let lastError: string | null = null
-        if (failedPreset !== undefined) {
-            lastError = failedPreset.lastError
-        }
-        this.status = {
-            state: resolveInspectionState(inspection),
-            manifest: inspection.manifest,
-            presets: inspection.presets,
-            currentJobId: this.status.currentJobId,
-            lastError
+        this.manifest = inspection.manifest
+        this.presets.clear()
+        for (const preset of inspection.presets) {
+            this.presets.set(preset.presetId, { ...preset })
         }
     }
 
-    markFailure(state: MemoryVectorIndexState, message: string) {
-        this.status = { ...this.status, state, lastError: message }
+    markUnavailable(message: string) {
+        this.overlay.unavailableMessage = message
     }
 
-    markMaintenanceFailure(state: MemoryVectorIndexState, message: string) {
-        this.status = {
-            ...this.status,
-            state,
-            currentJobId: null,
-            lastError: message
-        }
-    }
-
-    markWorkerFailure(error: Error) {
-        const updatedAt = Date.now()
-        this.status = {
-            ...this.status,
-            state: 'unavailable',
-            presets: this.status.presets.map((preset) => ({
-                ...preset,
-                state: 'unavailable',
-                lastError: error.message,
-                updatedAt
-            })),
-            lastError: error.message
-        }
+    markRuntimeError(message: string) {
+        this.overlay.runtimeError = message
     }
 
     getPresetIndexedCount(presetId: string) {
-        const preset = this.status.presets.find(
-            (item) => item.presetId === presetId
-        )
-        if (preset === undefined) {
-            return 0
-        }
-        return preset.indexedCount
+        return this.presets.get(presetId)?.indexedCount ?? 0
     }
 
     assertPresetReady(presetId: string) {
-        if (this.status.state !== 'ready') {
+        if (this.overlay.unavailableMessage !== null) {
             throw new LivingMemoryVectorIndexError(
                 'not-ready',
-                this.status.state,
-                `vector index is not ready: state=${this.status.state}`
+                'unavailable',
+                'vector index is not ready: state=unavailable'
             )
         }
-        const preset = this.status.presets.find(
-            (item) => item.presetId === presetId
-        )
+        if (this.manifest === null || this.overlay.maintenanceDepth > 0) {
+            throw new LivingMemoryVectorIndexError(
+                'not-ready',
+                'building',
+                'vector index is not ready: state=building'
+            )
+        }
+        const preset = this.presets.get(presetId)
         if (preset !== undefined && preset.state !== 'ready') {
             throw new LivingMemoryVectorIndexError(
                 'not-ready',
@@ -176,5 +171,27 @@ export class VectorIndexStatusStore {
                 `vector index preset is not ready: preset=${presetId}, state=${preset.state}`
             )
         }
+    }
+
+    private resolveState(
+        presets: MemoryVectorIndexPresetStatus[]
+    ): MemoryVectorIndexState {
+        if (this.overlay.unavailableMessage !== null) {
+            return 'unavailable'
+        }
+        if (
+            this.overlay.maintenanceDepth > 0 ||
+            this.manifest === null ||
+            presets.some((preset) => preset.state === 'building')
+        ) {
+            return 'building'
+        }
+        if (presets.some((preset) => preset.state === 'unavailable')) {
+            return 'unavailable'
+        }
+        if (presets.some((preset) => preset.state === 'dirty')) {
+            return 'dirty'
+        }
+        return 'ready'
     }
 }

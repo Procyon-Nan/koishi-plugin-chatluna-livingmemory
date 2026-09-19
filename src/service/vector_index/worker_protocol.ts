@@ -10,6 +10,19 @@ import type {
 } from '../../contracts/vector_index'
 import type { LivingMemoryVectorIndexErrorCode } from './errors'
 
+/**
+ * 持久账本只接受终态；进行中与瞬态条件只存在于主进程 overlay。
+ * 展示用的 MemoryVectorIndexPresetStatus 合并 overlay 后可为四态，两者不可混用。
+ */
+export interface VectorIndexPresetStateMark {
+    presetId: string
+    state: 'ready' | 'dirty'
+    expectedCount: number
+    indexedCount: number
+    lastError: string | null
+    updatedAt: number
+}
+
 export interface VectorIndexInspection {
     vectorExtensionVersion: string
     manifest: MemoryVectorIndexManifest | null
@@ -148,7 +161,7 @@ export interface VectorIndexWorkerCommandMap {
         result: VectorIndexInventoryPage
     }
     markPresetState: {
-        input: MemoryVectorIndexPresetStatus
+        input: VectorIndexPresetStateMark
         result: MemoryVectorIndexPresetStatus
     }
     createRebuildFile: {

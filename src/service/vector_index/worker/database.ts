@@ -5,7 +5,6 @@ import { existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type {
     MemoryVectorIndexManifest,
-    MemoryVectorIndexPresetStatus,
     MemoryVectorIndexState
 } from '../../../contracts/vector_index'
 import { summarizeError } from '../../shared/utils'
@@ -14,6 +13,7 @@ import type {
     VectorIndexInspection,
     VectorIndexKnnQuery,
     VectorIndexMutation,
+    VectorIndexPresetStateMark,
     VectorIndexReplaceUpsert
 } from '../worker_protocol'
 import {
@@ -282,7 +282,7 @@ export class LivingMemoryVectorIndexDatabase {
         )
     }
 
-    markPresetState(status: MemoryVectorIndexPresetStatus) {
+    markPresetState(status: VectorIndexPresetStateMark) {
         return markVectorIndexPresetState(this.requireDatabase(), status)
     }
 

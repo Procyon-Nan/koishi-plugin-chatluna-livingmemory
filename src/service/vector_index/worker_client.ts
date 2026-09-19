@@ -6,6 +6,7 @@ import type {
     VectorIndexHybridQuery,
     VectorIndexKnnQuery,
     VectorIndexMutation,
+    VectorIndexPresetStateMark,
     VectorIndexReplaceUpsert,
     VectorIndexWorkerCommand,
     VectorIndexWorkerCommandName,
@@ -13,10 +14,7 @@ import type {
     VectorIndexWorkerResponse,
     VectorIndexWorkerResult
 } from './worker_protocol'
-import type {
-    MemoryVectorIndexManifest,
-    MemoryVectorIndexPresetStatus
-} from '../../contracts/vector_index'
+import type { MemoryVectorIndexManifest } from '../../contracts/vector_index'
 
 interface PendingRequest {
     resolve: (result: unknown) => void
@@ -155,7 +153,7 @@ export class LivingMemoryVectorIndexWorkerClient {
         })
     }
 
-    markPresetState(status: MemoryVectorIndexPresetStatus) {
+    markPresetState(status: VectorIndexPresetStateMark) {
         return this.request({ type: 'markPresetState', ...status })
     }
 

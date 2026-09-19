@@ -178,6 +178,13 @@ chatluna-livingmemory/
      召回检索（embedding-rerank）、agentic recall 内部搜索和 Dream 邻居
      查询固定只查活跃记忆。归档向量随 rebuild 与 reconcile 完整维护，
      WebUI 重新激活记忆时可直接复用。
+   - 预设状态账本（`lm_index_preset_state`）只落盘终态 `ready`/`dirty`；
+     `building`、`unavailable` 等进行中或瞬态条件只存在于主进程状态
+     overlay，不得持久化。账本行的生命周期不变量为「行存在 ⇔ 预设存在于
+     DB 条目 ∪ 索引文档」，全量对账负责清除只剩状态行的孤儿。
+   - 就绪门禁按预设独立判定：只有索引级条件（manifest 未建立、全局维护
+     窗口进行中、worker 故障）拦截全部读取；单个预设的非终态或 dirty 不
+     得阻断其他预设的召回。
 
 10. WebUI 与 RPC
    - Console RPC 变更必须同步更新 `src/contracts/rpc.ts`、Koishi declaration

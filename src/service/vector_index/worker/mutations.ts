@@ -1,5 +1,6 @@
 import type { PGlite } from '@electric-sql/pglite'
 import type { MemoryVectorIndexPresetStatus } from '../../../contracts/vector_index'
+import type { VectorIndexPresetStateMark } from '../worker_protocol'
 import type {
     VectorIndexMutation,
     VectorIndexPreserveUpsert,
@@ -234,7 +235,7 @@ export const clearVectorIndexPreset = async (
 
 export const markVectorIndexPresetState = async (
     database: PGlite,
-    status: MemoryVectorIndexPresetStatus
+    status: VectorIndexPresetStateMark
 ): Promise<MemoryVectorIndexPresetStatus> => {
     await database.query(
         `INSERT INTO lm_index_preset_state (

@@ -31,10 +31,7 @@ export interface VectorIndexRebuildRepository {
 
 export type VectorIndexRebuildWorker = Pick<
     LivingMemoryVectorIndexWorkerClient,
-    | 'abortRebuild'
-    | 'appendRebuildBatch'
-    | 'createRebuildFile'
-    | 'markPresetState'
+    'abortRebuild' | 'appendRebuildBatch' | 'createRebuildFile'
 >
 
 export interface VectorIndexRebuildProgress {
@@ -104,25 +101,11 @@ export const rebuildVectorIndex = async (options: {
             )
         }
         const presetIds = await repository.listEntryPresetIds()
-        const expectedByPreset = new Map<string, number>()
+        let total = 0
         for (const presetId of presetIds) {
-            const expectedCount =
-                await repository.countEntriesByPreset(presetId)
-            expectedByPreset.set(presetId, expectedCount)
-            await worker.markPresetState({
-                presetId,
-                state: 'building',
-                expectedCount,
-                indexedCount: 0,
-                lastError: null,
-                updatedAt: Date.now()
-            })
+            total += await repository.countEntriesByPreset(presetId)
         }
 
-        const total = [...expectedByPreset.values()].reduce(
-            (sum, count) => sum + count,
-            0
-        )
         const startedAt = performance.now()
         let completed = 0
         let cursor: string | null = null
@@ -165,16 +148,7 @@ export const rebuildVectorIndex = async (options: {
             )
 
             for (const [presetId, group] of groupUpsertsByPreset(upserts)) {
-                const expectedCount = expectedByPreset.get(presetId)!
-                const result = await worker.appendRebuildBatch(presetId, group)
-                await worker.markPresetState({
-                    presetId,
-                    state: 'building',
-                    expectedCount,
-                    indexedCount: result.indexedCount,
-                    lastError: null,
-                    updatedAt: Date.now()
-                })
+                await worker.appendRebuildBatch(presetId, group)
             }
 
             completed += sources.length

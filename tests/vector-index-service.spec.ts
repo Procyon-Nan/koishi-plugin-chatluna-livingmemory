@@ -9,6 +9,7 @@ import {
 } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
+import { PGlite } from '@electric-sql/pglite'
 import type { Logger } from 'koishi'
 import { LivingMemoryLogger } from '../src/service/logging/logger'
 import type {
@@ -483,6 +484,67 @@ it('restarts the worker and reinitializes the existing index', async () => {
         assert.equal(service.getStatus().state, 'ready')
         assert.equal(repository.jobs.length, 2)
         await service.stop()
+    })
+})
+
+it('clears orphaned preset state rows during startup reconcile', async () => {
+    await withTemporaryDirectory(async (baseDir) => {
+        const repository = new TestVectorIndexRepository([
+            createSource('memory-a')
+        ])
+        const first = createService({
+            baseDir,
+            repository,
+            modelId: 'model-a',
+            dimension: 3
+        })
+        await first.start()
+        await first.waitForInitialization()
+        await first.stop()
+
+        // 模拟历史残留：既无 DB 条目也无索引文档、只剩状态行的 building 孤儿。
+        // 旧版本可直接落盘 building，现行协议输入已收窄为终态，故经 PGlite 直写。
+        const indexDirectory = resolveIndexDirectory(baseDir)
+        const database = new PGlite(
+            resolve(indexDirectory, 'vector-index.pglite')
+        )
+        await database.query(
+            `INSERT INTO lm_index_preset_state (
+                preset_id, state, expected_count, indexed_count,
+                last_error, updated_at
+            ) VALUES ('ghost-preset', 'building', 0, 0, NULL, $1)`,
+            [Date.now()]
+        )
+        await database.close()
+
+        const second = createService({
+            baseDir,
+            repository,
+            modelId: 'model-a',
+            dimension: 3
+        })
+        await second.start()
+        await second.waitForInitialization()
+
+        const status = second.getStatus()
+        assert.equal(status.state, 'ready')
+        assert.deepEqual(
+            status.presets.map((preset) => preset.presetId),
+            ['preset-a']
+        )
+        assert.doesNotThrow(() => second.assertPresetReady('preset-a'))
+        const hits = await second.searchSemantic({
+            presetId: 'preset-a',
+            searchTexts: ['content memory-a'],
+            memoryTypes: null,
+            memoryStatus: 'active',
+            maxCandidates: 2
+        })
+        assert.deepEqual(
+            hits.map((hit) => hit.memoryId),
+            ['memory-a']
+        )
+        await second.stop()
     })
 })
 

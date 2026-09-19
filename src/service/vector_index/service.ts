@@ -152,7 +152,7 @@ export class LivingMemoryVectorIndexService
             this.generation = await acquireVectorIndexGeneration(generationKey)
         } catch (error) {
             const failure = toError(error)
-            this.status.markFailure('unavailable', failure.message)
+            this.status.markUnavailable(failure.message)
             this.logger.error(
                 'vector-index.start.failed',
                 { workflow: 'vector-index', state: 'unavailable' },
@@ -171,17 +171,20 @@ export class LivingMemoryVectorIndexService
                 this.previousDatabaseDirectory
             )
             this.operationGate.assertAccepting()
-            this.status.markStarting(null)
+            this.status.applyInspection(inspection)
+            this.status.markStarting()
             this.initialization = this.queueMaintenance(async () => {
                 try {
                     await this.initialize(inspection)
                 } catch (error) {
                     await this.handleMaintenanceFailure(error)
+                } finally {
+                    this.status.endMaintenance()
                 }
             })
         } catch (error) {
             const failure = toError(error)
-            this.status.markFailure('unavailable', failure.message)
+            this.status.markUnavailable(failure.message)
             this.logger.error(
                 'vector-index.start.failed',
                 { workflow: 'vector-index', state: 'unavailable' },
@@ -450,10 +453,11 @@ export class LivingMemoryVectorIndexService
             this.markPresetBuilding(presetId, job.id, expectedCount)
             void this.queueMaintenance(async () => {
                 try {
-                    this.markPresetBuilding(presetId, job.id, expectedCount)
                     await this.maintenance.runPresetReconcileJob(job, reason)
                 } catch (error) {
                     await this.handleMaintenanceFailure(error)
+                } finally {
+                    this.status.clearPresetBuilding(presetId)
                 }
             })
             return job
@@ -466,6 +470,8 @@ export class LivingMemoryVectorIndexService
                 await this.maintenance.rebuild(reason)
             } catch (error) {
                 await this.handleMaintenanceFailure(error)
+            } finally {
+                this.status.endMaintenance()
             }
         })
     }
@@ -473,7 +479,7 @@ export class LivingMemoryVectorIndexService
     startRebuild(reason: string) {
         this.operationGate.assertAccepting()
         this.status.setCurrentJob(null)
-        this.status.markStarting(null)
+        this.status.markStarting()
         void this.rebuild(reason)
     }
 
@@ -576,18 +582,12 @@ export class LivingMemoryVectorIndexService
         error: unknown
     ) {
         const failure = toError(error)
-        let state: MemoryVectorIndexState = 'dirty'
-        if (error instanceof LivingMemoryVectorIndexError) {
-            state = error.state
-        } else if (this.workerFailure !== null || this.worker === null) {
-            state = 'unavailable'
-        }
         const expectedCount =
             await this.repository.countEntriesByPreset(presetId)
         if (this.worker !== null && this.workerFailure === null) {
             await this.worker.markPresetState({
                 presetId,
-                state,
+                state: 'dirty',
                 expectedCount,
                 indexedCount,
                 lastError: failure.message,
@@ -595,11 +595,11 @@ export class LivingMemoryVectorIndexService
             })
             await this.refreshInspection()
         } else {
-            this.status.markFailure(state, failure.message)
+            this.status.markUnavailable(failure.message)
         }
         return new LivingMemoryVectorIndexError(
             'mutation-failed',
-            state,
+            'dirty',
             `vector index mutation failed: preset=${presetId}: ${failure.message}`,
             { cause: error }
         )
@@ -784,7 +784,11 @@ export class LivingMemoryVectorIndexService
             state = error.state
         }
         await this.inspectAfterFailure()
-        this.status.markMaintenanceFailure(state, failure.message)
+        if (state === 'unavailable') {
+            this.status.markUnavailable(failure.message)
+        } else {
+            this.status.markRuntimeError(failure.message)
+        }
         if (this.workerFailure === null) {
             const event =
                 state === 'unavailable'
@@ -823,7 +827,7 @@ export class LivingMemoryVectorIndexService
 
     private recordWorkerFailure(error: Error) {
         this.workerFailure = error
-        this.status.markWorkerFailure(error)
+        this.status.markUnavailable(error.message)
         this.logger.error(
             'vector-index.worker.failed',
             { workflow: 'vector-index', state: 'unavailable' },
