@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2026-09-20 version:0.23.2
+
+- pending: 调整 Agentic Recall 提示词：任务步骤改为结合聊天记录思考话题内容并预测聊天走向，记忆查询指引放宽为直接查询相关记忆，不再限定于预测出的话题；输出契约新增记忆描述须有完整主谓宾、尽量给出对后续聊天有价值信息的要求。
+
 ## 2026-09-19 version:0.23.1
 
 - 2d139b3: 修复向量索引全局状态被残留状态行永久拖在 building、召回持续失败且 WebUI 恒显「同步中」的问题，并重构索引状态机制。事故根因：`lm_index_preset_state` 中既无 DB 条目也无索引文档的孤儿状态行（历史版本对账中断残留或 v3→v4 升级全表置 building 产生）不在全量对账的预设集合内，永远不会被清除；旧门禁以聚合状态为先导检查，单个非 ready 行即可拦死所有预设的召回。机制整改：预设状态账本只落盘终态 ready/dirty，移除 reconcile 开头的 building 预写、rebuild 重建库内无读者的 building 进度标记、schema 升级的全表 SET building 与变更失败路径按错误瞬态（building/unavailable）落盘；全量对账预设集合扩为 DB 条目 ∪ 索引文档 ∪ 状态行，孤儿行经 total=0 的 clearPreset 删除，存量部署下次启动自愈；就绪门禁改为按预设独立判定，仅索引级条件（manifest 未建立、全局维护窗口进行中、worker 故障）拦截全部读取，A 预设非终态不再阻断 B 预设召回；主进程状态存储重构为 inspection 镜像加运行时 overlay 的单轨模型，启动时播种 worker 初检结果，维护窗口与按预设对账的展示标记互不覆盖。AGENTS.md 设计约束同步记录账本终态与门禁不变量。评审加固：全局维护窗口改为开方负责关窗（计数模型，任务通道的 setCurrentJob(null) 不再触碰窗口，重叠开窗时先结束的任务不得提前关窗）；markPresetState 协议输入收窄为终态 VectorIndexPresetStateMark，账本不变量由编译器承担，孤儿行回归 fixture 改为经 PGlite 直写模拟旧版遗留数据。
