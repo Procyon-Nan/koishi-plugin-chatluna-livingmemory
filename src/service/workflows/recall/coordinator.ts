@@ -11,6 +11,7 @@ import type {
     LivingMemoryConfig,
     SnapshotRepository
 } from '../../../contracts/workflows'
+import type { MessageLogRegistry } from '../../transcript/message_log/message_log_registry'
 import type {
     LivingMemoryTranscriptMessage,
     MemoryRecallStrategy,
@@ -22,9 +23,12 @@ type LivingMemoryRecallCoordinatorConfig = Pick<
     LivingMemoryConfig,
     | 'recallStrategy'
     | 'recallTopK'
-    | 'recallInterval'
+    | 'recallIntervalMessages'
     | 'enableConversationIsolation'
 >
+
+/** 召回间隔锚点所需的消息日志读取面。 */
+type RecallMessageLog = Pick<MessageLogRegistry, 'tailSeq'>
 
 type RecallQueryBuilder = Pick<LivingMemoryRecallQueryBuilder, 'resolve'>
 type RecallRetriever = Pick<LivingMemoryRetriever, 'retrieve'>
@@ -35,10 +39,15 @@ export type RecallWorkflowRepository = Pick<JobRepository, 'createFailedJob'> &
 
 export class LivingMemoryRecallCoordinator {
     private readonly recallLockByConversation = new Set<string>()
-    private readonly turnsSinceRecallByConversation = new Map<string, number>()
+    /**
+     * 召回窗口锚点：上次实际执行召回时点的日志末序号。间隔按此后累计
+     * 进入日志的消息条数（含闲聊）计；锚点只在召回实际执行时前移。
+     */
+    private readonly anchorSeqByScope = new Map<string, number>()
 
     constructor(
         private readonly config: LivingMemoryRecallCoordinatorConfig,
+        private readonly messageLog: RecallMessageLog,
         private readonly repository: RecallWorkflowRepository,
         private readonly recallQuery: RecallQueryBuilder,
         private readonly retriever: RecallRetriever,
@@ -52,7 +61,7 @@ export class LivingMemoryRecallCoordinator {
         currentMessage: LivingMemoryTranscriptMessage,
         loadHistoryMessages: () => Promise<LivingMemoryTranscriptMessage[]>
     ) {
-        if (this.config.recallInterval === 0) {
+        if (this.config.recallIntervalMessages === 0) {
             this.logger.diagnostic('recall.skipped', {
                 workflow: 'recall',
                 conversationId: scope.conversationId,
@@ -63,21 +72,19 @@ export class LivingMemoryRecallCoordinator {
         }
 
         const lockKey = scopeKey(scope)
-        const previousTurns = this.turnsSinceRecallByConversation.get(lockKey)
-        if (previousTurns !== undefined) {
-            const turnsSinceRecall = Math.min(
-                previousTurns + 1,
-                this.config.recallInterval
-            )
-            this.turnsSinceRecallByConversation.set(lockKey, turnsSinceRecall)
-            if (turnsSinceRecall < this.config.recallInterval) {
+        const anchorSeq = this.anchorSeqByScope.get(lockKey)
+        if (anchorSeq !== undefined) {
+            const tailSeq = this.messageLog.tailSeq(scope.conversationId)
+            const messagesSinceRecall =
+                tailSeq == null ? 0 : tailSeq - anchorSeq
+            if (messagesSinceRecall < this.config.recallIntervalMessages) {
                 this.logger.diagnostic('recall.skipped', {
                     workflow: 'recall',
                     conversationId: scope.conversationId,
                     presetId: scope.presetId,
                     reason: 'recall-interval',
-                    turnsRemaining:
-                        this.config.recallInterval - turnsSinceRecall
+                    messagesRemaining:
+                        this.config.recallIntervalMessages - messagesSinceRecall
                 })
                 return
             }
@@ -95,7 +102,10 @@ export class LivingMemoryRecallCoordinator {
             return
         }
 
-        this.turnsSinceRecallByConversation.set(lockKey, 0)
+        this.anchorSeqByScope.set(
+            lockKey,
+            this.messageLog.tailSeq(scope.conversationId) ?? 0
+        )
         this.recallLockByConversation.add(lockKey)
 
         const runLogger = this.logger.with({
@@ -114,13 +124,13 @@ export class LivingMemoryRecallCoordinator {
     }
 
     clearAll() {
-        this.turnsSinceRecallByConversation.clear()
+        this.anchorSeqByScope.clear()
     }
 
     clearByConversation(conversationId: string) {
-        for (const key of this.turnsSinceRecallByConversation.keys()) {
+        for (const key of this.anchorSeqByScope.keys()) {
             if (key.endsWith(`\n${conversationId}`)) {
-                this.turnsSinceRecallByConversation.delete(key)
+                this.anchorSeqByScope.delete(key)
             }
         }
     }

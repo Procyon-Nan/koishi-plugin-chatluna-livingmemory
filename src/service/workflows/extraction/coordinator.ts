@@ -13,16 +13,18 @@ import type {
     LivingMemoryConfig
 } from '../../../contracts/workflows'
 import type {
-    LivingMemoryCompletedRound,
     LivingMemoryTranscriptMessage,
     MemoryScope
 } from '../../../contracts/memory'
 import type { LivingMemoryLogger } from '../../logging/logger'
+import type { MessageLogRegistry } from '../../transcript/message_log/message_log_registry'
+import type { ConversationLogMessage } from '../../transcript/message_log/types'
+import { toLogTranscriptMessages } from '../../transcript/message_log/converter'
 
 type LivingMemoryExtractionConfig = Pick<
     LivingMemoryConfig,
-    | 'extractionInterval'
-    | 'extractionRounds'
+    | 'extractionWindowMessages'
+    | 'extractionIncludeOverheard'
     | 'enableExtractionWhitelist'
     | 'extractionWhitelist'
 >
@@ -32,23 +34,19 @@ type ExtractionFormatter = Pick<
     'toExtractionPayload'
 >
 type ExtractionModel = Pick<LivingMemoryExtractor, 'extractWithTrace'>
-interface ExtractionRoundRequest {
-    scope: MemoryScope
-    resolvePresetPrompt: () => Promise<string>
-    resolveTranscriptOrigin: () => Promise<MemoryTranscriptOrigin>
-}
 
-interface BufferedExtractionRound {
-    sequence: number
-    round: LivingMemoryCompletedRound
-}
+/** 提取排干所需的消息日志读取面。 */
+export type ExtractionMessageLog = Pick<
+    MessageLogRegistry,
+    'warmup' | 'isWarm' | 'afterSeq' | 'tailSeq' | 'countSince'
+>
 
 interface ExtractionScopeState {
-    scope: Pick<MemoryScope, 'conversationId' | 'presetId'>
-    lastCompletedSequence: number
-    lastConsumedSequence: number
-    rounds: BufferedExtractionRound[]
-    triggerRequests: Map<number, ExtractionRoundRequest>
+    conversationId: string
+    /** 上次成功（或放弃）块末条的日志序号；首个合规 after-chat 时初始化为当时末序号。 */
+    cursorSeq: number
+    /** 当前块连续失败次数；达到上限后放弃该块（记任务、推进游标、续排后续块）。 */
+    failStreak: number
 }
 
 export type ExtractionJobRepository = Pick<JobRepository, 'createFailedJob'>
@@ -58,25 +56,185 @@ export type ExtractionMemoryWriter = Pick<
     'appendMemories'
 >
 
+const EXTRACTION_FAIL_STREAK_LIMIT = 3
+
+/**
+ * 段锚定切块：以「连续 assistant 段的末条 assistant」闭合段——段不腰斩
+ * 交换，末尾无 assistant 收尾的尾巴留在积压等下次。段打包为 ≤ window 的
+ * 块；长段在参与锚定模式下截断取 window 后缀（远端闲聊头按策略丢弃），
+ * 旁听模式下切分为多个子块、子块边界尽量落在 assistant 之后。
+ */
+export const planExtractionChunks = (
+    entries: readonly ConversationLogMessage[],
+    window: number,
+    includeOverheard: boolean
+): ConversationLogMessage[][] => {
+    if (window <= 0 || entries.length === 0) {
+        return []
+    }
+
+    const segments: ConversationLogMessage[][] = []
+    let current: ConversationLogMessage[] = []
+    for (let index = 0; index < entries.length; index++) {
+        const entry = entries[index]
+        current.push(entry)
+        const closesSegment =
+            entry.role === 'assistant' &&
+            (index + 1 === entries.length ||
+                entries[index + 1].role !== 'assistant')
+        if (closesSegment) {
+            segments.push(current)
+            current = []
+        }
+    }
+
+    const chunks: ConversationLogMessage[][] = []
+    let buffer: ConversationLogMessage[] = []
+    const flushBuffer = () => {
+        if (buffer.length > 0) {
+            chunks.push(buffer)
+            buffer = []
+        }
+    }
+
+    for (const segment of segments) {
+        if (segment.length > window) {
+            flushBuffer()
+            if (!includeOverheard) {
+                chunks.push(segment.slice(-window))
+                continue
+            }
+            let start = 0
+            while (segment.length - start > window) {
+                let lastAssistant = -1
+                for (let index = start; index < start + window; index += 1) {
+                    if (segment[index].role === 'assistant') {
+                        lastAssistant = index
+                    }
+                }
+                const cut =
+                    lastAssistant >= 0 ? lastAssistant + 1 : start + window
+                chunks.push(segment.slice(start, cut))
+                start = cut
+            }
+            chunks.push(segment.slice(start))
+            continue
+        }
+
+        if (buffer.length + segment.length > window) {
+            flushBuffer()
+        }
+        buffer.push(...segment)
+    }
+    flushBuffer()
+
+    return chunks
+}
+
 export class LivingMemoryExtractionCoordinator {
     private readonly stateByScope = new Map<string, ExtractionScopeState>()
     private readonly runningScopeKeys = new Set<string>()
-    private readonly whitelist: Set<string>
 
     constructor(
         private readonly config: LivingMemoryExtractionConfig,
+        private readonly messageLog: ExtractionMessageLog,
         private readonly jobRepository: ExtractionJobRepository,
         private readonly memoryWriter: ExtractionMemoryWriter,
         private readonly formatter: ExtractionFormatter,
         private readonly extractor: ExtractionModel,
         private readonly queueAutoDream: (presetId: string) => void,
         private readonly logger: LivingMemoryLogger
-    ) {
-        this.whitelist = new Set(
-            config.extractionWhitelist
-                .map((item) => item.trim())
-                .filter((item) => item.length > 0)
+    ) {}
+
+    async queue(scope: MemoryScope, options: QueueExtractionOptions) {
+        const window = this.config.extractionWindowMessages
+        if (window === 0) {
+            this.logger.diagnostic('extraction.skipped', {
+                workflow: 'extraction',
+                conversationId: scope.conversationId,
+                presetId: scope.presetId,
+                window,
+                reason: 'disabled'
+            })
+            return
+        }
+
+        // 白名单只挡提取，不挡日志（召回依赖日志）。未命中时游标不初始化，
+        // 后续加入白名单从当时刻重新起算，不倾泻积压。
+        if (this.config.enableExtractionWhitelist) {
+            const sessionId = this.resolveWhitelistId(scope)
+            if (
+                sessionId == null ||
+                !this.config.extractionWhitelist.includes(sessionId)
+            ) {
+                this.logger.diagnostic('extraction.skipped', {
+                    workflow: 'extraction',
+                    conversationId: scope.conversationId,
+                    presetId: scope.presetId,
+                    sessionId,
+                    reason: 'not-whitelisted'
+                })
+                return
+            }
+        }
+
+        await this.messageLog.warmup(scope.conversationId)
+
+        // 游标初始化的前提是日志已含全部回填内容；回填失败待重试时跳过，
+        // 否则重试落地的平台历史会追加在游标之后被整段重复提取。
+        if (!this.messageLog.isWarm(scope.conversationId)) {
+            this.logger.diagnostic('extraction.skipped', {
+                workflow: 'extraction',
+                conversationId: scope.conversationId,
+                presetId: scope.presetId,
+                reason: 'backfill-pending'
+            })
+            return
+        }
+
+        const key = scopeKey(scope)
+        const state = this.stateByScope.get(key) ?? {
+            // 冷启动游标：首个合规 after-chat 时点的末序号，不回溯平台历史
+            conversationId: scope.conversationId,
+            cursorSeq: this.messageLog.tailSeq(scope.conversationId) ?? 0,
+            failStreak: 0
+        }
+        this.stateByScope.set(key, state)
+
+        const backlog = this.messageLog.countSince(
+            scope.conversationId,
+            state.cursorSeq
         )
+        if (backlog < window) {
+            this.logger.diagnostic('extraction.pending', {
+                workflow: 'extraction',
+                conversationId: scope.conversationId,
+                presetId: scope.presetId,
+                backlog,
+                window,
+                reason: 'window-not-reached'
+            })
+            return
+        }
+
+        if (this.runningScopeKeys.has(key)) {
+            this.logger.diagnostic('extraction.pending', {
+                workflow: 'extraction',
+                conversationId: scope.conversationId,
+                presetId: scope.presetId,
+                backlog,
+                reason: 'running'
+            })
+            return
+        }
+
+        this.drain(key, state, scope, options).catch((error) => {
+            this.logger.warn(
+                'extraction.failed',
+                { operation: 'drain', conversationId: scope.conversationId },
+                error
+            )
+        })
     }
 
     clearAll() {
@@ -91,215 +249,109 @@ export class LivingMemoryExtractionCoordinator {
         }
     }
 
-    async queue(
-        scope: MemoryScope,
-        completedRound: LivingMemoryCompletedRound,
-        options: QueueExtractionOptions
-    ) {
-        this.logger.diagnostic('extraction.round.queued', {
-            workflow: 'extraction',
-            conversationId: scope.conversationId,
-            presetId: scope.presetId,
-            interval: this.config.extractionInterval,
-            messages: completedRound.messages.length
-        })
-
-        if (this.config.extractionInterval <= 0) {
-            this.logger.diagnostic('extraction.skipped', {
-                workflow: 'extraction',
-                conversationId: scope.conversationId,
-                presetId: scope.presetId,
-                interval: this.config.extractionInterval,
-                reason: 'disabled'
-            })
-            return
-        }
-
-        // 白名单未命中的会话不进入轮次缓冲：既不累计轮次也不触发提取，
-        // 避免后续把该会话加入白名单时立刻消费历史积压轮次。
-        if (this.config.enableExtractionWhitelist) {
-            const sessionId = this.resolveWhitelistId(scope)
-            if (sessionId == null || !this.whitelist.has(sessionId)) {
-                this.logger.diagnostic('extraction.skipped', {
-                    workflow: 'extraction',
-                    conversationId: scope.conversationId,
-                    presetId: scope.presetId,
-                    sessionId,
-                    reason: 'not-whitelisted'
-                })
-                return
-            }
-        }
-
-        const hasUser = completedRound.messages.some(
-            (message) => message.role === 'user'
-        )
-        const hasAssistant = completedRound.messages.some(
-            (message) => message.role === 'assistant'
-        )
-        if (!hasUser || !hasAssistant) {
-            throw new Error(
-                'Extraction completed round must contain both user and assistant messages.'
-            )
-        }
-
-        const key = scopeKey(scope)
-        const state: ExtractionScopeState = this.stateByScope.get(key) ?? {
-            scope,
-            lastCompletedSequence: 0,
-            lastConsumedSequence: 0,
-            rounds: [],
-            triggerRequests: new Map()
-        }
-
-        state.lastCompletedSequence += 1
-        state.scope = scope
-        state.rounds.push({
-            sequence: state.lastCompletedSequence,
-            round: completedRound
-        })
-        if (
-            state.lastCompletedSequence % this.config.extractionInterval ===
-            0
-        ) {
-            state.triggerRequests.set(state.lastCompletedSequence, {
-                scope,
-                resolvePresetPrompt: options.resolvePresetPrompt,
-                resolveTranscriptOrigin: options.resolveTranscriptOrigin
-            })
-        }
-        this.stateByScope.set(key, state)
-
-        this.tryStart(key, state)
-    }
-
-    /**
-     * 白名单以用户可直接填写的平台 id 为准：群聊比对群号，私聊比对用户 id。
-     */
+    /** 白名单以用户可直接填写的平台 id 为准：群聊比对群号，私聊比对用户 id。 */
     private resolveWhitelistId(scope: MemoryScope) {
         return scope.isDirect === true ? scope.userId : scope.guildId
     }
 
-    private tryStart(key: string, state: ExtractionScopeState) {
-        const pendingRounds =
-            state.lastCompletedSequence - state.lastConsumedSequence
-        const latestScope = state.scope
-
-        if (this.runningScopeKeys.has(key)) {
-            this.logger.diagnostic('extraction.pending', {
-                workflow: 'extraction',
-                conversationId: latestScope.conversationId,
-                presetId: latestScope.presetId,
-                pendingRounds,
-                reason: 'running'
-            })
-            return
-        }
-
-        if (pendingRounds < this.config.extractionInterval) {
-            this.logger.diagnostic('extraction.pending', {
-                workflow: 'extraction',
-                conversationId: latestScope.conversationId,
-                presetId: latestScope.presetId,
-                pendingRounds,
-                interval: this.config.extractionInterval,
-                reason: 'interval-not-reached'
-            })
-            return
-        }
-
-        const triggerSequence =
-            state.lastConsumedSequence + this.config.extractionInterval
-        const triggerIndex = state.rounds.findIndex(
-            (item) => item.sequence === triggerSequence
-        )
-        if (triggerIndex < 0) {
-            throw new Error(
-                `Extraction round buffer is missing trigger sequence ${triggerSequence}.`
-            )
-        }
-
-        const selectedRounds = state.rounds.slice(
-            Math.max(0, triggerIndex - this.config.extractionRounds + 1),
-            triggerIndex + 1
-        )
-        const rounds = selectedRounds.flatMap((item) => item.round.messages)
-        const request = state.triggerRequests.get(triggerSequence)
-        if (request == null) {
-            throw new Error(
-                `Extraction round buffer is missing trigger request ${triggerSequence}.`
-            )
-        }
-        state.triggerRequests.delete(triggerSequence)
-
+    private async drain(
+        key: string,
+        state: ExtractionScopeState,
+        scope: MemoryScope,
+        options: QueueExtractionOptions
+    ) {
         this.runningScopeKeys.add(key)
         const runLogger = this.logger.with({
             workflow: 'extraction',
             runId: randomUUID(),
-            conversationId: request.scope.conversationId,
-            presetId: request.scope.presetId,
-            triggerSequence
+            conversationId: scope.conversationId,
+            presetId: scope.presetId
         })
-        runLogger.diagnostic('extraction.started', {
-            pendingRounds,
-            bufferedRounds: selectedRounds.length,
-            messages: rounds.length
-        })
-        this.run(
-            request.scope,
-            rounds,
-            request.resolvePresetPrompt,
-            request.resolveTranscriptOrigin,
-            runLogger
-        )
-            .catch((error) => {
-                runLogger.warn('extraction.failed', { operation: 'run' }, error)
-            })
-            .finally(() => {
-                this.consumeRoundsAfterRun(key, state, triggerSequence)
-            })
-    }
 
-    /**
-     * 一次提取运行结束后消费触发边界：标记触发轮之前的缓冲已消费、
-     * 清理不再需要的轮次缓冲，并在积压再次达到间隔时续跑。
-     */
-    private consumeRoundsAfterRun(
-        key: string,
-        state: ExtractionScopeState,
-        triggerSequence: number
-    ) {
-        this.runningScopeKeys.delete(key)
-        const currentState = this.stateByScope.get(key)
-        if (currentState == null) {
-            return
-        }
+        try {
+            while (true) {
+                // 会话清理已移除或重建状态：旧游标立即失效，终止本次排干；
+                // 正在执行的单次模型调用照常完成，后续消息由新状态的
+                // 下一次触发接管。
+                if (this.stateByScope.get(key) !== state) {
+                    runLogger.diagnostic('extraction.drain.stopped', {
+                        reason: 'state-cleared'
+                    })
+                    return
+                }
+                const entries = this.messageLog.afterSeq(
+                    scope.conversationId,
+                    state.cursorSeq
+                )
+                const chunks = planExtractionChunks(
+                    entries,
+                    this.config.extractionWindowMessages,
+                    this.config.extractionIncludeOverheard
+                )
+                const chunk = chunks[0]
+                if (chunk == null) {
+                    return
+                }
 
-        if (currentState === state) {
-            state.lastConsumedSequence = triggerSequence
-            const minimumSequenceToKeep = Math.max(
-                1,
-                state.lastConsumedSequence - this.config.extractionRounds + 2
-            )
-            state.rounds = state.rounds.filter(
-                (item) => item.sequence >= minimumSequenceToKeep
-            )
-        }
+                runLogger.diagnostic('extraction.started', {
+                    backlog: entries.length,
+                    chunkMessages: chunk.length
+                })
 
-        if (
-            currentState.lastCompletedSequence -
-                currentState.lastConsumedSequence >=
-            this.config.extractionInterval
-        ) {
-            this.tryStart(key, currentState)
+                const messages = await toLogTranscriptMessages(
+                    scope,
+                    scope.platform ?? 'unknown',
+                    chunk
+                )
+                try {
+                    await this.run(scope, messages, options, runLogger)
+                    state.cursorSeq = chunk[chunk.length - 1].seq
+                    state.failStreak = 0
+                } catch (error) {
+                    state.failStreak += 1
+                    if (state.failStreak < EXTRACTION_FAIL_STREAK_LIMIT) {
+                        runLogger.warn(
+                            'extraction.chunk.retry-deferred',
+                            {
+                                operation: 'drain',
+                                failStreak: state.failStreak,
+                                cursorSeq: state.cursorSeq
+                            },
+                            error
+                        )
+                        return
+                    }
+
+                    // 连续失败达到上限：放弃该块，记任务后续排，防止游标永久卡死
+                    runLogger.warn(
+                        'extraction.chunk.abandoned',
+                        {
+                            operation: 'drain',
+                            failStreak: state.failStreak,
+                            cursorSeq: state.cursorSeq,
+                            chunkEndSeq: chunk[chunk.length - 1].seq
+                        },
+                        error
+                    )
+                    await this.recordFailedExtraction(
+                        scope,
+                        this.formatter.toExtractionPayload(messages).input,
+                        error,
+                        new Date()
+                    )
+                    state.cursorSeq = chunk[chunk.length - 1].seq
+                    state.failStreak = 0
+                }
+            }
+        } finally {
+            this.runningScopeKeys.delete(key)
         }
     }
 
     private async run(
         scope: MemoryScope,
         messages: LivingMemoryTranscriptMessage[],
-        resolvePresetPrompt: () => Promise<string>,
-        resolveTranscriptOrigin: () => Promise<MemoryTranscriptOrigin>,
+        options: QueueExtractionOptions,
         logger: LivingMemoryLogger
     ) {
         const startedAt = new Date()
@@ -308,37 +360,32 @@ export class LivingMemoryExtractionCoordinator {
         let trace: LivingMemoryExtractionTrace
         let origin: MemoryTranscriptOrigin
 
-        try {
-            payload = this.formatter.toExtractionPayload(messages)
-            input = payload.input
-            origin = await resolveTranscriptOrigin()
-            input = `${origin.header}\n\n${input}`
+        payload = this.formatter.toExtractionPayload(messages)
+        input = payload.input
+        origin = await options.resolveTranscriptOrigin()
+        input = `${origin.header}\n\n${input}`
 
-            logger.diagnostic('extraction.input.prepared', {
-                sourceOriginMessages: payload.sourceOriginMessages.length,
-                inputLength: input.length
+        logger.diagnostic('extraction.input.prepared', {
+            sourceOriginMessages: payload.sourceOriginMessages.length,
+            inputLength: input.length
+        })
+
+        const presetPrompt = await options.resolvePresetPrompt()
+        trace = await this.extractor.extractWithTrace(
+            input,
+            {
+                conversationId: scope.conversationId,
+                presetId: scope.presetId,
+                presetLabel: scope.presetLabel,
+                presetPrompt,
+                speakers: payload.speakers
+            },
+            logger
+        )
+        if (trace.skippedReason != null) {
+            logger.diagnostic('extraction.skipped', {
+                reason: trace.skippedReason
             })
-
-            const presetPrompt = await resolvePresetPrompt()
-            trace = await this.extractor.extractWithTrace(
-                input,
-                {
-                    conversationId: scope.conversationId,
-                    presetId: scope.presetId,
-                    presetLabel: scope.presetLabel,
-                    presetPrompt,
-                    speakers: payload.speakers
-                },
-                logger
-            )
-            if (trace.skippedReason != null) {
-                logger.diagnostic('extraction.skipped', {
-                    reason: trace.skippedReason
-                })
-            }
-        } catch (error) {
-            await this.recordFailedExtraction(scope, input, error, startedAt)
-            throw error
         }
 
         // 结果工具在一次纠正重试后仍无法通过校验：持久化失败记录，
@@ -358,18 +405,13 @@ export class LivingMemoryExtractionCoordinator {
         }
 
         const extracted = trace.extracted
-        try {
-            if (extracted.length > 0) {
-                await this.memoryWriter.appendMemories(
-                    scope,
-                    payload.sourceOriginMessages,
-                    extracted,
-                    origin.sourceLabel
-                )
-            }
-        } catch (error) {
-            await this.recordFailedExtraction(scope, input, error, startedAt)
-            throw error
+        if (extracted.length > 0) {
+            await this.memoryWriter.appendMemories(
+                scope,
+                payload.sourceOriginMessages,
+                extracted,
+                origin.sourceLabel
+            )
         }
 
         logger.diagnostic('extraction.completed', {

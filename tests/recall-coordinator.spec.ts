@@ -40,8 +40,9 @@ it('completes embedding-rerank recall without persisting a successful job', asyn
             enableConversationIsolation: false,
             recallStrategy: 'embedding-rerank',
             recallTopK: 3,
-            recallInterval: 1
+            recallIntervalMessages: 1
         },
+        { tailSeq: () => 100 },
         repository,
         { resolve: async () => createRecallQueryResult() },
         {
@@ -116,8 +117,9 @@ it('does not read recalled memory content for logging', async () => {
             enableConversationIsolation: false,
             recallStrategy: 'embedding-rerank',
             recallTopK: 1,
-            recallInterval: 1
+            recallIntervalMessages: 1
         },
+        { tailSeq: () => 100 },
         {
             createFailedJob: createJobStore().createFailedJob,
             upsertSnapshot: async () => {}
@@ -161,8 +163,9 @@ it('keeps the previous snapshot when embedding recall returns no results', async
             enableConversationIsolation: false,
             recallStrategy: 'embedding-rerank',
             recallTopK: 3,
-            recallInterval: 1
+            recallIntervalMessages: 1
         },
+        { tailSeq: () => 100 },
         {
             createFailedJob: jobStore.createFailedJob,
             upsertSnapshot: async () => {
@@ -209,8 +212,9 @@ it('completes agentic recall without persisting a successful job', async () => {
             enableConversationIsolation: false,
             recallStrategy: 'agentic-recall',
             recallTopK: 3,
-            recallInterval: 1
+            recallIntervalMessages: 1
         },
+        { tailSeq: () => 100 },
         repository,
         { resolve: async () => createRecallQueryResult() },
         { retrieve: async () => [] },
@@ -245,8 +249,9 @@ it('keeps the previous snapshot without persisting a job for <NO_MEMORY>', async
             enableConversationIsolation: false,
             recallStrategy: 'agentic-recall',
             recallTopK: 3,
-            recallInterval: 1
+            recallIntervalMessages: 1
         },
+        { tailSeq: () => 100 },
         repository,
         { resolve: async () => createRecallQueryResult() },
         { retrieve: async () => [] },
@@ -281,8 +286,9 @@ it('serializes recall runs for the same scope without persisted running state', 
             enableConversationIsolation: false,
             recallStrategy: 'embedding-rerank',
             recallTopK: 3,
-            recallInterval: 1
+            recallIntervalMessages: 1
         },
+        { tailSeq: () => 100 },
         {
             createFailedJob: jobStore.createFailedJob,
             upsertSnapshot: async () => {}
@@ -323,8 +329,9 @@ it('persists one failed recall job when query construction throws', async () => 
             enableConversationIsolation: false,
             recallStrategy: 'embedding-rerank',
             recallTopK: 3,
-            recallInterval: 1
+            recallIntervalMessages: 1
         },
+        { tailSeq: () => 100 },
         {
             createFailedJob: jobStore.createFailedJob,
             upsertSnapshot: async () => {}
@@ -357,8 +364,9 @@ it('logs recall scope and preserves the original background error', async () => 
             enableConversationIsolation: false,
             recallStrategy: 'embedding-rerank',
             recallTopK: 3,
-            recallInterval: 1
+            recallIntervalMessages: 1
         },
+        { tailSeq: () => 100 },
         {
             createFailedJob: async () => {
                 throw backgroundError
@@ -396,8 +404,9 @@ it('persists one failed recall job when retrieval throws', async () => {
             enableConversationIsolation: false,
             recallStrategy: 'embedding-rerank',
             recallTopK: 3,
-            recallInterval: 1
+            recallIntervalMessages: 1
         },
+        { tailSeq: () => 100 },
         {
             createFailedJob: jobStore.createFailedJob,
             upsertSnapshot: async () => {}
@@ -431,8 +440,9 @@ it('persists one failed recall job when snapshot hydration throws', async () => 
             enableConversationIsolation: false,
             recallStrategy: 'embedding-rerank',
             recallTopK: 3,
-            recallInterval: 1
+            recallIntervalMessages: 1
         },
+        { tailSeq: () => 100 },
         {
             createFailedJob: jobStore.createFailedJob,
             upsertSnapshot: async () => {}
@@ -467,8 +477,9 @@ it('does not persist a recall job when the query is skipped', async () => {
             enableConversationIsolation: false,
             recallStrategy: 'embedding-rerank',
             recallTopK: 3,
-            recallInterval: 1
+            recallIntervalMessages: 1
         },
+        { tailSeq: () => 100 },
         {
             createFailedJob: jobStore.createFailedJob,
             upsertSnapshot: async () => {}
@@ -509,8 +520,9 @@ it('does not persist a recall job when the final query is empty', async () => {
             enableConversationIsolation: false,
             recallStrategy: 'embedding-rerank',
             recallTopK: 3,
-            recallInterval: 1
+            recallIntervalMessages: 1
         },
+        { tailSeq: () => 100 },
         {
             createFailedJob: jobStore.createFailedJob,
             upsertSnapshot: async () => {}
@@ -550,8 +562,9 @@ it('continues recall with empty history without persisting a job', async () => {
             enableConversationIsolation: false,
             recallStrategy: 'embedding-rerank',
             recallTopK: 3,
-            recallInterval: 1
+            recallIntervalMessages: 1
         },
+        { tailSeq: () => 100 },
         {
             createFailedJob: jobStore.createFailedJob,
             upsertSnapshot: async () => {}
@@ -598,8 +611,9 @@ it('persists one failed agentic recall job when its executor throws', async () =
             enableConversationIsolation: false,
             recallStrategy: 'agentic-recall',
             recallTopK: 3,
-            recallInterval: 1
+            recallIntervalMessages: 1
         },
+        { tailSeq: () => 100 },
         {
             createFailedJob: jobStore.createFailedJob,
             upsertSnapshot: async () => {}
@@ -620,4 +634,57 @@ it('persists one failed agentic recall job when its executor throws', async () =
 
     assert.equal(jobStore.jobs[0]?.recallStrategy, 'agentic-recall')
     assert.match(jobStore.jobs[0]?.error ?? '', /agentic failure/u)
+})
+
+it('gates recall by message gap since the last executed recall', async () => {
+    const jobStore = createJobStore()
+    const snapshots: number[] = []
+    let tail = 100
+    const coordinator = new LivingMemoryRecallCoordinator(
+        {
+            enableConversationIsolation: false,
+            recallStrategy: 'embedding-rerank',
+            recallTopK: 3,
+            recallIntervalMessages: 10
+        },
+        {
+            tailSeq: () => tail
+        },
+        {
+            createFailedJob: jobStore.createFailedJob,
+            upsertSnapshot: async () => {
+                snapshots.push(1)
+            }
+        },
+        { resolve: async () => createRecallQueryResult() },
+        {
+            retrieve: async () => [
+                { id: 'memory-1', content: 'matched', score: 0.9 }
+            ]
+        },
+        { run: async () => createAgenticTrace('unused') },
+        { hydrate: async () => 'memory' },
+        logger
+    )
+
+    // 首启无锚点：立即召回
+    await coordinator.queue(scope, currentMessage, async () => [])
+    await waitFor(() => snapshots.length === 1, 'first immediate recall')
+
+    // 间隔不足：跳过
+    tail = 105
+    await coordinator.queue(scope, currentMessage, async () => [])
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    assert.equal(snapshots.length, 1)
+
+    // 达到间隔：再次执行并前移锚点
+    tail = 110
+    await coordinator.queue(scope, currentMessage, async () => [])
+    await waitFor(() => snapshots.length === 2, 'second recall after gap')
+
+    // 锚点已前移到 110：新一轮间隔从上次执行点重新计
+    tail = 115
+    await coordinator.queue(scope, currentMessage, async () => [])
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    assert.equal(snapshots.length, 2)
 })

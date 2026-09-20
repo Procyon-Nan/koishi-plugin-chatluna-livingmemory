@@ -4,11 +4,10 @@ import {
     type CharacterTranscriptSourceMessage,
     isCharacterBotMessage,
     isSameCharacterMessage,
-    takeRecentCharacterRounds,
-    toCharacterCompletedRound,
-    toCharacterTranscriptMessageResult,
-    toCharacterTranscriptMessages
+    toCharacterTranscriptMessageResult
 } from '../service/transcript/character_transcript_adapter'
+import { toLogTranscriptMessages } from '../service/transcript/message_log/converter'
+import type { ConversationLogEntryInput } from '../service/transcript/message_log/types'
 import { collectUserProfileSpeakerKeys } from '../service/user_profile'
 import type { UserSpeakerCache } from '../service/transcript/user_speaker'
 import { buildMemoryTranscriptOrigin } from '../service/transcript/origin_context'
@@ -161,6 +160,97 @@ const formatPromptVariable = (sections: PromptSections) => {
     return parts.join('\n\n')
 }
 
+const registerConversationLog = (
+    ctx: Context,
+    session: Session,
+    conversationId: string
+) => {
+    ctx.chatluna_living_memory.messageLog.register(
+        conversationId,
+        {
+            platform: session.platform,
+            channelId: session.channelId ?? session.userId ?? '',
+            guildId: session.guildId ?? undefined,
+            isDirect: session.isDirect
+        },
+        session.bot
+    )
+}
+
+/** 触发消息条目：先于读取显式补写，消除与平台监听的执行顺序耦合（去重保证单条）。 */
+const buildCharacterUserEntry = (
+    message: CharacterMessage
+): ConversationLogEntryInput | null => {
+    const content = message.content.trim()
+    const userId = toNonEmptyString(message.id)
+    if (content.length === 0 || userId == null) {
+        return null
+    }
+
+    return {
+        messageId: toNonEmptyString(message.messageId) ?? undefined,
+        userId,
+        name: toNonEmptyString(message.name) ?? userId,
+        content,
+        timestamp: message.timestamp ?? Date.now(),
+        role: 'user',
+        origin: 'live'
+    }
+}
+
+/**
+ * 通道 2：focus 之后的末尾连续 bot 消息段即本次实际发出的回复（分句多条）。
+ * 平台侧没发出任何消息（如 <action> 空回复）时不产生条目。
+ */
+const buildCharacterReplyEntries = (
+    session: Session,
+    messages: readonly CharacterMessage[],
+    focus: CharacterMessage | undefined
+): ConversationLogEntryInput[] => {
+    let lowerBound = 0
+    if (focus != null) {
+        for (let index = messages.length - 1; index >= 0; index--) {
+            if (isSameCharacterMessage(messages[index], focus)) {
+                lowerBound = index + 1
+                break
+            }
+        }
+    }
+
+    let end = messages.length
+    while (
+        end > lowerBound &&
+        !isCharacterBotMessage(session, messages[end - 1])
+    ) {
+        end -= 1
+    }
+    let start = end
+    while (
+        start > lowerBound &&
+        isCharacterBotMessage(session, messages[start - 1])
+    ) {
+        start -= 1
+    }
+
+    return messages.slice(start, end).flatMap((message) => {
+        const content = message.content.trim()
+        if (content.length === 0) {
+            return []
+        }
+        return [
+            {
+                messageId: toNonEmptyString(message.messageId) ?? undefined,
+                userId: toNonEmptyString(message.id) ?? session.selfId,
+                name: toNonEmptyString(message.name) ?? session.selfId,
+                content,
+                timestamp: message.timestamp ?? Date.now(),
+                role: 'assistant' as const,
+                origin: 'reply' as const
+            }
+        ]
+    })
+}
+
 export async function apply(ctx: Context, config: LivingMemoryConfig) {
     const logger = ctx.chatluna_living_memory.memoryLogger.with({
         workflow: 'character'
@@ -240,6 +330,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
         'chatluna_character/before-chat',
         async (payload: CharacterBeforeChatEventPayload) => {
             const scope = createCharacterScope(ctx, payload)
+            registerConversationLog(ctx, payload.session, scope.conversationId)
 
             logger.diagnostic('character.before.received', {
                 conversationId: scope.conversationId,
@@ -284,19 +375,25 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                     )
                 })
 
-            const historyMessages = payload.messages.filter(
-                (message) =>
-                    !isSameCharacterMessage(message, payload.focusMessage)
-            )
-            const history = await toCharacterTranscriptMessages(
+            const focusEntry =
+                payload.focusMessage == null
+                    ? null
+                    : buildCharacterUserEntry(payload.focusMessage)
+            if (focusEntry != null) {
+                livingMemory.messageLog.appendLive(
+                    [scope.conversationId],
+                    focusEntry
+                )
+            }
+
+            const history = await toLogTranscriptMessages(
                 scope,
-                payload.session,
-                takeRecentCharacterRounds(
-                    payload.session,
-                    historyMessages,
-                    config.recallHistoryWindowRounds
-                ),
-                speakerCache
+                payload.session.platform,
+                await livingMemory.messageLog.loadRecallHistory(
+                    scope.conversationId,
+                    config.recallHistoryMessages,
+                    focusEntry
+                )
             )
             profileSpeakerKeysByScope.set(
                 scopeKey(scope),
@@ -318,15 +415,23 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
         'chatluna_character/after-chat',
         async (payload: CharacterAfterChatEventPayload) => {
             const scope = createCharacterScope(ctx, payload)
-            const messages = await toCharacterTranscriptMessages(
-                scope,
-                payload.session,
-                takeRecentCharacterRounds(
+            registerConversationLog(ctx, payload.session, scope.conversationId)
+            livingMemory.messageLog.appendReply(
+                scope.conversationId,
+                buildCharacterReplyEntries(
                     payload.session,
                     payload.messages,
-                    config.recallHistoryWindowRounds
-                ),
-                speakerCache
+                    payload.focusMessage
+                )
+            )
+            const messages = await toLogTranscriptMessages(
+                scope,
+                payload.session.platform,
+                await livingMemory.messageLog.loadRecallHistory(
+                    scope.conversationId,
+                    config.recallHistoryMessages,
+                    null
+                )
             )
             const key = scopeKey(scope)
             profileSpeakerKeysByScope.set(
@@ -334,64 +439,44 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 collectUserProfileSpeakerKeys(messages)
             )
 
-            const completedRound =
-                payload.focusMessage == null
-                    ? {
-                          round: null,
-                          reason: 'focus-message-missing' as const
-                      }
-                    : await toCharacterCompletedRound(
-                          scope,
-                          payload.session,
-                          payload.messages,
-                          payload.focusMessage,
-                          speakerCache
-                      )
-
             logger.diagnostic('character.after.received', {
                 conversationId: scope.conversationId,
                 presetId: scope.presetId,
                 messages: payload.messages.length,
-                transcriptMessages: messages.length,
-                completedRoundMessages:
-                    completedRound.round?.messages.length ?? 0,
-                completedRoundReason: completedRound.reason
+                transcriptMessages: messages.length
             })
 
-            if (completedRound.round == null) {
-                return
-            }
+            const focusLabel =
+                payload.focusMessage == null
+                    ? ''
+                    : (payload.focusMessage.name ??
+                      payload.focusMessage.id ??
+                      '')
 
-            await ctx.chatluna_living_memory.queueExtraction(
-                scope,
-                completedRound.round,
-                {
-                    resolveTranscriptOrigin: async () => {
-                        if (payload.session.isDirect) {
-                            return buildMemoryTranscriptOrigin({
-                                isDirect: true,
-                                speakerLabel:
-                                    completedRound.round.messages[0]
-                                        .speakerLabel,
-                                speakerId: scope.speakerId
-                            })
-                        }
-
-                        const guild = await payload.session.bot.getGuild(
-                            scope.guildId!
-                        )
+            await ctx.chatluna_living_memory.queueExtraction(scope, {
+                resolveTranscriptOrigin: async () => {
+                    if (payload.session.isDirect) {
                         return buildMemoryTranscriptOrigin({
-                            isDirect: false,
-                            guildName: guild.name,
-                            guildId: scope.guildId!
+                            isDirect: true,
+                            speakerLabel: focusLabel,
+                            speakerId: scope.speakerId
                         })
-                    },
-                    resolvePresetPrompt: async () =>
-                        await renderCharacterPresetPrompt(ctx, payload.preset, {
-                            session: payload.session
-                        })
-                }
-            )
+                    }
+
+                    const guild = await payload.session.bot.getGuild(
+                        scope.guildId!
+                    )
+                    return buildMemoryTranscriptOrigin({
+                        isDirect: false,
+                        guildName: guild.name,
+                        guildId: scope.guildId!
+                    })
+                },
+                resolvePresetPrompt: async () =>
+                    await renderCharacterPresetPrompt(ctx, payload.preset, {
+                        session: payload.session
+                    })
+            })
         }
     )
 

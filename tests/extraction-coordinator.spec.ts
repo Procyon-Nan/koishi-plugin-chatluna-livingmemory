@@ -1,41 +1,27 @@
-import assert from 'node:assert/strict'
+import { describe, expect, it } from 'vitest'
 import type {
     AttributedMemoryItem,
     ExtractionPayload
 } from '../src/contracts/workflows'
-import type {
-    LivingMemoryTranscriptMessage,
-    MemoryScope,
-    MemorySourceMessage
-} from '../src/contracts/memory'
+import type { MemoryScope, MemorySourceMessage } from '../src/contracts/memory'
 import {
     type ExtractionJobRepository,
     type ExtractionMemoryWriter,
-    LivingMemoryExtractionCoordinator
+    LivingMemoryExtractionCoordinator,
+    planExtractionChunks
 } from '../src/service/workflows/extraction/coordinator'
+import { MessageLogRegistry } from '../src/service/transcript/message_log/message_log_registry'
+import type { ConversationBackfillBot } from '../src/service/transcript/message_log/backfill'
+import type { ConversationLogMessage } from '../src/service/transcript/message_log/types'
 import type { LivingMemoryExtractionTrace } from '../src/service/workflows/extraction/extractor'
 import {
     createCapturedLogger,
     createJobStore,
-    scope,
+    scope as baseScope,
     waitFor
 } from './workflow-test-utils'
 
-const createExtractionMessages = (): LivingMemoryTranscriptMessage[] => [
-    {
-        role: 'user',
-        speakerKey: 'speaker-key',
-        speakerLabel: '用户',
-        contentLines: ['用户消息'],
-        createdAt: new Date('2026-07-01T00:00:00.000Z')
-    },
-    {
-        role: 'assistant',
-        speakerLabel: '助手',
-        contentLines: ['助手消息'],
-        createdAt: new Date('2026-07-01T00:01:00.000Z')
-    }
-]
+const scope: MemoryScope = { ...baseScope, platform: 'onebot' }
 
 const createExtractionTrace = (
     overrides: Partial<LivingMemoryExtractionTrace> = {}
@@ -58,62 +44,69 @@ const createExtractedMemory = (): AttributedMemoryItem => ({
     speakerKeys: ['speaker-key']
 })
 
-interface ExtractionCoordinatorOptions {
-    trace?: LivingMemoryExtractionTrace
-    extractionInterval?: number
-    extractionRounds?: number
+interface CoordinatorHarnessOptions {
+    window?: number
+    includeOverheard?: boolean
     enableExtractionWhitelist?: boolean
     extractionWhitelist?: string[]
+    backfillBot?: ConversationBackfillBot
     extractWithTrace?: () => Promise<LivingMemoryExtractionTrace>
     createFailedJob?: ExtractionJobRepository['createFailedJob']
     queueAutoDream?: (presetId: string) => void
-    toExtractionPayload?: (
-        messages: LivingMemoryTranscriptMessage[]
-    ) => ExtractionPayload
     appendMemories?: ExtractionMemoryWriter['appendMemories']
 }
 
-const createExtractionCoordinator = (
-    options: ExtractionCoordinatorOptions = {}
-) => {
-    const trace = options.trace ?? createExtractionTrace()
-    const jobStore = createJobStore()
-    const appended: {
+interface CoordinatorHarness {
+    coordinator: LivingMemoryExtractionCoordinator
+    messageLog: MessageLogRegistry
+    jobStore: ReturnType<typeof createJobStore>
+    appended: {
         scope: MemoryScope
         sourceOriginMessages: MemorySourceMessage[]
         extracted: AttributedMemoryItem[]
         sourceLabel?: string | null
-    }[] = []
-    const captured = createCapturedLogger()
-    const debugMessages = captured.info
-    const warnings = captured.warnings
+    }[]
+    getExtractorCalls: () => number
+    getExtractorInputs: () => string[]
+    warnings: unknown[][]
+}
+
+const createHarness = (
+    options: CoordinatorHarnessOptions = {}
+): CoordinatorHarness => {
+    const trace = options.extractWithTrace
+    const jobStore = createJobStore()
+    const appended: CoordinatorHarness['appended'] = []
+    const captured = createCapturedLogger(false)
     let extractorCalls = 0
+    const extractorInputs: string[] = []
+
     const formatter = {
-        toExtractionPayload:
-            options.toExtractionPayload ??
-            (() => ({
-                input: 'payload',
-                sourceOriginMessages: [
-                    {
-                        role: 'user' as const,
-                        speakerLabel: '用户',
-                        content: '用户消息',
-                        transcriptLines: ['用户说：用户消息']
-                    }
-                ],
-                speakers: [
-                    {
-                        speakerLabel: '用户',
-                        speakerKey: 'speaker-key'
-                    }
+        toExtractionPayload: ((
+            messages: { contentLines: string[]; speakerLabel: string }[]
+        ): ExtractionPayload => ({
+            input: messages
+                .map(
+                    (message) =>
+                        `${message.speakerLabel}: ${message.contentLines.join('|')}`
+                )
+                .join('\n'),
+            sourceOriginMessages: messages.map((message) => ({
+                role: 'user' as const,
+                speakerLabel: message.speakerLabel,
+                content: message.contentLines.join('|'),
+                transcriptLines: [
+                    `${message.speakerLabel}说：${message.contentLines.join('|')}`
                 ]
-            }))
+            })),
+            speakers: []
+        })) as never
     }
     const extractor = {
-        extractWithTrace: async () => {
+        extractWithTrace: async (input: string) => {
             extractorCalls += 1
-            return await (options.extractWithTrace?.() ??
-                Promise.resolve(trace))
+            extractorInputs.push(input)
+            return await (trace?.() ?? Promise.resolve(createExtractionTrace()))
         }
     }
     const repository: ExtractionJobRepository & ExtractionMemoryWriter = {
@@ -135,14 +128,26 @@ const createExtractionCoordinator = (
                 return []
             })
     }
+    const messageLog = new MessageLogRegistry()
+    messageLog.register(
+        scope.conversationId,
+        {
+            platform: 'onebot',
+            channelId: 'channel-1',
+            isDirect: false
+        },
+        options.backfillBot ?? { selfId: 'bot-self' }
+    )
+
     const coordinator = new LivingMemoryExtractionCoordinator(
         {
-            extractionInterval: options.extractionInterval ?? 1,
-            extractionRounds: options.extractionRounds ?? 1,
+            extractionWindowMessages: options.window ?? 4,
+            extractionIncludeOverheard: options.includeOverheard ?? false,
             enableExtractionWhitelist:
                 options.enableExtractionWhitelist ?? false,
             extractionWhitelist: options.extractionWhitelist ?? []
         },
+        messageLog,
         repository,
         repository,
         formatter,
@@ -152,501 +157,459 @@ const createExtractionCoordinator = (
     )
     return {
         coordinator,
+        messageLog,
         jobStore,
         appended,
-        debugMessages,
-        warnings,
-        getExtractorCalls: () => extractorCalls
+        getExtractorCalls: () => extractorCalls,
+        getExtractorInputs: () => extractorInputs,
+        warnings: captured.warnings
     }
 }
 
+const entry = (
+    role: 'user' | 'assistant',
+    content: string
+): {
+    userId: string
+    name: string
+    content: string
+    timestamp: number
+    role: 'user' | 'assistant'
+    origin: 'live'
+} => ({
+    userId: role === 'assistant' ? 'bot-self' : 'user-1',
+    name: role === 'assistant' ? 'bot' : '用户A',
+    content,
+    timestamp: Date.now(),
+    role,
+    origin: 'live'
+})
+
 const queueExtraction = async (
-    coordinator: LivingMemoryExtractionCoordinator,
-    completedRoundCount = 1,
+    harness: CoordinatorHarness,
     resolvePresetPrompt: () => Promise<string> = async () => '你是测试助手。'
 ) => {
-    const options = {
+    await harness.messageLog.warmup(scope.conversationId)
+    await harness.coordinator.queue(scope, {
         resolvePresetPrompt,
         resolveTranscriptOrigin: async () => ({
             header: '以下是聊天记录：',
             sourceLabel: '来源于「测试群」（群聊 ID：guild-1）的群聊'
         })
-    }
-    for (let index = 0; index < completedRoundCount; index++) {
-        await coordinator.queue(
-            scope,
-            { messages: createExtractionMessages() },
-            options
-        )
-    }
+    })
 }
 
-it('counts the first completed round and extracts immediately at interval one', async () => {
-    const { coordinator, getExtractorCalls } = createExtractionCoordinator()
-
-    await coordinator.queue(
-        scope,
-        { messages: createExtractionMessages() },
-        {
-            resolvePresetPrompt: async () => '你是测试助手。',
-            resolveTranscriptOrigin: async () => ({
-                header: '以下是聊天记录：',
-                sourceLabel: '来源于「测试群」（群聊 ID：guild-1）的群聊'
-            })
-        }
-    )
-    await waitFor(() => getExtractorCalls() === 1, 'first extraction')
-
-    assert.equal(getExtractorCalls(), 1)
-})
-
-it('skips extraction when the configured interval is not reached', async () => {
-    const { coordinator, getExtractorCalls } = createExtractionCoordinator({
-        extractionInterval: 2
-    })
-
-    await queueExtraction(coordinator)
-
-    assert.equal(getExtractorCalls(), 0)
-})
-
-it('restarts extraction interval counting after all scopes are cleared', async () => {
-    const { coordinator, getExtractorCalls } = createExtractionCoordinator({
-        extractionInterval: 3,
-        extractionRounds: 3
-    })
-
-    await queueExtraction(coordinator, 2)
-    coordinator.clearAll()
-    await queueExtraction(coordinator, 2)
-
-    assert.equal(getExtractorCalls(), 0)
-
-    await queueExtraction(coordinator)
-    await waitFor(() => getExtractorCalls() === 1, 'post-reset extraction')
-
-    assert.equal(getExtractorCalls(), 1)
-})
-
-it('rejects an invalid completed-round contract', async () => {
-    const { coordinator } = createExtractionCoordinator()
-    const userOnlyRound = {
-        messages: createExtractionMessages().filter(
-            (message) => message.role === 'user'
-        )
-    }
-
-    await assert.rejects(
-        coordinator.queue(scope, userOnlyRound, {
-            resolvePresetPrompt: async () => '你是测试助手。',
-            resolveTranscriptOrigin: async () => ({
-                header: '以下是聊天记录：',
-                sourceLabel: '来源于「测试群」（群聊 ID：guild-1）的群聊'
-            })
-        }),
-        /must contain both user and assistant messages/u
-    )
-})
-
-it('preserves completed rounds while an extraction is in flight', async () => {
-    const extractionTrace = createExtractionTrace({
-        extracted: [createExtractedMemory()]
-    })
-    let resolveTrace!: (trace: LivingMemoryExtractionTrace) => void
-    const tracePromise = new Promise<LivingMemoryExtractionTrace>((resolve) => {
-        resolveTrace = resolve
-    })
-    let firstCall = true
-    const { coordinator, jobStore, appended, getExtractorCalls } =
-        createExtractionCoordinator({
-            trace: extractionTrace,
-            extractWithTrace: async () => {
-                if (firstCall) {
-                    firstCall = false
-                    return await tracePromise
-                }
-                return extractionTrace
-            }
-        })
-    const options = {
-        resolvePresetPrompt: async () => '你是测试助手。',
-        resolveTranscriptOrigin: async () => ({
-            header: '以下是聊天记录：',
-            sourceLabel: '来源于「测试群」（群聊 ID：guild-1）的群聊'
-        })
-    }
-
-    await coordinator.queue(
-        scope,
-        { messages: createExtractionMessages() },
-        options
-    )
-    await waitFor(() => getExtractorCalls() === 1, 'extraction model call')
-    await coordinator.queue(
-        scope,
-        { messages: createExtractionMessages() },
-        options
-    )
-
-    assert.equal(getExtractorCalls(), 1)
-    assert.equal(jobStore.jobs.length, 0)
-
-    resolveTrace(extractionTrace)
-    await waitFor(
-        () => getExtractorCalls() === 2,
-        'queued extraction model call'
-    )
-    await waitFor(() => appended.length === 2, 'queued extraction completion')
-    assert.equal(jobStore.jobs.length, 0)
-})
-
-it('uses only the configured number of recent completed rounds', async () => {
-    const payloads: LivingMemoryTranscriptMessage[][] = []
-    const { coordinator, getExtractorCalls } = createExtractionCoordinator({
-        extractionInterval: 3,
-        extractionRounds: 2,
-        toExtractionPayload: (messages) => {
-            payloads.push(messages)
-            return {
-                input: 'payload',
-                sourceOriginMessages: [],
-                speakers: []
-            }
-        }
-    })
-
-    for (let index = 1; index <= 3; index++) {
-        const round = createExtractionMessages().map((message) => ({
-            ...message,
-            contentLines: [`round-${index}-${message.role}`]
+describe('planExtractionChunks', () => {
+    const log = (roles: ('user' | 'assistant')[]): ConversationLogMessage[] =>
+        roles.map((role, index) => ({
+            seq: index + 1,
+            userId: role === 'assistant' ? 'bot' : 'user',
+            name: role,
+            content: `${role}-${index}`,
+            timestamp: 1_000,
+            role,
+            origin: 'live'
         }))
-        await coordinator.queue(
-            scope,
-            { messages: round },
-            {
-                resolvePresetPrompt: async () => '你是测试助手。',
-                resolveTranscriptOrigin: async () => ({
-                    header: '以下是聊天记录：',
-                    sourceLabel: '来源于「测试群」（群聊 ID：guild-1）的群聊'
-                })
-            }
+
+    it('closes segments at the last assistant of each run and leaves the unclosed tail', () => {
+        // u u a a u a u（末尾无 assistant 收尾）
+        const chunks = planExtractionChunks(
+            log([
+                'user',
+                'user',
+                'assistant',
+                'assistant',
+                'user',
+                'assistant',
+                'user'
+            ]),
+            10,
+            false
         )
-    }
-    await waitFor(() => getExtractorCalls() === 1, 'buffered extraction')
-
-    assert.deepEqual(
-        payloads[0]?.map((message) => message.contentLines[0]),
-        [
-            'round-2-user',
-            'round-2-assistant',
-            'round-3-user',
-            'round-3-assistant'
-        ]
-    )
-})
-
-it('releases a consumed trigger resolver while retaining recent round context', async () => {
-    const { coordinator, getExtractorCalls } = createExtractionCoordinator({
-        extractionRounds: 2
+        expect(chunks.map((chunk) => chunk.length)).toEqual([6])
     })
-    const internal = coordinator as unknown as {
-        stateByScope: Map<
-            string,
-            {
-                rounds: unknown[]
-                triggerRequests: Map<number, unknown>
-            }
-        >
-    }
 
-    await queueExtraction(coordinator)
-    await waitFor(() => getExtractorCalls() === 1, 'first extraction')
-
-    const state = internal.stateByScope.get(
-        `${scope.presetId}\n${scope.conversationId}`
-    )
-    assert.equal(state?.rounds.length, 1)
-    assert.equal(state?.triggerRequests.size, 0)
-})
-
-it('keeps separate trigger boundaries when multiple intervals arrive in flight', async () => {
-    const payloads: string[][] = []
-    let resolveFirstTrace!: (trace: LivingMemoryExtractionTrace) => void
-    const firstTrace = new Promise<LivingMemoryExtractionTrace>((resolve) => {
-        resolveFirstTrace = resolve
-    })
-    let firstCall = true
-    const { coordinator, getExtractorCalls } = createExtractionCoordinator({
-        extractionInterval: 2,
-        extractionRounds: 2,
-        toExtractionPayload: (messages) => {
-            payloads.push(messages.map((message) => message.contentLines[0]))
-            return {
-                input: 'payload',
-                sourceOriginMessages: [],
-                speakers: []
-            }
-        },
-        extractWithTrace: async () => {
-            if (firstCall) {
-                firstCall = false
-                return await firstTrace
-            }
-            return createExtractionTrace()
-        }
-    })
-    const options = {
-        resolvePresetPrompt: async () => '你是测试助手。',
-        resolveTranscriptOrigin: async () => ({
-            header: '以下是聊天记录：',
-            sourceLabel: '来源于「测试群」（群聊 ID：guild-1）的群聊'
-        })
-    }
-
-    for (let index = 1; index <= 6; index++) {
-        const round = createExtractionMessages().map((message) => ({
-            ...message,
-            contentLines: [`round-${index}-${message.role}`]
-        }))
-        await coordinator.queue(scope, { messages: round }, options)
-    }
-    assert.equal(getExtractorCalls(), 1)
-
-    resolveFirstTrace(createExtractionTrace())
-    await waitFor(() => getExtractorCalls() === 3, 'three interval boundaries')
-
-    assert.deepEqual(
-        payloads.map((payload) => payload[0]),
-        ['round-1-user', 'round-3-user', 'round-5-user']
-    )
-})
-
-it('writes extracted memories and queues auto Dream without persisting a job', async () => {
-    const extracted: AttributedMemoryItem[] = [
-        {
-            ...createExtractedMemory(),
-            content: 'private extracted detail'
-        }
-    ]
-    const autoDreamPresets: string[] = []
-    const { coordinator, jobStore, appended, debugMessages } =
-        createExtractionCoordinator({
-            trace: createExtractionTrace({ extracted }),
-            queueAutoDream: (presetId) => autoDreamPresets.push(presetId)
-        })
-
-    await queueExtraction(coordinator)
-    await waitFor(() => appended.length === 1, 'successful extraction')
-
-    assert.equal(jobStore.jobs.length, 0)
-    assert.deepEqual(appended[0]?.extracted, extracted)
-    assert.equal(
-        appended[0]?.sourceLabel,
-        '来源于「测试群」（群聊 ID：guild-1）的群聊'
-    )
-    assert.deepEqual(autoDreamPresets, [scope.presetId])
-    assert.ok(
-        debugMessages.some(
-            (message) =>
-                message.includes('event=extraction.completed') &&
-                message.includes('extracted=1')
+    it('packs consecutive segments greedily within the window', () => {
+        const chunks = planExtractionChunks(
+            log(['user', 'assistant', 'user', 'assistant']),
+            3,
+            false
         )
-    )
-    assert.ok(
-        debugMessages.every(
-            (message) => !message.includes(extracted[0].content)
+        expect(chunks.map((chunk) => chunk.length)).toEqual([2, 2])
+        expect(chunks[0].map((e) => e.content)).toEqual([
+            'user-0',
+            'assistant-1'
+        ])
+    })
+
+    it('truncates a long segment to the window suffix in participation mode', () => {
+        const roles: ('user' | 'assistant')[] = Array(39).fill('user')
+        roles.push('assistant')
+        const chunks = planExtractionChunks(log(roles), 30, false)
+        expect(chunks).toHaveLength(1)
+        expect(chunks[0]).toHaveLength(30)
+        expect(chunks[0][29].role).toBe('assistant')
+    })
+
+    it('splits a long segment preferring assistant boundaries in overheard mode', () => {
+        // 单段：4 用户 + 2 连续 assistant（段长 6 > 窗口 5）
+        const chunks = planExtractionChunks(
+            log(['user', 'user', 'user', 'user', 'assistant', 'assistant']),
+            5,
+            true
         )
-    )
-})
-
-it('persists one failed extraction job when payload construction throws', async () => {
-    const { coordinator, jobStore } = createExtractionCoordinator({
-        toExtractionPayload: () => {
-            throw new Error('payload failure')
-        }
+        expect(chunks.map((chunk) => chunk.length)).toEqual([5, 1])
+        expect(chunks[0][chunks[0].length - 1].role).toBe('assistant')
     })
 
-    await queueExtraction(coordinator)
-    await waitFor(() => jobStore.jobs.length === 1, 'failed extraction payload')
-
-    assert.equal(jobStore.jobs[0]?.input, '')
-    assert.match(jobStore.jobs[0]?.error ?? '', /payload failure/u)
+    it('splits pure-chatter stretches at the window in overheard mode', () => {
+        // 单段：7 用户 + 1 assistant（窗口内无 assistant 时按窗口切）
+        const chunks = planExtractionChunks(
+            log([
+                'user',
+                'user',
+                'user',
+                'user',
+                'user',
+                'user',
+                'user',
+                'assistant'
+            ]),
+            3,
+            true
+        )
+        expect(chunks.map((chunk) => chunk.length)).toEqual([3, 3, 2])
+        expect(chunks[chunks.length - 1][1].role).toBe('assistant')
+    })
 })
 
-it('persists one failed extraction job when the model throws', async () => {
-    const { coordinator, jobStore } = createExtractionCoordinator({
-        extractWithTrace: async () => {
-            throw new Error('extraction failure')
-        }
+describe('LivingMemoryExtractionCoordinator', () => {
+    it('extracts once the backlog reaches the window', async () => {
+        const harness = createHarness({ window: 4 })
+        // 首个 after-chat 初始化游标（空日志末尾）
+        await queueExtraction(harness)
+
+        harness.messageLog.appendReply(scope.conversationId, [
+            entry('user', '问题'),
+            entry('assistant', '回答')
+        ])
+        await queueExtraction(harness)
+        expect(harness.getExtractorCalls()).toBe(0)
+
+        harness.messageLog.appendReply(scope.conversationId, [
+            entry('user', '追问'),
+            entry('assistant', '补充')
+        ])
+        await queueExtraction(harness)
+        await waitFor(() => harness.getExtractorCalls() === 1, 'drain settle')
+        expect(harness.getExtractorInputs()[0]).toContain('问题')
+        expect(harness.getExtractorInputs()[0]).toContain('补充')
     })
 
-    await queueExtraction(coordinator)
-    await waitFor(() => jobStore.jobs.length === 1, 'failed extraction model')
-
-    assert.equal(jobStore.jobs[0]?.input, '以下是聊天记录：\n\npayload')
-    assert.match(jobStore.jobs[0]?.error ?? '', /extraction failure/u)
-})
-
-it('logs extraction scope and preserves the original background error', async () => {
-    const backgroundError = new Error('failed to persist extraction failure')
-    const { coordinator, warnings } = createExtractionCoordinator({
-        extractWithTrace: async () => {
-            throw new Error('extraction failure')
-        },
-        createFailedJob: async () => {
-            throw backgroundError
-        }
+    it('skips extraction entirely when the window is zero', async () => {
+        const harness = createHarness({ window: 0 })
+        harness.messageLog.appendReply(scope.conversationId, [
+            entry('user', 'a'),
+            entry('assistant', 'b')
+        ])
+        await queueExtraction(harness)
+        expect(harness.getExtractorCalls()).toBe(0)
     })
 
-    await queueExtraction(coordinator)
-    await waitFor(() => warnings.length === 1, 'extraction background warning')
+    it('initializes the cold cursor at the current tail without dumping history', async () => {
+        const harness = createHarness({ window: 2 })
+        harness.messageLog.appendReply(scope.conversationId, [
+            entry('user', '旧消息'),
+            entry('assistant', '旧回答')
+        ])
+        // 首个 after-chat：游标落在当时末尾，不回溯提取
+        await queueExtraction(harness)
+        expect(harness.getExtractorCalls()).toBe(0)
 
-    assert.match(
-        String(warnings[0]?.[0]),
-        /event=extraction.failed workflow=extraction .*presetId=preset-1.*conversationId=conversation-1.*operation=run.*triggerSequence=1/u
-    )
-    assert.equal(warnings[0]?.[1], backgroundError)
-})
-
-it('persists one failed extraction job when preset prompt resolution throws', async () => {
-    const { coordinator, jobStore, getExtractorCalls } =
-        createExtractionCoordinator()
-
-    await queueExtraction(coordinator, 1, async () => {
-        throw new Error('preset prompt resolution failure')
+        harness.messageLog.appendReply(scope.conversationId, [
+            entry('user', '新消息'),
+            entry('assistant', '新回答')
+        ])
+        await queueExtraction(harness)
+        await waitFor(
+            () => harness.getExtractorCalls() === 1,
+            'post-init drain'
+        )
+        expect(harness.getExtractorInputs()[0]).not.toContain('旧消息')
     })
-    await waitFor(
-        () => jobStore.jobs.length === 1,
-        'failed preset prompt resolution'
-    )
 
-    assert.equal(getExtractorCalls(), 0)
-    assert.match(
-        jobStore.jobs[0]?.error ?? '',
-        /preset prompt resolution failure/u
-    )
-})
+    it('leaves an assistant-less tail unconsumed for the next drain', async () => {
+        const harness = createHarness({ window: 2 })
+        await queueExtraction(harness)
+        harness.messageLog.appendReply(scope.conversationId, [
+            entry('user', '问题'),
+            entry('assistant', '回答'),
+            entry('user', '只有闲聊')
+        ])
+        await queueExtraction(harness)
+        await waitFor(() => harness.getExtractorCalls() === 1, 'drain segment')
+        expect(harness.getExtractorInputs()[0]).toContain('问题')
+        expect(harness.getExtractorInputs()[0]).not.toContain('只有闲聊')
 
-it('consumes a failed boundary and processes the next completed round once', async () => {
-    let shouldFail = true
-    const { coordinator, jobStore, debugMessages, getExtractorCalls } =
-        createExtractionCoordinator({
-            extractWithTrace: async () => {
-                if (shouldFail) {
-                    throw new Error('first extraction failure')
+        // 追加闲聊不闭合段：不消费
+        harness.messageLog.appendReply(scope.conversationId, [
+            entry('user', '更多闲聊')
+        ])
+        await queueExtraction(harness)
+        expect(harness.getExtractorCalls()).toBe(1)
+    })
+
+    it('drains multiple chunks serially for a large backlog', async () => {
+        const harness = createHarness({ window: 2 })
+        await queueExtraction(harness)
+        harness.messageLog.appendReply(scope.conversationId, [
+            entry('user', 'q1'),
+            entry('assistant', 'a1'),
+            entry('user', 'q2'),
+            entry('assistant', 'a2'),
+            entry('user', 'q3'),
+            entry('assistant', 'a3')
+        ])
+        await queueExtraction(harness)
+        await waitFor(() => harness.getExtractorCalls() === 3, 'three chunks')
+        expect(harness.getExtractorInputs()[0]).toContain('q1')
+        expect(harness.getExtractorInputs()[2]).toContain('q3')
+    })
+
+    it('retries a failing chunk and abandons it after three failures', async () => {
+        let modelCalls = 0
+        const harness = createHarness({
+            window: 2,
+            extractWithTrace: () => {
+                modelCalls += 1
+                if (modelCalls <= 3) {
+                    return Promise.reject(new Error('model down'))
                 }
+                return Promise.resolve(createExtractionTrace())
+            }
+        })
+        await queueExtraction(harness)
+        harness.messageLog.appendReply(scope.conversationId, [
+            entry('user', 'q1'),
+            entry('assistant', 'a1'),
+            entry('user', 'q2'),
+            entry('assistant', 'a2')
+        ])
+
+        // 第一次触发：块 1 失败，游标不动
+        await queueExtraction(harness)
+        await waitFor(() => harness.getExtractorCalls() === 1, 'first failure')
+
+        // 第二次触发：块 1 第二次失败
+        await queueExtraction(harness)
+        await waitFor(() => harness.getExtractorCalls() === 2, 'second failure')
+        expect(harness.jobStore.jobs).toHaveLength(0)
+
+        // 第三次触发：达到上限，块 1 记任务放弃，块 2 继续并成功
+        await queueExtraction(harness)
+        await waitFor(
+            () => harness.getExtractorCalls() === 4,
+            'abandon and next'
+        )
+        expect(harness.jobStore.jobs).toHaveLength(1)
+        expect(harness.getExtractorInputs()[3]).toContain('q2')
+    })
+
+    it('does not initialize the cursor for non-whitelisted scopes', async () => {
+        const whitelistedScope: MemoryScope = {
+            ...scope,
+            guildId: 'guild-1'
+        }
+        const harness = createHarness({
+            window: 2,
+            enableExtractionWhitelist: true,
+            extractionWhitelist: ['guild-1']
+        })
+        harness.messageLog.appendReply(scope.conversationId, [
+            entry('user', 'q'),
+            entry('assistant', 'a')
+        ])
+
+        // 未命中白名单：跳过且游标不初始化
+        await queueExtraction(harness)
+        expect(harness.getExtractorCalls()).toBe(0)
+
+        // 命中白名单后的首个事件：从当时刻起算，不倾泻之前的积压
+        harness.messageLog.appendReply(scope.conversationId, [
+            entry('user', 'q2'),
+            entry('assistant', 'a2')
+        ])
+        await harness.messageLog.warmup(whitelistedScope.conversationId)
+        await harness.coordinator.queue(whitelistedScope, {
+            resolvePresetPrompt: async () => 'preset',
+            resolveTranscriptOrigin: async () => ({
+                header: 'h',
+                sourceLabel: 's'
+            })
+        })
+        expect(harness.getExtractorCalls()).toBe(0)
+
+        harness.messageLog.appendReply(whitelistedScope.conversationId, [
+            entry('user', 'q3'),
+            entry('assistant', 'a3')
+        ])
+        await harness.coordinator.queue(whitelistedScope, {
+            resolvePresetPrompt: async () => 'preset',
+            resolveTranscriptOrigin: async () => ({
+                header: 'h',
+                sourceLabel: 's'
+            })
+        })
+        await waitFor(
+            () => harness.getExtractorCalls() === 1,
+            'whitelisted drain'
+        )
+        expect(harness.getExtractorInputs()[0]).toContain('q3')
+    })
+
+    it('writes extracted memories and queues auto dream', async () => {
+        const dreamPresetIds: string[] = []
+        const trace = createExtractionTrace({
+            extracted: [createExtractedMemory()]
+        })
+        const harness = createHarness({
+            window: 2,
+            extractWithTrace: () => Promise.resolve(trace),
+            queueAutoDream: (presetId) => dreamPresetIds.push(presetId)
+        })
+        await queueExtraction(harness)
+        harness.messageLog.appendReply(scope.conversationId, [
+            entry('user', 'q'),
+            entry('assistant', 'a')
+        ])
+        await queueExtraction(harness)
+
+        await waitFor(() => harness.appended.length === 1, 'memory written')
+        expect(harness.appended[0].extracted).toHaveLength(1)
+        expect(dreamPresetIds).toEqual([scope.presetId])
+        expect(harness.jobStore.jobs).toHaveLength(0)
+    })
+
+    it('records a failed job and consumes the chunk on parse errors', async () => {
+        const harness = createHarness({
+            window: 2,
+            extractWithTrace: () =>
+                Promise.resolve(
+                    createExtractionTrace({ parseError: 'bad output' })
+                )
+        })
+        await queueExtraction(harness)
+        harness.messageLog.appendReply(scope.conversationId, [
+            entry('user', 'q'),
+            entry('assistant', 'a')
+        ])
+        await queueExtraction(harness)
+        await waitFor(() => harness.jobStore.jobs.length === 1, 'parse job')
+        expect(harness.getExtractorCalls()).toBe(1)
+
+        // 解析失败视为该块已消费，不重试
+        await queueExtraction(harness)
+        expect(harness.getExtractorCalls()).toBe(1)
+    })
+
+    it('clears scope state by conversation', async () => {
+        const harness = createHarness({ window: 2 })
+        harness.messageLog.appendReply(scope.conversationId, [
+            entry('user', 'q'),
+            entry('assistant', 'a')
+        ])
+        await queueExtraction(harness)
+        expect(harness.getExtractorCalls()).toBe(0)
+
+        harness.coordinator.clearByConversation(scope.conversationId)
+        harness.messageLog.appendReply(scope.conversationId, [
+            entry('user', 'q2'),
+            entry('assistant', 'a2')
+        ])
+        await queueExtraction(harness)
+        // 清空后游标重置为当前末尾，重新起算
+        expect(harness.getExtractorCalls()).toBe(0)
+    })
+
+    it('defers cursor initialization until backfill succeeds', async () => {
+        let failBackfill = true
+        const backfillBot: ConversationBackfillBot = {
+            selfId: 'bot-self',
+            getMessageList: async () => {
+                if (failBackfill) {
+                    throw new Error('platform down')
+                }
+                return {
+                    data: [
+                        {
+                            id: 'old-1',
+                            user: { id: 'user-1', name: '用户A' },
+                            content: '回填历史',
+                            timestamp: 1_000
+                        }
+                    ]
+                }
+            }
+        }
+        const harness = createHarness({ window: 2, backfillBot })
+
+        // 回填失败期间不初始化游标：积压已达标也不提取
+        await queueExtraction(harness)
+        harness.messageLog.appendReply(scope.conversationId, [
+            entry('user', '旧问题'),
+            entry('assistant', '旧回答')
+        ])
+        await queueExtraction(harness)
+        expect(harness.getExtractorCalls()).toBe(0)
+
+        // 重试成功：游标在回填落地后初始化，历史与新消息都不倾泻
+        failBackfill = false
+        await queueExtraction(harness)
+        expect(harness.getExtractorCalls()).toBe(0)
+
+        harness.messageLog.appendReply(scope.conversationId, [
+            entry('user', 'q2'),
+            entry('assistant', 'a2')
+        ])
+        await queueExtraction(harness)
+        await waitFor(() => harness.getExtractorCalls() === 1, 'drain')
+        expect(harness.getExtractorInputs()[0]).toContain('q2')
+        expect(harness.getExtractorInputs()[0]).not.toContain('回填历史')
+        expect(harness.getExtractorInputs()[0]).not.toContain('旧问题')
+    })
+
+    it('stops a running drain whose scope state was cleared mid-run', async () => {
+        let releaseExtractor!: () => void
+        const extractorGate = new Promise<void>((resolve) => {
+            releaseExtractor = resolve
+        })
+        const harness = createHarness({
+            window: 2,
+            extractWithTrace: async () => {
+                await extractorGate
                 return createExtractionTrace()
             }
         })
+        await queueExtraction(harness)
+        harness.messageLog.appendReply(scope.conversationId, [
+            entry('user', 'q'),
+            entry('assistant', 'a')
+        ])
+        await queueExtraction(harness)
+        await waitFor(() => harness.getExtractorCalls() === 1, 'drain gated')
 
-    await queueExtraction(coordinator)
-    await waitFor(() => jobStore.jobs.length === 1, 'first failed extraction')
-    assert.equal(getExtractorCalls(), 1)
+        // 模型请求等待期间清空会话，随后新消息到达并由新状态接管
+        harness.coordinator.clearByConversation(scope.conversationId)
+        harness.messageLog.appendReply(scope.conversationId, [
+            entry('user', 'new-q'),
+            entry('assistant', 'new-a')
+        ])
+        releaseExtractor()
+        await new Promise((resolve) => setTimeout(resolve, 20))
 
-    shouldFail = false
-    await queueExtraction(coordinator)
-    await waitFor(
-        () =>
-            debugMessages.some((message) =>
-                message.includes('event=extraction.completed')
-            ),
-        'next extraction completion'
-    )
-
-    assert.equal(getExtractorCalls(), 2)
-    assert.equal(jobStore.jobs.length, 1)
-})
-
-it('keeps a cleared scope serialized until its active extraction finishes', async () => {
-    let resolveFirstTrace!: (trace: LivingMemoryExtractionTrace) => void
-    const firstTrace = new Promise<LivingMemoryExtractionTrace>((resolve) => {
-        resolveFirstTrace = resolve
+        // 旧排干只完成在途块，不再消费新纪元消息
+        expect(harness.getExtractorCalls()).toBe(1)
+        expect(harness.getExtractorInputs()[0]).toContain('q')
+        expect(harness.getExtractorInputs()[0]).not.toContain('new-q')
     })
-    let firstCall = true
-    const { coordinator, getExtractorCalls } = createExtractionCoordinator({
-        extractWithTrace: async () => {
-            if (firstCall) {
-                firstCall = false
-                return await firstTrace
-            }
-            return createExtractionTrace()
-        }
-    })
-
-    await queueExtraction(coordinator)
-    await waitFor(() => getExtractorCalls() === 1, 'active extraction')
-
-    coordinator.clearByConversation(scope.conversationId)
-    await queueExtraction(coordinator)
-    assert.equal(getExtractorCalls(), 1)
-
-    resolveFirstTrace(createExtractionTrace())
-    await waitFor(
-        () => getExtractorCalls() === 2,
-        'post-clear extraction completion'
-    )
-})
-
-it('persists one failed extraction job for parse errors', async () => {
-    const { coordinator, jobStore, appended } = createExtractionCoordinator({
-        trace: createExtractionTrace({ parseError: 'bad json' })
-    })
-
-    await queueExtraction(coordinator)
-    await waitFor(() => jobStore.jobs.length === 1, 'failed extraction parse')
-
-    assert.equal(appended.length, 0)
-    assert.match(jobStore.jobs[0]?.error ?? '', /extraction parse failed/u)
-})
-
-it('persists one failed extraction job when memory persistence throws', async () => {
-    const { coordinator, jobStore } = createExtractionCoordinator({
-        trace: createExtractionTrace({
-            extracted: [createExtractedMemory()]
-        }),
-        appendMemories: async () => {
-            throw new Error('memory persistence failure')
-        }
-    })
-
-    await queueExtraction(coordinator)
-    await waitFor(
-        () => jobStore.jobs.length === 1,
-        'failed extracted-memory persistence'
-    )
-
-    assert.match(jobStore.jobs[0]?.error ?? '', /memory persistence failure/u)
-})
-
-it('does not persist a job for valid empty extraction output', async () => {
-    const { coordinator, jobStore, appended, debugMessages } =
-        createExtractionCoordinator({
-            trace: createExtractionTrace({ extracted: [] })
-        })
-
-    await queueExtraction(coordinator)
-    await waitFor(
-        () => debugMessages.some((message) => message.includes('completed')),
-        'empty extraction completion'
-    )
-
-    assert.equal(appended.length, 0)
-    assert.equal(jobStore.jobs.length, 0)
-})
-
-it('does not persist a job when extraction is explicitly skipped', async () => {
-    const { coordinator, jobStore, debugMessages } =
-        createExtractionCoordinator({
-            trace: createExtractionTrace({
-                skippedReason: 'model-not-configured'
-            })
-        })
-
-    await queueExtraction(coordinator)
-    await waitFor(
-        () => debugMessages.some((message) => message.includes('completed')),
-        'skipped extraction completion'
-    )
-
-    assert.equal(jobStore.jobs.length, 0)
 })

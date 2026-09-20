@@ -5,6 +5,7 @@ import { apply as characterMiddlewarePlugin } from './plugins/character_middlewa
 import { apply as chatMiddlewarePlugin } from './plugins/chat_middleware'
 import { apply as livingMemoryToolsPlugin } from './plugins/living_memory_tools'
 import { apply as livingMemoryCommandsPlugin } from './plugins/commands'
+import { apply as messageCollectorPlugin } from './plugins/message_collector'
 import {
     registerEntry as registerWebUIEntry,
     apply as webuiPlugin
@@ -27,6 +28,7 @@ export function apply(ctx: Context, config: Config) {
 
     ctx.inject(['chatluna_living_memory'], (ctx) => {
         livingMemoryCommandsPlugin(ctx)
+        messageCollectorPlugin(ctx)
         void chatMiddlewarePlugin(ctx, config)
         livingMemoryToolsPlugin(ctx, config)
 
@@ -51,22 +53,19 @@ export const Config: Schema<Config> = Schema.intersect([
                 '开启 chatLuna 主插件的记忆注入（character 插件需通过预设中的 {living_memory} 变量注入）'
             )
             .default(true),
-        extractionRounds: Schema.number()
-            .min(1)
-            .max(100)
-            .step(1)
-            .description(
-                '每次提取时使用的最近对话轮数（1 轮 = 1 次用户消息 + 1 次AI回复）。'
-            )
-            .default(10),
-        extractionInterval: Schema.number()
+        extractionWindowMessages: Schema.number()
             .min(0)
-            .max(100)
+            .max(200)
             .step(1)
             .description(
-                '每隔多少轮对话触发一次记忆提取；设为 0 时不执行自动记忆提取。'
+                '提取窗口：会话日志积压达到该条数时触发排干，同时作为单次提取块的消息条数上限；设为 0 时不执行自动记忆提取。长积压按 bot 回复为锚切段逐块提取。'
             )
-            .default(10),
+            .default(30),
+        extractionIncludeOverheard: Schema.boolean()
+            .description(
+                '旁听提取：开启后超长分段按窗口切分全部提取（含 bot 未参与的聊天）；关闭时每段只保留以 bot 回复结尾的窗口后缀，远端闲聊丢弃。'
+            )
+            .default(false),
         enableExtractionWhitelist: Schema.boolean()
             .description(
                 '开启自动记忆提取白名单；开启后只有白名单内的会话才会自动提取记忆，关闭时白名单列表不生效。'
@@ -180,22 +179,22 @@ export const Config: Schema<Config> = Schema.intersect([
         ] as const)
             .description('记忆召回策略。')
             .default('embedding-rerank'),
-        recallInterval: Schema.number()
+        recallIntervalMessages: Schema.number()
             .min(0)
-            .max(30)
+            .max(200)
             .step(1)
             .description(
-                '自动记忆召回的轮次间隔；设为 0 时不启用自动召回，否则每个预设会话首次立即召回，此后每隔指定轮数召回一次。'
+                '召回窗口：两次召回执行之间累计进入会话日志的最小消息条数（含未触发回复的闲聊）；设为 0 时不启用自动召回，否则每个预设会话首次立即召回。'
             )
-            .default(5),
-        recallHistoryWindowRounds: Schema.number()
+            .default(10),
+        recallHistoryMessages: Schema.number()
             .min(1)
-            .max(12)
+            .max(200)
             .step(1)
             .description(
-                '记忆召回流程使用的最近对话轮数，用于查询改写和 agentic-recall 规划（1 轮 = 1 次用户消息 + 1 次助手回复）。'
+                '每次召回时从会话日志读取的最近聊天消息条数，用于查询改写和 agentic-recall 规划的上下文。'
             )
-            .default(3),
+            .default(20),
         enableRecallQueryRewrite: Schema.boolean()
             .description(
                 '是否在 embedding-rerank 召回前使用 LLM 根据历史信息改写检索的查询文本。'

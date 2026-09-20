@@ -22,7 +22,7 @@ const queryLineTerminatorPattern = /[。！？!?；;，,、：:]$/u
 
 type LivingMemoryRecallQueryConfig = Pick<
     LivingMemoryConfig,
-    'enableRecallQueryRewrite' | 'recallHistoryWindowRounds' | 'subModel'
+    'enableRecallQueryRewrite' | 'subModel'
 >
 
 const normalizeQueryLines = (lines: string[]) => {
@@ -265,12 +265,8 @@ export class LivingMemoryRecallQueryBuilder {
         historyMessages: LivingMemoryTranscriptMessage[]
     ) {
         const assistantLabel = resolveScopeAssistantLabel(scope)
-        const recentMessages = this.formatter.takeRecentRounds(
-            historyMessages,
-            this.config.recallHistoryWindowRounds
-        )
         const chatHistory =
-            this.formatter.toExtractionPayload(recentMessages).input
+            this.formatter.toExtractionPayload(historyMessages).input
 
         return buildRecallRewritePrompt({
             assistantLabel,

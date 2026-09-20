@@ -49,7 +49,6 @@ type LivingMemoryAgenticRecallConfig = Pick<
     | 'subModel'
     | 'debug'
     | 'memorySearchToolMaxResults'
-    | 'recallHistoryWindowRounds'
     | 'enableConversationIsolation'
 >
 
@@ -338,12 +337,8 @@ export class LivingMemoryAgenticRecallExecutor {
         const lastMessage = this.formatter.toExtractionPayload([
             currentMessage
         ]).input
-        const recentMessages = this.formatter.takeRecentRounds(
-            historyMessages,
-            this.config.recallHistoryWindowRounds
-        )
         const chatHistory =
-            this.formatter.toExtractionPayload(recentMessages).input
+            this.formatter.toExtractionPayload(historyMessages).input
         return buildAgenticRecallPrompt({
             assistantLabel,
             lastMessage,

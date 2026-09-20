@@ -46,8 +46,7 @@ const config = {
     subModel: 'test/model',
     embeddingModel: 'test-embedding',
     debug: false,
-    memorySearchToolMaxResults: 30,
-    recallHistoryWindowRounds: 3
+    memorySearchToolMaxResults: 30
 } as const
 
 const testScope: MemoryScope = {

@@ -10,11 +10,13 @@ import type {
     MemoryScope
 } from '../contracts/memory'
 import {
+    getChatLunaMessageCreatedAt,
+    getMessageTextParts,
     setLivingMemoryRawContent,
-    takeRecentChatLunaRounds,
-    toChatLunaTranscriptMessageResult,
-    toChatLunaTranscriptMessages
+    toChatLunaTranscriptMessageResult
 } from '../service/transcript/chatluna_transcript_adapter'
+import { toLogTranscriptMessages } from '../service/transcript/message_log/converter'
+import type { ConversationLogEntryInput } from '../service/transcript/message_log/types'
 import type { UserSpeakerCache } from '../service/transcript/user_speaker'
 import { buildMemoryTranscriptOrigin } from '../service/transcript/origin_context'
 import { collectUserProfileSpeakerKeys } from '../service/user_profile'
@@ -22,6 +24,86 @@ import {
     renderChatLunaPresetPrompt,
     resolveMainRunConversationId
 } from '../service/memory/helpers'
+import { toNonEmptyString } from '../service/shared/utils'
+
+const registerConversationLog = (
+    ctx: Context,
+    session: Session,
+    conversationId: string
+) => {
+    ctx.chatluna_living_memory.messageLog.register(
+        conversationId,
+        {
+            platform: session.platform,
+            channelId: session.channelId ?? session.userId ?? '',
+            guildId: session.guildId ?? undefined,
+            isDirect: session.isDirect
+        },
+        session.bot
+    )
+}
+
+/**
+ * 触发消息条目：先于读取显式补写，消除与平台监听的执行顺序耦合。
+ * 透传平台 messageId，使 before-chat 补写、after-chat 交换对与平台监听
+ * 三处写入共享同一去重键、只落一条。
+ */
+export const buildChatLunaSourceEntry = (
+    session: Session,
+    sourceMessage: HumanMessage
+): ConversationLogEntryInput | null => {
+    const sourceUserId =
+        toNonEmptyString(sourceMessage.id) ?? toNonEmptyString(session.userId)
+    const content = getMessageTextParts(sourceMessage).parts.join('\n')
+    if (sourceUserId == null || content.trim().length === 0) {
+        return null
+    }
+
+    return {
+        messageId: toNonEmptyString(session.messageId) ?? undefined,
+        userId: sourceUserId,
+        name:
+            toNonEmptyString(session.author?.nick) ??
+            toNonEmptyString(session.username) ??
+            sourceUserId,
+        content,
+        timestamp:
+            getChatLunaMessageCreatedAt(sourceMessage)?.getTime() ?? Date.now(),
+        role: 'user',
+        origin: 'live'
+    }
+}
+
+/**
+ * 通道 2：本次交换的 source + response 两条。ChatLuna 虚拟房间没有平台
+ * channel 可供监听，这两条是那里唯一的日志来源；平台绑定的房间则与监听
+ * 经去重合一。
+ */
+const buildChatLunaExchangeEntries = (
+    session: Session,
+    sourceMessage: HumanMessage,
+    responseMessage: AIMessage
+): ConversationLogEntryInput[] => {
+    const sourceEntry = buildChatLunaSourceEntry(session, sourceMessage)
+    const responseText = getMessageTextParts(responseMessage).parts.join('\n')
+    const botName = toNonEmptyString(session.bot?.user?.name) ?? session.selfId
+
+    return [
+        ...(sourceEntry == null
+            ? []
+            : [{ ...sourceEntry, origin: 'reply' as const }]),
+        {
+            userId: session.selfId,
+            name: botName,
+            content: responseText,
+            timestamp:
+                getChatLunaMessageCreatedAt(responseMessage)?.getTime() ??
+                Date.now(),
+            role: 'assistant' as const,
+            origin: 'reply' as const
+        }
+    ].filter((entry) => entry.content.trim().length > 0)
+}
 
 const writeRawUserContent = (
     message: HumanMessage,
@@ -183,6 +265,14 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
             if (scope == null) {
                 return
             }
+            registerConversationLog(ctx, session, conversationId)
+            const sourceEntry = buildChatLunaSourceEntry(session, message)
+            if (sourceEntry != null) {
+                livingMemory.messageLog.appendLive(
+                    [conversationId],
+                    sourceEntry
+                )
+            }
             writeRawUserContent(message, promptVariables)
 
             const currentTranscript = await toChatLunaTranscriptMessageResult(
@@ -224,14 +314,14 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
             > | null = null
             const loadHistoryMessages = () => {
                 historyMessagesPromise ??= (async () => {
-                    return await toChatLunaTranscriptMessages(
+                    return await toLogTranscriptMessages(
                         scope,
-                        session,
-                        takeRecentChatLunaRounds(
-                            await chatInterface.chatHistory.getMessages(),
-                            config.recallHistoryWindowRounds
-                        ),
-                        speakerCache
+                        session.platform,
+                        await livingMemory.messageLog.loadRecallHistory(
+                            conversationId,
+                            config.recallHistoryMessages,
+                            sourceEntry
+                        )
                     )
                 })()
 
@@ -364,81 +454,51 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
             if (scope == null) {
                 return
             }
-
-            const completedAt = new Date()
-            const sourceTranscript = await toChatLunaTranscriptMessageResult(
-                scope,
-                session,
-                sourceMessage,
-                {
-                    fallbackCreatedAt: completedAt,
-                    speakerCache
-                }
+            registerConversationLog(ctx, session, conversationId)
+            livingMemory.messageLog.appendReply(
+                conversationId,
+                buildChatLunaExchangeEntries(
+                    session,
+                    sourceMessage,
+                    responseMessage
+                )
             )
-            const responseTranscript = await toChatLunaTranscriptMessageResult(
-                scope,
-                session,
-                responseMessage,
-                {
-                    fallbackCreatedAt: completedAt,
-                    speakerCache
-                }
-            )
-
-            if (
-                sourceTranscript.message == null ||
-                responseTranscript.message == null
-            ) {
-                diagnostic('chat.extraction.skipped', {
-                    conversationId,
-                    presetId: scope.presetId,
-                    reason: 'invalid-completed-round',
-                    sourceReason: sourceTranscript.reason,
-                    responseReason: responseTranscript.reason
-                })
-                return
-            }
-
-            const completedRound = {
-                messages: [sourceTranscript.message, responseTranscript.message]
-            }
 
             diagnostic('chat.extraction.queued', {
                 conversationId,
-                presetId: scope.presetId,
-                roundMessages: completedRound.messages.length
+                presetId: scope.presetId
             })
             const presetTemplate = chatInterface.preset.value
+            const sourceLabel =
+                toNonEmptyString(session.author?.nick) ??
+                toNonEmptyString(session.username) ??
+                session.userId ??
+                ''
 
-            await ctx.chatluna_living_memory.queueExtraction(
-                scope,
-                completedRound,
-                {
-                    resolveTranscriptOrigin: async () => {
-                        if (session.isDirect) {
-                            return buildMemoryTranscriptOrigin({
-                                isDirect: true,
-                                speakerLabel:
-                                    sourceTranscript.message.speakerLabel,
-                                speakerId: scope.speakerId
-                            })
-                        }
-
-                        const guild = await session.bot.getGuild(scope.guildId!)
+            await ctx.chatluna_living_memory.queueExtraction(scope, {
+                resolveTranscriptOrigin: async () => {
+                    if (session.isDirect) {
                         return buildMemoryTranscriptOrigin({
-                            isDirect: false,
-                            guildName: guild.name,
-                            guildId: scope.guildId!
+                            isDirect: true,
+                            speakerLabel: sourceLabel,
+                            speakerId: scope.speakerId
                         })
-                    },
-                    resolvePresetPrompt: async () =>
-                        await renderChatLunaPresetPrompt(
-                            ctx,
-                            presetTemplate,
-                            promptVariables
-                        )
-                }
-            )
+                    }
+
+                    const guild = await session.bot.getGuild(scope.guildId!)
+                    return buildMemoryTranscriptOrigin({
+                        isDirect: false,
+                        guildName: guild.name,
+                        guildId: scope.guildId!
+                    })
+                },
+                resolvePresetPrompt: async () =>
+                    await renderChatLunaPresetPrompt(
+                        ctx,
+                        presetTemplate,
+                        promptVariables
+                    )
+            })
         }
     )
 

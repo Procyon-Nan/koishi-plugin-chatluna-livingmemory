@@ -1,12 +1,9 @@
 import assert from 'node:assert/strict'
-import { AIMessage, HumanMessage } from '@langchain/core/messages'
+import { HumanMessage } from '@langchain/core/messages'
 import type { Session } from 'koishi'
 import type { MemoryScope } from '../src/contracts/memory'
 import { createUserProfileSpeakerKey } from '../src/service/memory/speaker_identity'
-import {
-    takeRecentChatLunaRounds,
-    toChatLunaTranscriptMessageResult
-} from '../src/service/transcript/chatluna_transcript_adapter'
+import { toChatLunaTranscriptMessageResult } from '../src/service/transcript/chatluna_transcript_adapter'
 
 const createScope = (platform?: string): MemoryScope => ({
     conversationId: 'conversation-1',
@@ -83,30 +80,5 @@ it('rejects ChatLuna history without a user id', async () => {
             { fallbackCreatedAt: new Date('2026-08-21T00:00:00.000Z') }
         ),
         /has no id/u
-    )
-})
-
-it('slices recent chat rounds by completed pairs', () => {
-    const history = [
-        new HumanMessage({ id: 'user-1', content: '一轮' }),
-        new AIMessage({ content: '回复一' }),
-        new HumanMessage({ id: 'user-1', content: '二轮' }),
-        new AIMessage({ content: '回复二' }),
-        new HumanMessage({ id: 'user-1', content: '未回复' })
-    ]
-    assert.deepEqual(
-        takeRecentChatLunaRounds(history, 1).map((message) => message.content),
-        ['二轮', '回复二', '未回复']
-    )
-    assert.deepEqual(
-        takeRecentChatLunaRounds(history, 2).map((message) => message.content),
-        ['一轮', '回复一', '二轮', '回复二', '未回复']
-    )
-    assert.deepEqual(
-        takeRecentChatLunaRounds(
-            [new HumanMessage({ id: 'user-1', content: '独苗' })],
-            2
-        ),
-        []
     )
 })

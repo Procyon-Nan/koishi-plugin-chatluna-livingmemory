@@ -19,7 +19,6 @@ it('does not recognize [skip] as a recall rewrite control value', async () => {
     } as unknown as Context
     const builder = new LivingMemoryRecallQueryBuilder(ctx, {
         enableRecallQueryRewrite: true,
-        recallHistoryWindowRounds: 3,
         subModel: 'test-model'
     })
 

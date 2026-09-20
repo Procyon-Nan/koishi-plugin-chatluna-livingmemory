@@ -25,7 +25,6 @@ import {
     filterUserProfileList
 } from '../../query'
 import type {
-    LivingMemoryCompletedRound,
     LivingMemoryPresetExport,
     LivingMemoryPresetImportResult,
     LivingMemorySearchDetailedResult,
@@ -77,11 +76,14 @@ import {
     loadMemorySourceMessages
 } from './query_projections'
 import { LivingMemoryLogger } from '../logging/logger'
+import { MessageLogRegistry } from '../transcript/message_log/message_log_registry'
 
 export type { QueueExtractionOptions } from '../memory/helpers'
 
 export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     readonly memoryLogger: LivingMemoryLogger
+    /** 会话消息日志：召回与提取共用的唯一消息历史视界。 */
+    readonly messageLog: MessageLogRegistry
     private readonly repository: LivingMemoryRepository
     private readonly snapshotCache: LivingMemorySnapshotCache
     private readonly recallCoordinator: LivingMemoryRecallCoordinator
@@ -104,6 +106,8 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             ctx.logger('chatluna-livingmemory'),
             () => this.config.debug
         )
+        this.messageLog = new MessageLogRegistry()
+        ctx.on('dispose', () => this.messageLog.dispose())
 
         this.repository = new LivingMemoryRepository(ctx)
         this.vectorIndex = new LivingMemoryVectorIndexService(
@@ -182,6 +186,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         )
         this.recallCoordinator = new LivingMemoryRecallCoordinator(
             config,
+            this.messageLog,
             this.repository,
             recallQuery,
             retriever,
@@ -197,6 +202,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         )
         this.extractionCoordinator = new LivingMemoryExtractionCoordinator(
             config,
+            this.messageLog,
             this.repository,
             this.mutations,
             formatter,
@@ -431,12 +437,8 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         )
     }
 
-    async queueExtraction(
-        scope: MemoryScope,
-        completedRound: LivingMemoryCompletedRound,
-        options: QueueExtractionOptions
-    ) {
-        await this.extractionCoordinator.queue(scope, completedRound, options)
+    async queueExtraction(scope: MemoryScope, options: QueueExtractionOptions) {
+        await this.extractionCoordinator.queue(scope, options)
     }
 
     clearExtractionState() {
@@ -452,6 +454,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         this.snapshotCache.clearByConversation(conversationId)
         this.recallCoordinator.clearByConversation(conversationId)
         this.extractionCoordinator.clearByConversation(conversationId)
+        this.messageLog.clear(conversationId)
     }
 
     async listPresetIds(): Promise<string[]> {

@@ -156,12 +156,12 @@ export interface LivingMemoryConfig {
     userProfileMinMemoryCount: number
     userProfileMemoryLimit: number
     enableRecallQueryRewrite: boolean
-    recallInterval: number
-    recallHistoryWindowRounds: number
+    recallIntervalMessages: number
+    recallHistoryMessages: number
     embeddingModel: string
     rerankModel: string
-    extractionRounds: number
-    extractionInterval: number
+    extractionWindowMessages: number
+    extractionIncludeOverheard: boolean
     enableExtractionWhitelist: boolean
     extractionWhitelist: string[]
     recallTopK: number
@@ -284,10 +284,6 @@ export interface UserProfileRepository {
 }
 
 export interface MessageFormatter {
-    takeRecentRounds(
-        messages: LivingMemoryTranscriptMessage[],
-        roundCount: number
-    ): LivingMemoryTranscriptMessage[]
     toExtractionPayload(
         messages: LivingMemoryTranscriptMessage[]
     ): ExtractionPayload
