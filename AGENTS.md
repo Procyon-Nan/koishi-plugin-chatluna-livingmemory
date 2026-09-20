@@ -17,15 +17,16 @@ chatluna-livingmemory/
 ├── src/
 │   ├── contracts/               # 记忆、工作流、向量索引与 RPC 公共契约
 │   ├── integrations/            # Koishi 服务、事件与 Console 类型合并
-│   ├── plugins/                 # 中间件、管理指令、模型工具与 Console 入口
+│   ├── plugins/                 # 消息采集器、中间件、管理指令、模型工具与 Console 入口
 │   ├── service/
 │   │   ├── app/                 # 应用门面、作用域、配置状态与变更编排
 │   │   ├── logging/             # 诊断事件与模型调用日志
 │   │   ├── memory/              # 记忆字段、来源、speaker、快照和工具实现
 │   │   ├── persistence/         # Koishi 表定义、分表仓库与持久化门面
 │   │   ├── prompts/             # 工作流提示词、结构化输出 schema 与 XML 格式
-│   │   ├── shared/              # 预设队列、轮次及少量共享工具
+│   │   ├── shared/              # 预设队列及少量共享工具
 │   │   ├── transcript/          # ChatLuna/Character 聊天记录适配与渲染
+│   │   │   └── message_log/     # 会话消息日志、注册表、回填与统一转换
 │   │   ├── vector_index/        # PGlite/pgvector 索引服务、重建与 Worker
 │   │   ├── workflows/           # extraction、recall、dream 与任务状态
 │   │   └── user_profile.ts      # 用户画像分组、生成与渲染
@@ -59,14 +60,19 @@ chatluna-livingmemory/
    - 两条集成路径保持独立。它们使用不同事件载荷、聊天记录适配器、预设
      标识和注入机制，不得为表面复用合并成统一中间件。
    - ChatLuna 通过 `before-chat` 注入已缓存快照与用户画像，通过
-     `after-chat` 提交完成轮次供 Extraction 使用。
+     `after-chat` 追加本次实际发出的回复段并触发提取排干。
    - Character 通过专用生命周期事件维护上下文，并由预设中的
      `{living_memory}` 变量注入；不得套用 ChatLuna 的请求级注入方式。
-   - 清空会话历史时同步清除对应快照、提取缓冲和内存召回计数。
+   - 清空会话历史时同步清除对应快照、召回锚点、提取游标与消息日志条目，
+     并推进日志纪元以拒绝清空时点之前时间戳的回填消息。
 
 3. 聊天记录与 speaker 归属
-   - ChatLuna 与 Character 原始消息只经各自 transcript adapter 转换，公共
-     渲染和轮次裁剪复用 `src/service/transcript/` 内的实现。
+   - 会话消息日志（`src/service/transcript/message_log/`）是召回与提取共用
+     的唯一历史视界，经平台实时监听、after-chat 回复段追加和冷启动回填三个
+     通道写入。消息角色（user/assistant）在写入时确定，读取方不得重新判定。
+   - 日志历史的模型可见转换统一经 `toLogTranscriptMessages`；当前触发消息
+     与单条载荷消息仍由各自 transcript adapter 转换。不得在调用点自行拼装
+     历史视图。
    - 模型可见聊天记录统一使用规范化昵称，并用 `<chat_history>` 包裹；存在
      独立末条消息时使用 `<last_message>`。
    - Extraction 返回 `speakerLabels`，服务端只根据本次 transcript 中建立的
@@ -77,8 +83,13 @@ chatluna-livingmemory/
 4. Recall 工作流
    - Recall 是异步流程。当前请求注入开始前已水合的快照；本轮新生成的快照
      只供后续轮次使用，不得改成阻塞当前模型请求。
-   - 自动召回计数只存在内存中，并按预设会话隔离。启用时首次立即召回，
-     此后按 `recallInterval` 轮次执行；插件或相关集成重启后重新计数。
+   - 自动召回按消息间隔触发：`recallIntervalMessages = 0` 时关闭；否则预设
+     会话首次触发立即召回，此后当会话日志自上次召回锚点起累计的消息条数
+     达到该值时执行，闲聊同样推进间隔。锚点只存在内存中并按预设会话隔离，
+     插件或相关集成重启后重新计数。
+   - 召回上下文为会话日志最近 `recallHistoryMessages` 条消息（以当前
+     触发消息为边界、取其之前），由 before-chat 时点惰性加载并等待回填
+     完成；等待期间追加的后续闲聊不挤入边界。
    - `embedding-rerank` 只从活跃记忆中检索，快照保存记忆引用；
      `agentic-recall` 保存模型整理后的文本和搜索轨迹。
    - 没有可靠结果时保留既有快照，不以空结果覆盖。召回失败记录任务和诊断
@@ -86,14 +97,23 @@ chatluna-livingmemory/
    - 用户关联信息可用于说明记忆归属，但不得成为召回门槛。
 
 5. Extraction 工作流
-   - Extraction 以已完成的用户/助手轮次为输入，保留按作用域的内存缓冲、
-     串行执行和触发边界消费语义。
-   - `extractionInterval = 0` 时关闭自动提取；触发时只消费已达到边界的轮次，
-     不得重复处理或在失败后错误丢弃未消费轮次。
+   - Extraction 以会话日志游标排干为模型：after-chat 时检查自游标起的
+     积压，达到 `extractionWindowMessages` 即按段锚定打包排干；同会话
+     串行，跨会话并行。`extractionWindowMessages = 0` 时关闭自动提取。
+   - 段以连续 assistant 消息 run 的末条闭合，无 assistant 收尾的尾巴不
+     消费；积压按段贪心装入不超过窗口的块。参与锚定模式（默认）下超长段
+     只取以段尾结束的窗口后缀；旁听模式（`extractionIncludeOverheard`）
+     下按窗口切分全部提取。冷启动游标取首个合规 after-chat 时点的日志
+     末位，不重提取回填历史；回填失败待重试的会话顺延至重试成功后的
+     首个 after-chat。会话清理即时终止在途排干的后续消费。
+   - 单块失败连续 3 次后记录 failed job 并放弃该块、继续后续块；不足
+     3 次中断本次排干，连同新消息下次重试。不得重复处理已成功推进游标的
+     消息，也不得在失败后错误丢弃未消费消息。
    - `enableExtractionWhitelist` 开启时只有白名单会话进入提取：群聊比对
-     `scope.guildId`，私聊比对 `scope.userId`，均为原始平台 id。未命中的会话在
-     进入轮次缓冲前返回，不累计轮次；白名单只约束自动提取，召回、快照与画像
-     注入以及 `living_memory_create_memory` 不受其影响。
+     `scope.guildId`，私聊比对 `scope.userId`，均为原始平台 id。未命中的
+     会话不初始化提取游标，后续加入白名单从当时刻重新起算；消息日志照常
+     收集，召回、快照与画像注入以及 `living_memory_create_memory` 不受
+     白名单影响。
    - 提取必须取得对应预设提示词，并使用本次聊天记录附带的 speaker 映射。
    - 模型输出经结构化结果工具校验后才能写入；模型格式错误遵循统一纠错
      流程，不得在 Extraction 内另写一套解析或兜底。
