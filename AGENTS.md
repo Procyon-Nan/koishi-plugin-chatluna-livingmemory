@@ -73,8 +73,11 @@ chatluna-livingmemory/
    - 日志历史的模型可见转换统一经 `toLogTranscriptMessages`；当前触发消息
      与单条载荷消息仍由各自 transcript adapter 转换。不得在调用点自行拼装
      历史视图。
-   - 模型可见聊天记录统一使用规范化昵称，并用 `<chat_history>` 包裹；存在
-     独立末条消息时使用 `<last_message>`。
+   - 模型可见聊天记录统一使用用户昵称：写入侧直读 `event.user.name` 或经
+     `resolveUserSpeaker`（`bot.getUser().name`），缺失退 userId。
+     `author.nick`、`member`、`session.username` 是群名片口径，不得采信
+     （`session.author` getter 会用 `member` 覆盖 `user`）。聊天记录用
+     `<chat_history>` 包裹；存在独立末条消息时使用 `<last_message>`。
    - Extraction 返回 `speakerLabels`，服务端只根据本次 transcript 中建立的
      昵称映射转换为 `speakerKeys`。模型不得直接生成或猜测稳定身份键。
    - 来源消息序列化与记忆正文分开保存；查询原始消息时以持久化来源关系为

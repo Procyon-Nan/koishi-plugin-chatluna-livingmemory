@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2026-09-22 version:0.24.1
+
+- b6a4123: 修复窗口去轮化重构后模型可见聊天记录的说话人昵称回归为群名片的问题。消息日志写入通道的 name 字段原本按 `author.nick`/`member.name`/`user.nick` 优先解析，而 OneBot/Milky 的这些字段对应群名片（Koishi `session.username` 同样群名片优先，`session.author` getter 还会用 `member` 覆盖 `user`），导致召回历史、提取转写与画像 speaker 的昵称变为群昵称。现统一改为按用户昵称解析：平台采集器与 ChatLuna 触发消息补写直读 `session.event.user.name`，缺失退 userId；Character 触发消息的 focus 作者是重读消息列表末条、与事件 session 用户不保证同一人，条目标签复用按 focus 用户 ID 解析出的 `speakerLabel`，after-chat 私聊 origin 标签同法并共享解析缓存；getMessageList 回填的 `user.name` 口径本就正确，仅移除镜像中不再读取的 `member` 与 `user.nick` 字段。
+
 ## 2026-09-21 version:0.24.0
 
 - 7a69f13: 新增会话消息日志模块 `src/service/transcript/message_log/`，为召回与提取提供统一的会话级内存历史视界。按会话维护容量 500 的滚动日志（seq 单调递增；messageId 优先、`(userId, timestamp, content)` 三元组兜底的双键去重；清空推进纪元，拒绝清空时点之前时间戳的消息复活）；`backfill.ts` 经适配器 `getMessageList` 拉取平台历史做冷启动回填（特性检测降级、预热 200 条、失败下次 warmup 重试，无平台时间戳的消息丢弃；文本元素按标准 `attrs.content` 读取，续读游标 `next ?? prev ?? 批首 id` 对齐 @satorijs/protocol BidiList 契约，OneBot/Milky 已实测核对）；`message_log_registry.ts` 维护会话到日志与渠道索引，回填期间实时写入缓冲、结束后按序冲刷，暴露 `isWarm` 供消费方等待回填落地；`loadRecallHistory` 以当前触发消息为边界取其之前最近 N 条（双方均有 messageId 时只按 ID 判定，任一缺失才退三元组兜底，同用户同秒重复内容的不同消息不得互相冒充）；消息角色写入时确定，模型可见历史统一经 `toLogTranscriptMessages` 转换，speakerKey 直接由平台 userId 派生。
