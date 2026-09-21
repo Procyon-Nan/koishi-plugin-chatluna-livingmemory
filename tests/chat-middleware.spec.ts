@@ -33,6 +33,21 @@ describe('buildChatLunaSourceEntry', () => {
         expect(entry?.messageId).toBeUndefined()
     })
 
+    it('uses the user nickname over the group card for the speaker label', () => {
+        const entry = buildChatLunaSourceEntry(
+            createSession({
+                username: '群名片A',
+                event: {
+                    user: { id: 'user-1', name: '用户昵称A' },
+                    member: { name: '群名片A', nick: '群名片A' }
+                }
+            }),
+            new HumanMessage('你好')
+        )
+
+        expect(entry?.name).toBe('用户昵称A')
+    })
+
     it('returns null for empty content', () => {
         expect(
             buildChatLunaSourceEntry(createSession(), new HumanMessage('   '))

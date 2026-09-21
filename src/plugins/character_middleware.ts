@@ -9,7 +9,10 @@ import {
 import { toLogTranscriptMessages } from '../service/transcript/message_log/converter'
 import type { ConversationLogEntryInput } from '../service/transcript/message_log/types'
 import { collectUserProfileSpeakerKeys } from '../service/user_profile'
-import type { UserSpeakerCache } from '../service/transcript/user_speaker'
+import {
+    resolveUserSpeaker,
+    type UserSpeakerCache
+} from '../service/transcript/user_speaker'
 import { buildMemoryTranscriptOrigin } from '../service/transcript/origin_context'
 import {
     type CharacterPresetPromptSource,
@@ -177,8 +180,13 @@ const registerConversationLog = (
     )
 }
 
-/** 触发消息条目：先于读取显式补写，消除与平台监听的执行顺序耦合（去重保证单条）。 */
+/**
+ * 触发消息条目：先于读取显式补写，消除与平台监听的执行顺序耦合（去重保证单条）。
+ * focus 作者是重读消息列表的末条，与事件 session 用户不保证同一人，昵称必须
+ * 用按 focus 用户 ID 解析出的 speakerLabel，不得从 session 推断。
+ */
 const buildCharacterUserEntry = (
+    speakerLabel: string,
     message: CharacterMessage
 ): ConversationLogEntryInput | null => {
     const content = message.content.trim()
@@ -190,7 +198,7 @@ const buildCharacterUserEntry = (
     return {
         messageId: toNonEmptyString(message.messageId) ?? undefined,
         userId,
-        name: toNonEmptyString(message.name) ?? userId,
+        name: speakerLabel,
         content,
         timestamp: message.timestamp ?? Date.now(),
         role: 'user',
@@ -375,10 +383,10 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                     )
                 })
 
-            const focusEntry =
-                payload.focusMessage == null
-                    ? null
-                    : buildCharacterUserEntry(payload.focusMessage)
+            const focusEntry = buildCharacterUserEntry(
+                currentTranscript.message.speakerLabel,
+                payload.focusMessage
+            )
             if (focusEntry != null) {
                 livingMemory.messageLog.appendLive(
                     [scope.conversationId],
@@ -446,12 +454,19 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 transcriptMessages: messages.length
             })
 
+            // 标签按 focus 用户 ID 解析（与 before-chat 共享缓存）；
+            // 解析失败不阻断提取，退空串。
+            const focusUserId = toNonEmptyString(payload.focusMessage?.id)
             const focusLabel =
-                payload.focusMessage == null
+                focusUserId == null
                     ? ''
-                    : (payload.focusMessage.name ??
-                      payload.focusMessage.id ??
-                      '')
+                    : await resolveUserSpeaker(
+                          payload.session,
+                          focusUserId,
+                          speakerCache
+                      )
+                          .then((speaker) => speaker.speakerLabel)
+                          .catch(() => '')
 
             await ctx.chatluna_living_memory.queueExtraction(scope, {
                 resolveTranscriptOrigin: async () => {

@@ -197,11 +197,11 @@ it('loads recall history from the conversation log excluding the current message
             isDirect: false,
             userId: 'user-1',
             selfId: 'bot-self',
-            username: '用户A',
+            username: '群名片A',
             bot: {
                 selfId: 'bot-self',
                 user: { name: 'bot' },
-                getUser: async () => ({ name: '用户A' })
+                getUser: async () => ({ name: '用户昵称A' })
             }
         } as unknown as Session
         const emitCharacterBeforeChat = ctx as unknown as {
@@ -227,7 +227,7 @@ it('loads recall history from the conversation log excluding the current message
                 ],
                 focusMessage: {
                     id: 'user-1',
-                    name: '用户A',
+                    name: '群名片A',
                     content: '新的触发消息',
                     messageId: 'm-4',
                     timestamp: Date.now()
@@ -243,6 +243,17 @@ it('loads recall history from the conversation log excluding the current message
             '之前的回答',
             '旁听闲聊'
         ])
+        // 触发消息条目的标签按 focus 用户经 getUser 解析，不采用
+        // Character 传入的群名片口径 name，也不读事件会话的 username
+        const appended = await messageLog.loadRecallHistory(
+            'group:guild-1',
+            10,
+            null
+        )
+        assert.equal(
+            appended.find((entry) => entry.messageId === 'm-4')?.name,
+            '用户昵称A'
+        )
     } finally {
         await ctx.stop()
     }

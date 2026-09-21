@@ -7,8 +7,7 @@ export interface BackfillHistoryMessage {
     messageId?: string
     content?: string
     elements?: Array<{ type: string; attrs?: Record<string, unknown> }>
-    user?: { id?: string; name?: string; nick?: string }
-    member?: { name?: string }
+    user?: { id?: string; name?: string }
     timestamp?: number | string | Date
     createdAt?: number | string | Date
 }
@@ -65,13 +64,9 @@ const toTextContent = (message: BackfillHistoryMessage) => {
         .trim()
 }
 
+/** 说话人标签只取用户昵称（user.name）；群名片（nick/member）不进模型可见视图。 */
 const toDisplayName = (message: BackfillHistoryMessage, userId: string) => {
-    return (
-        toNonEmptyString(message.member?.name) ??
-        toNonEmptyString(message.user?.nick) ??
-        toNonEmptyString(message.user?.name) ??
-        userId
-    )
+    return toNonEmptyString(message.user?.name) ?? userId
 }
 
 /**

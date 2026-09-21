@@ -30,11 +30,10 @@ export function apply(ctx: Context) {
                 registry.appendLive(conversationIds, {
                     messageId: toNonEmptyString(session.messageId) ?? undefined,
                     userId,
-                    name:
-                        toNonEmptyString(session.author?.nick) ??
-                        toNonEmptyString(session.author?.name) ??
-                        toNonEmptyString(session.username) ??
-                        userId,
+                    // 说话人标签只取用户昵称（event.user.name）。author getter
+                    // 会用 member 覆盖 user、session.username 优先返回群名片，
+                    // 都不可信。
+                    name: toNonEmptyString(session.event?.user?.name) ?? userId,
                     content,
                     timestamp: session.event?.timestamp ?? Date.now(),
                     role: 'user',

@@ -46,7 +46,6 @@ const baseSession = (overrides: Record<string, unknown> = {}) => ({
     channelId: 'group-1',
     userId: 'user-1',
     selfId: 'bot-self',
-    username: '用户A',
     content: 'hello',
     event: { timestamp: 1_000 },
     ...overrides
@@ -58,7 +57,12 @@ describe('message collector', () => {
         await dispatch(
             baseSession({
                 messageId: 'm-1',
-                author: { nick: '群名片', name: '用户A' }
+                username: '群名片',
+                event: {
+                    timestamp: 1_000,
+                    user: { id: 'user-1', name: '用户A' },
+                    member: { name: '群名片', nick: '群名片' }
+                }
             })
         )
 
@@ -67,7 +71,7 @@ describe('message collector', () => {
         expect(entries[0]).toMatchObject({
             messageId: 'm-1',
             userId: 'user-1',
-            name: '群名片',
+            name: '用户A',
             content: 'hello',
             role: 'user',
             origin: 'live'
@@ -87,10 +91,10 @@ describe('message collector', () => {
         expect(registry.lastN('conv-1', 10)).toEqual([])
     })
 
-    it('skips empty content and falls back through name sources', async () => {
+    it('skips empty content and falls back to the user id without a nickname', async () => {
         const { registry, dispatch } = createHarness()
         await dispatch(baseSession({ content: '   ' }))
-        await dispatch(baseSession({ username: undefined }))
+        await dispatch(baseSession({ messageId: 'm-2' }))
         const entries = registry.lastN('conv-1', 10)
         expect(entries).toHaveLength(1)
         expect(entries[0].name).toBe('user-1')

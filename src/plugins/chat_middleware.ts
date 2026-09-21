@@ -62,10 +62,9 @@ export const buildChatLunaSourceEntry = (
     return {
         messageId: toNonEmptyString(session.messageId) ?? undefined,
         userId: sourceUserId,
-        name:
-            toNonEmptyString(session.author?.nick) ??
-            toNonEmptyString(session.username) ??
-            sourceUserId,
+        // 说话人标签只取用户昵称（event.user.name）：author getter 会用
+        // member 覆盖 user，session.username 优先返回群名片，均不可信。
+        name: toNonEmptyString(session.event?.user?.name) ?? sourceUserId,
         content,
         timestamp:
             getChatLunaMessageCreatedAt(sourceMessage)?.getTime() ?? Date.now(),
@@ -470,8 +469,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
             })
             const presetTemplate = chatInterface.preset.value
             const sourceLabel =
-                toNonEmptyString(session.author?.nick) ??
-                toNonEmptyString(session.username) ??
+                toNonEmptyString(session.event?.user?.name) ??
                 session.userId ??
                 ''
 
