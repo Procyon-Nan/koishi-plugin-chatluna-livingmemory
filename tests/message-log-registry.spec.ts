@@ -237,6 +237,115 @@ describe('MessageLogRegistry', () => {
         ])
     })
 
+    it('keeps non-text backfill messages as placeholders and resolves at labels', async () => {
+        const registry = new MessageLogRegistry()
+        const bot: ConversationBackfillBot = {
+            selfId: 'bot-self',
+            getMessageList: async () => ({
+                data: [
+                    {
+                        id: 'e-2',
+                        user: { id: 'user-1', name: '用户A' },
+                        elements: [h('forward', { id: 'f-1' })],
+                        timestamp: 1_000
+                    },
+                    {
+                        id: 'e-3',
+                        user: { id: 'user-1', name: '用户A' },
+                        elements: [h.text('喊'), h('at', { id: 'user-2' })],
+                        timestamp: 2_000
+                    }
+                ]
+            }),
+            getUser: async () => ({ name: '用户昵称B' })
+        }
+        registry.register('conv-1', channelBinding(), bot)
+        await registry.warmup('conv-1')
+
+        expect(registry.lastN('conv-1', 10).map((e) => e.content)).toEqual([
+            '[聊天记录]',
+            '喊@用户昵称B'
+        ])
+    })
+
+    it('only looks up at targets the renderer will expand', async () => {
+        const registry = new MessageLogRegistry()
+        const requestedIds: string[] = []
+        const bot: ConversationBackfillBot = {
+            selfId: 'bot-self',
+            getMessageList: async () => ({
+                data: [
+                    {
+                        id: 'e-5',
+                        user: { id: 'user-1', name: '用户A' },
+                        elements: [
+                            // 转发占位内部的 at 对输出不可见，不得触发查询
+                            {
+                                type: 'message',
+                                attrs: { forward: 'true' },
+                                children: [
+                                    {
+                                        type: 'message',
+                                        attrs: {},
+                                        children: [
+                                            {
+                                                type: 'at',
+                                                attrs: { id: 'invisible' }
+                                            }
+                                        ]
+                                    }
+                                ]
+                            },
+                            {
+                                type: 'p',
+                                children: [
+                                    h.text('喊'),
+                                    h('at', { id: 'user-2' })
+                                ]
+                            }
+                        ],
+                        timestamp: 1_000
+                    }
+                ]
+            }),
+            getUser: async (userId) => {
+                requestedIds.push(userId)
+                return { name: '用户昵称B' }
+            }
+        }
+        registry.register('conv-1', channelBinding(), bot)
+        await registry.warmup('conv-1')
+
+        expect(requestedIds).toEqual(['user-2'])
+        expect(registry.lastN('conv-1', 10).map((e) => e.content)).toEqual([
+            '[聊天记录]喊@用户昵称B'
+        ])
+    })
+
+    it('parses content-only backfill messages through the same extraction', async () => {
+        const registry = new MessageLogRegistry()
+        const bot: ConversationBackfillBot = {
+            selfId: 'bot-self',
+            getMessageList: async () => ({
+                data: [
+                    {
+                        id: 'e-4',
+                        user: { id: 'user-1', name: '用户A' },
+                        content:
+                            '看这个<img src="https://example.test/a.jpg"/><forward id="7688"/>',
+                        timestamp: 1_000
+                    }
+                ]
+            })
+        }
+        registry.register('conv-1', channelBinding(), bot)
+        await registry.warmup('conv-1')
+
+        expect(registry.lastN('conv-1', 10).map((e) => e.content)).toEqual([
+            '看这个[图片][聊天记录]'
+        ])
+    })
+
     it('paginates by the next cursor for Milky-shaped adapters', async () => {
         const registry = new MessageLogRegistry()
         const requestedCursors: Array<string | undefined> = []

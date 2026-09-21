@@ -1,4 +1,10 @@
+import { h } from 'koishi'
 import { toNonEmptyString } from '../../shared/utils'
+import {
+    collectVisibleAtTargetIds,
+    elementsToLogText,
+    type LogTextElement
+} from './element_text'
 import type { ConversationLogEntryInput } from './types'
 
 /** getMessageList 返回的适配消息（@satorijs/protocol Message 的本地最小镜像）。 */
@@ -6,7 +12,7 @@ export interface BackfillHistoryMessage {
     id?: string
     messageId?: string
     content?: string
-    elements?: Array<{ type: string; attrs?: Record<string, unknown> }>
+    elements?: LogTextElement[]
     user?: { id?: string; name?: string }
     timestamp?: number | string | Date
     createdAt?: number | string | Date
@@ -28,12 +34,16 @@ export interface ConversationBackfillBot {
         prev?: string
         next?: string
     }>
+    /** at 目标昵称解析（Bot.getUser 同形）；缺省时 at 退 @id。 */
+    getUser?: (userId: string) => Promise<{ name?: string } | null>
 }
 
 export interface ConversationBackfillOptions {
     channelId: string
     warmupCount: number
 }
+
+type AtLabelLookup = (userId: string) => Promise<string | null>
 
 const normalizeTimestamp = (value: number | string | Date | undefined) => {
     if (typeof value === 'number' && Number.isFinite(value)) {
@@ -49,19 +59,44 @@ const normalizeTimestamp = (value: number | string | Date | undefined) => {
     return null
 }
 
-const toTextContent = (message: BackfillHistoryMessage) => {
-    if (message.elements == null) {
-        return toNonEmptyString(message.content)?.trim() ?? ''
+const toMessageElements = (message: BackfillHistoryMessage) => {
+    if (message.elements != null) {
+        return message.elements
     }
-    return message.elements
-        .filter((element) => element.type === 'text')
-        .map((element) => {
-            // Koishi 文本元素的正文在 attrs.content（h.text() 的产物形状）
-            const text = element.attrs?.['content']
-            return typeof text === 'string' ? text : ''
+    const content = toNonEmptyString(message.content)?.trim()
+    // Satori 契约允许仅 content 的消息（adapter-satori 的 getMessageList
+    // 就不解析 elements）；经 h.parse 走同一占位转换，不当作纯文本。
+    return content == null ? [] : h.parse(content)
+}
+
+/**
+ * 先解析本条消息渲染可见 at 目标的昵称，再同步渲染——渲染本体不承担
+ * 异步；无 getUser 能力时直接渲染（at 退 @id）。
+ */
+const toTextContent = async (
+    message: BackfillHistoryMessage,
+    lookupAtLabel: AtLabelLookup | null
+) => {
+    const elements = toMessageElements(message)
+    if (elements.length === 0) {
+        return ''
+    }
+    if (lookupAtLabel == null) {
+        return elementsToLogText(elements)
+    }
+
+    const ids = new Set<string>()
+    collectVisibleAtTargetIds(elements, ids)
+    const labels = new Map<string, string>()
+    await Promise.all(
+        [...ids].map(async (id) => {
+            const label = await lookupAtLabel(id)
+            if (label != null) {
+                labels.set(id, label)
+            }
         })
-        .join('')
-        .trim()
+    )
+    return elementsToLogText(elements, (id) => labels.get(id) ?? null)
 }
 
 /** 说话人标签只取用户昵称（user.name）；群名片（nick/member）不进模型可见视图。 */
@@ -84,6 +119,23 @@ export const pullConversationBackfill = async (
     if (typeof bot.getMessageList !== 'function') {
         return []
     }
+
+    // at 目标昵称解析：批次内去重，失败缓存为 null 退 @id（下次 warmup 重解析）
+    const atLabelCache = new Map<string, Promise<string | null>>()
+    const lookupAtLabel: AtLabelLookup | null =
+        bot.getUser == null
+            ? null
+            : (userId) => {
+                  const cached = atLabelCache.get(userId)
+                  if (cached != null) {
+                      return cached
+                  }
+                  const pending = Promise.resolve(bot.getUser?.(userId))
+                      .then((user) => toNonEmptyString(user?.name) ?? null)
+                      .catch(() => null)
+                  atLabelCache.set(userId, pending)
+                  return pending
+              }
 
     const results: ConversationLogEntryInput[] = []
     let nextId: string | undefined
@@ -109,7 +161,7 @@ export const pullConversationBackfill = async (
             if (timestamp == null) {
                 continue
             }
-            const content = toTextContent(message)
+            const content = await toTextContent(message, lookupAtLabel)
             if (content.length === 0) {
                 continue
             }
