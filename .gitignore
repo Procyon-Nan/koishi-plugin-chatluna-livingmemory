@@ -26,6 +26,7 @@ tmp/
 .claude/
 .omc/
 .zcode/
+.zcodeignore
 
 # codegraph
 .codegraph/
