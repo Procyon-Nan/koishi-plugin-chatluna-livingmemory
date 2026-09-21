@@ -2,6 +2,7 @@
 
 ## 2026-09-22 version:0.24.1
 
+- d065004: 修复非文本消息元素以元素标签序列化形式进入模型可见聊天记录的问题（如合并转发被记录为 `<forward id="..."/>`、json 卡片整段载荷刷屏），并消除评审确认的关联缺陷：at 昵称查询阻塞采集入账时序（后到消息与回复越序入账，破坏召回边界与提取段归属）、仅 content 的回填消息绕过占位转换（adapter-satori 的 getMessageList 不解析 elements，重启回填重新引入标签串）、文字格式元素（b/code/a 等，Telegram 实际产生）内的正文丢失、逐层 trim 吞掉容器边界空白。新增消息日志模块共享的同步占位提取 `element_text.ts`：文本元素直取正文，文字格式容器递归提取正文（共享 parts、仅顶层 trim 一次，br/段落边界换行），非文本元素替换为占位说明（`[聊天记录]`、`[图片]`、`[卡片:来源] 标题` 等），信息不丢弃；at 不采信群名片口径的 name 属性，按目标用户昵称经 getUser 解析（与说话人标签同口径、可与聊天记录互相指认），采集侧缓存命中才渲染昵称、未命中先记 @id 并后台预热，渲染与实时入账全程不让出事件循环；QQ json 卡片只提取标题（prompt）、来源应用与分享者，Milky 转发携带的标题与摘要一并渲染；采集器与回填统一采用该提取，仅 content 的回填消息经 h.parse 走同一转换，纯非文本消息不再整条丢弃，回填侧先解析渲染可见的 at 目标昵称（占位元素内部不查询）再同步渲染。
 - b6a4123: 修复窗口去轮化重构后模型可见聊天记录的说话人昵称回归为群名片的问题。消息日志写入通道的 name 字段原本按 `author.nick`/`member.name`/`user.nick` 优先解析，而 OneBot/Milky 的这些字段对应群名片（Koishi `session.username` 同样群名片优先，`session.author` getter 还会用 `member` 覆盖 `user`），导致召回历史、提取转写与画像 speaker 的昵称变为群昵称。现统一改为按用户昵称解析：平台采集器与 ChatLuna 触发消息补写直读 `session.event.user.name`，缺失退 userId；Character 触发消息的 focus 作者是重读消息列表末条、与事件 session 用户不保证同一人，条目标签复用按 focus 用户 ID 解析出的 `speakerLabel`，after-chat 私聊 origin 标签同法并共享解析缓存；getMessageList 回填的 `user.name` 口径本就正确，仅移除镜像中不再读取的 `member` 与 `user.nick` 字段。
 
 ## 2026-09-21 version:0.24.0
