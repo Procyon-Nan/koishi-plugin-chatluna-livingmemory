@@ -59,10 +59,39 @@ export type ExtractionMemoryWriter = Pick<
 const EXTRACTION_FAIL_STREAK_LIMIT = 3
 
 /**
- * 段锚定切块：以「连续 assistant 段的末条 assistant」闭合段——段不腰斩
- * 交换，末尾无 assistant 收尾的尾巴留在积压等下次。段打包为 ≤ window 的
- * 块；长段在参与锚定模式下截断取 window 后缀（远端闲聊头按策略丢弃），
- * 旁听模式下切分为多个子块、子块边界尽量落在 assistant 之后。
+ * 锚定模式切块：段（一轮＝触发消息＋回复 run）是不可分割的原子单位。
+ * 从最新段向旧并入整段，累计不超过「窗口 + 半窗」即并入同块——窗口是
+ * 模糊预算而非硬上限，盈余不超过半窗不开新块，最新一轮不因回复多条
+ * 被拆开或切走上下文；余量更大时作为前序块继续同规则提取；超出预算的
+ * 段独立成块、不截断，不丢消息。
+ */
+const planAnchoredChunks = (
+    segments: readonly ConversationLogMessage[][],
+    window: number
+): ConversationLogMessage[][] => {
+    const absorbLimit = window + Math.floor(window / 2)
+    const chunks: ConversationLogMessage[][] = []
+    let consumed = segments.length
+
+    while (consumed > 0) {
+        let start = consumed - 1
+        let size = segments[consumed - 1].length
+        while (start > 0 && size + segments[start - 1].length <= absorbLimit) {
+            start -= 1
+            size += segments[start].length
+        }
+        chunks.unshift(segments.slice(start, consumed).flat())
+        consumed = start
+    }
+
+    return chunks
+}
+
+/**
+ * 段锚定切块：以「连续 assistant 段的末条 assistant」闭合段——末尾无
+ * assistant 收尾的尾巴留在积压等下次。参与锚定模式按 planAnchoredChunks
+ * 以段为原子单位从尾向旧成块；旁听模式下按窗口切分全部提取、子块边界
+ * 尽量落在 assistant 之后。
  */
 export const planExtractionChunks = (
     entries: readonly ConversationLogMessage[],
@@ -88,6 +117,10 @@ export const planExtractionChunks = (
         }
     }
 
+    if (!includeOverheard) {
+        return planAnchoredChunks(segments, window)
+    }
+
     const chunks: ConversationLogMessage[][] = []
     let buffer: ConversationLogMessage[] = []
     const flushBuffer = () => {
@@ -100,10 +133,6 @@ export const planExtractionChunks = (
     for (const segment of segments) {
         if (segment.length > window) {
             flushBuffer()
-            if (!includeOverheard) {
-                chunks.push(segment.slice(-window))
-                continue
-            }
             let start = 0
             while (segment.length - start > window) {
                 let lastAssistant = -1

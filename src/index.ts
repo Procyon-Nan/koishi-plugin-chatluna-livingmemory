@@ -58,12 +58,12 @@ export const Config: Schema<Config> = Schema.intersect([
             .max(200)
             .step(1)
             .description(
-                '提取窗口：会话日志积压达到该条数时触发排干，同时作为单次提取块的消息条数上限；设为 0 时不执行自动记忆提取。长积压按 bot 回复为锚切段逐块提取。'
+                '提取窗口：会话日志积压达到该条数时触发排干；窗口是单块的目标预算而非硬上限，相邻对话段合并入块时最多超出二分之一窗口。设为 0 时不执行自动记忆提取。'
             )
             .default(30),
         extractionIncludeOverheard: Schema.boolean()
             .description(
-                '旁听提取：开启后超长分段按窗口切分全部提取（含 bot 未参与的聊天）；关闭时每段只保留以 bot 回复结尾的窗口后缀，远端闲聊丢弃。'
+                '旁听提取：开启后超长分段按窗口切分全部提取（含 bot 未参与的聊天）；关闭时以 bot 回复收尾的完整对话段为原子单位成块提取，超预算的段不截断、不丢弃。'
             )
             .default(false),
         enableExtractionWhitelist: Schema.boolean()

@@ -229,26 +229,29 @@ describe('planExtractionChunks', () => {
         expect(chunks.map((chunk) => chunk.length)).toEqual([6])
     })
 
-    it('packs consecutive segments greedily within the window', () => {
+    it('merges the exchange containing the window cut into one fuzzy chunk', () => {
         const chunks = planExtractionChunks(
             log(['user', 'assistant', 'user', 'assistant']),
             3,
             false
         )
-        expect(chunks.map((chunk) => chunk.length)).toEqual([2, 2])
+        expect(chunks.map((chunk) => chunk.length)).toEqual([4])
         expect(chunks[0].map((e) => e.content)).toEqual([
             'user-0',
-            'assistant-1'
+            'assistant-1',
+            'user-2',
+            'assistant-3'
         ])
     })
 
-    it('truncates a long segment to the window suffix in participation mode', () => {
-        const roles: ('user' | 'assistant')[] = Array(39).fill('user')
+    it('keeps an overlong round whole as its own chunk without truncation', () => {
+        const roles: ('user' | 'assistant')[] = Array(50).fill('user')
         roles.push('assistant')
         const chunks = planExtractionChunks(log(roles), 30, false)
+        // 段长 51 超出预算 45：一轮（触发消息＋回复）不截断，整段独立成块
         expect(chunks).toHaveLength(1)
-        expect(chunks[0]).toHaveLength(30)
-        expect(chunks[0][29].role).toBe('assistant')
+        expect(chunks[0]).toHaveLength(51)
+        expect(chunks[0][50].role).toBe('assistant')
     })
 
     it('splits a long segment preferring assistant boundaries in overheard mode', () => {
@@ -359,7 +362,25 @@ describe('LivingMemoryExtractionCoordinator', () => {
         expect(harness.getExtractorCalls()).toBe(1)
     })
 
-    it('drains multiple chunks serially for a large backlog', async () => {
+    it('absorbs a sub-half-window overshoot into one fuzzy chunk', async () => {
+        const harness = createHarness({ window: 4 })
+        await queueExtraction(harness)
+        harness.messageLog.appendReply(scope.conversationId, [
+            entry('user', 'q1'),
+            entry('assistant', 'a1'),
+            entry('user', 'q2'),
+            entry('assistant', 'a2'),
+            entry('user', 'q3'),
+            entry('assistant', 'a3')
+        ])
+        await queueExtraction(harness)
+        await waitFor(() => harness.getExtractorCalls() === 1, 'fuzzy chunk')
+        // 三段共 6 条 > 窗口 4，但盈余 2 ≤ 半窗 2：并入同块，最新交换带上下文
+        expect(harness.getExtractorInputs()[0]).toContain('q1')
+        expect(harness.getExtractorInputs()[0]).toContain('q3')
+    })
+
+    it('splits whole-exchange chunks only when the remainder exceeds half the window', async () => {
         const harness = createHarness({ window: 2 })
         await queueExtraction(harness)
         harness.messageLog.appendReply(scope.conversationId, [
@@ -372,6 +393,7 @@ describe('LivingMemoryExtractionCoordinator', () => {
         ])
         await queueExtraction(harness)
         await waitFor(() => harness.getExtractorCalls() === 3, 'three chunks')
+        // 窗口 2、半窗 1：每段 2 条，盈余 2 > 1 才允许独立成块，段不腰斩
         expect(harness.getExtractorInputs()[0]).toContain('q1')
         expect(harness.getExtractorInputs()[2]).toContain('q3')
     })
@@ -396,22 +418,21 @@ describe('LivingMemoryExtractionCoordinator', () => {
             entry('assistant', 'a2')
         ])
 
-        // 第一次触发：块 1 失败，游标不动
+        // 连续两次失败：游标不动，不记任务
         await queueExtraction(harness)
         await waitFor(() => harness.getExtractorCalls() === 1, 'first failure')
-
-        // 第二次触发：块 1 第二次失败
         await queueExtraction(harness)
         await waitFor(() => harness.getExtractorCalls() === 2, 'second failure')
         expect(harness.jobStore.jobs).toHaveLength(0)
 
-        // 第三次触发：达到上限，块 1 记任务放弃，块 2 继续并成功
+        // 第三次失败达到上限：块 1 记任务放弃，同次排干继续块 2 并成功
         await queueExtraction(harness)
         await waitFor(
             () => harness.getExtractorCalls() === 4,
             'abandon and next'
         )
         expect(harness.jobStore.jobs).toHaveLength(1)
+        expect(harness.getExtractorInputs()[0]).toContain('q1')
         expect(harness.getExtractorInputs()[3]).toContain('q2')
     })
 
