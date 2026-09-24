@@ -254,19 +254,37 @@ describe('planExtractionChunks', () => {
         expect(chunks[0][50].role).toBe('assistant')
     })
 
-    it('splits a long segment preferring assistant boundaries in overheard mode', () => {
-        // 单段：4 用户 + 2 连续 assistant（段长 6 > 窗口 5）
+    it('keeps a segment within the absorb budget whole in overheard mode', () => {
+        // 单段：4 用户 + 2 连续 assistant（段长 6，窗口 5、预算 7：不切）
         const chunks = planExtractionChunks(
             log(['user', 'user', 'user', 'user', 'assistant', 'assistant']),
             5,
             true
         )
-        expect(chunks.map((chunk) => chunk.length)).toEqual([5, 1])
+        expect(chunks.map((chunk) => chunk.length)).toEqual([6])
+    })
+
+    it('splits an over-budget segment preferring assistant boundaries in overheard mode', () => {
+        // 单段：5 用户 + 2 连续 assistant（段长 7 > 预算 6，切在预算内最后一个 assistant 后）
+        const chunks = planExtractionChunks(
+            log([
+                'user',
+                'user',
+                'user',
+                'user',
+                'user',
+                'assistant',
+                'assistant'
+            ]),
+            4,
+            true
+        )
+        expect(chunks.map((chunk) => chunk.length)).toEqual([6, 1])
         expect(chunks[0][chunks[0].length - 1].role).toBe('assistant')
     })
 
-    it('splits pure-chatter stretches at the window in overheard mode', () => {
-        // 单段：7 用户 + 1 assistant（窗口内无 assistant 时按窗口切）
+    it('splits pure-chatter stretches at the absorb budget in overheard mode', () => {
+        // 单段：7 用户 + 1 assistant（预算切片内无 assistant 时按预算硬切）
         const chunks = planExtractionChunks(
             log([
                 'user',
@@ -281,8 +299,27 @@ describe('planExtractionChunks', () => {
             3,
             true
         )
-        expect(chunks.map((chunk) => chunk.length)).toEqual([3, 3, 2])
-        expect(chunks[chunks.length - 1][1].role).toBe('assistant')
+        expect(chunks.map((chunk) => chunk.length)).toEqual([4, 4])
+        expect(chunks[chunks.length - 1][3].role).toBe('assistant')
+    })
+
+    it('absorbs whole segments tail-anchored in overheard mode', () => {
+        // 三轮交换各 2 条：合计 6 ≤ 预算 6，从最新向旧并入同块，不孤立最新一轮
+        const chunks = planExtractionChunks(
+            log([
+                'user',
+                'assistant',
+                'user',
+                'assistant',
+                'user',
+                'assistant'
+            ]),
+            4,
+            true
+        )
+        expect(chunks.map((chunk) => chunk.length)).toEqual([6])
+        expect(chunks[0][0].content).toBe('user-0')
+        expect(chunks[0][5].content).toBe('assistant-5')
     })
 })
 

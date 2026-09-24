@@ -58,29 +58,32 @@ export type ExtractionMemoryWriter = Pick<
 
 const EXTRACTION_FAIL_STREAK_LIMIT = 3
 
+/** 吸收预算：窗口＋半窗。窗口是模糊预算而非硬上限，块内盈余不超过半窗。 */
+const absorbLimitOf = (window: number): number =>
+    window + Math.floor(window / 2)
+
 /**
- * 锚定模式切块：段（一轮＝触发消息＋回复 run）是不可分割的原子单位。
- * 从最新段向旧并入整段，累计不超过「窗口 + 半窗」即并入同块——窗口是
- * 模糊预算而非硬上限，盈余不超过半窗不开新块，最新一轮不因回复多条
- * 被拆开或切走上下文；余量更大时作为前序块继续同规则提取；超出预算的
- * 段独立成块、不截断，不丢消息。
+ * 尾锚定装包：以传入的原子单位从最新向旧并入，累计不超过吸收预算即
+ * 并入同块——最新内容优先保有上下文；余量更大时作为前序块继续同规则
+ * 提取，不丢消息；超出预算的单位独立成块、不截断。锚定模式传入完整
+ * 对话段（一轮＝触发消息＋回复 run），旁听模式传入切片后的子块。
  */
 const planAnchoredChunks = (
-    segments: readonly ConversationLogMessage[][],
+    units: readonly ConversationLogMessage[][],
     window: number
 ): ConversationLogMessage[][] => {
-    const absorbLimit = window + Math.floor(window / 2)
+    const absorbLimit = absorbLimitOf(window)
     const chunks: ConversationLogMessage[][] = []
-    let consumed = segments.length
+    let consumed = units.length
 
     while (consumed > 0) {
         let start = consumed - 1
-        let size = segments[consumed - 1].length
-        while (start > 0 && size + segments[start - 1].length <= absorbLimit) {
+        let size = units[consumed - 1].length
+        while (start > 0 && size + units[start - 1].length <= absorbLimit) {
             start -= 1
-            size += segments[start].length
+            size += units[start].length
         }
-        chunks.unshift(segments.slice(start, consumed).flat())
+        chunks.unshift(units.slice(start, consumed).flat())
         consumed = start
     }
 
@@ -88,10 +91,43 @@ const planAnchoredChunks = (
 }
 
 /**
+ * 旁听切片：超出吸收预算的超长段切成不超过预算的子块，边界尽量落在
+ * assistant 之后；预算内的段保持原子。
+ */
+const splitOverheardUnits = (
+    segments: readonly ConversationLogMessage[][],
+    window: number
+): ConversationLogMessage[][] => {
+    const absorbLimit = absorbLimitOf(window)
+    const units: ConversationLogMessage[][] = []
+    for (const segment of segments) {
+        if (segment.length <= absorbLimit) {
+            units.push(segment)
+            continue
+        }
+        let start = 0
+        while (segment.length - start > absorbLimit) {
+            let lastAssistant = -1
+            for (let index = start; index < start + absorbLimit; index += 1) {
+                if (segment[index].role === 'assistant') {
+                    lastAssistant = index
+                }
+            }
+            const cut =
+                lastAssistant >= 0 ? lastAssistant + 1 : start + absorbLimit
+            units.push(segment.slice(start, cut))
+            start = cut
+        }
+        units.push(segment.slice(start))
+    }
+    return units
+}
+
+/**
  * 段锚定切块：以「连续 assistant 段的末条 assistant」闭合段——末尾无
- * assistant 收尾的尾巴留在积压等下次。参与锚定模式按 planAnchoredChunks
- * 以段为原子单位从尾向旧成块；旁听模式下按窗口切分全部提取、子块边界
- * 尽量落在 assistant 之后。
+ * assistant 收尾的尾巴留在积压等下次。两种模式共用 planAnchoredChunks
+ * 从尾向旧模糊装包；锚定模式以完整段为原子单位，超预算的段不截断；
+ * 旁听模式先经 splitOverheardUnits 把超预算段切成预算内子块。
  */
 export const planExtractionChunks = (
     entries: readonly ConversationLogMessage[],
@@ -120,44 +156,7 @@ export const planExtractionChunks = (
     if (!includeOverheard) {
         return planAnchoredChunks(segments, window)
     }
-
-    const chunks: ConversationLogMessage[][] = []
-    let buffer: ConversationLogMessage[] = []
-    const flushBuffer = () => {
-        if (buffer.length > 0) {
-            chunks.push(buffer)
-            buffer = []
-        }
-    }
-
-    for (const segment of segments) {
-        if (segment.length > window) {
-            flushBuffer()
-            let start = 0
-            while (segment.length - start > window) {
-                let lastAssistant = -1
-                for (let index = start; index < start + window; index += 1) {
-                    if (segment[index].role === 'assistant') {
-                        lastAssistant = index
-                    }
-                }
-                const cut =
-                    lastAssistant >= 0 ? lastAssistant + 1 : start + window
-                chunks.push(segment.slice(start, cut))
-                start = cut
-            }
-            chunks.push(segment.slice(start))
-            continue
-        }
-
-        if (buffer.length + segment.length > window) {
-            flushBuffer()
-        }
-        buffer.push(...segment)
-    }
-    flushBuffer()
-
-    return chunks
+    return planAnchoredChunks(splitOverheardUnits(segments, window), window)
 }
 
 export class LivingMemoryExtractionCoordinator {

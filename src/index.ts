@@ -63,7 +63,7 @@ export const Config: Schema<Config> = Schema.intersect([
             .default(30),
         extractionIncludeOverheard: Schema.boolean()
             .description(
-                '旁听提取：开启后超长分段按窗口切分全部提取（含 bot 未参与的聊天）；关闭时以 bot 回复收尾的完整对话段为原子单位成块提取，超预算的段不截断、不丢弃。'
+                '旁听提取：开启后超出单块预算的超长分段按预算切片提取（含 bot 未参与的聊天）；关闭时超预算的完整对话段整段成块、不截断。两种模式都从最新对话段向旧合并装块，合并块最多超出提取窗口二分之一。'
             )
             .default(false),
         enableExtractionWhitelist: Schema.boolean()
