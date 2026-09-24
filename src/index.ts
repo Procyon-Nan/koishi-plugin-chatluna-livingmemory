@@ -53,30 +53,6 @@ export const Config: Schema<Config> = Schema.intersect([
                 '开启 chatLuna 主插件的记忆注入（character 插件需通过预设中的 {living_memory} 变量注入）'
             )
             .default(true),
-        extractionWindowMessages: Schema.number()
-            .min(0)
-            .max(200)
-            .step(1)
-            .description(
-                '提取窗口：会话日志积压达到该条数时触发排干；窗口是单块的目标预算而非硬上限，相邻对话段合并入块时最多超出二分之一窗口。设为 0 时不执行自动记忆提取。'
-            )
-            .default(30),
-        extractionIncludeOverheard: Schema.boolean()
-            .description(
-                '旁听提取：开启后超出单块预算的超长分段按预算切片提取（含 bot 未参与的聊天）；关闭时超预算的完整对话段整段成块、不截断。两种模式都从最新对话段向旧合并装块，合并块最多超出提取窗口二分之一。'
-            )
-            .default(false),
-        enableExtractionWhitelist: Schema.boolean()
-            .description(
-                '开启自动记忆提取白名单；开启后只有白名单内的会话才会自动提取记忆，关闭时白名单列表不生效。'
-            )
-            .default(false),
-        extractionWhitelist: Schema.array(Schema.string())
-            .role('table')
-            .description(
-                '自动记忆提取白名单，填入群号（群聊）或用户 QQ 号（私聊）；开启白名单但列表为空时不会自动提取任何记忆。'
-            )
-            .default([]),
         debug: Schema.boolean()
             .description(
                 '输出 Recall、Extraction、Dream 的完整模型 Prompt、原始响应与诊断事件；包含对话、预设提示词和记忆正文，仅应在访问受控环境启用。'
@@ -138,7 +114,7 @@ export const Config: Schema<Config> = Schema.intersect([
     Schema.object({
         enableAutoDream: Schema.boolean()
             .description(
-                '当某个预设尚未完成 consolidation 的记忆达到阈值时，自动执行增量 Dream。'
+                '当某个预设内未完成整理的记忆达到阈值时，自动执行增量 Dream。'
             )
             .default(false),
         autoDreamMemoryGrowthThreshold: Schema.number()
@@ -146,7 +122,7 @@ export const Config: Schema<Config> = Schema.intersect([
             .max(200)
             .step(1)
             .description(
-                '自动增量 Dream 的 pending 记忆阈值，同时也是单次任务选取的批次大小。'
+                '待整理记忆累计达到该条数时触发一次自动增量 Dream，单次任务也最多整理这么多条。'
             )
             .default(30)
     }).description('Dream 流程配置'),
@@ -184,7 +160,7 @@ export const Config: Schema<Config> = Schema.intersect([
             .max(200)
             .step(1)
             .description(
-                '召回窗口：两次召回执行之间累计进入会话日志的最小消息条数（含未触发回复的闲聊）；设为 0 时不启用自动召回，否则每个预设会话首次立即召回。'
+                '召回窗口：每累计该条数的新聊天消息（包括 bot 未回复的闲聊）自动召回一次记忆；设为 0 时关闭自动召回，每个预设会话首次对话时立即召回一次。'
             )
             .default(10),
         recallHistoryMessages: Schema.number()
@@ -192,7 +168,7 @@ export const Config: Schema<Config> = Schema.intersect([
             .max(200)
             .step(1)
             .description(
-                '每次召回时从会话日志读取的最近聊天消息条数，用于查询改写和 agentic-recall 规划的上下文。'
+                '每次召回时取最近该条数的聊天消息作为上下文，用来判断需要回忆哪些记忆。'
             )
             .default(20),
         enableRecallQueryRewrite: Schema.boolean()
@@ -208,7 +184,33 @@ export const Config: Schema<Config> = Schema.intersect([
                 'embedding-rerank 每次召回时返回的最相关记忆条数上限。'
             )
             .default(5)
-    }).description('记忆召回配置')
+    }).description('记忆召回配置'),
+    Schema.object({
+        extractionWindowMessages: Schema.number()
+            .min(0)
+            .max(200)
+            .step(1)
+            .description(
+                '提取窗口：未提取的聊天消息累计达到该条数时，自动提取一次记忆；为不拆散完整对话，单次最多处理该值 1.5 倍的消息。设为 0 时关闭自动提取。'
+            )
+            .default(30),
+        extractionIncludeOverheard: Schema.boolean()
+            .description(
+                '旁听提取：只影响远超提取窗口的超长对话。开启时分多次提取，单次不超过提取窗口的 1.5 倍；关闭时整段一次提取，上下文最完整，但单次发送的消息可能很多。闲聊消息会随所在对话一起提取，不受此开关影响。'
+            )
+            .default(false),
+        enableExtractionWhitelist: Schema.boolean()
+            .description(
+                '开启自动记忆提取白名单；开启后只有白名单内的会话才会自动提取记忆，关闭时白名单列表不生效。'
+            )
+            .default(false),
+        extractionWhitelist: Schema.array(Schema.string())
+            .role('table')
+            .description(
+                '自动记忆提取白名单，填入群号（群聊）或用户 QQ 号（私聊）；开启白名单但列表为空时不会自动提取任何记忆。'
+            )
+            .default([])
+    }).description('记忆提取配置')
 ])
 
 export * from './types'
