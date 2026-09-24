@@ -191,12 +191,12 @@ export const Config: Schema<Config> = Schema.intersect([
             .max(200)
             .step(1)
             .description(
-                '提取窗口：未提取的聊天消息累计达到该条数时，自动提取一次记忆；为不拆散完整对话，单次最多处理该值 1.5 倍的消息。设为 0 时关闭自动提取。'
+                '提取窗口：未提取的聊天消息累计达到该条数时，自动提取一次记忆；触发本次提取的对话会连带其前方一个提取窗口的聊天消息。设为 0 时关闭自动提取。'
             )
             .default(30),
         extractionIncludeOverheard: Schema.boolean()
             .description(
-                '旁听提取：只影响远超提取窗口的超长对话。开启时分多次提取，单次不超过提取窗口的 1.5 倍；关闭时整段一次提取，上下文最完整，但单次发送的消息可能很多。闲聊消息会随所在对话一起提取，不受此开关影响。'
+                '旁听提取：控制 bot 未参与的闲聊是否计入记忆提取。每次对话及其前方一个提取窗口内的消息总是提取；开启后窗口之外的闲聊也一并提取，关闭时丢弃。'
             )
             .default(false),
         enableExtractionWhitelist: Schema.boolean()

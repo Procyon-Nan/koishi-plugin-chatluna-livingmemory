@@ -63,10 +63,55 @@ const absorbLimitOf = (window: number): number =>
     window + Math.floor(window / 2)
 
 /**
+ * 段尾的交流长度：末条用户消息（触发消息）起至回复 run 结束。无用户
+ * 消息的段（孤儿回复 run，触发消息未被记录）整段视为一个交流。
+ */
+const exchangeLengthOf = (
+    segment: readonly ConversationLogMessage[]
+): number => {
+    let exchangeStart = segment.length - 1
+    while (exchangeStart > 0 && segment[exchangeStart].role === 'assistant') {
+        exchangeStart -= 1
+    }
+    return segment.length - exchangeStart
+}
+
+/**
+ * 锚定筛选：交流（触发消息＋回复 run）无条件保留；闲聊只保留最新交流
+ * 前方一个提取窗口内的部分——核心边界从积压末尾按「最新交流＋窗口」
+ * 条向旧推进，核心内的段整段保留，核心外的段剥掉闲聊只留交流；边界
+ * 切进交流时整段交流保留。被丢弃的闲聊随游标推进，不再进入后续提取。
+ */
+const selectAnchoredUnits = (
+    segments: readonly ConversationLogMessage[][],
+    window: number
+): ConversationLogMessage[][] => {
+    if (segments.length === 0) {
+        return []
+    }
+
+    const units: ConversationLogMessage[][] = []
+    let coreRemaining = exchangeLengthOf(segments[segments.length - 1]) + window
+
+    for (let index = segments.length - 1; index >= 0; index -= 1) {
+        const segment = segments[index]
+        const covered = Math.min(coreRemaining, segment.length)
+        const keepLength = Math.min(
+            segment.length,
+            Math.max(covered, exchangeLengthOf(segment))
+        )
+        units.unshift(segment.slice(segment.length - keepLength))
+        coreRemaining -= covered
+    }
+
+    return units
+}
+
+/**
  * 尾锚定装包：以传入的原子单位从最新向旧并入，累计不超过吸收预算即
  * 并入同块——最新内容优先保有上下文；余量更大时作为前序块继续同规则
- * 提取，不丢消息；超出预算的单位独立成块、不截断。锚定模式传入完整
- * 对话段（一轮＝触发消息＋回复 run），旁听模式传入切片后的子块。
+ * 提取；超出预算的单位独立成块、不截断。锚定模式传入锚定筛选后的单元
+ * （核心后缀＋核心外的交流），旁听模式传入切片后的子块。
  */
 const planAnchoredChunks = (
     units: readonly ConversationLogMessage[][],
@@ -126,8 +171,8 @@ const splitOverheardUnits = (
 /**
  * 段锚定切块：以「连续 assistant 段的末条 assistant」闭合段——末尾无
  * assistant 收尾的尾巴留在积压等下次。两种模式共用 planAnchoredChunks
- * 从尾向旧模糊装包；锚定模式以完整段为原子单位，超预算的段不截断；
- * 旁听模式先经 splitOverheardUnits 把超预算段切成预算内子块。
+ * 从尾向旧模糊装包；锚定模式先经 selectAnchoredUnits 丢弃核心窗口之外
+ * 的闲聊，旁听模式先经 splitOverheardUnits 把超预算段切成预算内子块。
  */
 export const planExtractionChunks = (
     entries: readonly ConversationLogMessage[],
@@ -154,7 +199,7 @@ export const planExtractionChunks = (
     }
 
     if (!includeOverheard) {
-        return planAnchoredChunks(segments, window)
+        return planAnchoredChunks(selectAnchoredUnits(segments, window), window)
     }
     return planAnchoredChunks(splitOverheardUnits(segments, window), window)
 }

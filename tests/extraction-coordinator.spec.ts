@@ -229,6 +229,41 @@ describe('planExtractionChunks', () => {
         expect(chunks.map((chunk) => chunk.length)).toEqual([6])
     })
 
+    it('treats an assistant-only leading segment as one exchange', () => {
+        // 游标后紧跟孤儿回复（触发消息未被记录）：首段纯 assistant，整段视为交流
+        const chunks = planExtractionChunks(
+            log(['assistant', 'assistant', 'user', 'assistant']),
+            10,
+            false
+        )
+        expect(chunks.map((chunk) => chunk.length)).toEqual([4])
+    })
+
+    it('keeps an orphan assistant run beyond the window as an exchange', () => {
+        // 窗口 2：最新交流＋前 2 条构成核心，孤儿回复 run 在核心外仍整段保留
+        const chunks = planExtractionChunks(
+            log([
+                'assistant',
+                'assistant',
+                'user',
+                'user',
+                'user',
+                'user',
+                'user',
+                'assistant'
+            ]),
+            2,
+            false
+        )
+        expect(chunks.map((chunk) => chunk.length)).toEqual([2, 4])
+        expect(chunks[0].map((e) => e.content)).toEqual([
+            'assistant-0',
+            'assistant-1'
+        ])
+        expect(chunks[1][0].content).toBe('user-4')
+        expect(chunks.flat().map((e) => e.content)).not.toContain('user-2')
+    })
+
     it('merges the exchange containing the window cut into one fuzzy chunk', () => {
         const chunks = planExtractionChunks(
             log(['user', 'assistant', 'user', 'assistant']),
@@ -244,14 +279,55 @@ describe('planExtractionChunks', () => {
         ])
     })
 
-    it('keeps an overlong round whole as its own chunk without truncation', () => {
+    it('drops far chitchat beyond one window from the newest exchange', () => {
         const roles: ('user' | 'assistant')[] = Array(50).fill('user')
         roles.push('assistant')
         const chunks = planExtractionChunks(log(roles), 30, false)
-        // 段长 51 超出预算 45：一轮（触发消息＋回复）不截断，整段独立成块
+        // 段长 51、交流 2 条：核心＝交流＋窗口＝32，其余闲聊丢弃
         expect(chunks).toHaveLength(1)
-        expect(chunks[0]).toHaveLength(51)
-        expect(chunks[0][50].role).toBe('assistant')
+        expect(chunks[0]).toHaveLength(32)
+        expect(chunks[0][0].content).toBe('user-19')
+        expect(chunks[0][31].role).toBe('assistant')
+    })
+
+    it('keeps an exchange plus one window of context beyond the absorb budget', () => {
+        // 40 条闲聊＋交流（1 user＋40 assistant＝41 条）：保留 max(45, 41+30)=71
+        const roles: ('user' | 'assistant')[] = Array(41).fill('user')
+        for (let index = 0; index < 40; index += 1) {
+            roles.push('assistant')
+        }
+        const chunks = planExtractionChunks(log(roles), 30, false)
+        expect(chunks).toHaveLength(1)
+        expect(chunks[0]).toHaveLength(71)
+        expect(chunks[0][0].content).toBe('user-10')
+        expect(chunks[0][70].role).toBe('assistant')
+    })
+
+    it('keeps beyond-window exchanges but drops their chitchat in anchored mode', () => {
+        // 三段各＝10 闲聊＋交流(2)｜10 闲聊＋交流(2)｜4 闲聊＋交流(2)；窗口 6、预算 9
+        // 核心＝2+6=8：最新段整段(6)＋次新段核心内 2 条；核心外只留交流
+        const roles: ('user' | 'assistant')[] = []
+        for (let round = 0; round < 2; round += 1) {
+            for (let index = 0; index < 11; index += 1) {
+                roles.push('user')
+            }
+            roles.push('assistant')
+        }
+        for (let index = 0; index < 5; index += 1) {
+            roles.push('user')
+        }
+        roles.push('assistant')
+        const chunks = planExtractionChunks(log(roles), 6, false)
+        expect(chunks.map((chunk) => chunk.length)).toEqual([2, 8])
+        expect(chunks[0].map((e) => e.content)).toEqual([
+            'user-10',
+            'assistant-11'
+        ])
+        expect(chunks[1][0].content).toBe('user-22')
+        expect(chunks[1].map((e) => e.content)).toContain('user-24')
+        expect(chunks[1][7].content).toBe('assistant-29')
+        expect(chunks.flat().map((e) => e.content)).not.toContain('user-0')
+        expect(chunks.flat().map((e) => e.content)).not.toContain('user-12')
     })
 
     it('keeps a segment within the absorb budget whole in overheard mode', () => {
