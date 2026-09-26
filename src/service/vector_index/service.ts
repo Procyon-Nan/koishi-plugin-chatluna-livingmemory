@@ -454,6 +454,7 @@ export class LivingMemoryVectorIndexService
             void this.queueMaintenance(async () => {
                 try {
                     await this.maintenance.runPresetReconcileJob(job, reason)
+                    this.clearUnavailableIfHealthy()
                 } catch (error) {
                     await this.handleMaintenanceFailure(error)
                 } finally {
@@ -468,15 +469,19 @@ export class LivingMemoryVectorIndexService
         return this.queueMaintenance(async () => {
             try {
                 await this.maintenance.rebuild(reason)
-                if (this.workerFailure === null) {
-                    this.status.clearUnavailable()
-                }
+                this.clearUnavailableIfHealthy()
             } catch (error) {
                 await this.handleMaintenanceFailure(error)
             } finally {
                 this.status.endMaintenance()
             }
         })
+    }
+
+    private clearUnavailableIfHealthy() {
+        if (this.workerFailure === null) {
+            this.status.clearUnavailable()
+        }
     }
 
     startRebuild(reason: string) {

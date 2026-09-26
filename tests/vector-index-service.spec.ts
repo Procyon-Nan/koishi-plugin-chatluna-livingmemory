@@ -665,6 +665,48 @@ it('clears unavailable after a successful full rebuild', async () => {
     })
 })
 
+it('clears unavailable after a successful preset reconcile', async () => {
+    await withTemporaryDirectory(async (baseDir) => {
+        let failProbe = false
+        const repository = new TestVectorIndexRepository([
+            createSource('memory-a')
+        ])
+        const service = createService({
+            baseDir,
+            repository,
+            modelId: 'model-a',
+            dimension: 3,
+            onDocuments: async (texts) => {
+                if (failProbe && texts[0].includes('dimension probe')) {
+                    throw new Error('injected embedding failure')
+                }
+            }
+        })
+
+        await service.start()
+        await service.waitForInitialization()
+        assert.equal(service.getStatus().state, 'ready')
+
+        failProbe = true
+        await service.reconcilePreset('preset-a', 'failed recovery attempt')
+        await service.waitForMaintenance()
+        assert.equal(service.getStatus().state, 'unavailable')
+        assert.throws(
+            () => service.assertPresetReady('preset-a'),
+            /state=unavailable/u
+        )
+
+        failProbe = false
+        await service.reconcilePreset('preset-a', 'recover unavailable state')
+        await service.waitForMaintenance()
+
+        assert.equal(service.getStatus().state, 'ready')
+        assert.equal(service.getStatus().lastError, null)
+        assert.doesNotThrow(() => service.assertPresetReady('preset-a'))
+        await service.stop()
+    })
+})
+
 it('rolls back to the previous index when the candidate worker cannot open', async () => {
     await withTemporaryDirectory(async (baseDir) => {
         const repository = new TestVectorIndexRepository([
