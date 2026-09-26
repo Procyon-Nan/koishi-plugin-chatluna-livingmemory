@@ -93,6 +93,13 @@ export interface DreamMemoryRepository extends DreamMergeRepository {
     ): Promise<MemoryEntryRecord[]>
 }
 
+/** 按消费方命名：Dream 渲染提示前的说话人注册表补齐，实现在应用变更服务。 */
+export interface DreamSpeakerCoverage {
+    ensurePresetSpeakersCoverage(
+        presetId: string
+    ): Promise<PresetSpeakerRecord[]>
+}
+
 export type MemoryConfigWarningCode =
     | 'embedding-model-missing'
     | 'extract-model-missing'
@@ -254,6 +261,24 @@ export interface ExtractionRepository {
         patch: Partial<MemoryMutationInput>
     ): Promise<MemoryUpdateResult | null>
     deleteMemory(id: string): Promise<MemoryEntryRecord | null>
+}
+
+/**
+ * 提取落库面：由应用变更服务实现——windowSpeakers 的注册与记忆追加必须
+ * 在同一预设级队列操作内完成，持久化仓储的 appendMemories 只负责事实
+ * 写入、不维护注册表覆盖。方法与仓储 appendMemories 刻意不同名：
+ * TypeScript 少参方法可结构化兼容多参接口，同名注入会把 windowSpeakers
+ * 静默丢弃，缺行回归无法在类型层拦截。windowSpeakers 必填：省略即绕过
+ * 铸键不变量，无关联时由调用方显式传空数组。
+ */
+export interface ExtractionMemoryWriter {
+    appendExtractedMemories(
+        scope: MemoryScope,
+        sourceOriginMessages: MemorySourceMessage[],
+        extracted: AttributedMemoryItem[],
+        sourceLabel: string,
+        windowSpeakers: ExtractionPayload['speakers']
+    ): Promise<MemoryEntryRecord[]>
 }
 
 /** 按消费方命名：画像生成需要的记忆查询，实现在记忆仓储。 */

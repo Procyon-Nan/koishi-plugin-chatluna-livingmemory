@@ -8,7 +8,8 @@ import type { RunnableConfig } from '@langchain/core/runnables'
 import type { Context } from 'koishi'
 import type {
     DreamMemoryEntryRecord,
-    DreamMemoryRepository
+    DreamMemoryRepository,
+    DreamSpeakerCoverage
 } from '../src/contracts/workflows'
 import { dreamResultToolName } from '../src/service/prompts/schema'
 import type { ChatLunaModelCallOptions } from 'koishi-plugin-chatluna/llm-core/platform/model'
@@ -72,7 +73,7 @@ const createDreamHarness = (
     } as unknown as Context
     const repository = {
         listDreamEntriesByPreset: async () => memories,
-        listPresetSpeakers: async () => [
+        ensurePresetSpeakersCoverage: async () => [
             {
                 speakerKey: 'speaker-key',
                 speakerLabel: '张三',
@@ -101,6 +102,7 @@ const createDreamHarness = (
         { mainModel: 'test-model' },
         repository,
         repository as unknown as DreamMemoryRepository,
+        repository as unknown as DreamSpeakerCoverage,
         vectors,
         worker,
         captured.logger,

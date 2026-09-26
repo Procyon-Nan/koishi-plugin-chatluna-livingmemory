@@ -6,6 +6,7 @@ import type {
 } from '../src/contracts/memory'
 import type {
     DreamMemoryRepository,
+    DreamSpeakerCoverage,
     UserProfileMemoryRepository,
     UserProfileRepository
 } from '../src/contracts/workflows'
@@ -150,6 +151,19 @@ const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
         })
     ])
     let presetRenderCount = 0
+    const speakersState: PresetSpeakerRecord[] = [
+        {
+            id: 'speaker-1',
+            presetId: scope.presetId,
+            speakerKey: '张三',
+            speakerLabel: '张三',
+            speakerAliases: ['张三'],
+            speakerId: 'user-1',
+            platform: 'test',
+            createdAt: new Date('2026-07-01T00:00:00.000Z'),
+            updatedAt: new Date('2026-07-01T00:00:00.000Z')
+        }
+    ]
     const repository = {
         listDreamEntriesByPreset: async () => {
             events.push('list-entries')
@@ -163,7 +177,13 @@ const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
                 (entry) =>
                     entry.status === 'active' && memoryIds.includes(entry.id)
             ),
-        listActiveMemorySpeakerKeys: async () => ['张三'],
+        listActiveMemorySpeakerKeys: async () => [
+            ...new Set(
+                entries
+                    .filter((entry) => entry.status === 'active')
+                    .flatMap((entry) => entry.speakerKeys)
+            )
+        ],
         listActiveMemorySpeakerLinks: async () =>
             entries
                 .filter((entry) => entry.status === 'active')
@@ -184,21 +204,13 @@ const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
             }
         },
         applyDreamMerge: async () => {},
+        ensurePresetSpeakersCoverage: async () => {
+            events.push('list-speakers')
+            return [...speakersState]
+        },
         listPresetSpeakers: async () => {
             events.push('list-speakers')
-            return [
-                {
-                    id: 'speaker-1',
-                    presetId: scope.presetId,
-                    speakerKey: '张三',
-                    speakerLabel: '张三',
-                    speakerAliases: ['张三'],
-                    speakerId: 'user-1',
-                    platform: 'test',
-                    createdAt: activeEntry.createdAt,
-                    updatedAt: activeEntry.updatedAt
-                }
-            ]
+            return [...speakersState]
         },
         upsertPresetSpeaker: async () => {},
         listUserProfilesByPreset: async () => {
@@ -248,6 +260,7 @@ const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
         { mainModel: 'dream-model' },
         repository as unknown as DreamRepository,
         repository as unknown as DreamMemoryRepository,
+        repository satisfies DreamSpeakerCoverage,
         {
             readVectors: async (_presetId, memoryIds) =>
                 new Map(memoryIds.map((id) => [id, new Float32Array([1, 0])]))
@@ -257,7 +270,12 @@ const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
         userProfiles
     )
 
-    return { consolidatedIds, debugMessages: captured.info, events, service }
+    return {
+        consolidatedIds,
+        debugMessages: captured.info,
+        events,
+        service
+    }
 }
 
 it('keeps Dream successful when post-Dream user profile generation fails', async () => {
@@ -318,7 +336,7 @@ it('regenerates the related user profile after Dream', async () => {
     const repository = {
         listDreamEntriesByPreset: async () => [entry],
         listActiveMemorySpeakerKeys: async () => ['speaker-1'],
-        listPresetSpeakers: async () => [],
+        ensurePresetSpeakersCoverage: async () => [],
         setMemoryConsolidation: async () => {}
     } as unknown as DreamRepository
     const ctx = {
@@ -344,6 +362,7 @@ it('regenerates the related user profile after Dream', async () => {
         { mainModel: 'dream-model' },
         repository,
         repository as unknown as DreamMemoryRepository,
+        repository as unknown as DreamSpeakerCoverage,
         { readVectors: async () => new Map() },
         dreamWorker,
         logger,

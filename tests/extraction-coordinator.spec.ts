@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type {
     AttributedMemoryItem,
+    ExtractionMemoryWriter,
     ExtractionPayload
 } from '../src/contracts/workflows'
 import type { MemoryScope, MemorySourceMessage } from '../src/contracts/memory'
 import {
     type ExtractionJobRepository,
-    type ExtractionMemoryWriter,
     LivingMemoryExtractionCoordinator,
     planExtractionChunks
 } from '../src/service/workflows/extraction/coordinator'
@@ -53,7 +53,7 @@ interface CoordinatorHarnessOptions {
     extractWithTrace?: () => Promise<LivingMemoryExtractionTrace>
     createFailedJob?: ExtractionJobRepository['createFailedJob']
     queueAutoDream?: (presetId: string) => void
-    appendMemories?: ExtractionMemoryWriter['appendMemories']
+    appendExtractedMemories?: ExtractionMemoryWriter['appendExtractedMemories']
 }
 
 interface CoordinatorHarness {
@@ -65,6 +65,7 @@ interface CoordinatorHarness {
         sourceOriginMessages: MemorySourceMessage[]
         extracted: AttributedMemoryItem[]
         sourceLabel?: string | null
+        windowSpeakers?: ExtractionPayload['speakers']
     }[]
     getExtractorCalls: () => number
     getExtractorInputs: () => string[]
@@ -83,24 +84,48 @@ const createHarness = (
 
     const formatter = {
         toExtractionPayload: ((
-            messages: { contentLines: string[]; speakerLabel: string }[]
-        ): ExtractionPayload => ({
-            input: messages
-                .map(
-                    (message) =>
-                        `${message.speakerLabel}: ${message.contentLines.join('|')}`
+            messages: {
+                role: 'user' | 'assistant'
+                speakerKey?: string
+                contentLines: string[]
+                speakerLabel: string
+            }[]
+        ): ExtractionPayload => {
+            const speakerByLabel = new Map<string, string>()
+            for (const message of messages) {
+                if (message.role !== 'user') {
+                    continue
+                }
+                if (!speakerByLabel.has(message.speakerLabel)) {
+                    speakerByLabel.set(
+                        message.speakerLabel,
+                        message.speakerKey ?? `key-${message.speakerLabel}`
+                    )
+                }
+            }
+            return {
+                input: messages
+                    .map(
+                        (message) =>
+                            `${message.speakerLabel}: ${message.contentLines.join('|')}`
+                    )
+                    .join('\n'),
+                sourceOriginMessages: messages.map((message) => ({
+                    role: 'user' as const,
+                    speakerLabel: message.speakerLabel,
+                    content: message.contentLines.join('|'),
+                    transcriptLines: [
+                        `${message.speakerLabel}说：${message.contentLines.join('|')}`
+                    ]
+                })),
+                speakers: [...speakerByLabel].map(
+                    ([speakerLabel, speakerKey]) => ({
+                        speakerLabel,
+                        speakerKey
+                    })
                 )
-                .join('\n'),
-            sourceOriginMessages: messages.map((message) => ({
-                role: 'user' as const,
-                speakerLabel: message.speakerLabel,
-                content: message.contentLines.join('|'),
-                transcriptLines: [
-                    `${message.speakerLabel}说：${message.contentLines.join('|')}`
-                ]
-            })),
-            speakers: []
-        })) as never
+            }
+        }) as never
     }
     const extractor = {
         extractWithTrace: async (input: string) => {
@@ -111,19 +136,21 @@ const createHarness = (
     }
     const repository: ExtractionJobRepository & ExtractionMemoryWriter = {
         createFailedJob: options.createFailedJob ?? jobStore.createFailedJob,
-        appendMemories:
-            options.appendMemories ??
+        appendExtractedMemories:
+            options.appendExtractedMemories ??
             (async (
                 entryScope,
                 sourceOriginMessages,
                 extracted,
-                sourceLabel
+                sourceLabel,
+                windowSpeakers
             ) => {
                 appended.push({
                     scope: entryScope,
                     sourceOriginMessages,
                     extracted,
-                    sourceLabel
+                    sourceLabel,
+                    windowSpeakers
                 })
                 return []
             })
@@ -622,6 +649,74 @@ describe('LivingMemoryExtractionCoordinator', () => {
         expect(harness.appended[0].extracted).toHaveLength(1)
         expect(dreamPresetIds).toEqual([scope.presetId])
         expect(harness.jobStore.jobs).toHaveLength(0)
+    })
+
+    it('submits window speakers with extracted memories for registry coverage', async () => {
+        const harness = createHarness({
+            window: 2,
+            extractWithTrace: () =>
+                Promise.resolve(
+                    createExtractionTrace({
+                        extracted: [createExtractedMemory()]
+                    })
+                )
+        })
+        await queueExtraction(harness)
+        harness.messageLog.appendReply(scope.conversationId, [
+            entry('user', 'q'),
+            entry('assistant', 'a')
+        ])
+        await queueExtraction(harness)
+
+        await waitFor(() => harness.appended.length === 1, 'memory written')
+        expect(harness.appended[0].scope.presetId).toBe(scope.presetId)
+        expect(harness.appended[0].windowSpeakers).toEqual([
+            expect.objectContaining({ speakerLabel: '用户A' })
+        ])
+    })
+
+    it('skips speaker registration when no memories are extracted', async () => {
+        let call = 0
+        const harness = createHarness({
+            window: 2,
+            extractWithTrace: () => {
+                call += 1
+                return Promise.resolve(
+                    call === 1
+                        ? createExtractionTrace()
+                        : createExtractionTrace({
+                              extracted: [createExtractedMemory()]
+                          })
+                )
+            }
+        })
+        await queueExtraction(harness)
+        harness.messageLog.appendReply(scope.conversationId, [
+            entry('user', 'q'),
+            entry('assistant', 'a')
+        ])
+        await queueExtraction(harness)
+        await new Promise((resolve) => setTimeout(resolve, 25))
+
+        harness.messageLog.appendReply(scope.conversationId, [
+            {
+                userId: 'user-2',
+                name: '用户B',
+                content: 'q2',
+                timestamp: Date.now(),
+                role: 'user',
+                origin: 'live'
+            },
+            entry('assistant', 'a2')
+        ])
+        await queueExtraction(harness)
+        await waitFor(() => harness.appended.length === 1, 'memory written')
+
+        expect(harness.getExtractorCalls()).toBe(2)
+        expect(harness.appended).toHaveLength(1)
+        expect(harness.appended[0].windowSpeakers).toEqual([
+            expect.objectContaining({ speakerLabel: '用户B' })
+        ])
     })
 
     it('records a failed job and consumes the chunk on parse errors', async () => {

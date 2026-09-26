@@ -161,6 +161,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             config,
             this.repository,
             this.mutations,
+            this.mutations,
             this.vectorIndex,
             this.dreamWorker,
             this.memoryLogger,
@@ -170,6 +171,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             ctx,
             config,
             this.repository,
+            this.mutations,
             this.mutations,
             this.vectorIndex,
             this.userProfiles

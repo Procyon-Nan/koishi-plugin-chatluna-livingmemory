@@ -13,6 +13,10 @@ import {
 } from '../src/service/app/memory_mutation_service'
 import type { LivingMemoryLogger } from '../src/service/logging/logger'
 import {
+    createSyntheticSpeakerLabel,
+    createUserProfileSpeakerKey
+} from '../src/service/memory/speaker_identity'
+import {
     LivingMemoryFactsCommittedError,
     LivingMemoryVectorIndexError
 } from '../src/service/vector_index/errors'
@@ -443,5 +447,101 @@ it('splits bulk deletions into fixed-size batches', async () => {
         assert.equal(sink.mutations[0].deletes.length, MEMORY_DELETE_BATCH_SIZE)
         assert.equal(sink.mutations[1].deletes.length, 3)
         assert.deepEqual(await repository.listEntriesByPreset(presetId), [])
+    })
+})
+
+it('registers caller-provided speaker keys before create and update commit', async () => {
+    await withLivingMemoryRepository(async (_ctx, repository) => {
+        const sink = new MemoryIndexSinkStub()
+        const mutations = new LivingMemoryMutationService(
+            repository,
+            sink,
+            createLoggerStub().logger
+        )
+        const memory = await mutations.createMemory(
+            scope,
+            { type: 'fact', content: 'manual memory' },
+            ['caller-key']
+        )
+        assert.equal(
+            (await repository.listPresetSpeakers(presetId)).find(
+                (speaker) => speaker.speakerKey === 'caller-key'
+            )?.speakerLabel,
+            'user:caller-k'
+        )
+
+        await mutations.updateMemory(memory.id, {
+            speakerKeys: ['patched-key']
+        })
+        assert.equal(
+            (await repository.listPresetSpeakers(presetId)).find(
+                (speaker) => speaker.speakerKey === 'patched-key'
+            )?.speakerLabel,
+            'user:patched-'
+        )
+    })
+})
+
+it('registers scope-derived default speaker keys on create', async () => {
+    await withLivingMemoryRepository(async (_ctx, repository) => {
+        const sink = new MemoryIndexSinkStub()
+        const mutations = new LivingMemoryMutationService(
+            repository,
+            sink,
+            createLoggerStub().logger
+        )
+        await mutations.createMemory(
+            { ...scope, platform: 'onebot', speakerId: 'user-9' },
+            { type: 'fact', content: 'scope attributed memory' }
+        )
+        const derivedKey = createUserProfileSpeakerKey('onebot', 'user-9')
+        assert.equal(
+            (await repository.listPresetSpeakers(presetId)).find(
+                (speaker) => speaker.speakerKey === derivedKey
+            )?.speakerLabel,
+            createSyntheticSpeakerLabel(derivedKey)
+        )
+    })
+})
+
+it('backfills registry rows for active memory keys missing rows on Dream coverage', async () => {
+    // issue #6 回归：历史记忆键缺注册行时 Dream 渲染会崩，coverage 在
+    // 预设级队列内重读活跃键并以合成标签补齐缺失行。
+    await withLivingMemoryRepository(async (_ctx, repository) => {
+        const sink = new MemoryIndexSinkStub()
+        const mutations = new LivingMemoryMutationService(
+            repository,
+            sink,
+            createLoggerStub().logger
+        )
+        await repository.appendMemories(
+            scope,
+            [],
+            [
+                {
+                    type: 'fact',
+                    content: 'legacy memory without registry row',
+                    keywords: [],
+                    summary: '',
+                    sentiment: '',
+                    importance: 0.5,
+                    speakerKeys: ['orphan-key']
+                }
+            ]
+        )
+
+        const speakers = await mutations.ensurePresetSpeakersCoverage(presetId)
+
+        assert.equal(
+            speakers.find((speaker) => speaker.speakerKey === 'orphan-key')
+                ?.speakerLabel,
+            createSyntheticSpeakerLabel('orphan-key')
+        )
+        assert.equal(
+            (await mutations.ensurePresetSpeakersCoverage(presetId)).filter(
+                (speaker) => speaker.speakerKey === 'orphan-key'
+            ).length,
+            1
+        )
     })
 })

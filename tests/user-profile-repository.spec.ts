@@ -124,3 +124,55 @@ it('keeps users with the same nickname separate by stable identity', async () =>
         assert.notEqual(speakers[0].speakerKey, speakers[1].speakerKey)
     })
 })
+
+it('registers only missing preset speakers without touching existing rows', async () => {
+    await withLivingMemoryRepository(async (_ctx, repository) => {
+        const stableKey = createUserProfileSpeakerKey('onebot', 'user-1')
+        await repository.upsertPresetSpeaker({
+            presetId: 'preset-1',
+            speakerKey: stableKey,
+            speakerLabel: '已注册昵称',
+            speakerId: 'user-1',
+            platform: 'onebot'
+        })
+
+        const orphanKey = createUserProfileSpeakerKey('onebot', 'user-2')
+        await repository.registerMissingPresetSpeakers('preset-1', [
+            { speakerKey: stableKey, speakerLabel: '窗口新昵称' },
+            { speakerKey: orphanKey, speakerLabel: '旁观者昵称' },
+            { speakerKey: '   ', speakerLabel: '无效输入' },
+            { speakerKey: 'dup-key', speakerLabel: '先到者' },
+            { speakerKey: 'dup-key', speakerLabel: '后到者' }
+        ])
+
+        const speakers = await repository.listPresetSpeakers('preset-1')
+        assert.equal(speakers.length, 3)
+
+        const existing = speakers.find(
+            (speaker) => speaker.speakerKey === stableKey
+        )
+        assert.equal(existing?.speakerLabel, '已注册昵称')
+        assert.equal(existing?.speakerId, 'user-1')
+
+        const orphan = speakers.find(
+            (speaker) => speaker.speakerKey === orphanKey
+        )
+        assert.equal(orphan?.speakerLabel, '旁观者昵称')
+        assert.equal(orphan?.speakerId, null)
+        assert.equal(orphan?.platform, null)
+
+        const duplicated = speakers.find(
+            (speaker) => speaker.speakerKey === 'dup-key'
+        )
+        assert.equal(duplicated?.speakerLabel, '先到者')
+
+        // 重复补齐幂等：全量已注册时不产生写入
+        await repository.registerMissingPresetSpeakers('preset-1', [
+            { speakerKey: orphanKey, speakerLabel: '旁观者昵称' }
+        ])
+        assert.equal(
+            (await repository.listPresetSpeakers('preset-1')).length,
+            3
+        )
+    })
+})

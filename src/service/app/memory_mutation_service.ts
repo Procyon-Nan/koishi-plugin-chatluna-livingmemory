@@ -5,7 +5,8 @@ import type {
     MemoryMutationInput,
     MemoryUpdatePatch,
     MemoryScope,
-    MemorySourceMessage
+    MemorySourceMessage,
+    PresetSpeakerRecord
 } from '../../contracts/memory'
 import type {
     MemoryIndexDocument,
@@ -18,11 +19,17 @@ import type {
     DreamMemoryRepository,
     DreamMergeInput,
     DreamMemoryMutation,
-    ExtractionRepository
+    DreamSpeakerCoverage,
+    ExtractionMemoryWriter,
+    ExtractionPayload
 } from '../../contracts/workflows'
 import { Time } from 'koishi'
 import type { LivingMemoryRepository } from '../persistence/repository'
 import { DEFAULT_MEMORY_IMPORTANCE } from '../memory/entry_fields'
+import {
+    createSyntheticSpeakerLabel,
+    resolveScopeSpeakerKeys
+} from '../memory/speaker_identity'
 import { SerialTaskQueue } from '../shared/serial_task_queue'
 import { summarizeError } from '../shared/utils'
 import { LivingMemoryFactsCommittedError } from '../vector_index/errors'
@@ -31,6 +38,9 @@ import type { LivingMemoryLogger } from '../logging/logger'
 type MemoryFactRepository = Pick<
     LivingMemoryRepository,
     | 'appendMemories'
+    | 'registerMissingPresetSpeakers'
+    | 'listActiveMemorySpeakerKeys'
+    | 'listPresetSpeakers'
     | 'getEntryById'
     | 'getEntriesByPresetAndIds'
     | 'listArchivedEntriesBefore'
@@ -53,7 +63,10 @@ const ARCHIVED_MEMORY_GRACE_PERIOD = 7 * Time.day
 const ARCHIVED_MEMORY_DECAY_PERIOD = 180 * Time.day
 
 export class LivingMemoryMutationService
-    implements ExtractionRepository, DreamMemoryRepository
+    implements
+        ExtractionMemoryWriter,
+        DreamMemoryRepository,
+        DreamSpeakerCoverage
 {
     private readonly queue = new SerialTaskQueue()
 
@@ -63,13 +76,60 @@ export class LivingMemoryMutationService
         private readonly logger: LivingMemoryLogger
     ) {}
 
-    async appendMemories(
+    /**
+     * Dream 前置补齐：活跃记忆上的缺行键以合成标签补注册。必须在预设级
+     * 队列内重读活跃键——队列外读到的键可能已被同预设清空删除，按陈旧
+     * 键补行会在清空后的预设上留下孤儿注册行，listDistinctPresetIds 会
+     * 把它重新列为存量预设。
+     */
+    async ensurePresetSpeakersCoverage(
+        presetId: string
+    ): Promise<PresetSpeakerRecord[]> {
+        return this.runPresetMutation(presetId, async () => {
+            const [activeKeys, registered] = await Promise.all([
+                this.repository.listActiveMemorySpeakerKeys(presetId),
+                this.repository.listPresetSpeakers(presetId)
+            ])
+            const registeredKeys = new Set(
+                registered.map((speaker) => speaker.speakerKey)
+            )
+            const missing = activeKeys
+                .filter((speakerKey) => !registeredKeys.has(speakerKey))
+                .map((speakerKey) => ({
+                    speakerKey,
+                    speakerLabel: createSyntheticSpeakerLabel(speakerKey)
+                }))
+            if (missing.length === 0) {
+                return registered
+            }
+            await this.repository.registerMissingPresetSpeakers(
+                presetId,
+                missing
+            )
+            return this.repository.listPresetSpeakers(presetId)
+        })
+    }
+
+    async appendExtractedMemories(
         scope: MemoryScope,
         sourceOriginMessages: MemorySourceMessage[],
         extracted: AttributedMemoryItem[],
-        sourceLabel?: string | null
+        sourceLabel: string,
+        windowSpeakers: ExtractionPayload['speakers']
     ) {
         return this.runPresetMutation(scope.presetId, async () => {
+            // 铸键不变量：窗口说话人的注册与记忆追加必须在同一预设级队列
+            // 操作内完成——注册若在队列外先行提交，同预设清空可插入两步
+            // 之间，清掉注册行后再追加记忆，缺行崩溃面回归。两步仍分属
+            // 两个事务：注册行先行而记忆未落的中间态是无害闲置行（工程
+            // 约束 8）；注册失败时记忆尚未落库，fail-streak 重试不会重复
+            // 写记忆。
+            if (windowSpeakers.length > 0) {
+                await this.repository.registerMissingPresetSpeakers(
+                    scope.presetId,
+                    windowSpeakers
+                )
+            }
             const records = await this.repository.appendMemories(
                 scope,
                 sourceOriginMessages,
@@ -97,13 +157,21 @@ export class LivingMemoryMutationService
     ) {
         return this.runPresetMutation(scope.presetId, async () => {
             // 落库前预检索引就绪状态：未就绪时立即失败且零副作用。
-            // 仅 createMemory 预检；appendMemories 的提取窗口过期即失，
-            // 宁可落库后进入 dirty 由对账修复，也不能丢轮次。
+            // 仅 createMemory 预检；appendExtractedMemories 的提取窗口
+            // 过期即失，宁可落库后进入 dirty 由对账修复，也不能丢轮次。
             this.vectorIndex.assertPresetReady(scope.presetId)
+            // 显式键优先，省略时沿用仓储侧同一条 scope 推导规则，注册
+            // 与落库共用一组键。
+            const effectiveSpeakerKeys =
+                speakerKeys ?? resolveScopeSpeakerKeys(scope)
+            await this.registerCallerSpeakerKeys(
+                scope.presetId,
+                effectiveSpeakerKeys
+            )
             const record = await this.repository.createMemory(
                 scope,
                 input,
-                speakerKeys
+                effectiveSpeakerKeys
             )
             await this.applyCommittedMutation({
                 presetId: record.presetId,
@@ -120,6 +188,16 @@ export class LivingMemoryMutationService
             return null
         }
         return this.runPresetMutation(current.presetId, async () => {
+            // 队列外读到的条目可能已被同预设清空/删除：进队列后重读确认，
+            // 否则会为已不存在的目标补注册行，清空后的预设因孤儿注册行
+            // 被 listDistinctPresetIds 重新列为存量。
+            if ((await this.repository.getEntryById(id)) === undefined) {
+                return null
+            }
+            await this.registerCallerSpeakerKeys(
+                current.presetId,
+                patch.speakerKeys
+            )
             const result = await this.repository.updateMemory(id, patch)
             if (result === null) {
                 return null
@@ -136,6 +214,28 @@ export class LivingMemoryMutationService
             })
             return result
         })
+    }
+
+    /**
+     * 铸键不变量：create/update 落库的键（显式传入或 scope 默认推导）不
+     * 经过提取窗口映射，RPC 面只有键没有昵称，落库前以合成标签补齐缺失
+     * 行。与记忆写入同在预设级队列操作内、分属两个事务，依据同
+     * appendExtractedMemories。
+     */
+    private async registerCallerSpeakerKeys(
+        presetId: string,
+        speakerKeys: readonly string[] | undefined
+    ) {
+        if (speakerKeys == null || speakerKeys.length === 0) {
+            return
+        }
+        await this.repository.registerMissingPresetSpeakers(
+            presetId,
+            speakerKeys.map((speakerKey) => ({
+                speakerKey,
+                speakerLabel: createSyntheticSpeakerLabel(speakerKey)
+            }))
+        )
     }
 
     async updateMemoryForDream(

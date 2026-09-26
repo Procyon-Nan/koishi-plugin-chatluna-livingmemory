@@ -145,7 +145,6 @@ it('applies shared field rules to Dream mutations', async () => {
             capturedPatch = patch
             return { record: entry, contentChanged: false }
         },
-        setMemoryConsolidation: async () => [entry],
         applyDreamMerge: async () => ({
             target: entry,
             archivedSources: [],

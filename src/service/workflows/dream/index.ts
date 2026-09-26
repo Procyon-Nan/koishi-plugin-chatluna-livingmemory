@@ -4,6 +4,7 @@ import type { ManualDreamVectorReader } from '../../../contracts/vector_index'
 import type {
     DreamMemoryEntryRecord,
     DreamMemoryRepository,
+    DreamSpeakerCoverage,
     LivingMemoryConfig
 } from '../../../contracts/workflows'
 import type { PresetSpeakerRecord } from '../../../contracts/memory'
@@ -29,7 +30,6 @@ export interface DreamRepository {
         presetId: string
     ): Promise<DreamMemoryEntryRecord[]>
     listActiveMemorySpeakerKeys(presetId: string): Promise<string[]>
-    listPresetSpeakers(presetId: string): Promise<PresetSpeakerRecord[]>
 }
 
 export class LivingMemoryDreamService {
@@ -41,6 +41,7 @@ export class LivingMemoryDreamService {
         private readonly config: LivingMemoryDreamConfig,
         private readonly repository: DreamRepository,
         mutations: DreamMemoryRepository,
+        private readonly speakerCoverage: DreamSpeakerCoverage,
         vectors: ManualDreamVectorReader,
         worker: DreamWorkerRunner,
         private readonly logger: LivingMemoryLogger,
@@ -75,7 +76,8 @@ export class LivingMemoryDreamService {
         const chatModel = model.value
         const assistantLabel = resolveAssistantLabel(presetId)
         const presetPrompt = await resolvePresetPrompt(this.ctx, presetId)
-        const speakers = await this.repository.listPresetSpeakers(presetId)
+        const speakers =
+            await this.speakerCoverage.ensurePresetSpeakersCoverage(presetId)
         const result = await this.processEntries(
             presetId,
             assistantLabel,

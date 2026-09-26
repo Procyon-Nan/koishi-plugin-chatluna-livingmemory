@@ -39,8 +39,8 @@ import {
 import type { LivingMemoryTransact, LivingMemoryTransaction } from './types'
 import { dreamPendingIndex } from './tables'
 import {
-    createUserProfileSpeakerKey,
-    normalizeSpeakerKeys
+    normalizeSpeakerKeys,
+    resolveScopeSpeakerKeys
 } from '../memory/speaker_identity'
 
 const sourceOriginsArrayMigrationId = 'source-origins-array-v1'
@@ -575,7 +575,7 @@ export class LivingMemoryEntryRepository
             [],
             null,
             new Date(),
-            speakerKeys ?? this.resolveScopeSpeakerKeys(scope)
+            speakerKeys ?? resolveScopeSpeakerKeys(scope)
         )
         await this.transact(async (database) => {
             await database.create('living_memory_entry', record)
@@ -612,14 +612,6 @@ export class LivingMemoryEntryRepository
             createdAt,
             updatedAt: createdAt
         }
-    }
-
-    private resolveScopeSpeakerKeys(scope: MemoryScope) {
-        const platform = scope.platform?.trim()
-        const speakerId = (scope.speakerId ?? scope.userId)?.trim()
-        return platform && speakerId
-            ? [createUserProfileSpeakerKey(platform, speakerId)]
-            : []
     }
 
     async updateMemory(id: string, patch: MemoryUpdatePatch) {

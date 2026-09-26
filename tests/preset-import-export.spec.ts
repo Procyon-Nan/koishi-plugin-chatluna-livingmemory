@@ -5,6 +5,7 @@ import type {
     LivingMemoryPresetExportEntry
 } from '../src/contracts/memory'
 import { createPresetImportId } from '../src/service/persistence/normalizers'
+import { createSyntheticSpeakerLabel } from '../src/service/memory/speaker_identity'
 
 const createExportEntry = (
     id: string,
@@ -111,9 +112,15 @@ it('copies preset data without moving source records', async () => {
             (await repository.listPresetSpeakers(sourcePresetId)).length,
             1
         )
+        const targetSpeakers =
+            await repository.listPresetSpeakers(targetPresetId)
+        assert.equal(targetSpeakers.length, 2)
+        // 导出文件的注册行不含记忆实际关联的用户时，导入为该键合成注册行
         assert.equal(
-            (await repository.listPresetSpeakers(targetPresetId)).length,
-            1
+            targetSpeakers.find(
+                (speaker) => speaker.speakerKey === sourceMemory.speakerKeys[0]
+            )?.speakerLabel,
+            createSyntheticSpeakerLabel(sourceMemory.speakerKeys[0])
         )
 
         await repository.importPresetData(targetPresetId, exported)
@@ -175,6 +182,48 @@ it('normalizes missing version 1 consolidation state to pending', async () => {
                 .isConsolidated,
             false
         )
+    })
+})
+
+it('synthesizes registry rows for keys missing from version 3 imports', async () => {
+    await withLivingMemoryRepository(async (_ctx, repository) => {
+        const targetPresetId = 'version-3-speakers'
+        // 目标预设已有同键完整行：合成不得覆盖其昵称与身份字段
+        await repository.upsertPresetSpeaker({
+            presetId: targetPresetId,
+            speakerKey: 'known-key',
+            speakerLabel: '既有昵称',
+            speakerId: 'user-1',
+            platform: 'onebot'
+        })
+        const data: LivingMemoryPresetExport = {
+            version: 3,
+            exportedAt: '2026-08-06T00:00:00.000Z',
+            sourcePresetId: 'preset-legacy',
+            entries: [
+                {
+                    ...createExportEntry('version-3-entry', 1),
+                    isConsolidated: false,
+                    speakerKeys: ['known-key', 'unknown-key']
+                }
+            ],
+            userProfiles: [],
+            presetSpeakers: []
+        }
+
+        await repository.importPresetData(targetPresetId, data)
+
+        const speakers = await repository.listPresetSpeakers(targetPresetId)
+        const known = speakers.find(
+            (speaker) => speaker.speakerKey === 'known-key'
+        )
+        assert.equal(known?.speakerLabel, '既有昵称')
+        assert.equal(known?.speakerId, 'user-1')
+        const unknown = speakers.find(
+            (speaker) => speaker.speakerKey === 'unknown-key'
+        )
+        assert.equal(unknown?.speakerLabel, 'user:unknown-')
+        assert.equal(unknown?.speakerId, null)
     })
 })
 

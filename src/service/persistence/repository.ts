@@ -44,6 +44,7 @@ import {
 import { LivingMemorySnapshotRepository } from './snapshots'
 import { defineLivingMemoryTables } from './tables'
 import { LivingMemoryUserProfileRepository } from './user_profiles'
+import { createSyntheticSpeakerLabel } from '../memory/speaker_identity'
 import {
     reconcilePresetSpeaker,
     resolvePresetSpeakerIdentity
@@ -393,6 +394,16 @@ export class LivingMemoryRepository
         return this.userProfiles.upsertPresetSpeaker(input)
     }
 
+    registerMissingPresetSpeakers(
+        presetId: string,
+        speakers: Array<{ speakerKey: string; speakerLabel: string }>
+    ): Promise<void> {
+        return this.userProfiles.registerMissingPresetSpeakers(
+            presetId,
+            speakers
+        )
+    }
+
     async reconcilePresetSpeaker(input: PresetSpeakerInput): Promise<void> {
         const identity = resolvePresetSpeakerIdentity(input)
         if (identity == null) {
@@ -548,9 +559,40 @@ export class LivingMemoryRepository
                     await database.upsert('living_memory_user_profile', batch)
                 }
             )
+            // v≤3 等无 presetSpeakers 节的导出文件：活跃条目携带的键可能没有
+            // 注册行，Dream 渲染会缺行。为既不在文件也不在库里的键合成注册行；
+            // 库中既有行不覆盖——导入按整行 upsert，合成行会抹掉同键的完整身份。
+            const knownSpeakerKeys = new Set([
+                ...data.presetSpeakers.map((speaker) => speaker.speakerKey),
+                ...(
+                    await database.get('living_memory_preset_speaker', {
+                        presetId: targetPresetId
+                    })
+                ).map((row) => row.speakerKey)
+            ])
+            const importedActiveKeys = new Set(
+                rows.entrySpeakerRows.map((row) => row.speakerKey)
+            )
+            const synthesizedAt = new Date()
+            const synthesizedRows = [...importedActiveKeys]
+                .filter((speakerKey) => !knownSpeakerKeys.has(speakerKey))
+                .map((speakerKey) => {
+                    const speakerLabel = createSyntheticSpeakerLabel(speakerKey)
+                    return {
+                        id: createPresetSpeakerId(targetPresetId, speakerKey),
+                        presetId: targetPresetId,
+                        speakerKey,
+                        speakerLabel,
+                        speakerAliases: [speakerLabel],
+                        speakerId: null,
+                        platform: null,
+                        createdAt: synthesizedAt,
+                        updatedAt: synthesizedAt
+                    }
+                })
             await runPresetImportBatches(
                 'preset speakers',
-                rows.presetSpeakerRows,
+                [...rows.presetSpeakerRows, ...synthesizedRows],
                 async (batch) => {
                     await database.upsert('living_memory_preset_speaker', batch)
                 }

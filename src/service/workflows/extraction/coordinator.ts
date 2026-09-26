@@ -8,7 +8,7 @@ import type { MemoryTranscriptOrigin } from '../../transcript/origin_context'
 import { type QueueExtractionOptions, scopeKey } from '../../memory/helpers'
 import type {
     ExtractionPayload,
-    ExtractionRepository,
+    ExtractionMemoryWriter,
     JobRepository,
     LivingMemoryConfig
 } from '../../../contracts/workflows'
@@ -50,11 +50,6 @@ interface ExtractionScopeState {
 }
 
 export type ExtractionJobRepository = Pick<JobRepository, 'createFailedJob'>
-
-export type ExtractionMemoryWriter = Pick<
-    ExtractionRepository,
-    'appendMemories'
->
 
 const EXTRACTION_FAIL_STREAK_LIMIT = 3
 
@@ -479,11 +474,15 @@ export class LivingMemoryExtractionCoordinator {
 
         const extracted = trace.extracted
         if (extracted.length > 0) {
-            await this.memoryWriter.appendMemories(
+            // 铸键不变量：窗口说话人随记忆一并提交，注册与追加在变更服务
+            // 的同一预设级队列操作内完成（注册先行、两事务，依据见
+            // appendExtractedMemories），否则 Dream 按 key 反查标签时会缺行。
+            await this.memoryWriter.appendExtractedMemories(
                 scope,
                 payload.sourceOriginMessages,
                 extracted,
-                origin.sourceLabel
+                origin.sourceLabel,
+                payload.speakers
             )
         }
 

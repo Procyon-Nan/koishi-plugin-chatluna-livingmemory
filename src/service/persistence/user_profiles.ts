@@ -86,6 +86,61 @@ export class LivingMemoryUserProfileRepository implements UserProfileRepository 
         })
     }
 
+    /**
+     * 铸键不变量的基座：为缺失的键补注册行，缺失才写，不触碰既有行的标签
+     * 与身份字段（标签更新归 reconcile）。行不带身份字段，画像候选过滤
+     * 天然排除；该用户下次直接对话时 reconcile 按 stableId 命中同一行，
+     * 覆盖升级为完整身份。
+     */
+    async registerMissingPresetSpeakers(
+        presetId: string,
+        speakers: Array<{ speakerKey: string; speakerLabel: string }>
+    ) {
+        const candidates = new Map<string, string>()
+        for (const speaker of speakers) {
+            const speakerKey = speaker.speakerKey.trim()
+            const speakerLabel = speaker.speakerLabel.trim()
+            if (
+                presetId.length > 0 &&
+                speakerKey.length > 0 &&
+                speakerLabel.length > 0 &&
+                !candidates.has(speakerKey)
+            ) {
+                candidates.set(speakerKey, speakerLabel)
+            }
+        }
+        if (candidates.size === 0) {
+            return
+        }
+
+        await this.transact(async (database) => {
+            const existing = await database.get(
+                'living_memory_preset_speaker',
+                {
+                    presetId,
+                    speakerKey: { $in: [...candidates.keys()] }
+                }
+            )
+            const existingKeys = new Set(existing.map((row) => row.speakerKey))
+            const missing = [...candidates]
+                .filter(([speakerKey]) => !existingKeys.has(speakerKey))
+                .map(([speakerKey, speakerLabel]) => ({
+                    id: createPresetSpeakerId(presetId, speakerKey),
+                    presetId,
+                    speakerKey,
+                    speakerLabel,
+                    speakerAliases: [speakerLabel],
+                    speakerId: null,
+                    platform: null,
+                    createdAt: new Date(),
+                    updatedAt: new Date()
+                }))
+            if (missing.length > 0) {
+                await database.upsert('living_memory_preset_speaker', missing)
+            }
+        })
+    }
+
     async listUserProfilesByPreset(
         presetId: string
     ): Promise<UserProfileRecord[]> {

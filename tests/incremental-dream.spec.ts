@@ -1,14 +1,18 @@
 import assert from 'node:assert/strict'
 import { AIMessage, type BaseMessage } from '@langchain/core/messages'
 import type { Context } from 'koishi'
-import type { MemoryEntryRecord } from '../src/contracts/memory'
+import type {
+    MemoryEntryRecord,
+    PresetSpeakerRecord
+} from '../src/contracts/memory'
 import type {
     IncrementalDreamNeighborInput,
     IncrementalDreamNeighborSearch
 } from '../src/contracts/vector_index'
 import type {
     DreamMemoryRepository,
-    DreamMergeInput
+    DreamMergeInput,
+    DreamSpeakerCoverage
 } from '../src/contracts/workflows'
 import { dreamResultToolName } from '../src/service/prompts/schema'
 import {
@@ -79,20 +83,22 @@ class IncrementalRepositoryStub implements IncrementalDreamRepository {
         ).length
     }
 
-    async listPresetSpeakers() {
-        return [
-            {
-                id: 'speaker-1',
-                presetId,
-                speakerKey: 'speaker-1',
-                speakerLabel: '张三',
-                speakerAliases: ['张三'],
-                speakerId: 'user-1',
-                platform: 'test',
-                createdAt: now,
-                updatedAt: now
-            }
-        ]
+    private readonly speakersState: PresetSpeakerRecord[] = [
+        {
+            id: 'speaker-1',
+            presetId,
+            speakerKey: 'speaker-1',
+            speakerLabel: '张三',
+            speakerAliases: ['张三'],
+            speakerId: 'user-1',
+            platform: 'test',
+            createdAt: now,
+            updatedAt: now
+        }
+    ]
+
+    async ensurePresetSpeakersCoverage() {
+        return this.speakersState.map((speaker) => ({ ...speaker }))
     }
 
     async setMemoryConsolidation(
@@ -246,6 +252,7 @@ const createHarness = (
         },
         repository,
         repository as DreamMemoryRepository,
+        repository satisfies DreamSpeakerCoverage,
         neighborSearch,
         userProfiles
     )

@@ -16,7 +16,10 @@ import type {
     DreamOperationStats
 } from './types'
 
-export type DreamExecutorRepository = DreamMemoryRepository
+export type DreamExecutorRepository = Pick<
+    DreamMemoryRepository,
+    'updateMemoryForDream' | 'applyDreamMerge'
+>
 
 type DreamUpdateOperation = Extract<DreamOperation, { action: 'update' }>
 type DreamArchiveOperation = Extract<DreamOperation, { action: 'archive' }>

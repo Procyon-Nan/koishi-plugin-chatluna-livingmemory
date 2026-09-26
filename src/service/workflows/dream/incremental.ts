@@ -1,12 +1,10 @@
 import type { Context } from 'koishi'
 import type { ChatLunaChatModel } from 'koishi-plugin-chatluna/llm-core/platform/model'
-import type {
-    MemoryEntryRecord,
-    PresetSpeakerRecord
-} from '../../../contracts/memory'
+import type { MemoryEntryRecord } from '../../../contracts/memory'
 import type { IncrementalDreamNeighborSearch } from '../../../contracts/vector_index'
 import type {
     DreamMemoryRepository,
+    DreamSpeakerCoverage,
     LivingMemoryConfig
 } from '../../../contracts/workflows'
 import {
@@ -32,7 +30,6 @@ export interface IncrementalDreamRepository {
         ids: string[]
     ): Promise<MemoryEntryRecord[]>
     countPendingEntries(presetId: string): Promise<number>
-    listPresetSpeakers(presetId: string): Promise<PresetSpeakerRecord[]>
 }
 
 const INCREMENTAL_DREAM_TOP_K = 30
@@ -77,6 +74,7 @@ export class LivingMemoryIncrementalDreamService {
         private readonly config: IncrementalDreamConfig,
         private readonly repository: IncrementalDreamRepository,
         private readonly mutations: DreamMemoryRepository,
+        private readonly speakerCoverage: DreamSpeakerCoverage,
         private readonly neighborSearch: IncrementalDreamNeighborSearch,
         private readonly userProfiles: LivingMemoryUserProfileService
     ) {
@@ -111,7 +109,8 @@ export class LivingMemoryIncrementalDreamService {
         const model = await this.createChatModel()
         const assistantLabel = resolveAssistantLabel(presetId)
         const presetPrompt = await resolvePresetPrompt(this.ctx, presetId)
-        const speakers = await this.repository.listPresetSpeakers(presetId)
+        const speakers =
+            await this.speakerCoverage.ensurePresetSpeakersCoverage(presetId)
         const affectedSpeakerKeys = new Set<string>()
 
         let result: IncrementalDreamRunResult
