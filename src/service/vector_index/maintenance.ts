@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { resolve } from 'node:path'
 import type { Context } from 'koishi'
+import { parseRawModelName } from 'koishi-plugin-chatluna/llm-core/utils/count_tokens'
 import type { MemoryJobRecord } from '../../contracts/memory'
 import type { MemoryVectorIndexManifest } from '../../contracts/vector_index'
 import { isModelConfigured } from '../shared/utils'
@@ -157,6 +158,10 @@ export class LivingMemoryVectorIndexMaintenance {
                 'unavailable',
                 'vector index embedding model is not configured'
             )
+        }
+        const [platform] = parseRawModelName(config.embeddingModel)
+        if (platform !== undefined) {
+            await ctx.chatluna.awaitLoadPlatform(platform)
         }
         const result = await ctx.chatluna.createEmbeddings(
             config.embeddingModel

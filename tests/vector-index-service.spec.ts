@@ -209,6 +209,8 @@ const createService = (options: {
     workerPath?: string
     workerFactory?: VectorIndexWorkerFactory
     onDocuments?: (texts: string[]) => Promise<void>
+    awaitLoadPlatform?: (platform: string) => Promise<void>
+    onCreateEmbeddings?: (modelId: string) => void
 }) => {
     const calls = options.calls ?? []
     const embeddings = createEmbeddings(
@@ -218,8 +220,12 @@ const createService = (options: {
     )
     const ctx = createTestContext(options.baseDir)
     ctx.set('chatluna', {
+        awaitLoadPlatform: async (platform: string) => {
+            await options.awaitLoadPlatform?.(platform)
+        },
         createEmbeddings: async (modelId: string) => {
             assert.equal(modelId, options.modelId)
+            options.onCreateEmbeddings?.(modelId)
             return { value: embeddings }
         }
     } as never)
@@ -267,6 +273,55 @@ const withTemporaryDirectory = async (
 
 const resolveIndexDirectory = (baseDir: string) =>
     resolve(baseDir, 'data', 'chatluna', 'living-memory')
+
+it('waits for the ChatLuna platform before probing embeddings', async () => {
+    await withTemporaryDirectory(async (baseDir) => {
+        let releasePlatform: (() => void) | undefined
+        const platformReady = new Promise<void>((resolvePromise) => {
+            releasePlatform = resolvePromise
+        })
+        let signalPlatformWaitStarted: (() => void) | undefined
+        const platformWaitStarted = new Promise<void>((resolvePromise) => {
+            signalPlatformWaitStarted = resolvePromise
+        })
+        let probeCalls = 0
+        let createEmbeddingsCalls = 0
+        const service = createService({
+            baseDir,
+            repository: new TestVectorIndexRepository([
+                createSource('memory-a')
+            ]),
+            modelId: 'openai/model-a',
+            dimension: 3,
+            awaitLoadPlatform: async (platform) => {
+                assert.equal(platform, 'openai')
+                signalPlatformWaitStarted?.()
+                await platformReady
+            },
+            onCreateEmbeddings: () => {
+                createEmbeddingsCalls += 1
+            },
+            onDocuments: async (texts) => {
+                if (texts[0].includes('dimension probe')) {
+                    probeCalls += 1
+                }
+            }
+        })
+
+        await service.start()
+        const initialization = service.waitForInitialization()
+        await platformWaitStarted
+        assert.equal(createEmbeddingsCalls, 0)
+        assert.equal(probeCalls, 0)
+
+        releasePlatform?.()
+        await initialization
+        assert.equal(createEmbeddingsCalls, 1)
+        assert.equal(probeCalls, 1)
+        assert.equal(service.getStatus().state, 'ready')
+        await service.stop()
+    })
+})
 
 it('builds the index once and reuses its manifest after restart', async () => {
     await withTemporaryDirectory(async (baseDir) => {
