@@ -140,6 +140,10 @@ export class VectorIndexStatusStore {
         this.overlay.unavailableMessage = message
     }
 
+    clearUnavailable() {
+        this.overlay.unavailableMessage = null
+    }
+
     markRuntimeError(message: string) {
         this.overlay.runtimeError = message
     }

@@ -134,6 +134,18 @@ it('blocks every preset while the runtime is unavailable', () => {
     assert.equal(store.snapshot().state, 'building')
 })
 
+it('clears the runtime unavailable state after recovery', () => {
+    const store = new VectorIndexStatusStore()
+    store.applyInspection(createInspection([createPreset('preset-a', 'ready')]))
+    store.markUnavailable('embedding unavailable')
+
+    store.clearUnavailable()
+
+    assert.doesNotThrow(() => store.assertPresetReady('preset-a'))
+    assert.equal(store.snapshot().state, 'ready')
+    assert.equal(store.snapshot().lastError, null)
+})
+
 it('ends the maintenance window when a maintenance task fails', () => {
     const store = new VectorIndexStatusStore()
     store.applyInspection(createInspection([createPreset('preset-a', 'ready')]))

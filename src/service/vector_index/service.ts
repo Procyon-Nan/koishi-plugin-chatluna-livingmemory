@@ -468,6 +468,9 @@ export class LivingMemoryVectorIndexService
         return this.queueMaintenance(async () => {
             try {
                 await this.maintenance.rebuild(reason)
+                if (this.workerFailure === null) {
+                    this.status.clearUnavailable()
+                }
             } catch (error) {
                 await this.handleMaintenanceFailure(error)
             } finally {

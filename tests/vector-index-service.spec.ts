@@ -629,6 +629,42 @@ it('starts a full rebuild without blocking the caller', async () => {
     })
 }, 120_000)
 
+it('clears unavailable after a successful full rebuild', async () => {
+    await withTemporaryDirectory(async (baseDir) => {
+        let failProbe = true
+        const service = createService({
+            baseDir,
+            repository: new TestVectorIndexRepository([
+                createSource('memory-a')
+            ]),
+            modelId: 'model-a',
+            dimension: 3,
+            onDocuments: async (texts) => {
+                if (failProbe && texts[0].includes('dimension probe')) {
+                    throw new Error('injected embedding failure')
+                }
+            }
+        })
+
+        await service.start()
+        await service.waitForInitialization()
+        assert.equal(service.getStatus().state, 'unavailable')
+
+        service.startRebuild('failed recovery attempt')
+        await service.waitForMaintenance()
+        assert.equal(service.getStatus().state, 'unavailable')
+
+        failProbe = false
+        service.startRebuild('recover unavailable state')
+        await service.waitForMaintenance()
+
+        assert.equal(service.getStatus().state, 'ready')
+        assert.equal(service.getStatus().lastError, null)
+        assert.doesNotThrow(() => service.assertPresetReady('preset-a'))
+        await service.stop()
+    })
+})
+
 it('rolls back to the previous index when the candidate worker cannot open', async () => {
     await withTemporaryDirectory(async (baseDir) => {
         const repository = new TestVectorIndexRepository([
