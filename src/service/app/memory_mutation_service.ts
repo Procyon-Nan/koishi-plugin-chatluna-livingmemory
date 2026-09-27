@@ -300,33 +300,32 @@ export class LivingMemoryMutationService
             return { archived: 0 }
         }
         return this.runPresetMutation(presetId, async () => {
-            let archived = 0
             let snapshotsCleared = false
-            for (
-                let start = 0;
-                start < uniqueIds.length;
-                start += MEMORY_DELETE_BATCH_SIZE
-            ) {
-                const records = await this.repository.archiveActiveEntries(
-                    presetId,
-                    uniqueIds.slice(start, start + MEMORY_DELETE_BATCH_SIZE)
-                )
-                if (records.length === 0) {
-                    continue
+            const archived = await this.runBatchedMutation(
+                uniqueIds,
+                async (batchIds) => {
+                    const records =
+                        await this.repository.archiveActiveEntries(
+                            presetId,
+                            batchIds
+                        )
+                    if (records.length === 0) {
+                        return 0
+                    }
+                    if (!snapshotsCleared) {
+                        await this.repository.deleteSnapshotsByPreset(presetId)
+                        snapshotsCleared = true
+                    }
+                    await this.applyCommittedMutation({
+                        presetId,
+                        upserts: records.map((record) =>
+                            this.upsert(record, 'preserve')
+                        ),
+                        deletes: []
+                    })
+                    return records.length
                 }
-                if (!snapshotsCleared) {
-                    await this.repository.deleteSnapshotsByPreset(presetId)
-                    snapshotsCleared = true
-                }
-                await this.applyCommittedMutation({
-                    presetId,
-                    upserts: records.map((record) =>
-                        this.upsert(record, 'preserve')
-                    ),
-                    deletes: []
-                })
-                archived += records.length
-            }
+            )
             return { archived }
         })
     }
@@ -377,34 +376,29 @@ export class LivingMemoryMutationService
             return { deleted: 0 }
         }
         return this.runPresetMutation(presetId, async () => {
-            let deleted = 0
-            for (
-                let start = 0;
-                start < uniqueIds.length;
-                start += MEMORY_DELETE_BATCH_SIZE
-            ) {
-                const batch = uniqueIds.slice(
-                    start,
-                    start + MEMORY_DELETE_BATCH_SIZE
-                )
-                // 先按存在性与 preset 归属过滤：并发已删除或跨 preset
-                // 的 id 幂等跳过，不中断整批。
-                const records = await this.repository.getEntriesByPresetAndIds(
-                    presetId,
-                    batch
-                )
-                if (records.length === 0) {
-                    continue
+            const deleted = await this.runBatchedMutation(
+                uniqueIds,
+                async (batchIds) => {
+                    // 先按存在性与 preset 归属过滤：并发已删除或跨 preset
+                    // 的 id 幂等跳过，不中断整批。
+                    const records =
+                        await this.repository.getEntriesByPresetAndIds(
+                            presetId,
+                            batchIds
+                        )
+                    if (records.length === 0) {
+                        return 0
+                    }
+                    const validIds = records.map((record) => record.id)
+                    await this.repository.deleteEntries(presetId, validIds)
+                    await this.applyCommittedMutation({
+                        presetId,
+                        upserts: [],
+                        deletes: validIds.map((id) => ({ id, presetId }))
+                    })
+                    return validIds.length
                 }
-                const validIds = records.map((record) => record.id)
-                await this.repository.deleteEntries(presetId, validIds)
-                await this.applyCommittedMutation({
-                    presetId,
-                    upserts: [],
-                    deletes: validIds.map((id) => ({ id, presetId }))
-                })
-                deleted += validIds.length
-            }
+            )
             return { deleted }
         })
     }
@@ -428,24 +422,18 @@ export class LivingMemoryMutationService
                 })
                 .map((record) => record.id)
 
-            let deleted = 0
-            for (
-                let start = 0;
-                start < expiredIds.length;
-                start += MEMORY_DELETE_BATCH_SIZE
-            ) {
-                const ids = expiredIds.slice(
-                    start,
-                    start + MEMORY_DELETE_BATCH_SIZE
-                )
-                await this.repository.deleteEntries(presetId, ids)
-                await this.applyCommittedMutation({
-                    presetId,
-                    upserts: [],
-                    deletes: ids.map((id) => ({ id, presetId }))
-                })
-                deleted += ids.length
-            }
+            const deleted = await this.runBatchedMutation(
+                expiredIds,
+                async (batchIds) => {
+                    await this.repository.deleteEntries(presetId, batchIds)
+                    await this.applyCommittedMutation({
+                        presetId,
+                        upserts: [],
+                        deletes: batchIds.map((id) => ({ id, presetId }))
+                    })
+                    return batchIds.length
+                }
+            )
             return { deleted }
         })
     }
@@ -507,6 +495,28 @@ export class LivingMemoryMutationService
                     error
                 )
             })
+    }
+
+    /**
+     * 按 MEMORY_DELETE_BATCH_SIZE 将 id 切片，逐批执行 applyBatch 并累加其
+     * 返回的处理条数。批大小、切片与计数的单点：三处批量归档/删除只描述
+     * 每批做什么，SQL $in 规模与索引同步批次的约束集中在此维护。
+     */
+    private async runBatchedMutation(
+        ids: string[],
+        applyBatch: (batchIds: string[]) => Promise<number>
+    ): Promise<number> {
+        let processed = 0
+        for (
+            let start = 0;
+            start < ids.length;
+            start += MEMORY_DELETE_BATCH_SIZE
+        ) {
+            processed += await applyBatch(
+                ids.slice(start, start + MEMORY_DELETE_BATCH_SIZE)
+            )
+        }
+        return processed
     }
 
     private runPresetMutation<T>(presetId: string, task: () => Promise<T>) {

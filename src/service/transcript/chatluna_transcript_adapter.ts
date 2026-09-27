@@ -152,21 +152,3 @@ export const toChatLunaTranscriptMessageResult = async (
         stripSpeakerPrefix: resolved.stripSpeakerPrefix
     })
 }
-
-export const toChatLunaTranscriptMessages = async (
-    scope: MemoryScope,
-    session: Session,
-    messages: BaseMessage[],
-    speakerCache: UserSpeakerCache = new Map()
-) => {
-    const converted = await Promise.all(
-        messages.map((message) =>
-            toChatLunaTranscriptMessageResult(scope, session, message, {
-                speakerCache
-            })
-        )
-    )
-    return converted.flatMap((item) =>
-        item.message == null ? [] : [item.message]
-    )
-}

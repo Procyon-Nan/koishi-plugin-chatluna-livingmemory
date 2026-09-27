@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2026-09-27 version:0.24.8
+
+- pending: 代码审查低风险项清理，无行为变更。删除两处确认死代码：`service/shared/utils.ts` 的 `cosineSimilarity`（向量相似度计算已下沉 PGlite worker，全仓零引用）与 `transcript/chatluna_transcript_adapter.ts` 的 `toChatLunaTranscriptMessages`（v0.24.0 去轮化后被 `toLogTranscriptMessages` 取代的残留，零引用；同文件仍在用的 `toChatLunaTranscriptMessageResult` 与 `livingMemoryRawContentKey` 保留）。将 `LivingMemoryMutationService` 中 `archiveActiveMemories`、`deleteMemories`、`deleteExpiredArchivedMemories` 三处按 `MEMORY_DELETE_BATCH_SIZE` 切片、逐批写仓储并同步索引、累加计数的同构循环提取为私有 `runBatchedMutation(ids, applyBatch)`，批大小、切片与计数语义收敛为单点，三处只描述各自每批逻辑；空列表短路、批数与每批调用序列、归档快照单次清除、删除的跨预设幂等跳过均保持原样。
+
 ## 2026-09-27 version:0.24.7
 
 - 04ea556: 落地 WebUI 伪会话键（`webui:` 前缀）的写回迁移，清偿 `docs/webui-legacy-conversation-keys.md` 记录的遗留债务。历史版本 WebUI 手工创建的记忆以 `webui:{presetId}` 占位键写入 `living_memory_entry.sourceConversationId`；v0.22.0 起该列改为读取时折叠为 null，但数据库脏行一直物理留存，绕过 `normalizeEntryRecord` 的原始查询仍会看到幽灵键。新增启动一次性迁移 `webui-source-conversation-cleanup-v1`（经 `living_memory_migration` 幂等表守卫，在向量索引启动前的启动迁移序列中执行），将活跃与归档记忆中以 `webui:` 开头的 `sourceConversationId` 批量写回 null；随后移除 `normalizers.ts` 中针对 `webui:` 前缀的读取折叠分支（空串与 null 折叠保留），并删除已完成的备忘文档。向量索引来源列此前已在对账中补为 null，主库写回后与索引口径一致，无需重建索引。

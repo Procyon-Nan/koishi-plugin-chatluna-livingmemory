@@ -81,29 +81,3 @@ export const formatDateOnly = (value: Date | string | number) => {
         String(date.getDate()).padStart(2, '0')
     ].join('-')
 }
-
-export const cosineSimilarity = (left: number[], right: number[]) => {
-    if (
-        left.length === 0 ||
-        right.length === 0 ||
-        left.length !== right.length
-    ) {
-        return 0
-    }
-
-    let dot = 0
-    let leftNorm = 0
-    let rightNorm = 0
-
-    for (let index = 0; index < left.length; index++) {
-        dot += left[index] * right[index]
-        leftNorm += left[index] * left[index]
-        rightNorm += right[index] * right[index]
-    }
-
-    if (leftNorm === 0 || rightNorm === 0) {
-        return 0
-    }
-
-    return dot / Math.sqrt(leftNorm * rightNorm)
-}
