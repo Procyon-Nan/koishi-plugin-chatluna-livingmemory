@@ -304,11 +304,10 @@ export class LivingMemoryMutationService
             const archived = await this.runBatchedMutation(
                 uniqueIds,
                 async (batchIds) => {
-                    const records =
-                        await this.repository.archiveActiveEntries(
-                            presetId,
-                            batchIds
-                        )
+                    const records = await this.repository.archiveActiveEntries(
+                        presetId,
+                        batchIds
+                    )
                     if (records.length === 0) {
                         return 0
                     }

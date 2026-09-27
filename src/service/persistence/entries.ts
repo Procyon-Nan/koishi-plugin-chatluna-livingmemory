@@ -122,9 +122,7 @@ interface DreamMergeContext {
 }
 
 export class LivingMemoryEntryRepository
-    implements
-        RecallRepository,
-        UserProfileMemoryRepository
+    implements RecallRepository, UserProfileMemoryRepository
 {
     constructor(
         private readonly ctx: Context,
