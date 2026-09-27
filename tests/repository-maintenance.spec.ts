@@ -104,8 +104,8 @@ it('lists stored presets and clears only the selected preset', async () => {
     })
 })
 
-it('folds empty and legacy webui conversation keys to null', async () => {
-    await withLivingMemoryRepository(async (ctx, repository) => {
+it('folds empty conversation keys to null and preserves real keys', async () => {
+    await withLivingMemoryRepository(async (_ctx, repository) => {
         const manual = await repository.createMemory(
             { conversationId: '', presetId: 'preset-scope' },
             { type: 'fact', content: 'manual memory' }
@@ -117,8 +117,16 @@ it('folds empty and legacy webui conversation keys to null', async () => {
             { type: 'fact', content: 'group memory' }
         )
         assert.equal(grouped.sourceConversationId, 'group:10001')
+    })
+})
 
-        // 直接改库模拟历史版本写入的 webui: 占位键，验证读取边界折叠。
+it('migrates legacy webui conversation keys to null once', async () => {
+    await withLivingMemoryRepository(async (ctx, repository) => {
+        const grouped = await repository.createMemory(
+            { conversationId: 'group:10001', presetId: 'preset-scope' },
+            { type: 'fact', content: 'group memory' }
+        )
+        // 直接改库模拟历史版本 WebUI 手工创建写入的 webui: 占位键。
         await ctx.database.set(
             'living_memory_entry',
             { id: grouped.id },
@@ -126,7 +134,15 @@ it('folds empty and legacy webui conversation keys to null', async () => {
                 sourceConversationId: 'webui:preset-scope'
             }
         )
-        const reread = await repository.getEntryById(grouped.id)
-        assert.equal(reread?.sourceConversationId, null)
+
+        assert.equal(await repository.migrateWebuiSourceConversationKeys(), 1)
+
+        const [row] = await ctx.database.get('living_memory_entry', {
+            id: grouped.id
+        })
+        assert.equal(row.sourceConversationId, null)
+
+        // 幂等：迁移记录落库后不再重复写回。
+        assert.equal(await repository.migrateWebuiSourceConversationKeys(), 0)
     })
 })

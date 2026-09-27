@@ -133,6 +133,10 @@ export class LivingMemoryRepository
         return this.entries.migrateMemorySourceOriginsArray()
     }
 
+    migrateWebuiSourceConversationKeys(): Promise<number> {
+        return this.entries.migrateWebuiSourceConversationKeys()
+    }
+
     migrateActiveMemorySpeakers(): Promise<number> {
         return this.entries.migrateActiveMemorySpeakers()
     }

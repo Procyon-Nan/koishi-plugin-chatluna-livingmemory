@@ -46,6 +46,10 @@ import {
 const sourceOriginsArrayMigrationId = 'source-origins-array-v1'
 const legacyEmbeddingMigrationId = 'legacy-embedding-vector-index-v1'
 const activeMemorySpeakersMigrationId = 'active-memory-speakers-v1'
+const webuiSourceConversationMigrationId =
+    'webui-source-conversation-cleanup-v1'
+// 历史版本 WebUI 手工创建写入的伪会话键前缀，本次迁移将其写回为 null（无会话归属）。
+const legacyWebuiConversationPrefix = 'webui:'
 /**
  * 回填按页读取记忆、按批写入关联行。一条记忆展开出多条关联行，两者不是同一
  * 量纲，因此各自设界。
@@ -254,6 +258,43 @@ export class LivingMemoryEntryRepository
                 appliedAt: new Date()
             })
             return invalidIds.length
+        })
+    }
+
+    async migrateWebuiSourceConversationKeys(): Promise<number> {
+        return await this.transact(async (database) => {
+            const applied = await database.get('living_memory_migration', {
+                id: webuiSourceConversationMigrationId
+            })
+            if (applied.length > 0) {
+                return 0
+            }
+
+            const entries = await database.get('living_memory_entry', {}, [
+                'id',
+                'sourceConversationId'
+            ])
+            const legacyIds = entries
+                .filter((entry) =>
+                    (entry.sourceConversationId ?? '').startsWith(
+                        legacyWebuiConversationPrefix
+                    )
+                )
+                .map((entry) => entry.id)
+
+            if (legacyIds.length > 0) {
+                await database.set(
+                    'living_memory_entry',
+                    { id: { $in: legacyIds } },
+                    { sourceConversationId: null }
+                )
+            }
+
+            await database.create('living_memory_migration', {
+                id: webuiSourceConversationMigrationId,
+                appliedAt: new Date()
+            })
+            return legacyIds.length
         })
     }
 

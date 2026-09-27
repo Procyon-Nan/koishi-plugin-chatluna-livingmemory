@@ -244,6 +244,15 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
                 repaired
             })
         }
+        const clearedWebuiKeys =
+            await this.repository.migrateWebuiSourceConversationKeys()
+        if (clearedWebuiKeys > 0) {
+            this.memoryLogger.info('startup.migration.completed', {
+                workflow: 'maintenance',
+                operation: 'clear-webui-source-conversation',
+                cleared: clearedWebuiKeys
+            })
+        }
         const indexed = await this.repository.migrateActiveMemorySpeakers()
         if (indexed > 0) {
             this.memoryLogger.info('startup.migration.completed', {

@@ -16,17 +16,11 @@ import {
 import { normalizeMemorySourceOrigins } from '../memory/origins/source_origins'
 import { normalizeSpeakerKeys } from '../memory/speaker_identity'
 
-// WebUI 手工创建在历史版本写入的伪会话键前缀，读取时折叠为 null（无会话归属、
-// 全局可见）；数据库旧值的写回清理机制见 docs/webui-legacy-conversation-keys.md。
-const legacyWebuiConversationPrefix = 'webui:'
-
+// 空串与 null 都归一为「无会话归属、全局可见」；历史 WebUI 伪会话键（webui: 前缀）
+// 已由启动迁移 webui-source-conversation-cleanup-v1 写回 null，此处不再折叠。
 export const normalizeSourceConversationId = (value: string | null) => {
     const normalized = value?.trim()
-    if (
-        normalized == null ||
-        normalized.length === 0 ||
-        normalized.startsWith(legacyWebuiConversationPrefix)
-    ) {
+    if (normalized == null || normalized.length === 0) {
         return null
     }
     return normalized

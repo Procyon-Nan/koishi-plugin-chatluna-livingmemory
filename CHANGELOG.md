@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2026-09-27 version:0.24.7
+
+- pending: 落地 WebUI 伪会话键（`webui:` 前缀）的写回迁移，清偿 `docs/webui-legacy-conversation-keys.md` 记录的遗留债务。历史版本 WebUI 手工创建的记忆以 `webui:{presetId}` 占位键写入 `living_memory_entry.sourceConversationId`；v0.22.0 起该列改为读取时折叠为 null，但数据库脏行一直物理留存，绕过 `normalizeEntryRecord` 的原始查询仍会看到幽灵键。新增启动一次性迁移 `webui-source-conversation-cleanup-v1`（经 `living_memory_migration` 幂等表守卫，在向量索引启动前的启动迁移序列中执行），将活跃与归档记忆中以 `webui:` 开头的 `sourceConversationId` 批量写回 null；随后移除 `normalizers.ts` 中针对 `webui:` 前缀的读取折叠分支（空串与 null 折叠保留），并删除已完成的备忘文档。向量索引来源列此前已在对账中补为 null，主库写回后与索引口径一致，无需重建索引。
+
 ## 2026-09-27 version:0.24.6
 
 - dc18ce0: 向量索引创建 embedding 前等待 ChatLuna 平台完成初始化，避免启动竞态导致维度探测得到空向量并将索引标记为不可用。
