@@ -243,17 +243,7 @@ export class LivingMemoryAgenticRecallExecutor {
         historyMessages: LivingMemoryTranscriptMessage[],
         runLogger: LivingMemoryLogger = this.logger
     ): Promise<LivingMemoryAgenticRecallTrace | null> {
-        if (!isModelConfigured(this.config.subModel)) {
-            throw new Error('subModel is not configured.')
-        }
-
-        const model = await this.ctx.chatluna.createChatModel(
-            this.config.subModel
-        )
-        const chatModel = model.value
-        if (chatModel == null) {
-            throw new Error('subModel is unavailable.')
-        }
+        const chatModel = await this.resolveChatModel()
 
         const prompt = this.buildRecallPrompt(
             scope,
@@ -326,6 +316,20 @@ export class LivingMemoryAgenticRecallExecutor {
                 matchedMemories: uniqueMemories
             }
         }
+    }
+
+    private async resolveChatModel(): Promise<ChatLunaChatModel> {
+        if (!isModelConfigured(this.config.subModel)) {
+            throw new Error('subModel is not configured.')
+        }
+        const model = await this.ctx.chatluna.createChatModel(
+            this.config.subModel
+        )
+        const chatModel = model.value
+        if (chatModel == null) {
+            throw new Error('subModel is unavailable.')
+        }
+        return chatModel
     }
 
     private buildRecallPrompt(

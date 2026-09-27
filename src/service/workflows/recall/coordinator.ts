@@ -168,6 +168,48 @@ export class LivingMemoryRecallCoordinator {
         )
     }
 
+    /**
+     * 解析 embedding-rerank 的检索输入：改写查询、记录诊断，命中跳过原因或
+     * 改写结果为空时返回 null（本次不检索、不覆盖快照，非错误）；否则返回
+     * 归一化后的最终查询串。
+     */
+    private async resolveRerankQueryInput(
+        scope: MemoryScope,
+        currentMessage: LivingMemoryTranscriptMessage,
+        historyMessages: LivingMemoryTranscriptMessage[],
+        logger: LivingMemoryLogger
+    ): Promise<string | null> {
+        const query = await this.recallQuery.resolve(
+            scope,
+            currentMessage,
+            historyMessages,
+            logger
+        )
+
+        logger.diagnostic('recall.query.prepared', {
+            rawInputLength: query.rawInputLength,
+            cleanedQueryLength: query.cleanedQuery.length,
+            finalQueryLength: query.finalQuery.length
+        })
+        if (query.skippedReason != null) {
+            logger.diagnostic('recall.skipped', {
+                reason: query.skippedReason
+            })
+            return null
+        }
+
+        if (query.fallbackReason != null) {
+            logger.diagnostic('recall.query.fallback', {
+                reason: query.fallbackReason,
+                error: query.error,
+                finalQueryLength: query.finalQuery.length
+            })
+        }
+
+        const input = normalizeText(query.finalQuery)
+        return input.length === 0 ? null : input
+    }
+
     private async runEmbeddingRerank(
         scope: MemoryScope,
         currentMessage: LivingMemoryTranscriptMessage,
@@ -178,38 +220,16 @@ export class LivingMemoryRecallCoordinator {
         let input = normalizeText(currentMessage.contentLines.join('\n'))
 
         try {
-            const query = await this.recallQuery.resolve(
+            const resolvedInput = await this.resolveRerankQueryInput(
                 scope,
                 currentMessage,
                 historyMessages,
                 logger
             )
-
-            logger.diagnostic('recall.query.prepared', {
-                rawInputLength: query.rawInputLength,
-                cleanedQueryLength: query.cleanedQuery.length,
-                finalQueryLength: query.finalQuery.length
-            })
-            if (query.skippedReason != null) {
-                logger.diagnostic('recall.skipped', {
-                    reason: query.skippedReason
-                })
+            if (resolvedInput == null) {
                 return
             }
-
-            if (query.fallbackReason != null) {
-                const fallbackError = query.error
-                logger.diagnostic('recall.query.fallback', {
-                    reason: query.fallbackReason,
-                    error: fallbackError,
-                    finalQueryLength: query.finalQuery.length
-                })
-            }
-
-            input = normalizeText(query.finalQuery)
-            if (input.length === 0) {
-                return
-            }
+            input = resolvedInput
 
             const items = await this.retriever.retrieve(
                 scope.presetId,

@@ -3,6 +3,7 @@
 ## 2026-09-27 version:0.24.8
 
 - pending: 代码审查低风险项清理，无行为变更。删除两处确认死代码：`service/shared/utils.ts` 的 `cosineSimilarity`（向量相似度计算已下沉 PGlite worker，全仓零引用）与 `transcript/chatluna_transcript_adapter.ts` 的 `toChatLunaTranscriptMessages`（v0.24.0 去轮化后被 `toLogTranscriptMessages` 取代的残留，零引用；同文件仍在用的 `toChatLunaTranscriptMessageResult` 与 `livingMemoryRawContentKey` 保留）。将 `LivingMemoryMutationService` 中 `archiveActiveMemories`、`deleteMemories`、`deleteExpiredArchivedMemories` 三处按 `MEMORY_DELETE_BATCH_SIZE` 切片、逐批写仓储并同步索引、累加计数的同构循环提取为私有 `runBatchedMutation(ids, applyBatch)`，批大小、切片与计数语义收敛为单点，三处只描述各自每批逻辑；空列表短路、批数与每批调用序列、归档快照单次清除、删除的跨预设幂等跳过均保持原样。
+- pending: 代码审查长函数拆分，无行为变更。`workflows/extraction/coordinator.ts` 将 `drain` 的单块排干与失败处理拆出 `drainNextChunk` 与 `handleChunkFailure`（以「是否继续排后续块」的布尔驱动循环），`queue` 的白名单门禁拆出 `isExtractionWhitelisted`，`run` 的提取输入组装改用 `const` 消除声明后赋值并移除随之空置的类型导入；`workflows/recall/coordinator.ts` 将 `runEmbeddingRerank` 的查询改写与跳过判定拆出 `resolveRerankQueryInput`（返回 null 表示本次不检索、不覆盖快照）；`workflows/recall/agentic_recall.ts` 将 `run` 的子模型解析与可用性校验拆出 `resolveChatModel`；`app/living_memory_service.ts` 将构造函数的子系统装配拆出 `createRecallCoordinator`、`createDreamCoordinator`、`createExtractionCoordinator` 与 `scheduleDailyMaintenance`，共享依赖字段前移装配。各拆分保持诊断字段、游标推进、失败重试与跳过语义、依赖注入接线不变。
 
 ## 2026-09-27 version:0.24.7
 

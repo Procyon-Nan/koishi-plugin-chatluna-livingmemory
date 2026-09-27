@@ -129,35 +129,66 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             this.vectorIndex,
             this.memoryLogger
         )
-        const retriever = new LivingMemoryRetriever(
-            ctx,
-            config,
-            this.repository,
-            this.vectorIndex,
-            this.memoryLogger
-        )
-        const extractor = new LivingMemoryExtractor(ctx, config.mainModel)
-        const formatter = new LivingMemoryMessageFormatter()
-        const recallQuery = new LivingMemoryRecallQueryBuilder(ctx, config)
         this.searchEngine = new LivingMemoryEmbeddingSearchEngine(
             config,
             this.repository,
             this.vectorIndex
         )
-        const agenticRecall = new LivingMemoryAgenticRecallExecutor(
-            ctx,
-            config,
-            this.searchEngine,
-            this.memoryLogger
-        )
+        this.snapshotCache = new LivingMemorySnapshotCache(this.repository)
         this.userProfiles = new LivingMemoryUserProfileService(
             ctx,
             config,
             this.repository,
             this.memoryLogger
         )
-        const dream = new LivingMemoryDreamService(
+
+        this.recallCoordinator = this.createRecallCoordinator(config)
+        this.dreamCoordinator = this.createDreamCoordinator(config)
+        this.extractionCoordinator = this.createExtractionCoordinator(config)
+        this.presetCatalog = new LivingMemoryPresetCatalog(
             ctx,
+            this.repository,
+            this.memoryLogger
+        )
+
+        this.repository.defineTables()
+        this.scheduleDailyMaintenance()
+    }
+
+    private createRecallCoordinator(
+        config: LivingMemoryConfig
+    ): LivingMemoryRecallCoordinator {
+        const retriever = new LivingMemoryRetriever(
+            this.ctx,
+            config,
+            this.repository,
+            this.vectorIndex,
+            this.memoryLogger
+        )
+        const recallQuery = new LivingMemoryRecallQueryBuilder(this.ctx, config)
+        const agenticRecall = new LivingMemoryAgenticRecallExecutor(
+            this.ctx,
+            config,
+            this.searchEngine,
+            this.memoryLogger
+        )
+        return new LivingMemoryRecallCoordinator(
+            config,
+            this.messageLog,
+            this.repository,
+            recallQuery,
+            retriever,
+            agenticRecall,
+            this.snapshotCache,
+            this.memoryLogger
+        )
+    }
+
+    private createDreamCoordinator(
+        config: LivingMemoryConfig
+    ): LivingMemoryDreamCoordinator {
+        const dream = new LivingMemoryDreamService(
+            this.ctx,
             config,
             this.repository,
             this.mutations,
@@ -168,7 +199,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             this.userProfiles
         )
         const incrementalDream = new LivingMemoryIncrementalDreamService(
-            ctx,
+            this.ctx,
             config,
             this.repository,
             this.mutations,
@@ -176,9 +207,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             this.vectorIndex,
             this.userProfiles
         )
-
         const jobTracker = new LivingMemoryJobTracker(this.repository)
-        this.snapshotCache = new LivingMemorySnapshotCache(this.repository)
         const dreamJobRunner = new LivingMemoryDreamJobRunner(
             dream,
             incrementalDream,
@@ -186,23 +215,20 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             jobTracker,
             this.memoryLogger
         )
-        this.recallCoordinator = new LivingMemoryRecallCoordinator(
-            config,
-            this.messageLog,
-            this.repository,
-            recallQuery,
-            retriever,
-            agenticRecall,
-            this.snapshotCache,
-            this.memoryLogger
-        )
-        this.dreamCoordinator = new LivingMemoryDreamCoordinator(
+        return new LivingMemoryDreamCoordinator(
             config,
             dreamJobRunner,
             this.repository,
             this.memoryLogger
         )
-        this.extractionCoordinator = new LivingMemoryExtractionCoordinator(
+    }
+
+    private createExtractionCoordinator(
+        config: LivingMemoryConfig
+    ): LivingMemoryExtractionCoordinator {
+        const extractor = new LivingMemoryExtractor(this.ctx, config.mainModel)
+        const formatter = new LivingMemoryMessageFormatter()
+        return new LivingMemoryExtractionCoordinator(
             config,
             this.messageLog,
             this.repository,
@@ -212,14 +238,11 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             (presetId) => this.queueAutoDreamIfThresholdReached(presetId),
             this.memoryLogger
         )
-        this.presetCatalog = new LivingMemoryPresetCatalog(
-            ctx,
-            this.repository,
-            this.memoryLogger
-        )
+    }
 
-        this.repository.defineTables()
-        ctx.setInterval(() => {
+    /** 每日维护：清理过期任务，并调度过期归档记忆的衰减清理。 */
+    private scheduleDailyMaintenance() {
+        this.ctx.setInterval(() => {
             this.cleanupStaleJobs().catch((error) => {
                 this.memoryLogger.warn(
                     'maintenance.cleanup.failed',
