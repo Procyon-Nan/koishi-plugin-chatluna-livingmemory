@@ -1,12 +1,9 @@
 import type { LivingMemoryTranscriptMessage } from '../../contracts/memory'
-import type {
-    ExtractionPayload,
-    MessageFormatter
-} from '../../contracts/workflows'
+import type { ExtractionPayload } from '../../contracts/workflows'
 import { serializeLivingMemorySourceMessages } from './source_serializer'
 import { renderLivingMemoryTranscript } from './transcript_renderer'
 
-export class LivingMemoryMessageFormatter implements MessageFormatter {
+export class LivingMemoryMessageFormatter {
     toExtractionPayload(
         messages: LivingMemoryTranscriptMessage[]
     ): ExtractionPayload {

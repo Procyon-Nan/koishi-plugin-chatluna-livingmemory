@@ -16,7 +16,6 @@ import type {
     DreamMemoryEntryRecord,
     DreamMergeInput,
     DreamMemoryMutation,
-    ExtractionRepository,
     RecallRepository,
     UserProfileMemoryRepository
 } from '../../contracts/workflows'
@@ -125,7 +124,6 @@ interface DreamMergeContext {
 export class LivingMemoryEntryRepository
     implements
         RecallRepository,
-        ExtractionRepository,
         UserProfileMemoryRepository
 {
     constructor(

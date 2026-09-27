@@ -27,7 +27,6 @@ import type {
     DreamMemoryEntryRecord,
     DreamMergeInput,
     DreamMemoryMutation,
-    ExtractionRepository,
     JobRepository,
     RecallRepository,
     SnapshotRepository,
@@ -90,7 +89,6 @@ export class LivingMemoryRepository
         RecallRepository,
         SnapshotRepository,
         JobRepository,
-        ExtractionRepository,
         UserProfileMemoryRepository,
         UserProfileRepository
 {

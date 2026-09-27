@@ -1,7 +1,6 @@
 import type {
     LivingMemorySearchInput,
     LivingMemorySearchResult,
-    LivingMemoryTranscriptMessage,
     MemoryEntryRecord,
     MemoryEntryType,
     MemoryJobKind,
@@ -245,24 +244,6 @@ export interface JobRepository {
     ): Promise<MemoryJobRecord[]>
 }
 
-export interface ExtractionRepository {
-    appendMemories(
-        scope: MemoryScope,
-        sourceOriginMessages: MemorySourceMessage[],
-        extracted: AttributedMemoryItem[],
-        sourceLabel?: string | null
-    ): Promise<MemoryEntryRecord[]>
-    createMemory(
-        scope: MemoryScope,
-        input: MemoryMutationInput
-    ): Promise<MemoryEntryRecord>
-    updateMemory(
-        id: string,
-        patch: Partial<MemoryMutationInput>
-    ): Promise<MemoryUpdateResult | null>
-    deleteMemory(id: string): Promise<MemoryEntryRecord | null>
-}
-
 /**
  * 提取落库面：由应用变更服务实现——windowSpeakers 的注册与记忆追加必须
  * 在同一预设级队列操作内完成，持久化仓储的 appendMemories 只负责事实
@@ -306,10 +287,4 @@ export interface UserProfileRepository {
         profile: UserProfileInput
     ): Promise<void>
     deleteUserProfile(profileId: string): Promise<void>
-}
-
-export interface MessageFormatter {
-    toExtractionPayload(
-        messages: LivingMemoryTranscriptMessage[]
-    ): ExtractionPayload
 }
