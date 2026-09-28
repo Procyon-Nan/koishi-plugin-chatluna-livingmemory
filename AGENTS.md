@@ -161,6 +161,11 @@ chatluna-livingmemory/
      记忆。合并必须通过 `applyDreamMerge()` 完成，不得拆成多个独立写操作。
    - Dream 的 update 与 merge 结果完整覆盖模型生成的 `speakerKeys` 和其余
      可变字段，不对旧关联用户做并集保留。
+   - Dream 每个整理单元的模型结果必须用恰好一个操作覆盖簇内每条记忆：无需
+     改动的记忆用 `keep` 保留，禁止空 operations 或遗漏记忆。覆盖校验在落库前
+     执行，缺漏、重复或越簇 id 走结构化输出纠错重试，仍不达标则该单元记为失败
+     跳过、不推进相关记忆的固化。manual、incremental-batch、incremental-seed
+     三种模式统一适用，其中增量种子单元带入的候选邻居同样须由 keep 覆盖。
    - 保留阶段动作白名单、单次任务 touched-memory 防重复处理、完整生成元
      数据和预设级任务串行约束。
    - 全量 Dream 的聚类与 HDBSCAN 计算交给 Dream Worker；增量 Dream 只处理

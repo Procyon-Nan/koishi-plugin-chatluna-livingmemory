@@ -170,9 +170,6 @@ class IncrementalRepositoryStub implements IncrementalDreamRepository {
     }
 }
 
-const emptyResult = () =>
-    createToolCallMessage(dreamResultToolName, { operations: [] })
-
 const keepResult = (ids: string[]) =>
     createToolCallMessage(dreamResultToolName, {
         operations: [{ action: 'keep', memoryIds: ids, reason: '保持独立' }]
@@ -268,7 +265,11 @@ const createHarness = (
 
 it('runs one batch unit then consolidates every successful seed in order', async () => {
     const harness = createHarness(
-        [emptyResult(), keepResult(['seed-1', 'candidate']), emptyResult()],
+        [
+            keepResult(['seed-1', 'seed-2']),
+            keepResult(['seed-1', 'candidate']),
+            keepResult(['seed-2', 'candidate'])
+        ],
         [
             createEntry('seed-1', { speakerKeys: ['speaker-1'] }),
             createEntry('seed-2', {
@@ -325,8 +326,8 @@ it('updates affected profiles after a Dream unit throws post-commit', async () =
 it('continues after a seed structured-output failure and leaves it pending', async () => {
     const harness = createHarness(
         [
-            emptyResult(),
-            emptyResult(),
+            keepResult(['seed-1', 'seed-2']),
+            keepResult(['seed-1', 'candidate']),
             new AIMessage('invalid one'),
             new AIMessage('invalid two'),
             new AIMessage('invalid three')
@@ -352,7 +353,12 @@ it('continues after a seed structured-output failure and leaves it pending', asy
 
 it('rejects non-empty seed operations that do not reference the seed', async () => {
     const harness = createHarness(
-        [emptyResult(), keepResult(['candidate'])],
+        [
+            keepResult(['seed-1']),
+            keepResult(['candidate']),
+            keepResult(['candidate']),
+            keepResult(['candidate'])
+        ],
         [
             createEntry('seed-1'),
             createEntry('candidate', { isConsolidated: true })
@@ -395,7 +401,7 @@ it('stops after a first-round failure without consolidating the batch', async ()
 it('refreshes a mutated old candidate before processing the next seed', async () => {
     const harness = createHarness(
         [
-            emptyResult(),
+            keepResult(['seed-1', 'seed-2']),
             mergeResult('candidate', 'seed-1'),
             keepResult(['seed-2', 'candidate'])
         ],
@@ -422,7 +428,11 @@ it('refreshes a mutated old candidate before processing the next seed', async ()
 
 it('queries the latest index state for every sequential seed', async () => {
     const harness = createHarness(
-        [emptyResult(), emptyResult(), emptyResult()],
+        [
+            keepResult(['seed-1', 'seed-2']),
+            keepResult(['seed-1', 'candidate']),
+            keepResult(['seed-2', 'candidate'])
+        ],
         [
             createEntry('seed-1'),
             createEntry('seed-2', { createdAt: new Date(+now + 1) }),
@@ -450,8 +460,9 @@ it('limits each seed relation unit to the 30 nearest old memories', async () => 
             isConsolidated: true
         })
     )
+    const nearestIds = candidates.slice(0, 30).map((candidate) => candidate.id)
     const harness = createHarness(
-        [emptyResult(), keepResult(['seed-1'])],
+        [keepResult(['seed-1']), keepResult(['seed-1', ...nearestIds])],
         [createEntry('seed-1'), ...candidates]
     )
 

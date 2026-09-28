@@ -213,6 +213,11 @@ it('retries Dream before execution when a speaker is unrelated to the memories',
                         importance: 0.5
                     },
                     reason: '测试未知用户'
+                },
+                {
+                    action: 'keep',
+                    memoryIds: ['memory-2'],
+                    reason: '保持独立'
                 }
             ]
         }),
@@ -224,6 +229,36 @@ it('retries Dream before execution when a speaker is unrelated to the memories',
     assert.equal(harness.model.invocations.length, 2)
     assert.equal(result.kept, 1)
     assert.equal(result.updated, 0)
+})
+
+it('retries then skips a Dream cluster when operations omit cluster memories', async () => {
+    const emptyOperations = () =>
+        createToolCallMessage(dreamResultToolName, { operations: [] })
+    const harness = createDreamHarness([
+        emptyOperations(),
+        emptyOperations(),
+        emptyOperations()
+    ])
+
+    const result = await harness.service.run('preset-1')
+
+    assert.equal(harness.model.invocations.length, 3)
+    assert.equal(result.kept, 0)
+    assert.equal(result.skipped, 1)
+    assert.ok(
+        harness.debugMessages.some(
+            (message) =>
+                message.includes('event=dream.cluster.skipped') &&
+                message.includes('reason=structured-output-failed')
+        )
+    )
+    assert.ok(
+        harness.debugMessages.some(
+            (message) =>
+                message.includes('event=model.parse.failed') &&
+                message.includes('覆盖')
+        )
+    )
 })
 
 it('skips a Dream cluster after three invalid structured responses', async () => {

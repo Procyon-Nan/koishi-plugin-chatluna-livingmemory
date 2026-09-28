@@ -51,7 +51,7 @@ export const buildDreamPrompt = (input: DreamPromptInput): PromptMessages => {
         '',
         '<operation_rules>',
         '你可以执行的操作有：',
-        '- keep：当记忆的核心内容、主题彼此不重复时，保持不变。',
+        '- keep：当某条记忆无需改动（内容准确，且与簇内其他记忆不重复、不冲突）时，保留它，不做任何修改。',
         '- update：当某条记忆需要补充新的信息、修正错误信息或移除过时信息时，更新内容。',
         '- merge：当多条记忆的核心内容、主题相近，描述同一个事件、关系、概念时，选择一条记忆作为 target，合并信息；其余 source 会被代码层自动归档。',
         '- archive：当某条记忆已经过时或与新状态、新的记忆冲突时，将其归档。',
@@ -70,8 +70,9 @@ export const buildDreamPrompt = (input: DreamPromptInput): PromptMessages => {
         '',
         '<output_contract>',
         `你必须调用且只能调用 ${dreamResultToolName} 工具来提交记忆整理的结果。`,
-        `如果你认为没有记忆需要整理，请调用 ${dreamResultToolName} 工具并提交空 operations 数组。`,
-        '不要输出任何普通文本、Markdown 或代码块结果，不要进行解释说明。',
+        '输入 <memory_entries> 中的每一条记忆都必须被恰好一个操作覆盖：需要改动的用 update/merge/archive，无需改动的用 keep 保留。不得遗漏任何记忆，也不得让同一条记忆出现在多个操作中。',
+        '即使你判断全部记忆都无需改动，也必须用一个或多个 keep 操作把它们逐一覆盖，禁止提交空的 operations 数组。',
+        '不要输出任何普通文本、Markdown 或代码块结果；每个操作的判断理由写入其 reason 字段。',
         '</output_contract>'
     ].join('\n')
 
