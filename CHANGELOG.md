@@ -2,7 +2,7 @@
 
 ## 2026-09-28 version:0.24.9
 
-- pending: 收紧 Dream 记忆整理的结果契约，让整理决策可观测。此前提示词允许模型在「无需整理」时提交空 operations 数组、且禁止任何解释，导致日志里只能看到 `operations: []`，无法判断模型是否真的审阅了簇内每条记忆（每种操作本就带 `reason`，但空数组无从承载理由）。现要求模型用恰好一个操作覆盖簇内每条记忆——无需改动的用 `keep` 保留、需改动的用 `update`/`merge`/`archive`，禁止空数组与遗漏、禁止同一记忆被多个操作覆盖；`unit_processor` 落库前新增覆盖校验，缺漏、重复或越簇 id 抛错并走结构化输出既有纠错重试（上限 3 次），仍不达标则该单元记为 `structured-output-failed` 跳过、不推进相关记忆固化，失败明细经 `model.parse.failed` 与 `dream.cluster.skipped` 可见。manual、incremental-batch、incremental-seed 三种模式统一适用（增量种子单元带入的候选邻居同样须由 `keep` 覆盖）；随之移除 `unit_processor` 中已被覆盖校验涵盖的冗余 `seed-not-in-operations` 判定。同步更新提示词 `output_contract`、结果工具描述与 AGENTS.md §6，并改写依赖空结果的增量 Dream 测试、补充空 operations 被拒的手动 Dream 回归。无 schema、配置或数据契约变更。
+- 65ddd9c: 收紧 Dream 记忆整理的结果契约，让整理决策可观测。此前提示词允许模型在「无需整理」时提交空 operations 数组、且禁止任何解释，导致日志里只能看到 `operations: []`，无法判断模型是否真的审阅了簇内每条记忆（每种操作本就带 `reason`，但空数组无从承载理由）。现要求模型用恰好一个操作覆盖簇内每条记忆——无需改动的用 `keep` 保留、需改动的用 `update`/`merge`/`archive`，禁止空数组与遗漏、禁止同一记忆被多个操作覆盖；`unit_processor` 落库前新增覆盖校验，缺漏、重复或越簇 id 抛错并走结构化输出既有纠错重试（上限 3 次），仍不达标则该单元记为 `structured-output-failed` 跳过、不推进相关记忆固化，失败明细经 `model.parse.failed` 与 `dream.cluster.skipped` 可见。manual、incremental-batch、incremental-seed 三种模式统一适用（增量种子单元带入的候选邻居同样须由 `keep` 覆盖）；随之移除 `unit_processor` 中已被覆盖校验涵盖的冗余 `seed-not-in-operations` 判定。同步更新提示词 `output_contract`、结果工具描述与 AGENTS.md §6，并改写依赖空结果的增量 Dream 测试、补充空 operations 被拒的手动 Dream 回归。无 schema、配置或数据契约变更。
 
 ## 2026-09-27 version:0.24.8
 
