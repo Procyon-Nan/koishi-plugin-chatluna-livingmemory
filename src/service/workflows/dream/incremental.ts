@@ -1,6 +1,9 @@
 import type { Context } from 'koishi'
 import type { ChatLunaChatModel } from 'koishi-plugin-chatluna/llm-core/platform/model'
-import type { MemoryEntryRecord } from '../../../contracts/memory'
+import type {
+    MemoryEntryRecord,
+    PresetPersonaResolver
+} from '../../../contracts/memory'
 import type { IncrementalDreamNeighborSearch } from '../../../contracts/vector_index'
 import type {
     DreamMemoryRepository,
@@ -76,7 +79,8 @@ export class LivingMemoryIncrementalDreamService {
         private readonly mutations: DreamMemoryRepository,
         private readonly speakerCoverage: DreamSpeakerCoverage,
         private readonly neighborSearch: IncrementalDreamNeighborSearch,
-        private readonly userProfiles: LivingMemoryUserProfileService
+        private readonly userProfiles: LivingMemoryUserProfileService,
+        private readonly presetPersona?: PresetPersonaResolver
     ) {
         this.unitProcessor = new DreamUnitProcessor(mutations)
     }
@@ -108,7 +112,7 @@ export class LivingMemoryIncrementalDreamService {
 
         const model = await this.createChatModel()
         const assistantLabel = resolveAssistantLabel(presetId)
-        const presetPrompt = await resolvePresetPrompt(this.ctx, presetId)
+        const presetPrompt = await this.resolvePersona(presetId)
         const speakers =
             await this.speakerCoverage.ensurePresetSpeakersCoverage(presetId)
         const affectedSpeakerKeys = new Set<string>()
@@ -255,6 +259,17 @@ export class LivingMemoryIncrementalDreamService {
             throw new Error('incremental dream model is unavailable')
         }
         return model.value
+    }
+
+    /**
+     * 取得注入模型的人设上下文：优先用预设人设卡片，未装配卡片服务时回退
+     * 预设原文。
+     */
+    private async resolvePersona(presetId: string): Promise<string> {
+        if (this.presetPersona != null) {
+            return await this.presetPersona.resolve(presetId)
+        }
+        return await resolvePresetPrompt(this.ctx, presetId)
     }
 
     private async loadSeeds(presetId: string, batch: MemoryEntryRecord[]) {

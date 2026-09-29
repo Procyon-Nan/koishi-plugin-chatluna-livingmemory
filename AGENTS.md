@@ -180,6 +180,15 @@ chatluna-livingmemory/
      `renderMemoriesForModel` 统一渲染，各工作流不得自行拼装记忆视图。记忆 ID
      只在模型需要引用记忆时渲染：`living_memory_search` 渲染 ID 供
      `living_memory_get_messages` 使用，Agentic Recall 与用户画像不渲染 ID。
+   - 注入记忆写入类工作流（extraction、Dream、用户画像）的角色人设统一取
+     预设人设卡片，不直接注入预设原文。卡片由 `preset_persona.ts` 把预设原文
+     按行删减掉纯操作性内容（工具调用指南、输出与格式规范、状态模板、安保
+     约束等）得到，保留部分为原字节拼接，模型只在编号空间选择待删行，不重写
+     正文；删除比例过高、剪出结果过短或模型不可用时回退原文。卡片按预设落库
+     （`living_memory_preset_persona`，主键 presetId），`resolve(presetId)` 是
+     唯一写库路径、按原文哈希懒更新；extraction 经 `resolveRendered(rawText)`
+     只读内存层不落库，避免带会话变量的原文反复覆盖落库口径。WebUI 手改的
+     卡片 `source='manual'`，预设变动时不自动覆盖。recall 不注入预设，不接入。
    - 用户画像提示词在记忆列表前说明关联记忆总数与实际送入条数；画像输出只有
      正文，没有操作引用记忆 ID，送入的记忆也一律等权使用。
    - 动态文本经 `prompt_format.ts` 负责的 XML 块转义和 System/Human 消息

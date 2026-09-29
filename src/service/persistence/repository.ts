@@ -43,6 +43,10 @@ import {
 import { LivingMemorySnapshotRepository } from './snapshots'
 import { defineLivingMemoryTables } from './tables'
 import { LivingMemoryUserProfileRepository } from './user_profiles'
+import {
+    type PresetPersonaWriteInput,
+    LivingMemoryPresetPersonaRepository
+} from './preset_personas'
 import { createSyntheticSpeakerLabel } from '../memory/speaker_identity'
 import {
     reconcilePresetSpeaker,
@@ -96,6 +100,7 @@ export class LivingMemoryRepository
     private readonly jobs: LivingMemoryJobRepository
     private readonly snapshots: LivingMemorySnapshotRepository
     private readonly userProfiles: LivingMemoryUserProfileRepository
+    private readonly presetPersonas: LivingMemoryPresetPersonaRepository
     private readonly transactions = new SerialTaskQueue()
 
     constructor(private readonly ctx: Context) {
@@ -108,6 +113,23 @@ export class LivingMemoryRepository
             ctx,
             (callback) => this.runTransaction(callback)
         )
+        this.presetPersonas = new LivingMemoryPresetPersonaRepository(ctx)
+    }
+
+    getPresetPersona(presetId: string) {
+        return this.presetPersonas.getPresetPersona(presetId)
+    }
+
+    listPresetPersonas() {
+        return this.presetPersonas.listPresetPersonas()
+    }
+
+    upsertPresetPersona(input: PresetPersonaWriteInput) {
+        return this.presetPersonas.upsertPresetPersona(input)
+    }
+
+    deletePresetPersona(presetId: string) {
+        return this.presetPersonas.deletePresetPersona(presetId)
     }
 
     defineTables() {

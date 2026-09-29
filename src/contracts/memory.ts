@@ -238,6 +238,36 @@ export interface PresetSpeakerInput {
     platform?: string | null
 }
 
+/**
+ * 预设人设卡片。由预设原文按行删减掉纯操作性内容（工具调用指南、输出与格式
+ * 规范、状态模板等）得到，供记忆提取、Dream 整理与用户画像注入。
+ *
+ * `rawHash` 是生成卡片所依据的预设原文指纹；预设变动后哈希对不上即视为过期，
+ * 由消费方提示（不自动覆盖手改卡片）。`usedRawFallback` 表示删减异常（越界、
+ * 删除比例过高、剪出的卡片过短）已回退为原文。
+ */
+export interface PresetPersonaRecord {
+    presetId: string
+    card: string
+    rawHash: string
+    source: PresetPersonaSource
+    totalLines: number
+    deletedLines: number
+    usedRawFallback: boolean
+    createdAt: Date
+    updatedAt: Date
+}
+
+export type PresetPersonaSource = 'generated' | 'manual'
+
+/**
+ * 预设人设卡片解析入口。各工作流只依赖这一只读契约，由
+ * `LivingMemoryPresetPersonaService` 实现，未装配时回退预设原文。
+ */
+export interface PresetPersonaResolver {
+    resolve(presetId: string): Promise<string>
+}
+
 export interface MemoryMutationInput {
     type: MemoryEntryType
     status?: MemoryEntryStatus

@@ -17,11 +17,15 @@ export { buildDreamPrompt } from './dream'
 export type { DreamPromptInput } from './dream'
 export { buildUserProfilePrompt } from './user_profile'
 export type { UserProfilePromptInput } from './user_profile'
+export { buildPersonaCardPrompt } from './persona_card'
+export type { PersonaCardPromptInput } from './persona_card'
 export {
     extractionResultSchema,
     dreamResultSchema,
     dreamResultToolName,
     extractionResultToolName,
     userProfileResultSchema,
-    userProfileResultToolName
+    userProfileResultToolName,
+    personaCardResultSchema,
+    personaCardResultToolName
 } from './schema'

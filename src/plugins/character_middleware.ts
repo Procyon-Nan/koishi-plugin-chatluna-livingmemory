@@ -488,9 +488,11 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                     })
                 },
                 resolvePresetPrompt: async () =>
-                    await renderCharacterPresetPrompt(ctx, payload.preset, {
-                        session: payload.session
-                    })
+                    await ctx.chatluna_living_memory.resolveRenderedPresetPersona(
+                        await renderCharacterPresetPrompt(ctx, payload.preset, {
+                            session: payload.session
+                        })
+                    )
             })
         }
     )

@@ -119,3 +119,21 @@ export const userProfileResultSchema = z.object({
             '人物画像的正文内容，长度不超过 300 个字符；无需更新时为 null'
         )
 })
+
+export const personaCardResultToolName = 'living_memory_persona_card_result'
+
+export const personaCardResultSchema = z.object({
+    deletedLineNumbers: z
+        .array(
+            z
+                .number()
+                .int()
+                .positive()
+                .describe('待删除的行号（输入中以 [n] 标注的编号）')
+        )
+        .describe(
+            '应当从预设原文中删除的行号列表：内容与人格、语气、称呼、关系、价值取向无关的行（工具调用指南、输出或格式规范、状态模板、安保约束等）。无需删除任何行时提交空数组。'
+        )
+})
+
+export type PersonaCardResult = z.output<typeof personaCardResultSchema>

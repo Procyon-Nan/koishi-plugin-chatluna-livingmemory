@@ -491,10 +491,12 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                     })
                 },
                 resolvePresetPrompt: async () =>
-                    await renderChatLunaPresetPrompt(
-                        ctx,
-                        presetTemplate,
-                        promptVariables
+                    await ctx.chatluna_living_memory.resolveRenderedPresetPersona(
+                        await renderChatLunaPresetPrompt(
+                            ctx,
+                            presetTemplate,
+                            promptVariables
+                        )
                     )
             })
         }

@@ -32,3 +32,15 @@ export interface PresetSpeakerTableRecord extends Omit<
 > {
     speakerAliases: string[] | null
 }
+
+export interface PresetPersonaTableRecord {
+    presetId: string
+    card: string
+    rawHash: string
+    source: string
+    totalLines: number | null
+    deletedLines: number | null
+    usedRawFallback: boolean | null
+    createdAt: Date
+    updatedAt: Date
+}

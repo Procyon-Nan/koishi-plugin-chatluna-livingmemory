@@ -17,7 +17,7 @@ import {
     createUserProfileSpeakerKey,
     normalizeUserProfileSpeakerLabel
 } from '../memory/speaker_identity'
-import { toNonEmptyString } from '../shared/utils'
+import { summarizeError, toNonEmptyString } from '../shared/utils'
 import {
     filterJobList,
     filterMemoryIds,
@@ -51,6 +51,7 @@ import { LivingMemoryDreamCoordinator } from '../workflows/dream/coordinator'
 import { LivingMemoryExtractionCoordinator } from '../workflows/extraction/coordinator'
 import { LivingMemoryJobTracker } from '../workflows/job_tracker'
 import { LivingMemoryPresetCatalog } from '../memory/preset_catalog'
+import { LivingMemoryPresetPersonaService } from '../memory/preset_persona'
 import type { QueueExtractionOptions } from '../memory/helpers'
 import { LivingMemoryRecallCoordinator } from '../workflows/recall/coordinator'
 import { LivingMemorySnapshotCache } from '../memory/snapshot/snapshot_cache'
@@ -91,6 +92,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     private readonly dreamCoordinator: LivingMemoryDreamCoordinator
     private readonly presetCatalog: LivingMemoryPresetCatalog
     private readonly userProfiles: LivingMemoryUserProfileService
+    private readonly presetPersona: LivingMemoryPresetPersonaService
     private readonly searchEngine: LivingMemoryEmbeddingSearchEngine
     private readonly vectorIndex: LivingMemoryVectorIndexService
     private readonly dreamWorker: LivingMemoryDreamWorkerClient
@@ -135,11 +137,18 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             this.vectorIndex
         )
         this.snapshotCache = new LivingMemorySnapshotCache(this.repository)
-        this.userProfiles = new LivingMemoryUserProfileService(
+        this.presetPersona = new LivingMemoryPresetPersonaService(
             ctx,
             config,
             this.repository,
             this.memoryLogger
+        )
+        this.userProfiles = new LivingMemoryUserProfileService(
+            ctx,
+            config,
+            this.repository,
+            this.memoryLogger,
+            this.presetPersona
         )
 
         this.recallCoordinator = this.createRecallCoordinator(config)
@@ -196,7 +205,8 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             this.vectorIndex,
             this.dreamWorker,
             this.memoryLogger,
-            this.userProfiles
+            this.userProfiles,
+            this.presetPersona
         )
         const incrementalDream = new LivingMemoryIncrementalDreamService(
             this.ctx,
@@ -205,7 +215,8 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             this.mutations,
             this.mutations,
             this.vectorIndex,
-            this.userProfiles
+            this.userProfiles,
+            this.presetPersona
         )
         const jobTracker = new LivingMemoryJobTracker(this.repository)
         const dreamJobRunner = new LivingMemoryDreamJobRunner(
@@ -339,6 +350,43 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         }
         this.queueExpiredArchivedMemoryCleanup('startup')
         await this.archivedMemoryCleanup
+        await this.warmupPresetPersonas()
+    }
+
+    /**
+     * 启动时为全部预设预热人设卡片：生成缺失或过期的卡片。逐预设兜底、并发
+     * 受限，任何失败都不阻塞启动；懒生成与回退语义不变。
+     */
+    private async warmupPresetPersonas() {
+        let presetIds: string[]
+        try {
+            presetIds = await this.presetCatalog.list()
+        } catch (error) {
+            this.memoryLogger.warn(
+                'persona.warmup.failed',
+                {
+                    workflow: 'startup',
+                    operation: 'list-presets',
+                    error: summarizeError(error)
+                },
+                error
+            )
+            return
+        }
+
+        try {
+            await this.presetPersona.warmup(presetIds)
+        } catch (error) {
+            this.memoryLogger.warn(
+                'persona.warmup.failed',
+                {
+                    workflow: 'startup',
+                    operation: 'warmup',
+                    error: summarizeError(error)
+                },
+                error
+            )
+        }
     }
 
     protected async stop() {
@@ -493,6 +541,22 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
 
     async listPresetIds(): Promise<string[]> {
         return await this.presetCatalog.list()
+    }
+
+    /**
+     * 预设人设卡片入口：按预设 id 解析（唯一写库路径），供 Dream、用户画像与
+     * 预热使用。
+     */
+    resolvePresetPersona(presetId: string): Promise<string> {
+        return this.presetPersona.resolve(presetId)
+    }
+
+    /**
+     * 预设人设卡片入口：按已 render 好的原文解析，只读内存层、不落库，供
+     * extraction 这类每轮现 render 的闭包使用。
+     */
+    resolveRenderedPresetPersona(rawText: string): Promise<string> {
+        return this.presetPersona.resolveRendered(rawText)
     }
 
     async listMemories(query: MemoryListQuery) {
@@ -673,6 +737,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     async clearPresetData(presetId: string) {
         try {
             await this.mutations.clearPresetData(presetId)
+            await this.repository.deletePresetPersona(presetId)
         } finally {
             this.snapshotCache.clearByPreset(presetId)
         }

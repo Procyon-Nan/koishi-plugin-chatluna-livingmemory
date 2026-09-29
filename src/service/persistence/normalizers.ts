@@ -1,11 +1,14 @@
 import { createHash } from 'crypto'
 import type {
     MemoryEntryRecord,
+    PresetPersonaRecord,
+    PresetPersonaSource,
     PresetSpeakerRecord,
     UserProfileRecord
 } from '../../contracts/memory'
 import type {
     LivingMemoryEntrySpeakerRecord,
+    PresetPersonaTableRecord,
     PresetSpeakerTableRecord
 } from './types'
 import {
@@ -117,4 +120,26 @@ export const normalizePresetSpeakerRecord = (
         : [record.speakerLabel.trim()].filter((alias) => alias.length > 0),
     speakerId: normalizeOptionalString(record.speakerId),
     platform: normalizeOptionalString(record.platform)
+})
+
+const normalizePersonaSource = (value: string): PresetPersonaSource =>
+    value === 'manual' ? 'manual' : 'generated'
+
+const normalizeLineCount = (value: number | null) =>
+    typeof value === 'number' && Number.isFinite(value) && value >= 0
+        ? Math.floor(value)
+        : 0
+
+export const normalizePresetPersonaRecord = (
+    record: PresetPersonaTableRecord
+): PresetPersonaRecord => ({
+    presetId: record.presetId.trim(),
+    card: record.card,
+    rawHash: record.rawHash,
+    source: normalizePersonaSource(record.source),
+    totalLines: normalizeLineCount(record.totalLines),
+    deletedLines: normalizeLineCount(record.deletedLines),
+    usedRawFallback: record.usedRawFallback === true,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt
 })

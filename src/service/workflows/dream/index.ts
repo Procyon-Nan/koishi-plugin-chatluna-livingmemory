@@ -7,7 +7,10 @@ import type {
     DreamSpeakerCoverage,
     LivingMemoryConfig
 } from '../../../contracts/workflows'
-import type { PresetSpeakerRecord } from '../../../contracts/memory'
+import type {
+    PresetPersonaResolver,
+    PresetSpeakerRecord
+} from '../../../contracts/memory'
 import { isModelConfigured, summarizeError } from '../../shared/utils'
 import {
     resolveAssistantLabel,
@@ -45,7 +48,8 @@ export class LivingMemoryDreamService {
         vectors: ManualDreamVectorReader,
         worker: DreamWorkerRunner,
         private readonly logger: LivingMemoryLogger,
-        private readonly userProfiles: LivingMemoryUserProfileService
+        private readonly userProfiles: LivingMemoryUserProfileService,
+        private readonly presetPersona?: PresetPersonaResolver
     ) {
         this.clusterer = new DreamClusterer(vectors, worker)
         this.unitProcessor = new DreamUnitProcessor(mutations)
@@ -75,7 +79,7 @@ export class LivingMemoryDreamService {
 
         const chatModel = model.value
         const assistantLabel = resolveAssistantLabel(presetId)
-        const presetPrompt = await resolvePresetPrompt(this.ctx, presetId)
+        const presetPrompt = await this.resolvePersona(presetId)
         const speakers =
             await this.speakerCoverage.ensurePresetSpeakersCoverage(presetId)
         const result = await this.processEntries(
@@ -95,6 +99,17 @@ export class LivingMemoryDreamService {
         const detail = [result.detail, profileDetail].join('\n')
 
         return { ...result, detail }
+    }
+
+    /**
+     * 取得注入模型的人设上下文：优先用预设人设卡片（已剔除工具与输出规范等
+     * 操作性内容），未装配卡片服务时回退预设原文。
+     */
+    private async resolvePersona(presetId: string): Promise<string> {
+        if (this.presetPersona != null) {
+            return await this.presetPersona.resolve(presetId)
+        }
+        return await resolvePresetPrompt(this.ctx, presetId)
     }
 
     /**

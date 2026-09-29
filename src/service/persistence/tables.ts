@@ -212,4 +212,37 @@ export const defineLivingMemoryTables = (ctx: Context) => {
             primary: 'id'
         }
     )
+
+    // 预设级派生缓存：一行一预设，按 presetId 直取。非备份内容，不进导出。
+    ctx.model.extend(
+        'living_memory_preset_persona',
+        {
+            presetId: 'string(255)',
+            card: 'text',
+            rawHash: 'string(64)',
+            source: {
+                type: 'string',
+                length: 16,
+                initial: 'generated'
+            },
+            totalLines: {
+                type: 'integer',
+                initial: 0
+            },
+            deletedLines: {
+                type: 'integer',
+                initial: 0
+            },
+            usedRawFallback: {
+                type: 'boolean',
+                initial: false
+            },
+            createdAt: 'timestamp',
+            updatedAt: 'timestamp'
+        },
+        {
+            autoInc: false,
+            primary: 'presetId'
+        }
+    )
 }
