@@ -17,6 +17,7 @@ import type {
     MemoryServiceStatus,
     MemorySnapshotRecord,
     PageResult,
+    PresetPersonaCardInfo,
     PresetSpeakerRecord,
     UserProfileRecord
 } from './types'
@@ -145,6 +146,30 @@ export async function listPresetSpeakers(
     presetId: string
 ): Promise<PresetSpeakerRecord[]> {
     return await sendLivingMemory('living-memory/listPresetSpeakers', presetId)
+}
+
+export async function listPresetPersonas(): Promise<PresetPersonaCardInfo[]> {
+    return await sendLivingMemory('living-memory/listPresetPersonas')
+}
+
+export async function savePresetPersonaCard(
+    presetId: string,
+    card: string
+): Promise<{ success: true }> {
+    return await sendLivingMemory(
+        'living-memory/savePresetPersonaCard',
+        presetId,
+        card
+    )
+}
+
+export async function resetPresetPersonaCard(
+    presetId: string
+): Promise<{ success: true }> {
+    return await sendLivingMemory(
+        'living-memory/resetPresetPersonaCard',
+        presetId
+    )
 }
 
 export async function deleteUserProfile(

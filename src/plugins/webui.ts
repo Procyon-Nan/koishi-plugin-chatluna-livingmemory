@@ -143,6 +143,24 @@ export function apply(ctx: Context, _config?: LivingMemoryConfig) {
             await service(ctx).listPresetSpeakers(presetId)
     )
 
+    ctx.console.addListener('living-memory/listPresetPersonas', async () =>
+        service(ctx).listPresetPersonas()
+    )
+
+    ctx.console.addListener(
+        'living-memory/savePresetPersonaCard',
+        ok(async (presetId: string, card: string) => {
+            await service(ctx).savePresetPersonaCard(presetId, card)
+        })
+    )
+
+    ctx.console.addListener(
+        'living-memory/resetPresetPersonaCard',
+        ok(async (presetId: string) => {
+            await service(ctx).resetPresetPersonaCard(presetId)
+        })
+    )
+
     ctx.console.addListener(
         'living-memory/updateUserProfile',
         ok(async (profileId: string, content: string) => {

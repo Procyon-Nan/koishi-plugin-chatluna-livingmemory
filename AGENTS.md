@@ -188,7 +188,9 @@ chatluna-livingmemory/
      （`living_memory_preset_persona`，主键 presetId），`resolve(presetId)` 是
      唯一写库路径、按原文哈希懒更新；extraction 经 `resolveRendered(rawText)`
      只读内存层不落库，避免带会话变量的原文反复覆盖落库口径。WebUI 手改的
-     卡片 `source='manual'`，预设变动时不自动覆盖。recall 不注入预设，不接入。
+     卡片 `source='manual'`，预设变动时不自动覆盖。Console 经只读视图查看与
+     手工编辑：`stale` 只对手工卡片重算原文比哈希，`usedRawFallback` 与
+     `presetMissing` 分别提示回退原文与预设已不存在。recall 不注入预设，不接入。
    - 用户画像提示词在记忆列表前说明关联记忆总数与实际送入条数；画像输出只有
      正文，没有操作引用记忆 ID，送入的记忆也一律等权使用。
    - 动态文本经 `prompt_format.ts` 负责的 XML 块转义和 System/Human 消息
@@ -263,6 +265,10 @@ chatluna-livingmemory/
      复制资源加载和变更逻辑。
    - WebUI 的编辑、删除、导入导出、Dream、索引维护操作一律调用公开 RPC，
      不绕过应用服务直接访问数据库或索引。
+   - 预设人设卡片对 Console 开放查看与手工编辑（编辑落 `source='manual'`
+     并自此不再自动覆盖，另有重新生成入口），对外部插件只提供只读接口：
+     `resolvePresetPersona` 取卡片正文、`getPresetPersonaCard` 取带异常提示
+     的只读视图，不开放写入口。
 
 11. Koishi 生命周期与后台任务
    - 必需服务为 `chatluna` 与 `database`；`console` 和

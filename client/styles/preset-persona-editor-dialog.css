@@ -1,0 +1,95 @@
+/* Preset persona card editor dialog */
+.persona-editor-heading {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+}
+
+.persona-editor-avatar {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--lm-border);
+    border-radius: 6px;
+    background-color: var(--lm-primary-light);
+    color: var(--lm-primary);
+    font-family: var(--lm-font-mono);
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.persona-editor-kicker {
+    color: var(--lm-text-tertiary);
+    font-family: var(--lm-font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+}
+
+.persona-editor-heading h2 {
+    margin: 2px 0 0;
+    color: var(--lm-text-primary);
+    font-size: 16px;
+    font-weight: 600;
+    word-break: break-all;
+}
+
+.persona-editor-heading p {
+    margin: 4px 0 0;
+    color: var(--lm-text-secondary);
+    font-size: 12px;
+}
+
+.persona-editor-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.persona-editor-field-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.persona-editor-field-header label {
+    color: var(--lm-text-secondary);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.persona-editor-hint {
+    color: var(--lm-text-tertiary);
+    font-size: 12px;
+}
+
+.persona-editor-body :deep(.el-textarea__inner) {
+    background-color: var(--lm-bg-secondary);
+    color: var(--lm-text-primary);
+    border: 1px solid var(--lm-border);
+    border-radius: 4px;
+    font-family: var(--lm-font-mono);
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.persona-editor-body :deep(.el-textarea__inner:focus) {
+    border-color: var(--lm-primary);
+}
+
+.persona-editor-error {
+    margin: 0;
+    color: var(--lm-danger);
+    font-size: 12px;
+}
+
+.persona-editor-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 4px;
+}

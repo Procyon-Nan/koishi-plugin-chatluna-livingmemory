@@ -34,16 +34,25 @@ const renderedText = [
 
 const createHarness = (
     responses: (BaseMessage | Error)[],
-    options: { existing?: PresetPersonaRecord } = {}
+    options: { existing?: PresetPersonaRecord; presetIds?: string[] } = {}
 ) => {
     const model = createToolCallingModel(responses)
     const captured = createCapturedLogger()
     const upserts: unknown[] = []
+    const deleted: string[] = []
     const repository = {
         getPresetPersona: async () => options.existing,
+        listPresetPersonas: async () =>
+            options.existing == null ? [] : [options.existing],
         upsertPresetPersona: async (input: unknown) => {
             upserts.push(input)
+        },
+        deletePresetPersona: async (presetId: string) => {
+            deleted.push(presetId)
         }
+    }
+    const catalog = {
+        list: async () => options.presetIds ?? ['preset-1']
     }
     const ctx = {
         chatluna: {
@@ -62,9 +71,10 @@ const createHarness = (
         ctx,
         { mainModel: 'test-model' },
         repository,
-        captured.logger
+        captured.logger,
+        catalog
     )
-    return { captured, model, service, upserts }
+    return { captured, deleted, model, service, upserts }
 }
 
 const deleteLines = (lineNumbers: number[]) =>
@@ -212,4 +222,126 @@ it('never overwrites a manual card', async () => {
     assert.equal(card, 'manual card')
     assert.equal(harness.model.invocations.length, 0)
     assert.equal(harness.upserts.length, 0)
+})
+
+it('lists stored cards without rendering presets or calling the model', async () => {
+    const harness = createHarness([], {
+        existing: {
+            presetId: 'preset-1',
+            card: 'generated card',
+            rawHash: hashPresetText(renderedText),
+            source: 'generated',
+            totalLines: 7,
+            deletedLines: 3,
+            usedRawFallback: false,
+            createdAt: new Date(),
+            updatedAt: new Date()
+        }
+    })
+
+    const cards = await harness.service.listCards()
+
+    assert.equal(cards.length, 1)
+    assert.equal(cards[0].presetId, 'preset-1')
+    assert.equal(cards[0].source, 'generated')
+    assert.equal(cards[0].totalLines, 7)
+    assert.equal(cards[0].deletedLines, 3)
+    // 自动卡片由哈希懒更新，不存在过期态
+    assert.equal(cards[0].stale, false)
+    assert.equal(cards[0].presetMissing, false)
+    assert.equal(harness.model.invocations.length, 0)
+})
+
+it('marks a card whose preset has disappeared', async () => {
+    const harness = createHarness([], {
+        existing: {
+            presetId: 'gone-preset',
+            card: 'cached card',
+            rawHash: 'hash',
+            source: 'generated',
+            totalLines: 3,
+            deletedLines: 0,
+            usedRawFallback: true,
+            createdAt: new Date(),
+            updatedAt: new Date()
+        },
+        presetIds: ['preset-1']
+    })
+
+    const cards = await harness.service.listCards()
+
+    assert.equal(cards[0].presetMissing, true)
+    assert.equal(cards[0].usedRawFallback, true)
+})
+
+it('marks a manual card stale when the preset text has changed', async () => {
+    const harness = createHarness([], {
+        existing: {
+            presetId: 'preset-1',
+            card: 'manual card',
+            rawHash: 'hash-before-edit',
+            source: 'manual',
+            totalLines: 5,
+            deletedLines: 0,
+            usedRawFallback: false,
+            createdAt: new Date(),
+            updatedAt: new Date()
+        }
+    })
+
+    const cards = await harness.service.listCards()
+
+    assert.equal(cards[0].stale, true)
+    assert.equal(harness.model.invocations.length, 0)
+})
+
+it('saves a manual card and keeps it out of automatic updates', async () => {
+    const harness = createHarness([])
+
+    await harness.service.saveManualCard('preset-1', 'edited card')
+
+    assert.equal(harness.upserts.length, 1)
+    const upsert = harness.upserts[0] as Record<string, unknown>
+    assert.equal(upsert.presetId, 'preset-1')
+    assert.equal(upsert.card, 'edited card')
+    assert.equal(upsert.source, 'manual')
+    assert.equal(upsert.totalLines, 1)
+    assert.equal(harness.model.invocations.length, 0)
+    assert.equal(harness.captured.info.length, 0)
+})
+
+it('rejects empty manual card input', async () => {
+    const harness = createHarness([])
+
+    await assert.rejects(
+        () => harness.service.saveManualCard('preset-1', '   '),
+        /persona card must not be empty/u
+    )
+    assert.equal(harness.upserts.length, 0)
+})
+
+it('regenerates a card on reset and drops the stored row first', async () => {
+    const harness = createHarness([deleteLines([lineOf(2), lineOf(3)])], {
+        existing: {
+            presetId: 'preset-1',
+            card: 'manual card',
+            rawHash: 'hash-before-edit',
+            source: 'manual',
+            totalLines: 5,
+            deletedLines: 0,
+            usedRawFallback: false,
+            createdAt: new Date(),
+            updatedAt: new Date()
+        }
+    })
+
+    await harness.service.resetCard('preset-1')
+
+    assert.deepEqual(harness.deleted, ['preset-1'])
+    assert.equal(harness.model.invocations.length, 1)
+    assert.equal(harness.upserts.length, 1)
+    assert.equal(
+        (harness.upserts[0] as Record<string, unknown>).source,
+        'generated'
+    )
 })

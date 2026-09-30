@@ -32,7 +32,8 @@ import type {
     LivingMemoryTranscriptMessage,
     MemoryMutationInput,
     MemoryScope,
-    MemoryUpdatePatch
+    MemoryUpdatePatch,
+    PresetPersonaCardInfo
 } from '../../contracts/memory'
 import type {
     JobListQuery,
@@ -141,7 +142,8 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             ctx,
             config,
             this.repository,
-            this.memoryLogger
+            this.memoryLogger,
+            this.presetCatalog
         )
         this.userProfiles = new LivingMemoryUserProfileService(
             ctx,
@@ -557,6 +559,31 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
      */
     resolveRenderedPresetPersona(rawText: string): Promise<string> {
         return this.presetPersona.resolveRendered(rawText)
+    }
+
+    /**
+     * 读取单个预设人设卡片（只读视图，不含模型调用）。外部插件需要卡片正文时
+     * 用 `resolvePresetPersona`，需要异常提示或落库时间时用这里。
+     */
+    async getPresetPersonaCard(
+        presetId: string
+    ): Promise<PresetPersonaCardInfo | undefined> {
+        return await this.presetPersona.getCard(presetId)
+    }
+
+    /** 列出全部预设人设卡片及其异常提示，供 Console 展示与外部插件读取。 */
+    async listPresetPersonas(): Promise<PresetPersonaCardInfo[]> {
+        return await this.presetPersona.listCards()
+    }
+
+    /** 保存手工编辑的预设人设卡片；此后不再被自动覆盖。 */
+    async savePresetPersonaCard(presetId: string, card: string) {
+        await this.presetPersona.saveManualCard(presetId, card)
+    }
+
+    /** 丢弃手工卡片并按当前预设原文重新生成。 */
+    async resetPresetPersonaCard(presetId: string) {
+        await this.presetPersona.resetCard(presetId)
     }
 
     async listMemories(query: MemoryListQuery) {

@@ -231,6 +231,23 @@
                             />
                         </el-tab-pane>
 
+                        <el-tab-pane name="personas">
+                            <template #label>
+                                <span class="tab-label-container">
+                                    <span>人设卡片</span>
+                                    <span class="tab-badge">
+                                        {{ personaTotal }}
+                                    </span>
+                                </span>
+                            </template>
+                            <preset-personas-tab
+                                ref="personasTab"
+                                :preset-id="presetId"
+                                :is-dark="isDark"
+                                @total-change="personaTotal = $event"
+                            />
+                        </el-tab-pane>
+
                         <el-tab-pane name="snapshots">
                             <template #label>
                                 <span class="tab-label-container">
@@ -311,6 +328,7 @@ import JobsTab from './components/jobs-tab.vue'
 import MemoriesTab from './components/memories-tab.vue'
 import MemoryEditorDialog from './components/memory-editor-dialog.vue'
 import ProfilesTab from './components/profiles-tab.vue'
+import PresetPersonasTab from './components/preset-personas-tab.vue'
 import SearchTestTab from './components/search-test-tab.vue'
 import SnapshotsTab from './components/snapshots-tab.vue'
 import { isVectorWorkflowReady } from './utils/vector-index'
@@ -327,6 +345,7 @@ import type {
 type DashboardTab =
     | 'memories'
     | 'profiles'
+    | 'personas'
     | 'snapshots'
     | 'jobs'
     | 'search-test'
@@ -351,11 +370,13 @@ const activeTab = ref<DashboardTab>('memories')
 
 const memoryTotal = ref(0)
 const profileTotal = ref(0)
+const personaTotal = ref(0)
 const snapshotTotal = ref(0)
 const jobTotal = ref(0)
 
 const memoriesTab = ref<RefreshableTab | null>(null)
 const profilesTab = ref<RefreshableTab | null>(null)
+const personasTab = ref<RefreshableTab | null>(null)
 const snapshotsTab = ref<RefreshableTab | null>(null)
 const jobsTab = ref<RefreshableTab | null>(null)
 
@@ -526,6 +547,7 @@ const refreshAll = async (resetPage = false) => {
                 [
                     memoriesTab.value,
                     profilesTab.value,
+                    personasTab.value,
                     snapshotsTab.value,
                     jobsTab.value
                 ],
@@ -543,6 +565,7 @@ const refreshActiveTab = async () => {
     const tabs: Record<DashboardTab, RefreshableTab | null> = {
         memories: memoriesTab.value,
         profiles: profilesTab.value,
+        personas: personasTab.value,
         snapshots: snapshotsTab.value,
         jobs: jobsTab.value
     }

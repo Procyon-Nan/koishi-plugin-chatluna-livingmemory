@@ -11,6 +11,7 @@ import type {
     MemoryMutationInput,
     MemoryUpdatePatch,
     MemorySnapshotWithResolvedItems,
+    PresetPersonaCardInfo,
     PresetSpeakerRecord,
     UserProfileRecord
 } from './memory'
@@ -112,6 +113,14 @@ export interface LivingMemoryConsoleEvents {
     'living-memory/listUserProfiles': (
         query: UserProfileListQuery
     ) => Promise<PageResult<UserProfileRecord>>
+    'living-memory/listPresetPersonas': () => Promise<PresetPersonaCardInfo[]>
+    'living-memory/savePresetPersonaCard': (
+        presetId: string,
+        card: string
+    ) => Promise<{ success: true }>
+    'living-memory/resetPresetPersonaCard': (
+        presetId: string
+    ) => Promise<{ success: true }>
     'living-memory/listPresetSpeakers': (
         presetId: string
     ) => Promise<PresetSpeakerRecord[]>

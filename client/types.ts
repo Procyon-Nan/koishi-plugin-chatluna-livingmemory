@@ -162,6 +162,21 @@ export interface PresetSpeakerRecord {
     updatedAt: Date
 }
 
+export type PresetPersonaSource = 'generated' | 'manual'
+
+export interface PresetPersonaCardInfo {
+    presetId: string
+    card: string
+    source: PresetPersonaSource
+    totalLines: number
+    deletedLines: number
+    usedRawFallback: boolean
+    stale: boolean
+    presetMissing: boolean
+    createdAt: Date
+    updatedAt: Date
+}
+
 export interface DreamTriggerResult {
     success: true
     started: boolean
@@ -405,6 +420,14 @@ export interface LivingMemoryClientEvents {
     'living-memory/listPresetSpeakers': (
         presetId: string
     ) => PresetSpeakerRecord[]
+    'living-memory/listPresetPersonas': () => PresetPersonaCardInfo[]
+    'living-memory/savePresetPersonaCard': (
+        presetId: string,
+        card: string
+    ) => { success: true }
+    'living-memory/resetPresetPersonaCard': (
+        presetId: string
+    ) => { success: true }
     'living-memory/updateUserProfile': (
         profileId: string,
         content: string

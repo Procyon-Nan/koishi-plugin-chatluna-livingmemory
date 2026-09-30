@@ -2,6 +2,7 @@ import { createHash } from 'crypto'
 import type { Context } from 'koishi'
 import type { ChatLunaChatModel } from 'koishi-plugin-chatluna/llm-core/platform/model'
 import type {
+    PresetPersonaCardInfo,
     PresetPersonaRecord,
     PresetPersonaResolver,
     PresetPersonaSource
@@ -30,6 +31,7 @@ const WARMUP_CONCURRENCY = 3
 
 interface PresetPersonaRepository {
     getPresetPersona(presetId: string): Promise<PresetPersonaRecord | undefined>
+    listPresetPersonas(): Promise<PresetPersonaRecord[]>
     upsertPresetPersona(input: {
         presetId: string
         card: string
@@ -39,6 +41,12 @@ interface PresetPersonaRepository {
         deletedLines: number
         usedRawFallback: boolean
     }): Promise<void>
+    deletePresetPersona(presetId: string): Promise<void>
+}
+
+/** 提供当前预设 id 全集，用于判定卡片是否过期或预设已不存在。 */
+interface PresetIdCatalog {
+    list(): Promise<string[]>
 }
 
 interface PersonaCardOutcome {
@@ -74,7 +82,8 @@ export class LivingMemoryPresetPersonaService
         private readonly ctx: Context,
         private readonly config: PresetPersonaConfig,
         private readonly repository: PresetPersonaRepository,
-        private readonly logger: LivingMemoryLogger
+        private readonly logger: LivingMemoryLogger,
+        private readonly catalog: PresetIdCatalog
     ) {}
 
     /**
@@ -155,6 +164,110 @@ export class LivingMemoryPresetPersonaService
             }
         )
         await Promise.all(workers)
+    }
+
+    /**
+     * 列出全部已落库卡片及其异常提示，供 Console 展示与外部插件读取。只读：
+     * 不调模型、不落库，未生成卡片的预设不会出现在结果里。
+     */
+    async listCards(): Promise<PresetPersonaCardInfo[]> {
+        const [stored, presetIds] = await Promise.all([
+            this.repository.listPresetPersonas(),
+            this.catalog.list().catch(() => [])
+        ])
+        const available = new Set(presetIds)
+
+        return await Promise.all(
+            stored.map(async (record) =>
+                toCardInfo(
+                    record,
+                    !available.has(record.presetId),
+                    await this.isStale(record)
+                )
+            )
+        )
+    }
+
+    /**
+     * 读取单个已落库卡片；未生成时返回 undefined。不触发生成——需要卡片内容
+     * 的消费方走 `resolve`，此处只服务展示与外部读取。
+     */
+    async getCard(
+        presetId: string
+    ): Promise<PresetPersonaCardInfo | undefined> {
+        const record = await this.repository.getPresetPersona(presetId)
+        if (record == null) {
+            return undefined
+        }
+
+        const presetIds = await this.catalog.list().catch(() => [])
+        return toCardInfo(
+            record,
+            !presetIds.includes(record.presetId),
+            await this.isStale(record)
+        )
+    }
+
+    /**
+     * 卡片是否已落后于当前预设原文。自动卡片由 `resolve` 按哈希懒更新、不存在
+     * 过期态，直接判定为新鲜；只有手工卡片需要重算原文比对——手改时刻意保留了
+     * 当时的哈希，预设此后变动即表现为不一致。预设读取失败按新鲜处理，避免把
+     * 读取故障误报成过期提示。
+     */
+    private async isStale(record: PresetPersonaRecord): Promise<boolean> {
+        if (record.source !== 'manual') {
+            return false
+        }
+
+        try {
+            const raw = await resolvePresetPrompt(this.ctx, record.presetId)
+            return hashPresetText(raw) !== record.rawHash
+        } catch {
+            return false
+        }
+    }
+
+    /**
+     * 保存手工编辑的卡片：置 `source='manual'` 后不再被自动覆盖，哈希保留用于
+     * 判定预设是否已变动。空卡片拒绝写入。
+     */
+    async saveManualCard(presetId: string, card: string): Promise<void> {
+        const trimmedId = presetId.trim()
+        if (trimmedId.length === 0) {
+            throw new Error('presetId is required')
+        }
+        if (card.trim().length === 0) {
+            throw new Error('persona card must not be empty')
+        }
+
+        const existing = await this.repository.getPresetPersona(trimmedId)
+        await this.repository.upsertPresetPersona({
+            presetId: trimmedId,
+            card,
+            rawHash: existing?.rawHash ?? hashPresetText(card),
+            source: 'manual',
+            totalLines: splitLines(card).length,
+            deletedLines: 0,
+            usedRawFallback: false
+        })
+        this.forgetCard(existing)
+    }
+
+    /**
+     * 丢弃手工卡片并重新生成：清掉落库行后走一次 `resolve`，缓存随之刷新。
+     */
+    async resetCard(presetId: string): Promise<void> {
+        const existing = await this.repository.getPresetPersona(presetId)
+        await this.repository.deletePresetPersona(presetId)
+        this.forgetCard(existing)
+        await this.resolve(presetId)
+    }
+
+    /** 清掉被替换或删除的落库行在内存层的映射，避免陈旧卡片继续被命中。 */
+    private forgetCard(existing?: PresetPersonaRecord): void {
+        if (existing != null) {
+            this.memoByHash.delete(existing.rawHash)
+        }
     }
 
     private async resolveAndPersist(
@@ -240,7 +353,8 @@ export class LivingMemoryPresetPersonaService
                 prompt: buildPersonaCardPrompt({ lines }),
                 toolName: personaCardResultToolName,
                 toolDescription:
-                    '提交应当从预设原文中删除的行号列表；无需删除时提交空数组。',
+                    '提交应当从预设原文中删除的行号列表；' +
+                    '无需删除时提交空数组。',
                 schema: personaCardResultSchema,
                 validateResult: ({ deletedLineNumbers }) => {
                     const invalid = deletedLineNumbers.filter(
@@ -308,7 +422,8 @@ export class LivingMemoryPresetPersonaService
         }
 
         const ratio = deletedLines / lines.length
-        if (ratio > MAX_DELETION_RATIO || card.trim().length < MIN_CARD_LENGTH) {
+        const tooShort = card.trim().length < MIN_CARD_LENGTH
+        if (ratio > MAX_DELETION_RATIO || tooShort) {
             this.logger.diagnostic('persona.prune.fallback', {
                 reason:
                     ratio > MAX_DELETION_RATIO
@@ -350,6 +465,27 @@ export class LivingMemoryPresetPersonaService
 
 export const hashPresetText = (raw: string) =>
     createHash('sha256').update(raw).digest('hex')
+
+/**
+ * 落库行转展示视图。`presetMissing` 与 `stale` 由调用方判定：前者按当前预设 id
+ * 全集，后者只对手工卡片重算原文比哈希（见 `isStale`）。
+ */
+const toCardInfo = (
+    record: PresetPersonaRecord,
+    presetMissing: boolean,
+    stale: boolean
+): PresetPersonaCardInfo => ({
+    presetId: record.presetId,
+    card: record.card,
+    source: record.source,
+    totalLines: record.totalLines,
+    deletedLines: record.deletedLines,
+    usedRawFallback: record.usedRawFallback,
+    stale,
+    presetMissing,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt
+})
 
 /** 按行切分并归一换行；保留空行以维持行号与原文一致。 */
 export const splitLines = (raw: string) => {
