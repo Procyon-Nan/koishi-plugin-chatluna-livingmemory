@@ -1,8 +1,8 @@
 # CHANGELOG
 
-## 2026-09-28 version:0.24.9
+## 2026-10-06 version:0.25.0
 
-- pending: 按 oxfmt 规则修正人设卡片相关代码的格式（`client/types.ts`、`preset_persona.ts`、`preset_personas.ts`、`persona_card.ts`），均为 45a48a0 与 a908dec 引入的折行偏差，无行为变更。
+- d53d7e3: 按 oxfmt 规则修正人设卡片相关代码的格式（`client/types.ts`、`preset_persona.ts`、`preset_personas.ts`、`persona_card.ts`），均为 45a48a0 与 a908dec 引入的折行偏差，无行为变更。
 - dd04ac2: 人设卡片删减不再归一换行符，保留部分与原文逐字节一致。此前 `splitLines` 先把 `\r\n`/`\r` 替换为 `\n` 再切行，删减分支以 `\n` 拼接，含 CRLF 的原文删减后换行被改写，与 AGENTS.md §7「保留部分为原字节拼接」不符（无删除分支返回原文则保留 CRLF，两条分支口径也不一）。现直接按 `\n` 切行，`\r` 留在所在行尾，拼接后与原文逐字节一致。ChatLuna 与 Character 预设经 js-yaml 加载，块标量中的 CRLF 在解析时已归一为 LF，实际只有双引号字符串中显式写入的 `\r` 会受影响。新增 CRLF 原文删减后逐字节保留的回归测试。
 - 23d2ed3: 收敛 Dream、增量 Dream 与用户画像的人设解析。三处此前各自复制一段私有 `resolvePersona`：可选注入 `PresetPersonaResolver`，未注入时回退预设原文。卡片服务在应用门面中无条件装配，可选参数只为测试便利，且卡片服务自身已实现失败回退原文，工作流层的回退是对同一契约的重复保护。现 `PresetPersonaResolver` 改为三者的必填构造依赖，删除三处私有方法，直接调用 `resolve(presetId)`，与提取协调器一致；用户画像服务的 `ctx` 仅为该回退所用，随之从构造参数中移除。契约注释删去「未装配时回退」的表述；测试改为传入解析桩，Dream 画像失败用例的故障注入随之移到解析桩上。
 - 50bfefd: 移除人设卡片只读视图的 `presetMissing` 提示，卡片服务不再依赖预设目录。该提示按「卡片 presetId 不在预设目录中」判定，而目录包含记忆、快照、任务、画像与 speaker 注册表中出现过的全部 presetId；卡片只在对话之后生成，对话必然写入 speaker 注册行，因此卡片存在时其预设必在目录中，提示在预设从配置删除后也不会亮起，形同死字段。此外 `catalog.list().catch(() => [])` 只兜住数据库故障，与同次读取的卡片列表口径重复。现删除契约 `PresetPersonaCardInfo.presetMissing`、客户端镜像类型、WebUI「预设不存在」徽标、卡片服务的 `PresetIdCatalog` 依赖与两处 catch；`isStale` 在预设已不可读时仍按新鲜处理，避免单张残留卡片使整个列表失败。同步 AGENTS.md §7，测试以「预设已不存在的手工卡片照常列出且不标过期」替换原预设缺失用例。
@@ -14,6 +14,9 @@
 - 4ea947a: 补齐 `living_memory_preset_persona` 表的 Koishi `Tables` 声明合并。此前新增人设卡片表时只定义了表结构与 `PresetPersonaTableRecord`，未加入 `koishi-augmentations.ts`，minato 对 `extend`/`get`/`create`/`set`/`remove` 的表名约束（`K extends Keys<S>`）无法识别该表，类型检查失去对卡片持久化层的保护。无运行时行为变更。
 - 45a48a0: 新增预设人设卡片，记忆提取、Dream 整理与用户画像改为注入删减版人设。此前三类工作流向模型逐字注入完整预设原文，其中工具调用指南、输出与格式规范、状态模板、安保约束等操作性内容与人格无关，只会稀释任务指令、放大弱模型在满单元整理时的失败面。卡片由模型在编号行空间内选择应删的行号，保留部分按原字节拼接，模型无法重写正文；删除比例超过 80% 或剪出结果过短时回退原文并照常落库（`usedRawFallback` 标记，供 WebUI 提示），模型不可用、调用失败或结构化校验失败时回退原文且不写缓存、下次重试，最坏情况等价于原文注入。新增 `living_memory_preset_persona` 表（主键 presetId，预设级派生缓存，不进导出）、表级仓库与 normalizer；卡片服务内存层按原文哈希去重，落库只走 `resolve(presetId)` 并按哈希懒更新，`resolveRendered(rawText)` 供 extraction 每轮现 render 的闭包只读内存层、不落库，避免带会话变量的原文反复覆盖落库口径；插件启动时为全部预设预热（并发 3，逐预设兜底），清空预设数据时同步删除卡片。契约新增 `PresetPersonaRecord`、`PresetPersonaSource` 与只读 `PresetPersonaResolver`；新增删减提示词与 `deletedLineNumbers` 结果工具；同步 AGENTS.md §7，新增 preset-persona 测试覆盖删减、守卫回退、失败重试、哈希复用与手工卡片保护。
 - a908dec: WebUI 新增「人设卡片」标签页并开放只读外部接口。Console 可查看全部已落库卡片（卡片正文、来源、删减行数、更新时间），并以徽标提示三类异常：删减被守卫拦下已回退原文、预设原文在手工编辑后已变动、预设已不存在；支持手工编辑（保存后标记 `source='manual'`，此后不再被自动覆盖）与重新生成（丢弃手工内容并按当前预设原文重建）。服务新增只读视图 `getPresetPersonaCard`/`listPresetPersonas` 与写入口 `savePresetPersonaCard`/`resetPresetPersonaCard`，RPC 新增 `listPresetPersonas`、`savePresetPersonaCard`、`resetPresetPersonaCard` 三个事件；契约新增 `PresetPersonaCardInfo`（含 `stale` 与 `presetMissing` 提示，`stale` 只对手工卡片重算原文比对，自动卡片由哈希懒更新不存在过期态）。外部插件经应用门面只读读取，不开放写入口。同步 AGENTS.md §10，新增手工保存、过期判定、预设缺失、重新生成四类测试。
+
+## 2026-09-28 version:0.24.9
+
 - 65ddd9c: 收紧 Dream 记忆整理的结果契约，让整理决策可观测。此前提示词允许模型在「无需整理」时提交空 operations 数组、且禁止任何解释，导致日志里只能看到 `operations: []`，无法判断模型是否真的审阅了簇内每条记忆（每种操作本就带 `reason`，但空数组无从承载理由）。现要求模型用恰好一个操作覆盖簇内每条记忆——无需改动的用 `keep` 保留、需改动的用 `update`/`merge`/`archive`，禁止空数组与遗漏、禁止同一记忆被多个操作覆盖；`unit_processor` 落库前新增覆盖校验，缺漏、重复或越簇 id 抛错并走结构化输出既有纠错重试（上限 3 次），仍不达标则该单元记为 `structured-output-failed` 跳过、不推进相关记忆固化，失败明细经 `model.parse.failed` 与 `dream.cluster.skipped` 可见。manual、incremental-batch、incremental-seed 三种模式统一适用（增量种子单元带入的候选邻居同样须由 `keep` 覆盖）；随之移除 `unit_processor` 中已被覆盖校验涵盖的冗余 `seed-not-in-operations` 判定。同步更新提示词 `output_contract`、结果工具描述与 AGENTS.md §6，并改写依赖空结果的增量 Dream 测试、补充空 operations 被拒的手动 Dream 回归。无 schema、配置或数据契约变更。
 
 ## 2026-09-27 version:0.24.8
