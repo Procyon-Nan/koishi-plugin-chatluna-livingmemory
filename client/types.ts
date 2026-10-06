@@ -173,7 +173,6 @@ export interface PresetPersonaCardInfo {
     usedRawFallback: boolean
     stale: boolean
     presetMissing: boolean
-    createdAt: Date
     updatedAt: Date
 }
 

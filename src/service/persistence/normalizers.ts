@@ -140,6 +140,5 @@ export const normalizePresetPersonaRecord = (
     totalLines: normalizeLineCount(record.totalLines),
     deletedLines: normalizeLineCount(record.deletedLines),
     usedRawFallback: record.usedRawFallback === true,
-    createdAt: record.createdAt,
     updatedAt: record.updatedAt
 })

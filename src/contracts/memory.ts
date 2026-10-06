@@ -254,7 +254,6 @@ export interface PresetPersonaRecord {
     totalLines: number
     deletedLines: number
     usedRawFallback: boolean
-    createdAt: Date
     updatedAt: Date
 }
 
@@ -274,7 +273,6 @@ export interface PresetPersonaCardInfo {
     usedRawFallback: boolean
     stale: boolean
     presetMissing: boolean
-    createdAt: Date
     updatedAt: Date
 }
 

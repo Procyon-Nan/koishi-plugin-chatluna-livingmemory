@@ -460,7 +460,6 @@ const toCardInfo = (
     usedRawFallback: record.usedRawFallback,
     stale,
     presetMissing,
-    createdAt: record.createdAt,
     updatedAt: record.updatedAt
 })
 

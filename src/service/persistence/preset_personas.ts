@@ -17,7 +17,7 @@ export interface PresetPersonaWriteInput {
 
 /**
  * 预设人设卡片的表级仓库。卡片是预设级派生缓存（非备份内容），无跨表不变
- * 量，单语句写入即原子，不需要事务。
+ * 量，单行 upsert 即可，不需要事务；同一预设的写入由卡片服务串行。
  */
 export class LivingMemoryPresetPersonaRepository {
     constructor(private readonly ctx: Context) {}
@@ -43,41 +43,9 @@ export class LivingMemoryPresetPersonaRepository {
     }
 
     async upsertPresetPersona(input: PresetPersonaWriteInput): Promise<void> {
-        const presetId = input.presetId.trim()
-        if (presetId.length === 0) {
-            return
-        }
-
-        const now = new Date()
-        const stored = {
-            presetId,
-            card: input.card,
-            rawHash: input.rawHash,
-            source: input.source,
-            totalLines: input.totalLines,
-            deletedLines: input.deletedLines,
-            usedRawFallback: input.usedRawFallback,
-            updatedAt: now
-        }
-        const existing = (
-            await this.ctx.database.get('living_memory_preset_persona', {
-                presetId
-            })
-        )[0]
-
-        if (existing == null) {
-            await this.ctx.database.create('living_memory_preset_persona', {
-                ...stored,
-                createdAt: now
-            })
-            return
-        }
-
-        await this.ctx.database.set(
-            'living_memory_preset_persona',
-            { presetId },
-            stored
-        )
+        await this.ctx.database.upsert('living_memory_preset_persona', [
+            { ...input, updatedAt: new Date() }
+        ])
     }
 
     async deletePresetPersona(presetId: string): Promise<void> {

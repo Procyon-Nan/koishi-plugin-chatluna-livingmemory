@@ -237,7 +237,6 @@ export const defineLivingMemoryTables = (ctx: Context) => {
                 type: 'boolean',
                 initial: false
             },
-            createdAt: 'timestamp',
             updatedAt: 'timestamp'
         },
         {

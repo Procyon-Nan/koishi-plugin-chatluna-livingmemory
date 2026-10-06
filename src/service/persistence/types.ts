@@ -41,6 +41,5 @@ export interface PresetPersonaTableRecord {
     totalLines: number | null
     deletedLines: number | null
     usedRawFallback: boolean | null
-    createdAt: Date
     updatedAt: Date
 }

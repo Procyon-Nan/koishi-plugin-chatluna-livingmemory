@@ -38,7 +38,6 @@ const storedCard = (
     totalLines: 5,
     deletedLines: 0,
     usedRawFallback: false,
-    createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides
 })
@@ -84,12 +83,7 @@ const createHarness = (
         listPresetPersonas: async () => [...rows.values()],
         upsertPresetPersona: async (input: PresetPersonaWriteInput) => {
             upserts.push(input)
-            const now = new Date()
-            rows.set(input.presetId, {
-                ...input,
-                createdAt: rows.get(input.presetId)?.createdAt ?? now,
-                updatedAt: now
-            })
+            rows.set(input.presetId, { ...input, updatedAt: new Date() })
         },
         deletePresetPersona: async (presetId: string) => {
             rows.delete(presetId)
