@@ -27,9 +27,6 @@ const MAX_DELETION_RATIO = 0.8
 /** 剪出的卡片短于该字符数即视为异常，回退原文。 */
 const MIN_CARD_LENGTH = 20
 
-/** 启动预热的并发上限，避免同时向模型发起过多请求。 */
-const WARMUP_CONCURRENCY = 3
-
 interface PresetPersonaRepository {
     getPresetPersona(presetId: string): Promise<PresetPersonaRecord | undefined>
     listPresetPersonas(): Promise<PresetPersonaRecord[]>
@@ -124,34 +121,6 @@ export class LivingMemoryPresetPersonaService
     async readCard(presetId: string): Promise<string> {
         const stored = await this.repository.getPresetPersona(presetId)
         return stored?.card ?? (await resolvePresetPrompt(this.ctx, presetId))
-    }
-
-    /**
-     * 启动预热：为传入的每个预设生成缺失或过期的卡片。逐预设兜底，单点失败
-     * 不阻塞启动，也不影响懒生成；`manual` 卡片不自动覆盖。
-     */
-    async warmup(presetIds: string[]): Promise<void> {
-        const queue = [...new Set(presetIds)]
-        const workers = Array.from(
-            { length: Math.min(WARMUP_CONCURRENCY, queue.length) },
-            async () => {
-                while (queue.length > 0) {
-                    const presetId = queue.shift()
-                    if (presetId === undefined) {
-                        return
-                    }
-                    try {
-                        await this.resolve(presetId)
-                    } catch (error) {
-                        this.logger.diagnostic('persona.warmup.failed', {
-                            presetId,
-                            error: summarizeError(error)
-                        })
-                    }
-                }
-            }
-        )
-        await Promise.all(workers)
     }
 
     /**

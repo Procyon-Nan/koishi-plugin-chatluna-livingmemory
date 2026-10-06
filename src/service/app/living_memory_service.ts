@@ -17,7 +17,7 @@ import {
     createUserProfileSpeakerKey,
     normalizeUserProfileSpeakerLabel
 } from '../memory/speaker_identity'
-import { summarizeError, toNonEmptyString } from '../shared/utils'
+import { toNonEmptyString } from '../shared/utils'
 import {
     filterJobList,
     filterMemoryIds,
@@ -353,43 +353,6 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         }
         this.queueExpiredArchivedMemoryCleanup('startup')
         await this.archivedMemoryCleanup
-        await this.warmupPresetPersonas()
-    }
-
-    /**
-     * 启动时为全部预设预热人设卡片：生成缺失或过期的卡片。逐预设兜底、并发
-     * 受限，任何失败都不阻塞启动；懒生成与回退语义不变。
-     */
-    private async warmupPresetPersonas() {
-        let presetIds: string[]
-        try {
-            presetIds = await this.presetCatalog.list()
-        } catch (error) {
-            this.memoryLogger.warn(
-                'persona.warmup.failed',
-                {
-                    workflow: 'startup',
-                    operation: 'list-presets',
-                    error: summarizeError(error)
-                },
-                error
-            )
-            return
-        }
-
-        try {
-            await this.presetPersona.warmup(presetIds)
-        } catch (error) {
-            this.memoryLogger.warn(
-                'persona.warmup.failed',
-                {
-                    workflow: 'startup',
-                    operation: 'warmup',
-                    error: summarizeError(error)
-                },
-                error
-            )
-        }
     }
 
     protected async stop() {
