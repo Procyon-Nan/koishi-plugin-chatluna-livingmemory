@@ -6,9 +6,7 @@ import { LivingMemoryIncrementalDreamService } from '../workflows/dream/incremen
 import { LivingMemoryDreamJobRunner } from '../workflows/dream/job_runner'
 import { LivingMemoryExtractor } from '../workflows/extraction/extractor'
 import { LivingMemoryMessageFormatter } from '../transcript/message_formatter'
-import { LivingMemoryRecallQueryBuilder } from '../workflows/recall/query_builder'
 import { LivingMemoryRepository } from '../persistence/repository'
-import { LivingMemoryRetriever } from '../workflows/recall/retriever'
 import {
     LivingMemoryUserProfileService,
     normalizeManualUserProfileContent
@@ -169,14 +167,6 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     private createRecallCoordinator(
         config: LivingMemoryConfig
     ): LivingMemoryRecallCoordinator {
-        const retriever = new LivingMemoryRetriever(
-            this.ctx,
-            config,
-            this.repository,
-            this.vectorIndex,
-            this.memoryLogger
-        )
-        const recallQuery = new LivingMemoryRecallQueryBuilder(this.ctx, config)
         const agenticRecall = new LivingMemoryAgenticRecallExecutor(
             this.ctx,
             config,
@@ -187,8 +177,6 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             config,
             this.messageLog,
             this.repository,
-            recallQuery,
-            retriever,
             agenticRecall,
             this.snapshotCache,
             this.memoryLogger

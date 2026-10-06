@@ -6,7 +6,6 @@ import type {
     MemoryScope
 } from '../src/contracts/memory'
 import type { LivingMemoryAgenticRecallTrace } from '../src/service/workflows/recall/agentic_recall'
-import type { RecallQueryResult } from '../src/service/workflows/recall/query_builder'
 import type { DreamRunResult } from '../src/service/workflows/dream/types'
 import { summarizeError } from '../src/service/shared/utils'
 import { LivingMemoryLogger } from '../src/service/logging/logger'
@@ -129,21 +128,6 @@ export const createJobStore = () => {
     }
 }
 
-export const createRecallQueryResult = (
-    finalQuery = '记忆查询',
-    overrides: Partial<RecallQueryResult> = {}
-): RecallQueryResult => ({
-    rawInput: finalQuery,
-    rawInputLength: finalQuery.length,
-    cleanedQuery: finalQuery,
-    finalQuery,
-    rewritePrompt: null,
-    rewriteOutput: null,
-    fallbackReason: 'rewrite-disabled',
-    skippedReason: null,
-    error: null,
-    ...overrides
-})
 
 export const createMemoryEntry = (
     id: string,

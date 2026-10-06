@@ -113,14 +113,17 @@ chatluna-livingmemory/
    - 召回上下文为会话日志最近 `recallHistoryMessages` 条消息（以当前
      触发消息为边界、取其之前），由 before-chat 时点惰性加载并等待回填
      完成；等待期间追加的后续闲聊不挤入边界。
-   - `embedding-rerank` 只从活跃记忆中检索，快照保存记忆引用；
-     `agentic-recall` 保存模型整理后的文本和搜索轨迹。
-   - `LivingMemoryEmbeddingSearchEngine` 配置 Reranker 后，混合检索按结果
-     上限的 3 倍取候选，每条查询短语各自重排并取最大分；重排失败回退混合
-     检索排序，不得阻断检索。agentic recall 内部检索、主对话工具与 WebUI
-     检索测试共用这一条路径。
+   - 召回只有 Agentic Recall 一种实现：`subModel` 经召回内部的
+     `living_memory_search` 只从活跃记忆中检索，快照只保存模型整理后的
+     文本和搜索轨迹，不保存记忆引用。不得恢复多策略分派或在协调器内
+     另写检索路径。
+   - Reranker 只在 `LivingMemoryEmbeddingSearchEngine` 中接入：配置后
+     混合检索按结果上限的 3 倍取候选，每条查询短语各自重排并取最大分；
+     重排失败回退混合检索排序，不得阻断检索。召回内部检索、主对话工具
+     与 WebUI 检索测试共用这一条路径。
    - 没有可靠结果时保留既有快照，不以空结果覆盖。召回失败记录任务和诊断
-     信息，但不得阻断正常对话。
+     信息，但不得阻断正常对话。`subModel` 未配置属于配置缺失而非召回
+     失败：协调器在入队时跳过并只记诊断，不写任务，由配置状态告警提示。
    - 用户关联信息可用于说明记忆归属，但不得成为召回门槛。
 
 5. Extraction 工作流
@@ -256,9 +259,8 @@ chatluna-livingmemory/
      Worker 结束后启动。
    - 索引查询按调用方声明的 `memoryStatus` 过滤。主对话注册的
      `living_memory_search` 以必填参数允许模型检索活跃、归档或全部记忆；
-     召回检索（embedding-rerank）、agentic recall 内部搜索和 Dream 邻居
-     查询固定只查活跃记忆。归档向量随 rebuild 与 reconcile 完整维护，
-     WebUI 重新激活记忆时可直接复用。
+     召回内部搜索和 Dream 邻居查询固定只查活跃记忆。归档向量随 rebuild
+     与 reconcile 完整维护，WebUI 重新激活记忆时可直接复用。
    - 预设状态账本（`lm_index_preset_state`）只落盘终态 `ready`/`dirty`；
      `building`、`unavailable` 等进行中或瞬态条件只存在于主进程状态
      overlay，不得持久化。账本行的生命周期不变量为「行存在 ⇔ 预设存在于

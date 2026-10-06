@@ -11,10 +11,14 @@ export const validateLivingMemoryConfig = (
 ): MemoryConfigWarning[] => {
     const warnings: MemoryConfigWarning[] = []
 
-    if (
-        config.recallStrategy === 'embedding-rerank' &&
-        !isModelConfigured(config.embeddingModel)
-    ) {
+    if (!isModelConfigured(config.subModel)) {
+        warnings.push({
+            code: 'recall-model-missing',
+            field: 'subModel',
+            message: '未配置 subModel；记忆召回将被跳过。'
+        })
+    }
+    if (!isModelConfigured(config.embeddingModel)) {
         warnings.push({
             code: 'embedding-model-missing',
             field: 'embeddingModel',
@@ -30,42 +34,6 @@ export const validateLivingMemoryConfig = (
             field: 'mainModel',
             message:
                 '自动记忆提取已启用（extractionWindowMessages > 0），但未配置 mainModel；提取流程将被跳过。'
-        })
-    }
-
-    if (
-        config.recallStrategy === 'embedding-rerank' &&
-        config.enableRecallQueryRewrite &&
-        !isModelConfigured(config.subModel)
-    ) {
-        warnings.push({
-            code: 'recall-rewrite-model-missing',
-            field: 'subModel',
-            message: '召回查询改写已启用，但未配置 subModel；将回退到原始查询。'
-        })
-    }
-
-    if (
-        config.recallStrategy === 'agentic-recall' &&
-        !isModelConfigured(config.subModel)
-    ) {
-        warnings.push({
-            code: 'agentic-recall-model-missing',
-            field: 'subModel',
-            message:
-                'agentic-recall 已启用，但未配置 subModel；记忆召回将失败。'
-        })
-    }
-
-    if (
-        config.recallStrategy === 'agentic-recall' &&
-        !isModelConfigured(config.embeddingModel)
-    ) {
-        warnings.push({
-            code: 'embedding-model-missing',
-            field: 'embeddingModel',
-            message:
-                'agentic-recall 已启用，但未配置 embeddingModel；记忆召回将失败。'
         })
     }
 

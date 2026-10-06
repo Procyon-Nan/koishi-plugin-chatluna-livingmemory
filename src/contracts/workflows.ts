@@ -100,10 +100,9 @@ export interface DreamSpeakerCoverage {
 }
 
 export type MemoryConfigWarningCode =
+    | 'recall-model-missing'
     | 'embedding-model-missing'
     | 'extract-model-missing'
-    | 'recall-rewrite-model-missing'
-    | 'agentic-recall-model-missing'
     | 'auto-dream-model-missing'
     | 'auto-dream-embedding-model-missing'
 
@@ -135,12 +134,6 @@ export interface AttributedMemoryItem extends Omit<
     speakerKeys: string[]
 }
 
-export interface RetrievedMemoryItem {
-    id: string
-    content: string
-    score: number
-}
-
 export interface ExtractionPayload {
     input: string
     sourceOriginMessages: MemorySourceMessage[]
@@ -154,14 +147,12 @@ export interface LivingMemoryConfig {
     enableConversationIsolation: boolean
     enableSnapshotInjection: boolean
     enableUserProfileInjection: boolean
-    recallStrategy: MemoryRecallStrategy
     mainModel: string
     subModel: string
     enableAutoDream: boolean
     autoDreamMemoryGrowthThreshold: number
     userProfileMinMemoryCount: number
     userProfileMemoryLimit: number
-    enableRecallQueryRewrite: boolean
     recallIntervalMessages: number
     recallHistoryMessages: number
     embeddingModel: string
@@ -170,7 +161,6 @@ export interface LivingMemoryConfig {
     extractionIncludeOverheard: boolean
     enableExtractionWhitelist: boolean
     extractionWhitelist: string[]
-    recallTopK: number
     memorySearchToolMaxResults: number
     memorySearchMinSimilarity: number
     enableMemoryCreationTool: boolean

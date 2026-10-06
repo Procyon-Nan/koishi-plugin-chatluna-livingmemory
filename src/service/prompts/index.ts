@@ -3,11 +3,6 @@ export type {
     ExtractionPromptInput,
     ExtractionPromptMessages
 } from './extraction'
-export { buildRecallRewritePrompt } from './recall_query'
-export type {
-    RecallRewritePromptInput,
-    RecallRewritePromptMessages
-} from './recall_query'
 export { buildAgenticRecallPrompt } from './agentic_recall'
 export type {
     AgenticRecallPromptInput,

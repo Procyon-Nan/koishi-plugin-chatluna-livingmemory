@@ -8,7 +8,7 @@
 
 - 以预设（preset）为核心，全自动、异步地进行长期记忆的生成与召回
 - 标准 ChatLuna 会话会在系统提示词后注入用户画像，并在历史上下文之后、当前用户输入之前注入记忆快照；Character（伪装）插件通过预设中的 `{living_memory}` 变量注入记忆快照和相关用户画像
-- 提供 `embedding-rerank` 与 `agentic-recall（实验性）` 两种记忆召回策略
+- 由子模型结合近期对话调用记忆检索工具完成记忆召回，检索结果可选经 Reranker 重排序
 - 提供 `living_memory_search` 与 `living_memory_get_messages` 记忆工具，供模型查询记忆并按记忆 id 查看来源消息；开启 `enableMemoryCreationTool` 后另提供 `living_memory_create_memory`，允许模型在对话中主动创建长期记忆
 - 通过手动全量 Dream 与自动增量 Dream 执行记忆库的合并、更新与归档
 - 根据记忆内容形成用户画像，并在对话中实时注入
@@ -40,12 +40,12 @@ yarn workspace koishi-plugin-chatluna-livingmemory build
 
 2. 配置模型：
 
-| 配置项           | 模型用途                                                           | 是否必需                                    |
-| ---------------- | ------------------------------------------------------------------ | ------------------------------------------- |
-| `mainModel`      | 提取长期记忆，并在 Dream 中整理记忆和生成用户画像                  | 启用自动提取或 Dream 时必需                 |
-| `subModel`       | 改写 `embedding-rerank` 查询，或执行 `agentic-recall`              | 查询改写或 `agentic-recall` 启用时必需      |
-| `embeddingModel` | 为记忆检索、模型工具、手动 Dream 聚类和自动增量 Dream 检索生成向量 | 两种召回策略和 Dream 均必需                 |
-| `rerankModel`    | 对 `embedding-rerank` 的候选记忆重排序                             | 可选；未配置或调用失败时使用 embedding 排序 |
+| 配置项           | 模型用途                                                           | 是否必需                                        |
+| ---------------- | ------------------------------------------------------------------ | ----------------------------------------------- |
+| `mainModel`      | 提取长期记忆，并在 Dream 中整理记忆和生成用户画像                  | 启用自动提取或 Dream 时必需                     |
+| `subModel`       | 执行记忆召回                                                       | 必需                                            |
+| `embeddingModel` | 为记忆检索、模型工具、手动 Dream 聚类和自动增量 Dream 检索生成向量 | 记忆召回和 Dream 均必需                         |
+| `rerankModel`    | 对记忆检索结果重排序，召回内部检索与对话中的检索工具共用           | 可选；未配置或调用失败时使用混合检索得分排序    |
 
 如果你不知道应该如何配置 Embedding 嵌入模型和 Reranker 重排序模型，请参考[此文档](https://github.com/Procyon-Nan/koishi-plugin-chatluna-livingmemory/blob/main/docs/embedding-reranker-guide.md)进行配置。
 
@@ -55,13 +55,13 @@ yarn workspace koishi-plugin-chatluna-livingmemory build
 - Embedding 模型：`bce-embedding-base_v1`
 - Reranker 模型：`bce-reranker-base_v1`
 
-3. 在插件配置中选择记忆召回策略：
+3. 记忆召回流程：
 
-    - `embedding-rerank`：可选使用 `subModel` 改写查询，使用 embedding 检索候选记忆，并在 reranker 可用时重排序，最后将 top-K 记忆引用写入快照。
+    由 `subModel` 结合近期对话和当前消息，调用 `living_memory_search` 查询记忆（每次最多 3 条查询短语与 3 个关键词，语义检索与关键词匹配混合计分）；配置 `rerankModel` 后，检索候选按 `memorySearchToolMaxResults` 的 3 倍取出，逐条查询短语重排序并取最高分，截取前 `memorySearchToolMaxResults` 条。模型整理后的最终记忆文本和搜索轨迹写入快照；模型判定没有相关记忆时保留旧快照。
 
-    - `agentic-recall（实验性）`：由 `subModel` 结合近期对话和当前消息，调用 `living_memory_search` 查询记忆，再将最终记忆文本和搜索轨迹写入快照。
+    自 0.26.0 起移除了 `embedding-rerank` 策略及 `recallStrategy`、`enableRecallQueryRewrite`、`recallTopK` 配置项。
 
-    `enableConversationIsolation` 默认关闭，同一预设内共享记忆。开启后，两种自动召回策略和对话中的 `living_memory_search` 只检索当前会话及来源会话为 `null` 的全局记忆。用户画像继续以用户为核心，Dream 和管理操作保留预设范围；Dream 跨来源合并仍可产生全局记忆。旧快照不清理，后续召回成功产生结果时替换；`living_memory_get_messages` 保留预设归属校验。
+    `enableConversationIsolation` 默认关闭，同一预设内共享记忆。开启后，自动召回和对话中的 `living_memory_search` 只检索当前会话及来源会话为 `null` 的全局记忆。用户画像继续以用户为核心，Dream 和管理操作保留预设范围；Dream 跨来源合并仍可产生全局记忆。旧快照不清理，后续召回成功产生结果时替换；`living_memory_get_messages` 保留预设归属校验。
 
     首次升级会在本地向量索引中增加来源会话字段，并通过启动对账补齐；已有向量保留，对账完成后恢复检索。后续切换隔离开关无需重建索引。管理页面的来源标签用于说明记忆来源，实际隔离依据是来源会话 ID。
 

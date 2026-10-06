@@ -4,11 +4,9 @@ import type { MemoryEntryRecord } from '../src/contracts/memory'
 import type {
     MemoryHybridSearchHit,
     MemoryHybridSearchInput,
-    MemorySemanticSearchInput,
     MemoryVectorSearch
 } from '../src/contracts/vector_index'
 import { LivingMemoryEmbeddingSearchEngine } from '../src/service/workflows/recall/embedding_search_engine'
-import { LivingMemoryRetriever } from '../src/service/workflows/recall/retriever'
 import { createCapturedLogger, logger } from './workflow-test-utils'
 
 const createEntry = (id: string): MemoryEntryRecord => ({
@@ -275,107 +273,4 @@ it('propagates vector index failures', async () => {
         }),
         /vector index unavailable/u
     )
-})
-
-it('retrieves indexed candidates and reranks only the bounded result set', async () => {
-    const semanticQueries: MemorySemanticSearchInput[] = []
-    const vectorSearch = createVectorSearch({
-        searchSemantic: async (input: MemorySemanticSearchInput) => {
-            semanticQueries.push(input)
-            return [
-                { memoryId: 'memory-a', cosineScore: 0.9 },
-                { memoryId: 'memory-b', cosineScore: 0.8 }
-            ]
-        }
-    })
-    const context = {
-        logger: () => ({ info: () => {}, warn: () => {} }),
-        chatluna: {
-            createReranker: async () => ({
-                value: {
-                    rerank: async () => [{ index: 1, relevanceScore: 0.95 }]
-                }
-            })
-        }
-    } as unknown as Context
-    const retriever = new LivingMemoryRetriever(
-        context,
-        { rerankModel: 'test/reranker' },
-        createRepository([createEntry('memory-a'), createEntry('memory-b')]),
-        vectorSearch,
-        logger
-    )
-
-    const results = await retriever.retrieve('preset-a', 'query', 2)
-
-    assert.equal(semanticQueries[0]?.maxCandidates, 6)
-    assert.deepEqual(results, [
-        { id: 'memory-b', content: 'content-memory-b', score: 0.95 }
-    ])
-})
-
-it('propagates vector index failures without returning an empty recall', async () => {
-    const vectorSearch = createVectorSearch({
-        searchSemantic: async () => {
-            throw new Error('vector index unavailable')
-        }
-    })
-    const context = {
-        logger: () => ({ info: () => {}, warn: () => {} })
-    } as unknown as Context
-    const retriever = new LivingMemoryRetriever(
-        context,
-        { rerankModel: '' },
-        createRepository([]),
-        vectorSearch,
-        logger
-    )
-
-    await assert.rejects(
-        retriever.retrieve('preset-a', 'query', 5),
-        /vector index unavailable/u
-    )
-})
-
-it('keeps rerank fallback warnings correlated with the recall run', async () => {
-    const rerankError = new Error('reranker unavailable')
-    const captured = createCapturedLogger()
-    const vectorSearch = createVectorSearch({
-        searchSemantic: async () => [{ memoryId: 'memory-a', cosineScore: 0.9 }]
-    })
-    const context = {
-        chatluna: {
-            createReranker: async () => ({
-                value: {
-                    rerank: async () => {
-                        throw rerankError
-                    }
-                }
-            })
-        }
-    } as unknown as Context
-    const retriever = new LivingMemoryRetriever(
-        context,
-        { rerankModel: 'test/reranker' },
-        createRepository([createEntry('memory-a')]),
-        vectorSearch,
-        captured.logger
-    )
-    const runLogger = captured.logger.with({
-        workflow: 'recall',
-        runId: 'run-1',
-        presetId: 'preset-a',
-        conversationId: 'conversation-a'
-    })
-
-    const results = await retriever.retrieve('preset-a', 'query', 1, runLogger)
-
-    assert.deepEqual(results, [
-        { id: 'memory-a', content: 'content-memory-a', score: 0.9 }
-    ])
-    assert.match(
-        String(captured.warnings[0]?.[0]),
-        /event=recall.rerank.failed workflow=recall runId=run-1 presetId=preset-a conversationId=conversation-a/u
-    )
-    assert.equal(captured.warnings[0]?.[1], rerankError)
 })

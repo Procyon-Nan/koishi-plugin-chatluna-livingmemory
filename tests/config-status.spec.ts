@@ -8,14 +8,12 @@ const createConfig = (
     enableConversationIsolation: false,
     enableSnapshotInjection: true,
     enableUserProfileInjection: false,
-    recallStrategy: 'embedding-rerank',
     mainModel: 'test-model',
-    subModel: '',
+    subModel: 'test/sub-model',
     enableAutoDream: false,
     autoDreamMemoryGrowthThreshold: 30,
     userProfileMinMemoryCount: 3,
     userProfileMemoryLimit: 20,
-    enableRecallQueryRewrite: false,
     recallIntervalMessages: 10,
     recallHistoryMessages: 20,
     embeddingModel: 'test/embedding',
@@ -24,7 +22,6 @@ const createConfig = (
     extractionIncludeOverheard: false,
     enableExtractionWhitelist: false,
     extractionWhitelist: [],
-    recallTopK: 5,
     memorySearchToolMaxResults: 30,
     memorySearchMinSimilarity: 0,
     enableMemoryCreationTool: false,
@@ -33,13 +30,27 @@ const createConfig = (
     ...overrides
 })
 
-it('accepts embedding-rerank without an optional reranker', () => {
+it('accepts recall without an optional reranker', () => {
     const warnings = validateLivingMemoryConfig(createConfig())
 
     assert.deepEqual(warnings, [])
 })
 
-it('still warns when embedding-rerank has no embedding model', () => {
+it('warns when recall has no sub model', () => {
+    const warnings = validateLivingMemoryConfig(
+        createConfig({ subModel: '无' })
+    )
+
+    assert.deepEqual(warnings, [
+        {
+            code: 'recall-model-missing',
+            field: 'subModel',
+            message: '未配置 subModel；记忆召回将被跳过。'
+        }
+    ])
+})
+
+it('warns when recall has no embedding model', () => {
     const warnings = validateLivingMemoryConfig(
         createConfig({ embeddingModel: '' })
     )

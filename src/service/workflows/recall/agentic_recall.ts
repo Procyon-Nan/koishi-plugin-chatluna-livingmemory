@@ -29,7 +29,6 @@ import type { LivingMemoryConfig } from '../../../contracts/workflows'
 import { LivingMemoryMessageFormatter } from '../../transcript/message_formatter'
 import { buildAgenticRecallPrompt } from '../../prompts'
 import type { AgenticRecallPromptMessages } from '../../prompts'
-import { isModelConfigured } from '../../shared/utils'
 import type { LivingMemoryLogger } from '../../logging/logger'
 import { createLoggedModel } from '../../logging/model_calls'
 import {
@@ -319,9 +318,6 @@ export class LivingMemoryAgenticRecallExecutor {
     }
 
     private async resolveChatModel(): Promise<ChatLunaChatModel> {
-        if (!isModelConfigured(this.config.subModel)) {
-            throw new Error('subModel is not configured.')
-        }
         const model = await this.ctx.chatluna.createChatModel(
             this.config.subModel
         )

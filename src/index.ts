@@ -66,12 +66,10 @@ export const Config: Schema<Config> = Schema.intersect([
             )
             .default('无'),
         subModel: Schema.dynamic('model')
-            .description(
-                '子 LLM 模型，用于 embedding-rerank 查询改写和 agentic-recall 记忆召回。'
-            )
+            .description('子 LLM 模型，用于执行记忆召回（必需）。')
             .default('无'),
         embeddingModel: Schema.dynamic('embeddings')
-            .description('用于 embedding-rerank 向量化检索的嵌入模型。')
+            .description('用于记忆检索、模型工具和 Dream 聚类的嵌入模型。')
             .default('无'),
         rerankModel: Schema.dynamic('reranker')
             .description(
@@ -85,7 +83,7 @@ export const Config: Schema<Config> = Schema.intersect([
             .max(60)
             .step(1)
             .description(
-                'living_memory_search 查询工具每次最多返回的记忆条数。'
+                'living_memory_search 每次最多返回的记忆条数；记忆召回内部检索与对话工具共用。'
             )
             .default(30),
         memorySearchMinSimilarity: Schema.number()
@@ -93,7 +91,7 @@ export const Config: Schema<Config> = Schema.intersect([
             .max(1)
             .step(0.05)
             .description(
-                'living_memory_search 的最低余弦相似度阈值。低于此分数的语义命中将被过滤；' +
+                'living_memory_search 的最低余弦相似度阈值；记忆召回内部检索与对话工具共用。低于此分数的语义命中将被过滤；' +
                     '设为 0 表示不设阈值。关键词命中的条目不受此限制。'
             )
             .default(0),
@@ -149,12 +147,6 @@ export const Config: Schema<Config> = Schema.intersect([
                 '自动召回和 living_memory_search 仅检索当前会话及预设内全局记忆；用户画像与 Dream 仍在预设内共享。'
             )
             .default(false),
-        recallStrategy: Schema.union([
-            'embedding-rerank',
-            'agentic-recall'
-        ] as const)
-            .description('记忆召回策略。')
-            .default('embedding-rerank'),
         recallIntervalMessages: Schema.number()
             .min(0)
             .max(200)
@@ -170,20 +162,7 @@ export const Config: Schema<Config> = Schema.intersect([
             .description(
                 '每次召回时取最近该条数的聊天消息作为上下文，用来判断需要回忆哪些记忆。'
             )
-            .default(20),
-        enableRecallQueryRewrite: Schema.boolean()
-            .description(
-                '是否在 embedding-rerank 召回前使用 LLM 根据历史信息改写检索的查询文本。'
-            )
-            .default(false),
-        recallTopK: Schema.number()
-            .min(1)
-            .max(100)
-            .step(1)
-            .description(
-                'embedding-rerank 每次召回时返回的最相关记忆条数上限。'
-            )
-            .default(5)
+            .default(20)
     }).description('记忆召回配置'),
     Schema.object({
         extractionWindowMessages: Schema.number()

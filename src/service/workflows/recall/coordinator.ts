@@ -1,7 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { LivingMemoryRetriever } from './retriever'
-import type { LivingMemoryRecallQueryBuilder } from './query_builder'
-import { summarizeError } from '../../shared/utils'
+import { isModelConfigured, summarizeError } from '../../shared/utils'
 import { normalizeText, scopeKey } from '../../memory/helpers'
 import type { LivingMemoryLogger } from '../../logging/logger'
 import type { LivingMemorySnapshotCache } from '../../memory/snapshot/snapshot_cache'
@@ -14,24 +12,17 @@ import type {
 import type { MessageLogRegistry } from '../../transcript/message_log/message_log_registry'
 import type {
     LivingMemoryTranscriptMessage,
-    MemoryRecallStrategy,
-    MemoryScope,
-    MemorySnapshotItem
+    MemoryScope
 } from '../../../contracts/memory'
 
 type LivingMemoryRecallCoordinatorConfig = Pick<
     LivingMemoryConfig,
-    | 'recallStrategy'
-    | 'recallTopK'
-    | 'recallIntervalMessages'
-    | 'enableConversationIsolation'
+    'recallIntervalMessages' | 'subModel'
 >
 
 /** 召回间隔锚点所需的消息日志读取面。 */
 type RecallMessageLog = Pick<MessageLogRegistry, 'tailSeq'>
 
-type RecallQueryBuilder = Pick<LivingMemoryRecallQueryBuilder, 'resolve'>
-type RecallRetriever = Pick<LivingMemoryRetriever, 'retrieve'>
 type RecallAgenticExecutor = Pick<LivingMemoryAgenticRecallExecutor, 'run'>
 type RecallSnapshotCache = Pick<LivingMemorySnapshotCache, 'hydrate'>
 export type RecallWorkflowRepository = Pick<JobRepository, 'createFailedJob'> &
@@ -49,8 +40,6 @@ export class LivingMemoryRecallCoordinator {
         private readonly config: LivingMemoryRecallCoordinatorConfig,
         private readonly messageLog: RecallMessageLog,
         private readonly repository: RecallWorkflowRepository,
-        private readonly recallQuery: RecallQueryBuilder,
-        private readonly retriever: RecallRetriever,
         private readonly agenticRecall: RecallAgenticExecutor,
         private readonly snapshotCache: RecallSnapshotCache,
         private readonly logger: LivingMemoryLogger
@@ -61,12 +50,18 @@ export class LivingMemoryRecallCoordinator {
         currentMessage: LivingMemoryTranscriptMessage,
         loadHistoryMessages: () => Promise<LivingMemoryTranscriptMessage[]>
     ) {
-        if (this.config.recallIntervalMessages === 0) {
+        const disabledReason =
+            this.config.recallIntervalMessages === 0
+                ? 'disabled'
+                : !isModelConfigured(this.config.subModel)
+                  ? 'model-not-configured'
+                  : null
+        if (disabledReason != null) {
             this.logger.diagnostic('recall.skipped', {
                 workflow: 'recall',
                 conversationId: scope.conversationId,
                 presetId: scope.presetId,
-                reason: 'disabled'
+                reason: disabledReason
             })
             return
         }
@@ -141,6 +136,12 @@ export class LivingMemoryRecallCoordinator {
         loadHistoryMessages: () => Promise<LivingMemoryTranscriptMessage[]>,
         logger: LivingMemoryLogger
     ) {
+        const startedAt = new Date()
+        const input = normalizeText(currentMessage.contentLines.join('\n'))
+        if (input.length === 0) {
+            return
+        }
+
         let historyMessages: LivingMemoryTranscriptMessage[] = []
         try {
             historyMessages = await loadHistoryMessages()
@@ -148,141 +149,6 @@ export class LivingMemoryRecallCoordinator {
             logger.diagnostic('recall.history.unavailable', {
                 error: summarizeError(error)
             })
-        }
-
-        if (this.config.recallStrategy === 'agentic-recall') {
-            await this.runAgentic(
-                scope,
-                currentMessage,
-                historyMessages,
-                logger
-            )
-            return
-        }
-
-        await this.runEmbeddingRerank(
-            scope,
-            currentMessage,
-            historyMessages,
-            logger
-        )
-    }
-
-    /**
-     * 解析 embedding-rerank 的检索输入：改写查询、记录诊断，命中跳过原因或
-     * 改写结果为空时返回 null（本次不检索、不覆盖快照，非错误）；否则返回
-     * 归一化后的最终查询串。
-     */
-    private async resolveRerankQueryInput(
-        scope: MemoryScope,
-        currentMessage: LivingMemoryTranscriptMessage,
-        historyMessages: LivingMemoryTranscriptMessage[],
-        logger: LivingMemoryLogger
-    ): Promise<string | null> {
-        const query = await this.recallQuery.resolve(
-            scope,
-            currentMessage,
-            historyMessages,
-            logger
-        )
-
-        logger.diagnostic('recall.query.prepared', {
-            rawInputLength: query.rawInputLength,
-            cleanedQueryLength: query.cleanedQuery.length,
-            finalQueryLength: query.finalQuery.length
-        })
-        if (query.skippedReason != null) {
-            logger.diagnostic('recall.skipped', {
-                reason: query.skippedReason
-            })
-            return null
-        }
-
-        if (query.fallbackReason != null) {
-            logger.diagnostic('recall.query.fallback', {
-                reason: query.fallbackReason,
-                error: query.error,
-                finalQueryLength: query.finalQuery.length
-            })
-        }
-
-        const input = normalizeText(query.finalQuery)
-        return input.length === 0 ? null : input
-    }
-
-    private async runEmbeddingRerank(
-        scope: MemoryScope,
-        currentMessage: LivingMemoryTranscriptMessage,
-        historyMessages: LivingMemoryTranscriptMessage[],
-        logger: LivingMemoryLogger
-    ) {
-        const startedAt = new Date()
-        let input = normalizeText(currentMessage.contentLines.join('\n'))
-
-        try {
-            const resolvedInput = await this.resolveRerankQueryInput(
-                scope,
-                currentMessage,
-                historyMessages,
-                logger
-            )
-            if (resolvedInput == null) {
-                return
-            }
-            input = resolvedInput
-
-            const items = await this.retriever.retrieve(
-                scope.presetId,
-                input,
-                this.config.recallTopK,
-                logger,
-                this.config.enableConversationIsolation
-                    ? scope.conversationId
-                    : undefined
-            )
-            logger.diagnostic('recall.retrieval.completed', {
-                queryLength: input.length,
-                count: items.length
-            })
-            if (items.length === 0) {
-                logger.info('recall.snapshot.unchanged', {
-                    strategy: 'embedding-rerank',
-                    reason: 'no-memory-selected'
-                })
-                return
-            }
-            await this.persistSnapshot(
-                scope,
-                'embedding-rerank',
-                input,
-                items.map((item) => ({
-                    memoryId: item.id,
-                    score: item.score
-                })),
-                logger
-            )
-        } catch (error) {
-            await this.recordFailedRecall(
-                scope,
-                input,
-                error,
-                startedAt,
-                'embedding-rerank'
-            )
-            throw error
-        }
-    }
-
-    private async runAgentic(
-        scope: MemoryScope,
-        currentMessage: LivingMemoryTranscriptMessage,
-        historyMessages: LivingMemoryTranscriptMessage[],
-        logger: LivingMemoryLogger
-    ) {
-        const startedAt = new Date()
-        const input = normalizeText(currentMessage.contentLines.join('\n'))
-        if (input.length === 0) {
-            return
         }
 
         try {
@@ -294,27 +160,33 @@ export class LivingMemoryRecallCoordinator {
             )
             if (trace == null) {
                 logger.info('recall.snapshot.unchanged', {
-                    strategy: 'agentic-recall',
                     reason: 'no-memory-selected'
                 })
                 return
             }
 
-            const matchedCount = trace.item.matchedMemories.length
-            const query = JSON.stringify(trace.item.toolCallSummary)
-            await this.persistSnapshot(
+            await this.repository.upsertSnapshot(
                 scope,
                 'agentic-recall',
-                query,
-                [trace.item],
-                logger,
-                {
-                    matched: matchedCount
-                }
+                JSON.stringify(trace.item.toolCallSummary),
+                [trace.item]
+            )
+            const content = await this.snapshotCache.hydrate(scope)
+            logger.info(
+                'recall.snapshot.updated',
+                { matched: trace.item.matchedMemories.length },
+                [
+                    {
+                        title: 'snapshot.content',
+                        key: 'content',
+                        value: content
+                    }
+                ]
             )
         } catch (error) {
-            await this.recordFailedRecall(
+            await this.repository.createFailedJob(
                 scope,
+                'recall',
                 input,
                 error,
                 startedAt,
@@ -322,49 +194,5 @@ export class LivingMemoryRecallCoordinator {
             )
             throw error
         }
-    }
-
-    private async persistSnapshot(
-        scope: MemoryScope,
-        strategy: MemoryRecallStrategy,
-        query: string,
-        items: MemorySnapshotItem[],
-        logger: LivingMemoryLogger,
-        extraFields: Record<string, unknown> = {}
-    ) {
-        await this.repository.upsertSnapshot(scope, strategy, query, items)
-        const content = await this.snapshotCache.hydrate(scope)
-        logger.info(
-            'recall.snapshot.updated',
-            {
-                strategy,
-                itemCount: items.length,
-                ...extraFields
-            },
-            [
-                {
-                    title: 'snapshot.content',
-                    key: 'content',
-                    value: content
-                }
-            ]
-        )
-    }
-
-    private async recordFailedRecall(
-        scope: MemoryScope,
-        input: string,
-        error: unknown,
-        startedAt: Date,
-        strategy: MemoryRecallStrategy
-    ) {
-        await this.repository.createFailedJob(
-            scope,
-            'recall',
-            input,
-            error,
-            startedAt,
-            strategy
-        )
     }
 }
