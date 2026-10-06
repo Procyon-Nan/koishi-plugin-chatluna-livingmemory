@@ -2,6 +2,7 @@
 
 ## 2026-09-28 version:0.24.9
 
+- pending: 按 oxfmt 规则修正人设卡片相关代码的格式（`client/types.ts`、`preset_persona.ts`、`preset_personas.ts`、`persona_card.ts`），均为 45a48a0 与 a908dec 引入的折行偏差，无行为变更。
 - dd04ac2: 人设卡片删减不再归一换行符，保留部分与原文逐字节一致。此前 `splitLines` 先把 `\r\n`/`\r` 替换为 `\n` 再切行，删减分支以 `\n` 拼接，含 CRLF 的原文删减后换行被改写，与 AGENTS.md §7「保留部分为原字节拼接」不符（无删除分支返回原文则保留 CRLF，两条分支口径也不一）。现直接按 `\n` 切行，`\r` 留在所在行尾，拼接后与原文逐字节一致。ChatLuna 与 Character 预设经 js-yaml 加载，块标量中的 CRLF 在解析时已归一为 LF，实际只有双引号字符串中显式写入的 `\r` 会受影响。新增 CRLF 原文删减后逐字节保留的回归测试。
 - 23d2ed3: 收敛 Dream、增量 Dream 与用户画像的人设解析。三处此前各自复制一段私有 `resolvePersona`：可选注入 `PresetPersonaResolver`，未注入时回退预设原文。卡片服务在应用门面中无条件装配，可选参数只为测试便利，且卡片服务自身已实现失败回退原文，工作流层的回退是对同一契约的重复保护。现 `PresetPersonaResolver` 改为三者的必填构造依赖，删除三处私有方法，直接调用 `resolve(presetId)`，与提取协调器一致；用户画像服务的 `ctx` 仅为该回退所用，随之从构造参数中移除。契约注释删去「未装配时回退」的表述；测试改为传入解析桩，Dream 画像失败用例的故障注入随之移到解析桩上。
 - 50bfefd: 移除人设卡片只读视图的 `presetMissing` 提示，卡片服务不再依赖预设目录。该提示按「卡片 presetId 不在预设目录中」判定，而目录包含记忆、快照、任务、画像与 speaker 注册表中出现过的全部 presetId；卡片只在对话之后生成，对话必然写入 speaker 注册行，因此卡片存在时其预设必在目录中，提示在预设从配置删除后也不会亮起，形同死字段。此外 `catalog.list().catch(() => [])` 只兜住数据库故障，与同次读取的卡片列表口径重复。现删除契约 `PresetPersonaCardInfo.presetMissing`、客户端镜像类型、WebUI「预设不存在」徽标、卡片服务的 `PresetIdCatalog` 依赖与两处 catch；`isStale` 在预设已不可读时仍按新鲜处理，避免单张残留卡片使整个列表失败。同步 AGENTS.md §7，测试以「预设已不存在的手工卡片照常列出且不标过期」替换原预设缺失用例。

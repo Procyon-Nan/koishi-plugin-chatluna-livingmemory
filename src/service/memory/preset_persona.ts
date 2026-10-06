@@ -65,9 +65,7 @@ interface PersonaCardOutcome {
  * 的写队列内重读行后提交：生成期间被手工保存的卡片不被覆盖，生成期间被清空
  * 的预设不被写回。
  */
-export class LivingMemoryPresetPersonaService
-    implements PresetPersonaResolver
-{
+export class LivingMemoryPresetPersonaService implements PresetPersonaResolver {
     private readonly generating = new Map<string, Promise<string>>()
     private readonly writes = new SerialTaskQueue()
     private readonly clearEpochs = new Map<string, number>()

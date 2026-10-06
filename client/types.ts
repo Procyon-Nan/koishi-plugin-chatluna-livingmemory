@@ -423,9 +423,9 @@ export interface LivingMemoryClientEvents {
         presetId: string,
         card: string
     ) => { success: true }
-    'living-memory/resetPresetPersonaCard': (
-        presetId: string
-    ) => { success: true }
+    'living-memory/resetPresetPersonaCard': (presetId: string) => {
+        success: true
+    }
     'living-memory/updateUserProfile': (
         profileId: string,
         content: string

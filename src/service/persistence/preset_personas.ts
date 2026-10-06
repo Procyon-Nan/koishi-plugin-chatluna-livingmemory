@@ -25,9 +25,12 @@ export class LivingMemoryPresetPersonaRepository {
     async getPresetPersona(
         presetId: string
     ): Promise<PresetPersonaRecord | undefined> {
-        const rows = await this.ctx.database.get('living_memory_preset_persona', {
-            presetId
-        })
+        const rows = await this.ctx.database.get(
+            'living_memory_preset_persona',
+            {
+                presetId
+            }
+        )
         const row = rows[0]
         return row == null ? undefined : normalizePresetPersonaRecord(row)
     }

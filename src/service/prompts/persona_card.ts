@@ -7,9 +7,7 @@ export interface PersonaCardPromptInput {
 }
 
 const renderNumberedLines = (lines: string[]) => {
-    return lines
-        .map((line, index) => `[${index + 1}] ${line}`)
-        .join('\n')
+    return lines.map((line, index) => `[${index + 1}] ${line}`).join('\n')
 }
 
 /**
