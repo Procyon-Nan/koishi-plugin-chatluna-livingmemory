@@ -436,8 +436,8 @@ const toCardInfo = (
     updatedAt: record.updatedAt
 })
 
-/** 按行切分并归一换行；保留空行以维持行号与原文一致。 */
-export const splitLines = (raw: string) => {
-    const normalized = raw.replace(/\r\n?/gu, '\n')
-    return normalized.split('\n')
-}
+/**
+ * 按 `\n` 切行，保留空行以维持行号与原文一致。不归一换行符：`\r` 留在行尾，
+ * 保留行以 `\n` 重新拼接即与原文逐字节一致。
+ */
+export const splitLines = (raw: string) => raw.split('\n')

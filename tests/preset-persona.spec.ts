@@ -147,6 +147,18 @@ it('keeps original text and only deletes selected lines', async () => {
     assert.equal(upsert.usedRawFallback, false)
 })
 
+it('keeps CRLF line endings byte for byte in a pruned card', async () => {
+    const harness = createHarness([deleteLines([3, 4])])
+    harness.presetTexts.set('preset-1', presetLines.join('\r\n'))
+
+    const card = await harness.service.resolve('preset-1')
+
+    assert.equal(
+        card,
+        [presetLines[0], presetLines[1], presetLines[4]].join('\r\n')
+    )
+})
+
 it('reads only the unrendered system messages as the preset text', async () => {
     const systemText = '你是 {name}，说话简短。'
     const harness = createHarness([deleteLines([])], {
