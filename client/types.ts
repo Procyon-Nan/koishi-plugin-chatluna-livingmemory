@@ -172,7 +172,6 @@ export interface PresetPersonaCardInfo {
     deletedLines: number
     usedRawFallback: boolean
     stale: boolean
-    presetMissing: boolean
     updatedAt: Date
 }
 

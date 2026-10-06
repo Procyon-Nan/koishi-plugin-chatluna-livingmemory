@@ -51,13 +51,6 @@
                             >
                                 预设已变动
                             </span>
-                            <span
-                                v-if="item.presetMissing"
-                                class="persona-badge danger"
-                                :title="missingHint"
-                            >
-                                预设不存在
-                            </span>
                         </div>
                     </div>
 
@@ -126,7 +119,6 @@ const emit = defineEmits<{
 const rawFallbackHint =
     '删减被守卫拦下（删除比例过高或剪出结果过短），当前使用预设原文。'
 const staleHint = '预设原文在上次手工编辑后已变动，卡片未随预设更新。'
-const missingHint = '该预设当前已不存在，卡片是残留数据。'
 
 const items = shallowRef<PresetPersonaCardInfo[]>([])
 const loading = ref(false)
@@ -135,7 +127,7 @@ const editingCard = ref<PresetPersonaCardInfo | null>(null)
 const resettingPresetId = ref<string | null>(null)
 
 const hasAnomaly = (item: PresetPersonaCardInfo) =>
-    item.usedRawFallback || item.stale || item.presetMissing
+    item.usedRawFallback || item.stale
 
 const sourceBadgeClass = (item: PresetPersonaCardInfo) =>
     item.source === 'manual' ? 'warning' : 'info'

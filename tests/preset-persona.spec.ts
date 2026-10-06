@@ -66,8 +66,8 @@ const createHarness = (
     responses: (BaseMessage | Error)[],
     options: {
         stored?: PresetPersonaRecord[]
-        presetIds?: string[]
         presetMessages?: BaseMessage[]
+        missingPresetIds?: string[]
         modelGate?: { wait(): Promise<void> }
     } = {}
 ) => {
@@ -89,9 +89,6 @@ const createHarness = (
             rows.delete(presetId)
         }
     }
-    const catalog = {
-        list: async () => options.presetIds ?? ['preset-1']
-    }
     const ctx = {
         chatluna: {
             createChatModel: async () => {
@@ -99,15 +96,20 @@ const createHarness = (
                 return { value: model.model }
             },
             preset: {
-                getPreset: (presetId: string) => ({
-                    value: {
-                        messages: options.presetMessages ?? [
-                            new SystemMessage(
-                                presetTexts.get(presetId) ?? presetText
-                            )
-                        ]
+                getPreset: (presetId: string) => {
+                    if (options.missingPresetIds?.includes(presetId)) {
+                        throw new Error(`No preset found for ${presetId}`)
                     }
-                })
+                    return {
+                        value: {
+                            messages: options.presetMessages ?? [
+                                new SystemMessage(
+                                    presetTexts.get(presetId) ?? presetText
+                                )
+                            ]
+                        }
+                    }
+                }
             }
         }
     } as unknown as Context
@@ -115,8 +117,7 @@ const createHarness = (
         ctx,
         { mainModel: 'test-model' },
         repository,
-        captured.logger,
-        catalog
+        captured.logger
     )
     return { captured, model, presetTexts, rows, service, upserts }
 }
@@ -369,26 +370,26 @@ it('lists stored cards without rendering presets or calling the model', async ()
     assert.equal(cards[0].deletedLines, 3)
     // 自动卡片由哈希懒更新，不存在过期态
     assert.equal(cards[0].stale, false)
-    assert.equal(cards[0].presetMissing, false)
     assert.equal(harness.model.invocations.length, 0)
 })
 
-it('marks a card whose preset has disappeared', async () => {
+it('lists a manual card whose preset no longer exists as fresh', async () => {
     const harness = createHarness([], {
         stored: [
             storedCard({
                 presetId: 'gone-preset',
-                card: 'cached card',
-                usedRawFallback: true
+                card: 'manual card',
+                source: 'manual',
+                rawHash: 'hash-before-edit'
             })
         ],
-        presetIds: ['preset-1']
+        missingPresetIds: ['gone-preset']
     })
 
     const cards = await harness.service.listCards()
 
-    assert.equal(cards[0].presetMissing, true)
-    assert.equal(cards[0].usedRawFallback, true)
+    assert.equal(cards.length, 1)
+    assert.equal(cards[0].stale, false)
 })
 
 it('marks a manual card stale when the preset text has changed', async () => {

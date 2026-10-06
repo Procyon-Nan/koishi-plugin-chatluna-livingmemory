@@ -260,9 +260,9 @@ export interface PresetPersonaRecord {
 export type PresetPersonaSource = 'generated' | 'manual'
 
 /**
- * 预设人设卡片的只读视图，供 Console 与外部插件展示。`stale` 表示预设原文
- * 已变动、卡片待更新；`presetMissing` 表示该预设已不存在（卡片是残留行）。
- * 两者都只是提示：工作流仍按现状使用卡片，`manual` 卡片永不自动覆盖。
+ * 预设人设卡片的只读视图，供 Console 与外部插件展示。`stale` 表示手工卡片
+ * 编辑后预设原文已变动；它只是提示：工作流仍按现状使用卡片，`manual` 卡片
+ * 永不自动覆盖。
  */
 export interface PresetPersonaCardInfo {
     presetId: string
@@ -272,7 +272,6 @@ export interface PresetPersonaCardInfo {
     deletedLines: number
     usedRawFallback: boolean
     stale: boolean
-    presetMissing: boolean
     updatedAt: Date
 }
 

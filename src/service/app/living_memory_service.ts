@@ -147,8 +147,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             ctx,
             config,
             this.repository,
-            this.memoryLogger,
-            this.presetCatalog
+            this.memoryLogger
         )
         this.userProfiles = new LivingMemoryUserProfileService(
             ctx,

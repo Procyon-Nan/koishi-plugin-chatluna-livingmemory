@@ -42,11 +42,6 @@ interface PresetPersonaRepository {
     deletePresetPersona(presetId: string): Promise<void>
 }
 
-/** 提供当前预设 id 全集，用于判定卡片是否过期或预设已不存在。 */
-interface PresetIdCatalog {
-    list(): Promise<string[]>
-}
-
 /** 模型侧失败的原因；此类回退不落库，下次解析时重试。 */
 type PersonaPruneFailure =
     | 'model-unavailable'
@@ -81,8 +76,7 @@ export class LivingMemoryPresetPersonaService
         private readonly ctx: Context,
         private readonly config: PresetPersonaConfig,
         private readonly repository: PresetPersonaRepository,
-        private readonly logger: LivingMemoryLogger,
-        private readonly catalog: PresetIdCatalog
+        private readonly logger: LivingMemoryLogger
     ) {}
 
     /**
@@ -128,19 +122,10 @@ export class LivingMemoryPresetPersonaService
      * 不调模型、不落库，未生成卡片的预设不会出现在结果里。
      */
     async listCards(): Promise<PresetPersonaCardInfo[]> {
-        const [stored, presetIds] = await Promise.all([
-            this.repository.listPresetPersonas(),
-            this.catalog.list().catch(() => [])
-        ])
-        const available = new Set(presetIds)
-
+        const stored = await this.repository.listPresetPersonas()
         return await Promise.all(
             stored.map(async (record) =>
-                toCardInfo(
-                    record,
-                    !available.has(record.presetId),
-                    await this.isStale(record)
-                )
+                toCardInfo(record, await this.isStale(record))
             )
         )
     }
@@ -153,23 +138,16 @@ export class LivingMemoryPresetPersonaService
         presetId: string
     ): Promise<PresetPersonaCardInfo | undefined> {
         const record = await this.repository.getPresetPersona(presetId)
-        if (record == null) {
-            return undefined
-        }
-
-        const presetIds = await this.catalog.list().catch(() => [])
-        return toCardInfo(
-            record,
-            !presetIds.includes(record.presetId),
-            await this.isStale(record)
-        )
+        return record == null
+            ? undefined
+            : toCardInfo(record, await this.isStale(record))
     }
 
     /**
      * 卡片是否已落后于当前预设原文。自动卡片由 `resolve` 按哈希懒更新、不存在
      * 过期态，直接判定为新鲜；只有手工卡片需要重算原文比对——手改时刻意保留了
-     * 当时的哈希，预设此后变动即表现为不一致。预设读取失败按新鲜处理，避免把
-     * 读取故障误报成过期提示。
+     * 当时的哈希，预设此后变动即表现为不一致。预设已不存在或不可用时无从比对，
+     * 按新鲜处理，不让单张残留卡片拖垮整个列表。
      */
     private async isStale(record: PresetPersonaRecord): Promise<boolean> {
         if (record.source !== 'manual') {
@@ -443,13 +421,9 @@ export class LivingMemoryPresetPersonaService
 export const hashPresetText = (raw: string) =>
     createHash('sha256').update(raw).digest('hex')
 
-/**
- * 落库行转展示视图。`presetMissing` 与 `stale` 由调用方判定：前者按当前预设 id
- * 全集，后者只对手工卡片重算原文比哈希（见 `isStale`）。
- */
+/** 落库行转展示视图。`stale` 由调用方判定（见 `isStale`）。 */
 const toCardInfo = (
     record: PresetPersonaRecord,
-    presetMissing: boolean,
     stale: boolean
 ): PresetPersonaCardInfo => ({
     presetId: record.presetId,
@@ -459,7 +433,6 @@ const toCardInfo = (
     deletedLines: record.deletedLines,
     usedRawFallback: record.usedRawFallback,
     stale,
-    presetMissing,
     updatedAt: record.updatedAt
 })
 

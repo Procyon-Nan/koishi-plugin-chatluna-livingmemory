@@ -193,8 +193,8 @@ chatluna-livingmemory/
      的写队列内重读行后落库，不覆盖期间保存的手工卡片，清空预设数据之后不
      写回。WebUI 手改的卡片 `source='manual'`，预设变动时不自动覆盖；清空预设
      数据一并删除卡片（含手工卡片）。Console 经只读视图查看与手工编辑：
-     `stale` 只对手工卡片重算原文比哈希，`usedRawFallback` 与 `presetMissing`
-     分别提示回退原文与预设已不存在。recall 不注入预设，不接入。
+     `stale` 只对手工卡片重算原文比哈希（预设已不可读时按新鲜处理），
+     `usedRawFallback` 提示回退原文。recall 不注入预设，不接入。
    - 用户画像提示词在记忆列表前说明关联记忆总数与实际送入条数；画像输出只有
      正文，没有操作引用记忆 ID，送入的记忆也一律等权使用。
    - 动态文本经 `prompt_format.ts` 负责的 XML 块转义和 System/Human 消息
