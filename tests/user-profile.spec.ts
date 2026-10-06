@@ -189,9 +189,7 @@ it('regenerates when the profile is not newer than its memories', async () => {
         existingSourceMemoryIds: [memory.id],
         existingProfileUpdatedAt: now
     })
-    const { model, result } = await harness.run([
-        createProfileCall()
-    ])
+    const { model, result } = await harness.run([createProfileCall()])
 
     assert.equal(result.generated, 1)
     assert.equal(model.invocations.length, 1)
