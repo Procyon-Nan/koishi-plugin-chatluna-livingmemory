@@ -291,8 +291,7 @@ chatluna-livingmemory/
    - 后台工作流保持非阻塞，并保留既有任务记录、错误日志和审计语义。
    - 定时器、事件监听、Worker 和缓存必须绑定插件生命周期；dispose 后不得
      接受新的数据库、索引或模型任务。
-   - 日志统一经 `LivingMemoryLogger` 或 Koishi logger 输出。`debug` 会记录
-     完整对话、预设提示词和记忆正文，只能用于访问受控环境。
+   - 日志统一经 `LivingMemoryLogger` 或 Koishi logger 输出。
 
 ## 工程原则
 

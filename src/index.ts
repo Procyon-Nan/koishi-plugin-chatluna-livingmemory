@@ -49,32 +49,26 @@ export const inject = {
 export const Config: Schema<Config> = Schema.intersect([
     Schema.object({
         enableSnapshotInjection: Schema.boolean()
-            .description(
-                '开启 chatLuna 主插件的记忆注入（character 插件需通过预设中的 {living_memory} 变量注入）'
-            )
+            .description('开启 ChatLuna 主插件的记忆快照注入。')
             .default(true),
         debug: Schema.boolean()
             .description(
-                '输出 Recall、Extraction、Dream 的完整模型 Prompt、原始响应与诊断事件；包含对话、预设提示词和记忆正文，仅应在访问受控环境启用。'
+                '记录 Recall、Extraction、Dream 每次模型调用的完整 Prompt、原始响应与诊断事件。'
             )
             .default(false)
     }).description('基础配置'),
     Schema.object({
         mainModel: Schema.dynamic('model')
-            .description(
-                '主 LLM 模型，用于记忆提取和 Dream 记忆整理与合并决策。'
-            )
+            .description('主 LLM 模型，用于提取记忆、Dream 与用户画像。')
             .default('无'),
         subModel: Schema.dynamic('model')
-            .description('子 LLM 模型，用于执行记忆召回（必需）。')
+            .description('子 LLM 模型，用于召回记忆。')
             .default('无'),
         embeddingModel: Schema.dynamic('embeddings')
-            .description('用于记忆检索、模型工具和 Dream 聚类的嵌入模型。')
+            .description('嵌入模型，用于记忆检索与 Dream。')
             .default('无'),
         rerankModel: Schema.dynamic('reranker')
-            .description(
-                '可选的 Reranker 模型，对记忆检索结果重排序；未配置或调用失败时按检索得分排序。'
-            )
+            .description('Reranker 模型，用于记忆检索结果重排序。')
             .default('无')
     }).description('模型配置'),
     Schema.object({
@@ -83,7 +77,7 @@ export const Config: Schema<Config> = Schema.intersect([
             .max(60)
             .step(1)
             .description(
-                'living_memory_search 每次最多返回的记忆条数；记忆召回内部检索与对话工具共用。'
+                '每次记忆检索最多返回的记忆条数，召回与 living_memory_search 共用。'
             )
             .default(30),
         memorySearchMinSimilarity: Schema.number()
@@ -91,13 +85,12 @@ export const Config: Schema<Config> = Schema.intersect([
             .max(1)
             .step(0.05)
             .description(
-                'living_memory_search 的最低余弦相似度阈值；记忆召回内部检索与对话工具共用。低于此分数的语义命中将被过滤；' +
-                    '设为 0 表示不设阈值。关键词命中的条目不受此限制。'
+                '记忆检索的最低余弦相似度，召回与 living_memory_search 共用。关键词命中的记忆不受限制；设为 0 表示不限制。'
             )
             .default(0),
         enableMemoryCreationTool: Schema.boolean()
             .description(
-                '注册 living_memory_create_memory 工具，允许模型在对话中主动创建长期记忆。'
+                '注册 living_memory_create_memory 工具，允许模型在对话中主动创建记忆。'
             )
             .default(false),
         memoryCreateToolMaxMemories: Schema.number()
@@ -105,22 +98,20 @@ export const Config: Schema<Config> = Schema.intersect([
             .max(60)
             .step(1)
             .description(
-                'living_memory_create_memory 单次调用允许提交的记忆条数上限。'
+                'living_memory_create_memory 单次调用最多创建的记忆条数。'
             )
             .default(10)
     }).description('工具配置'),
     Schema.object({
         enableAutoDream: Schema.boolean()
-            .description(
-                '当某个预设内未完成整理的记忆达到阈值时，自动执行增量 Dream。'
-            )
+            .description('自动执行增量 Dream。')
             .default(false),
         autoDreamMemoryGrowthThreshold: Schema.number()
             .min(10)
             .max(200)
             .step(1)
             .description(
-                '待整理记忆累计达到该条数时触发一次自动增量 Dream，单次任务也最多整理这么多条。'
+                '未整理的记忆达到该条数时触发自动增量 Dream，每次最多整理该条数的记忆。'
             )
             .default(30)
     }).description('Dream 流程配置'),
@@ -144,7 +135,7 @@ export const Config: Schema<Config> = Schema.intersect([
     Schema.object({
         enableConversationIsolation: Schema.boolean()
             .description(
-                '自动召回和 living_memory_search 仅检索当前会话及预设内全局记忆；用户画像与 Dream 仍在预设内共享。'
+                '自动召回与 living_memory_search 只检索当前会话产生的记忆与全局记忆。'
             )
             .default(false),
         recallIntervalMessages: Schema.number()
@@ -152,16 +143,14 @@ export const Config: Schema<Config> = Schema.intersect([
             .max(200)
             .step(1)
             .description(
-                '召回窗口：每累计该条数的新聊天消息（包括 bot 未回复的闲聊）自动召回一次记忆；设为 0 时关闭自动召回，每个预设会话首次对话时立即召回一次。'
+                '每累计该条数的新消息（含 bot 未回复的闲聊）自动召回一次记忆，会话首次对话时立即召回。设为 0 时关闭自动召回。'
             )
             .default(10),
         recallHistoryMessages: Schema.number()
             .min(1)
             .max(200)
             .step(1)
-            .description(
-                '每次召回时取最近该条数的聊天消息作为上下文，用来判断需要回忆哪些记忆。'
-            )
+            .description('每次召回取最近该条数的消息作为上下文。')
             .default(20)
     }).description('记忆召回配置'),
     Schema.object({
@@ -170,24 +159,20 @@ export const Config: Schema<Config> = Schema.intersect([
             .max(200)
             .step(1)
             .description(
-                '提取窗口：未提取的聊天消息累计达到该条数时，自动提取一次记忆；触发本次提取的对话会连带其前方一个提取窗口的聊天消息。设为 0 时关闭自动提取。'
+                '未提取的消息累计达到该条数时自动提取一次记忆。设为 0 时关闭自动提取。'
             )
             .default(30),
         extractionIncludeOverheard: Schema.boolean()
             .description(
-                '旁听提取：控制 bot 未参与的闲聊是否计入记忆提取。每次对话及其前方一个提取窗口内的消息总是提取；开启后窗口之外的闲聊也一并提取，关闭时丢弃。'
+                '同时提取 bot 未参与的闲聊。关闭时，闲聊只在每次对话前方的提取窗口内提取。'
             )
             .default(false),
         enableExtractionWhitelist: Schema.boolean()
-            .description(
-                '开启自动记忆提取白名单；开启后只有白名单内的会话才会自动提取记忆，关闭时白名单列表不生效。'
-            )
+            .description('只对白名单内的会话自动提取记忆。')
             .default(false),
         extractionWhitelist: Schema.array(Schema.string())
             .role('table')
-            .description(
-                '自动记忆提取白名单，填入群号（群聊）或用户 QQ 号（私聊）；开启白名单但列表为空时不会自动提取任何记忆。'
-            )
+            .description('自动提取白名单：群聊填群号，私聊填对方 QQ 号。')
             .default([])
     }).description('记忆提取配置')
 ])
