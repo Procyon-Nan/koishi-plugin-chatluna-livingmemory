@@ -2,7 +2,8 @@
 
 ## 2026-10-06 version:0.25.1
 
-- pending: 改造用户画像的结果契约，去掉 `content: null` 空结果通道，让画像决策可以观测。此前结果工具的 `content` 可以为 null，表示「无需更新」，且禁止模型解释。这带来两个问题：一是日志只能看到 `content: null`，无法判断模型是否真的审阅了记忆；二是尚无画像时也能交 null，该用户因此一直没有画像，因为提示词只针对已有画像说明了 null 的用法，schema 与代码不区分这两种情况。现结果改为 `decision` 判别联合：`update` 提交完整新画像，附 `content` 与 `reason`；`keep` 保留已有画像，附 `reason`。两者都必须写理由。`validateResult` 拒绝尚无画像时的 `keep`，被拒结果和不合 schema 的 null 一样，走结构化输出既有的纠错重试，最多 3 次。`keep` 不写库，记一条 `user-profile.kept` 诊断；生成汇总中的 `empty` 计数改为 `kept`，`empty-content` 跳过分支随之删除（`requiredText` 已保证正文非空）。同步提示词 `output_contract`、结果工具描述与 AGENTS.md §7，改写画像测试的工具调用桩，并新增 keep 保留、无画像时 keep 被拒后重试、null 被拒后重试三类回归。
+- 7967315: 改造用户画像的结果契约，去掉 `content: null` 空结果通道，让画像决策可以观测。此前结果工具的 `content` 可以为 null，表示「无需更新」，且禁止模型解释。这带来两个问题：一是日志只能看到 `content: null`，无法判断模型是否真的审阅了记忆；二是尚无画像时也能交 null，该用户因此一直没有画像，因为提示词只针对已有画像说明了 null 的用法，schema 与代码不区分这两种情况。现结果改为 `decision` 判别联合：`update` 提交完整新画像，附 `content` 与 `reason`；`keep` 保留已有画像，附 `reason`。两者都必须写理由。`validateResult` 拒绝尚无画像时的 `keep`，被拒结果和不合 schema 的 null 一样，走结构化输出既有的纠错重试，最多 3 次。`keep` 不写库，记一条 `user-profile.kept` 诊断；生成汇总中的 `empty` 计数改为 `kept`，`empty-content` 跳过分支随之删除（`requiredText` 已保证正文非空）。同步提示词 `output_contract`、结果工具描述与 AGENTS.md §7，改写画像测试的工具调用桩，并新增 keep 保留、无画像时 keep 被拒后重试、null 被拒后重试三类回归。
+- pending: 修正模型对用户画像选择 `keep` 后，后续 Dream 对同一用户反复调用模型。`isProfileUpToDate` 判断画像是否需要重算时，比对的是画像行的 `sourceMemoryIds` 与 `updatedAt`，而这两个字段此前只在 `update` 改写画像时刷新。模型选 `keep` 后画像行仍停在上次改写时的输入，只要记忆集合与那时不同，此后每次 Dream 都会以完全相同的输入再询问一次，多半仍得到 `keep`，平白多出一次模型调用（手动 Dream 传入全部活跃说话人，浪费最多）。现 `keep` 分支经新增的 `markUserProfileReviewed` 单语句刷新这两个字段，正文不动，记下「这组输入已审阅、无需改写」，输入未变的后续 Dream 直接跳过。契约 `UserProfileRepository`、表级仓库与持久化门面同步新增该方法。WebUI 画像页的「更新于」与「由 N 条记忆生成」随之表示最近一次审阅的时刻与输入，不再特指最近一次改写。同步 AGENTS.md §7 与 `isProfileUpToDate` 注释；keep 用例改为断言记下本次输入，无画像时 keep 被拒的用例补充断言不触发审阅写入，Dream 工作流测试的仓储桩补齐新方法。
 
 ## 2026-10-06 version:0.25.0
 

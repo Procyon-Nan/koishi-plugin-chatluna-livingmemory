@@ -219,6 +219,7 @@ const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
         },
         listUserProfilesBySpeakerKeys: async () => [],
         replaceUserProfile: async () => {},
+        markUserProfileReviewed: async () => {},
         deleteUserProfile: async () => {}
     }
     const ctx = {

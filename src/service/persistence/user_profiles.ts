@@ -237,6 +237,18 @@ export class LivingMemoryUserProfileRepository implements UserProfileRepository 
         )
     }
 
+    /** 记下画像已按这组记忆审阅且无需改写：只刷新输入与时刻，正文不动。 */
+    async markUserProfileReviewed(
+        profileId: string,
+        sourceMemoryIds: string[]
+    ) {
+        await this.ctx.database.set(
+            'living_memory_user_profile',
+            { id: profileId },
+            { sourceMemoryIds, updatedAt: new Date() }
+        )
+    }
+
     async deleteUserProfile(profileId: string) {
         await this.ctx.database.remove('living_memory_user_profile', {
             id: profileId

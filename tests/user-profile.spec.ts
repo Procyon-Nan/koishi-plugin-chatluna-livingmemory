@@ -51,6 +51,8 @@ const createHarness = (
     } = {}
 ) => {
     const savedProfiles: UserProfileInput[] = []
+    const reviewedProfiles: { profileId: string; sourceMemoryIds: string[] }[] =
+        []
     const debugMessages: string[] = []
     const existingProfiles =
         options.existingSourceMemoryIds == null
@@ -91,6 +93,9 @@ const createHarness = (
         replaceUserProfile: async (_presetId, profile) => {
             savedProfiles.push(profile)
         },
+        markUserProfileReviewed: async (profileId, sourceMemoryIds) => {
+            reviewedProfiles.push({ profileId, sourceMemoryIds })
+        },
         deleteUserProfile: async () => {}
     }
     const service = new LivingMemoryUserProfileService(
@@ -113,6 +118,7 @@ const createHarness = (
 
     return {
         savedProfiles,
+        reviewedProfiles,
         debugMessages,
         run: async (
             responses: Parameters<typeof createToolCallingModel>[0],
@@ -342,7 +348,7 @@ it('preserves brackets inside profile content', async () => {
     assert.equal(harness.savedProfiles[0]?.content, content)
 })
 
-it('keeps the existing profile when the model chooses keep', async () => {
+it('records the reviewed input when the model chooses keep', async () => {
     const harness = createHarness({
         existingSourceMemoryIds: ['memory-old']
     })
@@ -350,6 +356,9 @@ it('keeps the existing profile when the model chooses keep', async () => {
 
     assert.equal(result.generated, 0)
     assert.equal(harness.savedProfiles.length, 0)
+    assert.deepEqual(harness.reviewedProfiles, [
+        { profileId: 'profile-1', sourceMemoryIds: ['memory-1'] }
+    ])
     assert.match(result.detail, /kept=1/u)
     assert.match(result.detail, /failed=0/u)
 })
@@ -364,6 +373,7 @@ it('rejects keep without an existing profile and retries for an update', async (
     assert.equal(result.generated, 1)
     assert.equal(model.invocations.length, 2)
     assert.equal(harness.savedProfiles[0]?.content, profileContent)
+    assert.equal(harness.reviewedProfiles.length, 0)
 })
 
 it('rejects null profile content and retries', async () => {

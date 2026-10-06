@@ -466,6 +466,16 @@ export class LivingMemoryRepository
         return this.userProfiles.updateUserProfileContent(profileId, content)
     }
 
+    markUserProfileReviewed(
+        profileId: string,
+        sourceMemoryIds: string[]
+    ): Promise<void> {
+        return this.userProfiles.markUserProfileReviewed(
+            profileId,
+            sourceMemoryIds
+        )
+    }
+
     deleteUserProfile(profileId: string): Promise<void> {
         return this.userProfiles.deleteUserProfile(profileId)
     }

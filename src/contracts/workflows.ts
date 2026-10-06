@@ -286,5 +286,9 @@ export interface UserProfileRepository {
         presetId: string,
         profile: UserProfileInput
     ): Promise<void>
+    markUserProfileReviewed(
+        profileId: string,
+        sourceMemoryIds: string[]
+    ): Promise<void>
     deleteUserProfile(profileId: string): Promise<void>
 }

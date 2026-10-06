@@ -307,9 +307,9 @@ export class LivingMemoryUserProfileService {
     }
 
     /**
-     * 画像输入是否与上次生成时相同。判据为选中记忆集合未变，且画像写入时刻
-     * 严格晚于组内全部记忆的更新时刻；同刻按已变化处理。相同输入的模型调用是
-     * 确定的空操作，跳过它不改变结果。
+     * 画像输入是否与上次审阅时相同（改写或 keep 都会记下本次输入）。判据为
+     * 选中记忆集合未变，且画像审阅时刻严格晚于组内全部记忆的更新时刻；同刻按
+     * 已变化处理。相同输入的模型调用是确定的空操作，跳过它不改变结果。
      *
      * 判据不覆盖 prompt 侧变化：模型输入还包含 assistantLabel 与 presetPrompt，
      * 改预设人设或升级画像模板都不会被判为需要重算。这类重算由既有的删除画像
@@ -330,9 +330,9 @@ export class LivingMemoryUserProfileService {
     }
 
     /**
-     * 生成并写入单个说话者的画像。返回结果区分：generated 表示已写入，
-     * kept 表示模型判断已有画像无需变更，failed 表示模型调用或结构化校验
-     * 失败并已通过 logProfileSkipped 记录。
+     * 生成并写入单个说话者的画像。返回结果区分：generated 表示已改写画像，
+     * kept 表示模型判断已有画像无需变更、只记下本次审阅的输入，failed 表示
+     * 模型调用或结构化校验失败并已通过 logProfileSkipped 记录。
      */
     private async generateProfileForGroup(
         presetId: string,
@@ -409,7 +409,14 @@ export class LivingMemoryUserProfileService {
         }
 
         const decision = structuredResult.value.decision
+        const sourceMemoryIds = group.entries.map((entry) => entry.id)
         if (decision.action === 'keep') {
+            // validateResult 已拒绝无画像时的 keep。记下本次输入，同一组记忆
+            // 下次被 isProfileUpToDate 判为最新，不再重复询问模型。
+            await this.repository.markUserProfileReviewed(
+                group.existingProfile!.id,
+                sourceMemoryIds
+            )
             runLogger.diagnostic('user-profile.kept', {
                 workflow: 'dream',
                 presetId,
@@ -422,7 +429,7 @@ export class LivingMemoryUserProfileService {
             speakerKey: group.speakerKey,
             speakerLabel: group.speakerLabel,
             content: decision.content.replace(/\s+/gu, ' '),
-            sourceMemoryIds: group.entries.map((entry) => entry.id)
+            sourceMemoryIds
         })
         return 'generated'
     }
