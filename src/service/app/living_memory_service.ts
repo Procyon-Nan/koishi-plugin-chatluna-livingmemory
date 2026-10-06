@@ -248,6 +248,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             this.mutations,
             formatter,
             extractor,
+            this.presetPersona,
             (presetId) => this.queueAutoDreamIfThresholdReached(presetId),
             this.memoryLogger
         )
@@ -546,19 +547,11 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     }
 
     /**
-     * 预设人设卡片入口：按预设 id 解析（唯一写库路径），供 Dream、用户画像与
-     * 预热使用。
+     * 读取预设人设卡片正文，供外部插件使用：已落库时返回卡片，否则返回预设
+     * system 部分原文。只读，不调模型、不落库。
      */
     resolvePresetPersona(presetId: string): Promise<string> {
-        return this.presetPersona.resolve(presetId)
-    }
-
-    /**
-     * 预设人设卡片入口：按已 render 好的原文解析，只读内存层、不落库，供
-     * extraction 这类每轮现 render 的闭包使用。
-     */
-    resolveRenderedPresetPersona(rawText: string): Promise<string> {
-        return this.presetPersona.resolveRendered(rawText)
+        return this.presetPersona.readCard(presetId)
     }
 
     /**
@@ -764,7 +757,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     async clearPresetData(presetId: string) {
         try {
             await this.mutations.clearPresetData(presetId)
-            await this.repository.deletePresetPersona(presetId)
+            await this.presetPersona.clearCard(presetId)
         } finally {
             this.snapshotCache.clearByPreset(presetId)
         }

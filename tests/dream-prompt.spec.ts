@@ -63,10 +63,7 @@ const createDreamHarness = (
         chatluna: {
             createChatModel: async () => ({ value: model.model }),
             preset: {
-                getPreset: () => ({ value: {} })
-            },
-            promptRenderer: {
-                renderPresetTemplate: async () => ({ messages: [] })
+                getPreset: () => ({ value: { messages: [] } })
             }
         },
         logger: () => ({ warn: () => {} })

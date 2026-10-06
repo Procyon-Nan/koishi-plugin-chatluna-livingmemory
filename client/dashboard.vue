@@ -676,7 +676,7 @@ const doRestartVectorIndex = () =>
 
 const doClearPresetData = () =>
     confirmAndRun({
-        confirmMessage: `该操作会清空预设 ${presetId.value} 的全部记忆、用户画像、快照和任务记录，且不可恢复。是否继续？`,
+        confirmMessage: `该操作会清空预设 ${presetId.value} 的全部记忆、用户画像、人设卡片、快照和任务记录，且不可恢复。是否继续？`,
         confirmTitle: '危险操作',
         confirmButtonText: '确认清空',
         failurePrefix: '清空失败：',

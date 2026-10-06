@@ -9,7 +9,8 @@ import type {
 } from '../../../contracts/workflows'
 import type {
     LivingMemoryTranscriptMessage,
-    MemoryScope
+    MemoryScope,
+    PresetPersonaResolver
 } from '../../../contracts/memory'
 import type { LivingMemoryLogger } from '../../logging/logger'
 import type { MessageLogRegistry } from '../../transcript/message_log/message_log_registry'
@@ -205,6 +206,7 @@ export class LivingMemoryExtractionCoordinator {
         private readonly memoryWriter: ExtractionMemoryWriter,
         private readonly formatter: ExtractionFormatter,
         private readonly extractor: ExtractionModel,
+        private readonly presetPersona: PresetPersonaResolver,
         private readonly queueAutoDream: (presetId: string) => void,
         private readonly logger: LivingMemoryLogger
     ) {}
@@ -485,7 +487,7 @@ export class LivingMemoryExtractionCoordinator {
             inputLength: input.length
         })
 
-        const presetPrompt = await options.resolvePresetPrompt()
+        const presetPrompt = await this.presetPersona.resolve(scope.presetId)
         const trace = await this.extractor.extractWithTrace(
             input,
             {

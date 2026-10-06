@@ -1,12 +1,9 @@
-import { BaseMessage } from '@langchain/core/messages'
-import type { Context, Session } from 'koishi'
-import type { PresetTemplate } from 'koishi-plugin-chatluna/llm-core/prompt'
+import type { Context } from 'koishi'
 import type { MemoryScope } from '../../contracts/memory'
 import type { MemoryTranscriptOrigin } from '../transcript/origin_context'
 import { toNonEmptyString } from '../shared/utils'
 
 export interface QueueExtractionOptions {
-    resolvePresetPrompt: () => Promise<string>
     resolveTranscriptOrigin: () => Promise<MemoryTranscriptOrigin>
 }
 
@@ -169,60 +166,6 @@ const stringifyMessageContent = (content: unknown) => {
 }
 
 /**
- * 将渲染后的 preset 系统提示词整理为带说明头的纯文本块，
- * 供提取与召回提示词内嵌角色人设上下文。
- */
-export const formatRenderedPresetPrompt = (messages: BaseMessage[]) => {
-    const formattedMessages = messages
-        .filter((message) => message.getType() === 'system')
-        .map((message) => stringifyMessageContent(message.content))
-
-    return [
-        '# 当前 preset prompt（仅用于理解“我”的人设，不要从此处抽取记忆）',
-        ...formattedMessages
-    ].join('\n\n')
-}
-
-export const renderChatLunaPresetPrompt = async (
-    ctx: Context,
-    presetTemplate: PresetTemplate,
-    variables: Record<string, unknown> = {}
-) => {
-    const rendered = await ctx.chatluna.promptRenderer.renderPresetTemplate(
-        presetTemplate,
-        variables
-    )
-
-    return formatRenderedPresetPrompt(rendered.messages)
-}
-
-export const renderCharacterPresetPrompt = async (
-    ctx: Context,
-    preset: CharacterPresetPromptSource,
-    options: {
-        session?: Session
-    } = {}
-) => {
-    const rendered = await ctx.chatluna.promptRenderer.renderTemplate(
-        preset.system.rawString,
-        {
-            time: '',
-            stickers: '',
-            status: ''
-        },
-        options.session == null
-            ? undefined
-            : {
-                  configurable: {
-                      session: options.session
-                  }
-              }
-    )
-
-    return rendered.text.trim()
-}
-
-/**
  * 从 presetId 解析角色名标签：Character 预设去掉后缀，ChatLuna 预设直接使用 presetId。
  */
 export const resolveAssistantLabel = (presetId: string): string => {
@@ -241,7 +184,8 @@ export const resolveScopeAssistantLabel = (
 ): string => scope.presetLabel?.trim() || scope.presetId
 
 /**
- * 解析预设的系统提示词文本，用于向 LLM 提供角色人设上下文。
+ * 取预设 system 部分的未渲染原文，作为人设卡片的删减来源。不经模板渲染器、
+ * 不取任何变量值：system 部分应为固定人设，写入其中的占位符原样保留。
  * Character 预设通过 chatluna_character 获取，ChatLuna 预设通过 chatluna.preset 获取。
  */
 export const resolvePresetPrompt = async (
@@ -254,9 +198,12 @@ export const resolvePresetPrompt = async (
             ctx as Context & { chatluna_character: CharacterPresetProvider }
         ).chatluna_character
         const preset = await character.preset.getPreset(presetName, false)
-        return await renderCharacterPresetPrompt(ctx, preset)
+        return preset.system.rawString.trim()
     }
 
-    const preset = ctx.chatluna.preset.getPreset(presetId).value
-    return await renderChatLunaPresetPrompt(ctx, preset)
+    const { messages } = ctx.chatluna.preset.getPreset(presetId).value
+    return messages
+        .filter((message) => message.getType() === 'system')
+        .map((message) => stringifyMessageContent(message.content))
+        .join('\n\n')
 }

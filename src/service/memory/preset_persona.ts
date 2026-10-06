@@ -16,6 +16,7 @@ import {
 } from '../prompts'
 import { invokeStructuredOutput } from '../workflows/structured_output'
 import type { LivingMemoryLogger } from '../logging/logger'
+import { SerialTaskQueue } from '../shared/serial_task_queue'
 import { resolvePresetPrompt } from './helpers'
 
 type PresetPersonaConfig = Pick<LivingMemoryConfig, 'mainModel'>
@@ -54,29 +55,25 @@ interface PersonaCardOutcome {
     totalLines: number
     deletedLines: number
     usedRawFallback: boolean
-    /** 模型侧失败导致的回退：跳过内存层与落库，下次解析时重试。 */
+    /** 模型侧失败导致的回退：不落库，下次解析时重试。 */
     retryable: boolean
 }
 
 /**
- * 预设人设卡片服务。把预设原文按行删减掉纯操作性内容，供记忆提取、Dream 与
- * 用户画像注入；recall 不注入预设，不接入。
+ * 预设人设卡片服务。把预设 system 部分原文按行删减掉纯操作性内容，供记忆
+ * 提取、Dream 与用户画像注入；recall 不注入预设，不接入。
  *
- * 两层缓存：
- * - 内存层按原文哈希去重（`memoByHash`），覆盖 extraction 这类高频、每轮现
- *   render 的入口；
- * - 落库层按 presetId（`living_memory_preset_persona`），覆盖跨重启与 WebUI
- *   查看，是唯一写库路径。
- *
- * 落库只走 `resolve(presetId)` 这条无变量路径；`resolveRendered(rawText)` 供
- * 已 render 好的 middleware 闭包使用，只读内存、不落库，避免带会话变量的原文
- * 反复覆盖落库口径。
+ * 落库行（`living_memory_preset_persona`，主键 presetId）是卡片的唯一状态，
+ * 本服务是它唯一的写入方。模型生成在写队列之外进行，落库在按 presetId 串行
+ * 的写队列内重读行后提交：生成期间被手工保存的卡片不被覆盖，生成期间被清空
+ * 的预设不被写回。
  */
 export class LivingMemoryPresetPersonaService
     implements PresetPersonaResolver
 {
-    private readonly memoByHash = new Map<string, string>()
-    private readonly inFlight = new Map<string, Promise<string>>()
+    private readonly generating = new Map<string, Promise<string>>()
+    private readonly writes = new SerialTaskQueue()
+    private readonly clearEpochs = new Map<string, number>()
 
     constructor(
         private readonly ctx: Context,
@@ -87,55 +84,41 @@ export class LivingMemoryPresetPersonaService
     ) {}
 
     /**
-     * 按预设 id 取卡片，是唯一会写库的路径。启动预热与 Dream、画像、手动
-     * Dream 均走这里。
+     * 按预设 id 取卡片：手工卡片与原文哈希一致的自动卡片直接返回，否则生成
+     * 并落库。同一预设的并发生成合并为一次。
      */
     async resolve(presetId: string): Promise<string> {
+        const epoch = this.clearEpoch(presetId)
         const raw = await resolvePresetPrompt(this.ctx, presetId)
         const rawHash = hashPresetText(raw)
-
-        const memoized = this.memoByHash.get(rawHash)
-        if (memoized !== undefined) {
-            return memoized
+        const stored = await this.repository.getPresetPersona(presetId)
+        if (
+            stored != null &&
+            (stored.source === 'manual' || stored.rawHash === rawHash)
+        ) {
+            return stored.card
         }
-        const pending = this.inFlight.get(rawHash)
+
+        const pending = this.generating.get(presetId)
         if (pending !== undefined) {
             return await pending
         }
-
-        const task = this.resolveAndPersist(presetId, raw, rawHash)
-        this.inFlight.set(rawHash, task)
+        const task = this.generate(presetId, raw, rawHash, epoch)
+        this.generating.set(presetId, task)
         try {
             return await task
         } finally {
-            this.inFlight.delete(rawHash)
+            this.generating.delete(presetId)
         }
     }
 
     /**
-     * 按已 render 好的原文取卡片，只查内存层、不落库。会话变量导致的原文差异
-     * 只在内存层生效，不影响落库口径。
+     * 只读取卡片正文：已落库时返回卡片，否则返回预设原文。不调模型、不落库，
+     * 供外部插件使用。
      */
-    async resolveRendered(rawText: string): Promise<string> {
-        const rawHash = hashPresetText(rawText)
-        const memoized = this.memoByHash.get(rawHash)
-        if (memoized !== undefined) {
-            return memoized
-        }
-        const pending = this.inFlight.get(rawHash)
-        if (pending !== undefined) {
-            return await pending
-        }
-
-        const task = this.buildCard(rawText, rawHash).then(
-            (outcome) => outcome.card
-        )
-        this.inFlight.set(rawHash, task)
-        try {
-            return await task
-        } finally {
-            this.inFlight.delete(rawHash)
-        }
+    async readCard(presetId: string): Promise<string> {
+        const stored = await this.repository.getPresetPersona(presetId)
+        return stored?.card ?? (await resolvePresetPrompt(this.ctx, presetId))
     }
 
     /**
@@ -189,8 +172,8 @@ export class LivingMemoryPresetPersonaService
     }
 
     /**
-     * 读取单个已落库卡片；未生成时返回 undefined。不触发生成——需要卡片内容
-     * 的消费方走 `resolve`，此处只服务展示与外部读取。
+     * 读取单个已落库卡片；未生成时返回 undefined。不触发生成，只服务展示与
+     * 外部读取。
      */
     async getCard(
         presetId: string
@@ -240,91 +223,84 @@ export class LivingMemoryPresetPersonaService
             throw new Error('persona card must not be empty')
         }
 
-        const existing = await this.repository.getPresetPersona(trimmedId)
-        await this.repository.upsertPresetPersona({
-            presetId: trimmedId,
-            card,
-            rawHash: existing?.rawHash ?? hashPresetText(card),
-            source: 'manual',
-            totalLines: splitLines(card).length,
-            deletedLines: 0,
-            usedRawFallback: false
+        await this.writes.run(trimmedId, async () => {
+            const stored = await this.repository.getPresetPersona(trimmedId)
+            await this.repository.upsertPresetPersona({
+                presetId: trimmedId,
+                card,
+                rawHash: stored?.rawHash ?? hashPresetText(card),
+                source: 'manual',
+                totalLines: splitLines(card).length,
+                deletedLines: 0,
+                usedRawFallback: false
+            })
         })
-        this.forgetCard(existing)
     }
 
-    /**
-     * 丢弃手工卡片并重新生成：清掉落库行后走一次 `resolve`，缓存随之刷新。
-     */
+    /** 丢弃手工卡片并重新生成：清掉落库行后走一次 `resolve`。 */
     async resetCard(presetId: string): Promise<void> {
-        const existing = await this.repository.getPresetPersona(presetId)
-        await this.repository.deletePresetPersona(presetId)
-        this.forgetCard(existing)
+        await this.writes.run(presetId, () =>
+            this.repository.deletePresetPersona(presetId)
+        )
         await this.resolve(presetId)
     }
 
-    /** 清掉被替换或删除的落库行在内存层的映射，避免陈旧卡片继续被命中。 */
-    private forgetCard(existing?: PresetPersonaRecord): void {
-        if (existing != null) {
-            this.memoByHash.delete(existing.rawHash)
-        }
+    /**
+     * 删除预设卡片（含手工卡片），随清空预设数据执行。推进清空纪元，清空前
+     * 发起的生成落库时比对失败即放弃写入，不在清空后的预设上写回卡片。
+     */
+    async clearCard(presetId: string): Promise<void> {
+        this.clearEpochs.set(presetId, this.clearEpoch(presetId) + 1)
+        await this.writes.run(presetId, () =>
+            this.repository.deletePresetPersona(presetId)
+        )
     }
 
-    private async resolveAndPersist(
+    private clearEpoch(presetId: string): number {
+        return this.clearEpochs.get(presetId) ?? 0
+    }
+
+    private async generate(
         presetId: string,
         raw: string,
-        rawHash: string
+        rawHash: string,
+        epoch: number
     ): Promise<string> {
-        const existing = await this.repository.getPresetPersona(presetId)
-        if (existing != null) {
-            this.memoByHash.set(existing.rawHash, existing.card)
-            if (existing.source === 'manual') {
-                return existing.card
-            }
-            if (existing.rawHash === rawHash) {
-                return existing.card
-            }
-        }
-
-        const outcome = await this.buildCard(raw, rawHash)
+        const outcome = await this.prune(raw)
         if (outcome.retryable) {
             return outcome.card
         }
-        try {
-            await this.repository.upsertPresetPersona({
-                presetId,
-                card: outcome.card,
-                rawHash,
-                source: 'generated',
-                totalLines: outcome.totalLines,
-                deletedLines: outcome.deletedLines,
-                usedRawFallback: outcome.usedRawFallback
-            })
-        } catch (error) {
-            this.logger.warn(
-                'persona.persist.failed',
-                { presetId, error: summarizeError(error) },
-                error
-            )
-        }
-        return outcome.card
+
+        return await this.writes.run(presetId, async () => {
+            if (this.clearEpoch(presetId) !== epoch) {
+                return outcome.card
+            }
+            const stored = await this.repository.getPresetPersona(presetId)
+            if (stored?.source === 'manual') {
+                return stored.card
+            }
+            try {
+                await this.repository.upsertPresetPersona({
+                    presetId,
+                    card: outcome.card,
+                    rawHash,
+                    source: 'generated',
+                    totalLines: outcome.totalLines,
+                    deletedLines: outcome.deletedLines,
+                    usedRawFallback: outcome.usedRawFallback
+                })
+            } catch (error) {
+                this.logger.warn(
+                    'persona.persist.failed',
+                    { presetId, error: summarizeError(error) },
+                    error
+                )
+            }
+            return outcome.card
+        })
     }
 
-    /**
-     * 生成卡片并写入内存层。模型不可用、调用失败或结构化校验失败时回退原文，
-     * 且不写入内存（下次重试）。
-     */
-    private async buildCard(
-        raw: string,
-        rawHash: string
-    ): Promise<PersonaCardOutcome> {
-        const outcome = await this.prune(raw)
-        if (!outcome.retryable) {
-            this.memoByHash.set(rawHash, outcome.card)
-        }
-        return outcome
-    }
-
+    /** 模型不可用、调用失败或结构化校验失败时回退原文并标记 retryable。 */
     private async prune(raw: string): Promise<PersonaCardOutcome> {
         const lines = splitLines(raw)
         const fallback: PersonaCardOutcome = {

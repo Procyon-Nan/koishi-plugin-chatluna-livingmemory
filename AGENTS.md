@@ -181,16 +181,20 @@ chatluna-livingmemory/
      只在模型需要引用记忆时渲染：`living_memory_search` 渲染 ID 供
      `living_memory_get_messages` 使用，Agentic Recall 与用户画像不渲染 ID。
    - 注入记忆写入类工作流（extraction、Dream、用户画像）的角色人设统一取
-     预设人设卡片，不直接注入预设原文。卡片由 `preset_persona.ts` 把预设原文
-     按行删减掉纯操作性内容（工具调用指南、输出与格式规范、状态模板、安保
-     约束等）得到，保留部分为原字节拼接，模型只在编号空间选择待删行，不重写
-     正文；删除比例过高、剪出结果过短或模型不可用时回退原文。卡片按预设落库
-     （`living_memory_preset_persona`，主键 presetId），`resolve(presetId)` 是
-     唯一写库路径、按原文哈希懒更新；extraction 经 `resolveRendered(rawText)`
-     只读内存层不落库，避免带会话变量的原文反复覆盖落库口径。WebUI 手改的
-     卡片 `source='manual'`，预设变动时不自动覆盖。Console 经只读视图查看与
-     手工编辑：`stale` 只对手工卡片重算原文比哈希，`usedRawFallback` 与
-     `presetMissing` 分别提示回退原文与预设已不存在。recall 不注入预设，不接入。
+     预设人设卡片，不直接注入预设原文。卡片原文取预设 system 部分的未渲染
+     模板（ChatLuna 的 system 消息、Character 的 `system.rawString`），不经
+     渲染器、不取任何变量值。卡片由 `preset_persona.ts` 把原文按行删减掉纯
+     操作性内容（工具调用指南、输出与格式规范、状态模板、安保约束等）得到，
+     保留部分为原字节拼接，模型只在编号空间选择待删行，不重写正文；删除比例
+     过高、剪出结果过短或模型不可用时回退原文。卡片按预设落库
+     （`living_memory_preset_persona`，主键 presetId），落库行是卡片的唯一
+     状态、卡片服务是唯一写入方，不设内存缓存：三个工作流经构造注入的
+     `resolve(presetId)` 取卡片，按原文哈希懒更新；生成结果在按 presetId 串行
+     的写队列内重读行后落库，不覆盖期间保存的手工卡片，清空预设数据之后不
+     写回。WebUI 手改的卡片 `source='manual'`，预设变动时不自动覆盖；清空预设
+     数据一并删除卡片（含手工卡片）。Console 经只读视图查看与手工编辑：
+     `stale` 只对手工卡片重算原文比哈希，`usedRawFallback` 与 `presetMissing`
+     分别提示回退原文与预设已不存在。recall 不注入预设，不接入。
    - 用户画像提示词在记忆列表前说明关联记忆总数与实际送入条数；画像输出只有
      正文，没有操作引用记忆 ID，送入的记忆也一律等权使用。
    - 动态文本经 `prompt_format.ts` 负责的 XML 块转义和 System/Human 消息
@@ -267,8 +271,9 @@ chatluna-livingmemory/
      不绕过应用服务直接访问数据库或索引。
    - 预设人设卡片对 Console 开放查看与手工编辑（编辑落 `source='manual'`
      并自此不再自动覆盖，另有重新生成入口），对外部插件只提供只读接口：
-     `resolvePresetPersona` 取卡片正文、`getPresetPersonaCard` 取带异常提示
-     的只读视图，不开放写入口。
+     `resolvePresetPersona` 取卡片正文（无卡片时取预设 system 部分原文，不调
+     模型、不落库）、`getPresetPersonaCard` 取带异常提示的只读视图，不开放
+     写入口。
 
 11. Koishi 生命周期与后台任务
    - 必需服务为 `chatluna` 与 `database`；`console` 和

@@ -179,6 +179,7 @@ const createHarness = (
         repository,
         formatter,
         extractor,
+        { resolve: async () => '你是测试助手。' },
         options.queueAutoDream ?? (() => {}),
         captured.logger
     )
@@ -212,13 +213,9 @@ const entry = (
     origin: 'live'
 })
 
-const queueExtraction = async (
-    harness: CoordinatorHarness,
-    resolvePresetPrompt: () => Promise<string> = async () => '你是测试助手。'
-) => {
+const queueExtraction = async (harness: CoordinatorHarness) => {
     await harness.messageLog.warmup(scope.conversationId)
     await harness.coordinator.queue(scope, {
-        resolvePresetPrompt,
         resolveTranscriptOrigin: async () => ({
             header: '以下是聊天记录：',
             sourceLabel: '来源于「测试群」（群聊 ID：guild-1）的群聊'
@@ -602,7 +599,6 @@ describe('LivingMemoryExtractionCoordinator', () => {
         ])
         await harness.messageLog.warmup(whitelistedScope.conversationId)
         await harness.coordinator.queue(whitelistedScope, {
-            resolvePresetPrompt: async () => 'preset',
             resolveTranscriptOrigin: async () => ({
                 header: 'h',
                 sourceLabel: 's'
@@ -615,7 +611,6 @@ describe('LivingMemoryExtractionCoordinator', () => {
             entry('assistant', 'a3')
         ])
         await harness.coordinator.queue(whitelistedScope, {
-            resolvePresetPrompt: async () => 'preset',
             resolveTranscriptOrigin: async () => ({
                 header: 'h',
                 sourceLabel: 's'

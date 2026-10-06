@@ -150,7 +150,7 @@ const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
             ]
         })
     ])
-    let presetRenderCount = 0
+    let presetReadCount = 0
     const speakersState: PresetSpeakerRecord[] = [
         {
             id: 'speaker-1',
@@ -230,16 +230,11 @@ const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
             preset: {
                 getPreset: () => {
                     events.push('resolve-preset')
-                    return { value: {} }
-                }
-            },
-            promptRenderer: {
-                renderPresetTemplate: async () => {
-                    presetRenderCount++
-                    if (presetRenderCount === 1) {
-                        return { messages: [] }
+                    presetReadCount++
+                    if (presetReadCount === 1) {
+                        return { value: { messages: [] } }
                     }
-                    throw new Error('preset prompt rendering failure')
+                    throw new Error('preset prompt read failure')
                 }
             }
         }
@@ -285,7 +280,7 @@ it('keeps Dream successful when post-Dream user profile generation fails', async
 
     assert.match(
         result.detail,
-        /user profiles failed: preset prompt rendering failure/u
+        /user profiles failed: preset prompt read failure/u
     )
     assert.deepEqual(harness.events, [
         'list-entries',
@@ -343,10 +338,7 @@ it('regenerates the related user profile after Dream', async () => {
         chatluna: {
             createChatModel: async () => ({ value: {} }),
             preset: {
-                getPreset: () => ({ value: {} })
-            },
-            promptRenderer: {
-                renderPresetTemplate: async () => ({ messages: [] })
+                getPreset: () => ({ value: { messages: [] } })
             }
         }
     } as unknown as Context

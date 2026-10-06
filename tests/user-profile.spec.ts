@@ -98,16 +98,15 @@ const createHarness = (
     const defaultCtx = {
         chatluna: {
             preset: {
-                getPreset: () => ({ value: {} })
-            },
-            promptRenderer: {
-                renderPresetTemplate: async () => ({
-                    messages: [
-                        {
-                            content: '你是测试角色。',
-                            getType: () => 'system'
-                        }
-                    ]
+                getPreset: () => ({
+                    value: {
+                        messages: [
+                            {
+                                content: '你是测试角色。',
+                                getType: () => 'system'
+                            }
+                        ]
+                    }
                 })
             }
         }
@@ -313,11 +312,6 @@ it('keeps user profile failures correlated with the Dream job', async () => {
 
 it('uses the Character preset name as the user profile assistant label', async () => {
     const ctx = {
-        chatluna: {
-            promptRenderer: {
-                renderTemplate: async () => ({ text: '你是角色甲。' })
-            }
-        },
         chatluna_character: {
             preset: {
                 getPreset: async () => ({

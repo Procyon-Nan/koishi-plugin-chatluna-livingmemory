@@ -16,7 +16,6 @@ import {
 import { buildMemoryTranscriptOrigin } from '../service/transcript/origin_context'
 import {
     type CharacterPresetPromptSource,
-    renderCharacterPresetPrompt,
     scopeKey,
     toCharacterMemoryConversationId,
     toCharacterMemoryPresetId
@@ -486,13 +485,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                         guildName: guild.name,
                         guildId: scope.guildId!
                     })
-                },
-                resolvePresetPrompt: async () =>
-                    await ctx.chatluna_living_memory.resolveRenderedPresetPersona(
-                        await renderCharacterPresetPrompt(ctx, payload.preset, {
-                            session: payload.session
-                        })
-                    )
+                }
             })
         }
     )

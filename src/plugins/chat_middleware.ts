@@ -20,10 +20,7 @@ import type { ConversationLogEntryInput } from '../service/transcript/message_lo
 import type { UserSpeakerCache } from '../service/transcript/user_speaker'
 import { buildMemoryTranscriptOrigin } from '../service/transcript/origin_context'
 import { collectUserProfileSpeakerKeys } from '../service/user_profile'
-import {
-    renderChatLunaPresetPrompt,
-    resolveMainRunConversationId
-} from '../service/memory/helpers'
+import { resolveMainRunConversationId } from '../service/memory/helpers'
 import { toNonEmptyString } from '../service/shared/utils'
 
 const registerConversationLog = (
@@ -430,7 +427,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
             conversationId,
             sourceMessage,
             responseMessage,
-            promptVariables,
+            _promptVariables,
             chatInterface,
             session
         ) => {
@@ -467,7 +464,6 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 conversationId,
                 presetId: scope.presetId
             })
-            const presetTemplate = chatInterface.preset.value
             const sourceLabel =
                 toNonEmptyString(session.event?.user?.name) ??
                 session.userId ??
@@ -489,15 +485,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                         guildName: guild.name,
                         guildId: scope.guildId!
                     })
-                },
-                resolvePresetPrompt: async () =>
-                    await ctx.chatluna_living_memory.resolveRenderedPresetPersona(
-                        await renderChatLunaPresetPrompt(
-                            ctx,
-                            presetTemplate,
-                            promptVariables
-                        )
-                    )
+                }
             })
         }
     )
