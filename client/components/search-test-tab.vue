@@ -128,6 +128,15 @@
                                         {{ item.boostedScore.toFixed(4) }}
                                     </strong>
                                 </div>
+                                <div
+                                    v-if="item.rerankScore != null"
+                                    class="score-item"
+                                >
+                                    <span class="score-label">rerank</span>
+                                    <strong class="score-value score-boosted">
+                                        {{ item.rerankScore.toFixed(4) }}
+                                    </strong>
+                                </div>
                             </div>
                         </div>
 

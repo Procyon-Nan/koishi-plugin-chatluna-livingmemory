@@ -43,6 +43,7 @@ export interface LivingMemorySearchDetailedResult {
     cosineScore: number
     keywordMatchCount: number
     boostedScore: number
+    rerankScore: number | null
 }
 
 export interface MemorySourceMessage {

@@ -75,7 +75,7 @@ export const Config: Schema<Config> = Schema.intersect([
             .default('无'),
         rerankModel: Schema.dynamic('reranker')
             .description(
-                '用于 embedding-rerank 召回结果重排序的 Reranker 模型。'
+                '可选的 Reranker 模型，对记忆检索结果重排序；未配置或调用失败时按检索得分排序。'
             )
             .default('无')
     }).description('模型配置'),

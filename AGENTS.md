@@ -115,6 +115,10 @@ chatluna-livingmemory/
      完成；等待期间追加的后续闲聊不挤入边界。
    - `embedding-rerank` 只从活跃记忆中检索，快照保存记忆引用；
      `agentic-recall` 保存模型整理后的文本和搜索轨迹。
+   - `LivingMemoryEmbeddingSearchEngine` 配置 Reranker 后，混合检索按结果
+     上限的 3 倍取候选，每条查询短语各自重排并取最大分；重排失败回退混合
+     检索排序，不得阻断检索。agentic recall 内部检索、主对话工具与 WebUI
+     检索测试共用这一条路径。
    - 没有可靠结果时保留既有快照，不以空结果覆盖。召回失败记录任务和诊断
      信息，但不得阻断正常对话。
    - 用户关联信息可用于说明记忆归属，但不得成为召回门槛。

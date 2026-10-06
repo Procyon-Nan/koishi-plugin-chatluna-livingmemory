@@ -133,9 +133,11 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             this.memoryLogger
         )
         this.searchEngine = new LivingMemoryEmbeddingSearchEngine(
+            ctx,
             config,
             this.repository,
-            this.vectorIndex
+            this.vectorIndex,
+            this.memoryLogger
         )
         this.snapshotCache = new LivingMemorySnapshotCache(this.repository)
         this.presetCatalog = new LivingMemoryPresetCatalog(

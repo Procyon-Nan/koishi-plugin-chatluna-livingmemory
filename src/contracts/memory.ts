@@ -64,6 +64,8 @@ export interface LivingMemorySearchDetailedResult extends LivingMemorySearchResu
     cosineScore: number
     keywordMatchCount: number
     boostedScore: number
+    /** 未配置 Reranker 或重排失败回退时为 null，结果按 boostedScore 排序。 */
+    rerankScore: number | null
 }
 
 export interface MemoryReference {

@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2026-10-06 version:0.26.0
+
+- pending: `LivingMemoryEmbeddingSearchEngine` 接入 Reranker，此前 Reranker 只服务 `embedding-rerank` 召回，agentic recall 内部检索与主对话 `living_memory_search` 均不重排。配置 `rerankModel` 后混合检索按 `memorySearchToolMaxResults` 的 3 倍取候选，每条查询短语各自重排一次，候选取各次最大分（与混合检索多向量取最大的口径一致）后截取；重排失败记 `search.rerank.failed` 并回退混合检索排序，不阻断检索。召回内部检索、主对话工具与 WebUI 检索测试共用该路径；`LivingMemorySearchDetailedResult` 新增 `rerankScore`（未重排为 null），检索测试页展示该分数；`rerankModel` 配置说明随之更新。新增逐短语重排取最大与重排失败回退两类测试。
+
 ## 2026-10-06 version:0.25.1
 
 - 7967315: 改造用户画像的结果契约，去掉 `content: null` 空结果通道，让画像决策可以观测。此前结果工具的 `content` 可以为 null，表示「无需更新」，且禁止模型解释。这带来两个问题：一是日志只能看到 `content: null`，无法判断模型是否真的审阅了记忆；二是尚无画像时也能交 null，该用户因此一直没有画像，因为提示词只针对已有画像说明了 null 的用法，schema 与代码不区分这两种情况。现结果改为 `decision` 判别联合：`update` 提交完整新画像，附 `content` 与 `reason`；`keep` 保留已有画像，附 `reason`。两者都必须写理由。`validateResult` 拒绝尚无画像时的 `keep`，被拒结果和不合 schema 的 null 一样，走结构化输出既有的纠错重试，最多 3 次。`keep` 不写库，记一条 `user-profile.kept` 诊断；生成汇总中的 `empty` 计数改为 `kept`，`empty-content` 跳过分支随之删除（`requiredText` 已保证正文非空）。同步提示词 `output_contract`、结果工具描述与 AGENTS.md §7，改写画像测试的工具调用桩，并新增 keep 保留、无画像时 keep 被拒后重试、null 被拒后重试三类回归。
