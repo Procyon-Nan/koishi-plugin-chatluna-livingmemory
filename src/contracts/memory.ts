@@ -276,8 +276,8 @@ export interface PresetPersonaCardInfo {
 }
 
 /**
- * 预设人设卡片解析入口。各工作流只依赖这一只读契约，由
- * `LivingMemoryPresetPersonaService` 实现，未装配时回退预设原文。
+ * 预设人设卡片解析入口。各工作流只依赖这一契约，由
+ * `LivingMemoryPresetPersonaService` 实现。
  */
 export interface PresetPersonaResolver {
     resolve(presetId: string): Promise<string>

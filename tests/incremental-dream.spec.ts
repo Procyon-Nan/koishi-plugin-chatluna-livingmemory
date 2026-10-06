@@ -227,10 +227,7 @@ const createHarness = (
     }
     const ctx = {
         chatluna: {
-            createChatModel: async () => ({ value: model.model }),
-            preset: {
-                getPreset: () => ({ value: { messages: [] } })
-            }
+            createChatModel: async () => ({ value: model.model })
         }
     } as unknown as Context
     const userProfiles = {
@@ -248,7 +245,8 @@ const createHarness = (
         repository as DreamMemoryRepository,
         repository satisfies DreamSpeakerCoverage,
         neighborSearch,
-        userProfiles
+        userProfiles,
+        { resolve: async () => '' }
     )
     return {
         model,

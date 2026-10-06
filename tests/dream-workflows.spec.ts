@@ -226,21 +226,20 @@ const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
             createChatModel: async () => {
                 events.push('create-model')
                 return { value: model.model }
-            },
-            preset: {
-                getPreset: () => {
-                    events.push('resolve-preset')
-                    presetReadCount++
-                    if (presetReadCount === 1) {
-                        return { value: { messages: [] } }
-                    }
-                    throw new Error('preset prompt read failure')
-                }
             }
         }
     } as unknown as Context
+    const presetPersona = {
+        resolve: async () => {
+            events.push('resolve-preset')
+            presetReadCount++
+            if (presetReadCount === 1) {
+                return ''
+            }
+            throw new Error('preset prompt read failure')
+        }
+    }
     const userProfiles = new LivingMemoryUserProfileService(
-        ctx,
         {
             enableUserProfileInjection,
             userProfileMinMemoryCount: 1,
@@ -248,7 +247,8 @@ const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
         },
         repository as unknown as UserProfileRepository &
             UserProfileMemoryRepository,
-        captured.logger
+        captured.logger,
+        presetPersona
     )
     const service = new LivingMemoryDreamService(
         ctx,
@@ -262,7 +262,8 @@ const createDreamServiceHarness = (enableUserProfileInjection: boolean) => {
         },
         dreamWorker,
         captured.logger,
-        userProfiles
+        userProfiles,
+        presetPersona
     )
 
     return {
@@ -336,10 +337,7 @@ it('regenerates the related user profile after Dream', async () => {
     } as unknown as DreamRepository
     const ctx = {
         chatluna: {
-            createChatModel: async () => ({ value: {} }),
-            preset: {
-                getPreset: () => ({ value: { messages: [] } })
-            }
+            createChatModel: async () => ({ value: {} })
         }
     } as unknown as Context
     const userProfiles = {
@@ -358,7 +356,8 @@ it('regenerates the related user profile after Dream', async () => {
         { readVectors: async () => new Map() },
         dreamWorker,
         logger,
-        userProfiles
+        userProfiles,
+        { resolve: async () => '' }
     )
 
     const result = await service.run(scope.presetId)

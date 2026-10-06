@@ -61,10 +61,7 @@ const createDreamHarness = (
     const captured = createCapturedLogger()
     const ctx = {
         chatluna: {
-            createChatModel: async () => ({ value: model.model }),
-            preset: {
-                getPreset: () => ({ value: { messages: [] } })
-            }
+            createChatModel: async () => ({ value: model.model })
         },
         logger: () => ({ warn: () => {} })
     } as unknown as Context
@@ -103,7 +100,8 @@ const createDreamHarness = (
         vectors,
         worker,
         captured.logger,
-        {} as LivingMemoryUserProfileService
+        {} as LivingMemoryUserProfileService,
+        { resolve: async () => '' }
     )
 
     return { debugMessages: captured.info, model, service }

@@ -1,4 +1,3 @@
-import { Context } from 'koishi'
 import type { ChatLunaChatModel } from 'koishi-plugin-chatluna/llm-core/platform/model'
 import type {
     LivingMemoryTranscriptMessage,
@@ -11,7 +10,7 @@ import type {
     UserProfileMemoryRepository,
     UserProfileRepository
 } from '../contracts/workflows'
-import { resolveAssistantLabel, resolvePresetPrompt } from './memory/helpers'
+import { resolveAssistantLabel } from './memory/helpers'
 import {
     buildUserProfilePrompt,
     userProfileResultSchema,
@@ -89,12 +88,11 @@ export const collectUserProfileSpeakerKeys = (
 
 export class LivingMemoryUserProfileService {
     constructor(
-        private readonly ctx: Context,
         private readonly config: LivingMemoryUserProfileConfig,
         private readonly repository: UserProfileRepository &
             UserProfileMemoryRepository,
         private readonly logger: LivingMemoryLogger,
-        private readonly presetPersona?: PresetPersonaResolver
+        private readonly presetPersona: PresetPersonaResolver
     ) {}
 
     /**
@@ -198,7 +196,7 @@ export class LivingMemoryUserProfileService {
         }
 
         const assistantLabel = resolveAssistantLabel(presetId)
-        const presetPrompt = await this.resolvePersona(presetId)
+        const presetPrompt = await this.presetPersona.resolve(presetId)
         const matchedEntryCount = profileGroups.reduce(
             (sum, group) => sum + group.matchedEntryCount,
             0
@@ -245,17 +243,6 @@ export class LivingMemoryUserProfileService {
                 `failed=${failed}`
             ].join(' ')
         }
-    }
-
-    /**
-     * 取得注入模型的人设上下文：优先用预设人设卡片，未装配卡片服务时回退
-     * 预设原文。
-     */
-    private async resolvePersona(presetId: string): Promise<string> {
-        if (this.presetPersona != null) {
-            return await this.presetPersona.resolve(presetId)
-        }
-        return await resolvePresetPrompt(this.ctx, presetId)
     }
 
     /**

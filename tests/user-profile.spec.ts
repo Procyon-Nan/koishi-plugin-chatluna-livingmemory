@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import { AIMessage } from '@langchain/core/messages'
-import type { Context } from 'koishi'
 import { LivingMemoryLogger } from '../src/service/logging/logger'
 import type {
     MemoryEntryRecord,
@@ -43,7 +42,6 @@ const memory: MemoryEntryRecord = {
 
 const createHarness = (
     options: {
-        ctx?: Context
         presetId?: string
         speakerLabel?: string
         speakerAliases?: string[]
@@ -95,25 +93,7 @@ const createHarness = (
         },
         deleteUserProfile: async () => {}
     }
-    const defaultCtx = {
-        chatluna: {
-            preset: {
-                getPreset: () => ({
-                    value: {
-                        messages: [
-                            {
-                                content: '你是测试角色。',
-                                getType: () => 'system'
-                            }
-                        ]
-                    }
-                })
-            }
-        }
-    } as unknown as Context
-    const ctx = options.ctx ?? defaultCtx
     const service = new LivingMemoryUserProfileService(
-        ctx,
         {
             enableUserProfileInjection: true,
             userProfileMinMemoryCount: options.userProfileMinMemoryCount ?? 1,
@@ -127,7 +107,8 @@ const createHarness = (
                 error: () => {}
             } as never,
             () => true
-        )
+        ),
+        { resolve: async () => '你是测试角色。' }
     )
 
     return {
@@ -311,19 +292,7 @@ it('keeps user profile failures correlated with the Dream job', async () => {
 })
 
 it('uses the Character preset name as the user profile assistant label', async () => {
-    const ctx = {
-        chatluna_character: {
-            preset: {
-                getPreset: async () => ({
-                    system: {
-                        rawString: '你是角色甲。'
-                    }
-                })
-            }
-        }
-    } as unknown as Context
     const harness = createHarness({
-        ctx,
         presetId: `角色甲${characterPresetSuffix}`
     })
 
