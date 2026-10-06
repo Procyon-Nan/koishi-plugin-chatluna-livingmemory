@@ -21,6 +21,7 @@ const createService = (options: {
                 migrateMemorySourceOriginsArray: async () => 0,
                 migrateWebuiSourceConversationKeys: async () => 0,
                 migrateActiveMemorySpeakers: async () => 0,
+                removeLegacyReferenceSnapshots: async () => 0,
                 dropLegacyPendingIndexes: async () => [],
                 markStaleRunningJobsAsFailed: async () => []
             }

@@ -52,7 +52,7 @@ const createCoordinator = (options: {
                 _scope,
                 _message,
                 historyMessages,
-                runLogger = logger
+                runLogger: LivingMemoryLogger
             ) => await run(historyMessages, runLogger)
         },
         { hydrate: options.hydrate ?? (async () => '') },
@@ -315,8 +315,8 @@ it('continues recall with empty history without persisting a job', async () => {
     assert.deepEqual(receivedHistory, [])
     assert.equal(jobStore.jobs.length, 0)
     assert.ok(
-        captured.info.every(
-            (message) => !message.includes('private history failure detail')
+        captured.info.some((message) =>
+            message.startsWith('event=recall.history.unavailable ')
         )
     )
 })

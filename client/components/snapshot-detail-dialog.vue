@@ -44,9 +44,7 @@
                             formatSearchTexts(item.toolCallSummary.searchTexts)
                         }}
                     </span>
-                    <span>
-                        上限：{{ item.toolCallSummary.maxCandidates }}
-                    </span>
+                    <span>上限：{{ item.toolCallSummary.maxCandidates }}</span>
                 </div>
                 <el-empty
                     v-if="item.matchedMemories.length === 0"
@@ -69,9 +67,7 @@
                             </el-tag>
                             <span class="snapshot-memory-score">
                                 重要度
-                                {{
-                                    formatImportance(memory.importance) || '-'
-                                }}
+                                {{ formatImportance(memory.importance) || '-' }}
                             </span>
                         </div>
                         <div class="snapshot-memory-content">
