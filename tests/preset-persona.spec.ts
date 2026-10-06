@@ -439,7 +439,7 @@ it('rejects empty manual card input', async () => {
     assert.equal(harness.upserts.length, 0)
 })
 
-it('regenerates a card on reset and drops the manual row', async () => {
+it('regenerates a card on reset and replaces the manual row', async () => {
     const harness = createHarness([deleteLines([3, 4])], {
         stored: [
             storedCard({
@@ -455,4 +455,24 @@ it('regenerates a card on reset and drops the manual row', async () => {
     assert.equal(harness.model.invocations.length, 1)
     assert.equal(harness.rows.get('preset-1')?.source, 'generated')
     assert.equal(harness.rows.get('preset-1')?.card, prunedCard)
+})
+
+it('keeps the stored card and reports an error when regeneration fails', async () => {
+    const harness = createHarness([new Error('model unavailable')], {
+        stored: [
+            storedCard({
+                card: 'manual card',
+                source: 'manual',
+                rawHash: 'hash-before-edit'
+            })
+        ]
+    })
+
+    await assert.rejects(
+        () => harness.service.resetCard('preset-1'),
+        /persona card generation failed: invoke-failed/u
+    )
+    assert.equal(harness.rows.get('preset-1')?.source, 'manual')
+    assert.equal(harness.rows.get('preset-1')?.card, 'manual card')
+    assert.equal(harness.upserts.length, 0)
 })

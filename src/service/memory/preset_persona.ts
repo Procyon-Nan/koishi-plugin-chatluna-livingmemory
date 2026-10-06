@@ -50,13 +50,18 @@ interface PresetIdCatalog {
     list(): Promise<string[]>
 }
 
+/** 模型侧失败的原因；此类回退不落库，下次解析时重试。 */
+type PersonaPruneFailure =
+    | 'model-unavailable'
+    | 'invoke-failed'
+    | 'structured-output-failed'
+
 interface PersonaCardOutcome {
     card: string
     totalLines: number
     deletedLines: number
     usedRawFallback: boolean
-    /** 模型侧失败导致的回退：不落库，下次解析时重试。 */
-    retryable: boolean
+    failure: PersonaPruneFailure | null
 }
 
 /**
@@ -237,12 +242,26 @@ export class LivingMemoryPresetPersonaService
         })
     }
 
-    /** 丢弃手工卡片并重新生成：清掉落库行后走一次 `resolve`。 */
+    /**
+     * 丢弃当前卡片（含手工卡片）并按当前预设原文重新生成。生成成功后才替换
+     * 落库行；模型侧失败时抛错，落库行保持原状。
+     */
     async resetCard(presetId: string): Promise<void> {
-        await this.writes.run(presetId, () =>
-            this.repository.deletePresetPersona(presetId)
-        )
-        await this.resolve(presetId)
+        const epoch = this.clearEpoch(presetId)
+        const raw = await resolvePresetPrompt(this.ctx, presetId)
+        const outcome = await this.prune(raw)
+        if (outcome.failure !== null) {
+            throw new Error(
+                `persona card generation failed: ${outcome.failure}`
+            )
+        }
+
+        const rawHash = hashPresetText(raw)
+        await this.writes.run(presetId, async () => {
+            if (this.clearEpoch(presetId) === epoch) {
+                await this.persistGenerated(presetId, rawHash, outcome)
+            }
+        })
     }
 
     /**
@@ -267,7 +286,7 @@ export class LivingMemoryPresetPersonaService
         epoch: number
     ): Promise<string> {
         const outcome = await this.prune(raw)
-        if (outcome.retryable) {
+        if (outcome.failure !== null) {
             return outcome.card
         }
 
@@ -280,15 +299,7 @@ export class LivingMemoryPresetPersonaService
                 return stored.card
             }
             try {
-                await this.repository.upsertPresetPersona({
-                    presetId,
-                    card: outcome.card,
-                    rawHash,
-                    source: 'generated',
-                    totalLines: outcome.totalLines,
-                    deletedLines: outcome.deletedLines,
-                    usedRawFallback: outcome.usedRawFallback
-                })
+                await this.persistGenerated(presetId, rawHash, outcome)
             } catch (error) {
                 this.logger.warn(
                     'persona.persist.failed',
@@ -300,16 +311,37 @@ export class LivingMemoryPresetPersonaService
         })
     }
 
-    /** 模型不可用、调用失败或结构化校验失败时回退原文并标记 retryable。 */
+    private async persistGenerated(
+        presetId: string,
+        rawHash: string,
+        outcome: PersonaCardOutcome
+    ): Promise<void> {
+        await this.repository.upsertPresetPersona({
+            presetId,
+            card: outcome.card,
+            rawHash,
+            source: 'generated',
+            totalLines: outcome.totalLines,
+            deletedLines: outcome.deletedLines,
+            usedRawFallback: outcome.usedRawFallback
+        })
+    }
+
+    /**
+     * 模型不可用、调用失败或结构化校验失败时回退原文，并在 `failure` 标明
+     * 原因。
+     */
     private async prune(raw: string): Promise<PersonaCardOutcome> {
         const lines = splitLines(raw)
-        const fallback: PersonaCardOutcome = {
+        const fallback = (
+            failure: PersonaPruneFailure
+        ): PersonaCardOutcome => ({
             card: raw,
             totalLines: lines.length,
             deletedLines: 0,
             usedRawFallback: true,
-            retryable: true
-        }
+            failure
+        })
 
         let model: ChatLunaChatModel
         try {
@@ -319,7 +351,7 @@ export class LivingMemoryPresetPersonaService
                 reason: 'model-unavailable',
                 error: summarizeError(error)
             })
-            return fallback
+            return fallback('model-unavailable')
         }
 
         let structuredResult
@@ -359,7 +391,7 @@ export class LivingMemoryPresetPersonaService
                 reason: 'invoke-failed',
                 error: summarizeError(error)
             })
-            return fallback
+            return fallback('invoke-failed')
         }
 
         if (structuredResult.parseError !== null) {
@@ -367,7 +399,7 @@ export class LivingMemoryPresetPersonaService
                 reason: 'structured-output-failed',
                 error: structuredResult.parseError
             })
-            return fallback
+            return fallback('structured-output-failed')
         }
 
         return this.applyDeletions(
@@ -393,7 +425,7 @@ export class LivingMemoryPresetPersonaService
                 totalLines: lines.length,
                 deletedLines: 0,
                 usedRawFallback: false,
-                retryable: false
+                failure: null
             }
         }
 
@@ -413,7 +445,7 @@ export class LivingMemoryPresetPersonaService
                 totalLines: lines.length,
                 deletedLines: 0,
                 usedRawFallback: true,
-                retryable: false
+                failure: null
             }
         }
 
@@ -422,7 +454,7 @@ export class LivingMemoryPresetPersonaService
             totalLines: lines.length,
             deletedLines,
             usedRawFallback: false,
-            retryable: false
+            failure: null
         }
     }
 
