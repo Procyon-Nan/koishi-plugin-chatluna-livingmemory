@@ -145,9 +145,7 @@ it('matches Dream memories through a stable user identity old nickname', async (
         speakerAliases: ['张三', '新昵称']
     })
     const { result } = await harness.run([
-        createProfileCall({
-            content: '我知道该用户正在准备考试。'
-        })
+        createProfileCall('我知道该用户正在准备考试。')
     ])
 
     assert.equal(result.generated, 1)
@@ -157,7 +155,7 @@ it('matches Dream memories through a stable user identity old nickname', async (
 it('skips profile generation below the active memory threshold', async () => {
     const harness = createHarness({ userProfileMinMemoryCount: 2 })
     const { model, result } = await harness.run([
-        createProfileCall({ content: '不应生成。' })
+        createProfileCall('不应生成。')
     ])
 
     assert.equal(result.generated, 0)
@@ -171,7 +169,7 @@ it('skips regeneration when the profile input is unchanged', async () => {
         existingProfileUpdatedAt: new Date(+now + 1)
     })
     const { model, result } = await harness.run([
-        createProfileCall({ content: '不应生成。' })
+        createProfileCall('不应生成。')
     ])
 
     assert.equal(result.generated, 0)
@@ -186,7 +184,7 @@ it('regenerates when the profile is not newer than its memories', async () => {
         existingProfileUpdatedAt: now
     })
     const { model, result } = await harness.run([
-        createProfileCall(baseProfileOutput)
+        createProfileCall()
     ])
 
     assert.equal(result.generated, 1)
@@ -194,15 +192,22 @@ it('regenerates when the profile is not newer than its memories', async () => {
     assert.match(result.detail, /unchanged=0/u)
 })
 
-const baseProfileOutput = {
-    content: '我知道张三正在准备考试。'
+const profileContent = '我知道张三正在准备考试。'
+
+const createProfileCall = (content = profileContent, id = 'result-1') => {
+    return createToolCallMessage(
+        userProfileResultToolName,
+        { decision: { action: 'update', content, reason: '记忆中有新的事实' } },
+        id
+    )
 }
 
-const createProfileCall = (
-    profile: Record<string, unknown>,
-    id = 'result-1'
-) => {
-    return createToolCallMessage(userProfileResultToolName, profile, id)
+const createKeepCall = (id = 'result-1') => {
+    return createToolCallMessage(
+        userProfileResultToolName,
+        { decision: { action: 'keep', reason: '旧画像已涵盖这些记忆' } },
+        id
+    )
 }
 
 const readPromptMessages = (
@@ -224,7 +229,7 @@ const readPromptMessages = (
 it('passes user profile rules and memory data through tool-calling messages', async () => {
     const harness = createHarness()
 
-    const { model } = await harness.run([createProfileCall(baseProfileOutput)])
+    const { model } = await harness.run([createProfileCall()])
 
     assert.equal(model.invocations.length, 1)
     const prompt = readPromptMessages(model)
@@ -245,13 +250,13 @@ it('passes user profile rules and memory data through tool-calling messages', as
 
 it('keeps user profile payloads out of ordinary debug logs', async () => {
     const harness = createHarness()
-    await harness.run([createProfileCall(baseProfileOutput)])
+    await harness.run([createProfileCall()])
 
     assert.ok(
         harness.debugMessages.every(
             (message) =>
                 !message.includes(memory.content) &&
-                !message.includes(baseProfileOutput.content)
+                !message.includes(profileContent)
         )
     )
 })
@@ -296,7 +301,7 @@ it('uses the Character preset name as the user profile assistant label', async (
         presetId: `角色甲${characterPresetSuffix}`
     })
 
-    const { model } = await harness.run([createProfileCall(baseProfileOutput)])
+    const { model } = await harness.run([createProfileCall()])
 
     const prompt = readPromptMessages(model)
     assert.match(prompt.systemPrompt, /你是角色甲，/u)
@@ -309,12 +314,7 @@ it('does not rewrite or truncate generated user profile content', async () => {
         existingSourceMemoryIds: ['memory-old']
     })
     const content = `张三的人物画像：${'甲'.repeat(301)}`
-    const { result } = await harness.run([
-        createProfileCall({
-            ...baseProfileOutput,
-            content
-        })
-    ])
+    const { result } = await harness.run([createProfileCall(content)])
 
     assert.equal(result.generated, 1)
     assert.equal(harness.savedProfiles.length, 1)
@@ -326,7 +326,7 @@ it('retries once after a non-tool response', async () => {
     const harness = createHarness()
     const { model, result } = await harness.run([
         new AIMessage('普通文本画像'),
-        createProfileCall(baseProfileOutput, 'result-2')
+        createProfileCall(profileContent, 'result-2')
     ])
 
     assert.equal(result.generated, 1)
@@ -336,25 +336,43 @@ it('retries once after a non-tool response', async () => {
 it('preserves brackets inside profile content', async () => {
     const harness = createHarness()
     const content = '我记得张三把这件事标成了[注意]。'
-    const { result } = await harness.run([
-        createProfileCall({
-            ...baseProfileOutput,
-            content
-        })
-    ])
+    const { result } = await harness.run([createProfileCall(content)])
 
     assert.equal(result.generated, 1)
     assert.equal(harness.savedProfiles[0]?.content, content)
 })
 
-it('treats null content as a valid no-op', async () => {
-    const harness = createHarness()
-    const { result } = await harness.run([
-        createToolCallMessage(userProfileResultToolName, { content: null })
-    ])
+it('keeps the existing profile when the model chooses keep', async () => {
+    const harness = createHarness({
+        existingSourceMemoryIds: ['memory-old']
+    })
+    const { result } = await harness.run([createKeepCall()])
 
     assert.equal(result.generated, 0)
     assert.equal(harness.savedProfiles.length, 0)
-    assert.match(result.detail, /empty=1/u)
+    assert.match(result.detail, /kept=1/u)
     assert.match(result.detail, /failed=0/u)
+})
+
+it('rejects keep without an existing profile and retries for an update', async () => {
+    const harness = createHarness()
+    const { model, result } = await harness.run([
+        createKeepCall(),
+        createProfileCall(profileContent, 'result-2')
+    ])
+
+    assert.equal(result.generated, 1)
+    assert.equal(model.invocations.length, 2)
+    assert.equal(harness.savedProfiles[0]?.content, profileContent)
+})
+
+it('rejects null profile content and retries', async () => {
+    const harness = createHarness()
+    const { model, result } = await harness.run([
+        createToolCallMessage(userProfileResultToolName, { content: null }),
+        createProfileCall(profileContent, 'result-2')
+    ])
+
+    assert.equal(result.generated, 1)
+    assert.equal(model.invocations.length, 2)
 })

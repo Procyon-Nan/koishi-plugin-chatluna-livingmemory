@@ -110,14 +110,19 @@ export type DreamOperation = z.output<
 export const userProfileResultToolName = 'living_memory_user_profile_result'
 
 export const userProfileResultSchema = z.object({
-    content: z
-        .string()
-        .trim()
-        .min(1)
-        .nullable()
-        .describe(
-            '人物画像的正文内容，长度不超过 300 个字符；无需更新时为 null'
-        )
+    decision: z.discriminatedUnion('action', [
+        z.object({
+            action: z.literal('update'),
+            content: requiredText(
+                '完整的新人物画像正文，长度不超过 300 个字符'
+            ),
+            reason: requiredText('更新人物画像的简短原因')
+        }),
+        z.object({
+            action: z.literal('keep'),
+            reason: requiredText('保留旧人物画像、无需更新的简短原因')
+        })
+    ])
 })
 
 export const personaCardResultToolName = 'living_memory_persona_card_result'

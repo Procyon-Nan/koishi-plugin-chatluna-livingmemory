@@ -185,13 +185,29 @@ it('uses the memory entry format and user profile result schema', () => {
     })
     assert.equal(
         userProfileResultSchema.safeParse({
-            content: '我知道张三正在准备考试。'
+            decision: {
+                action: 'update',
+                content: '我知道张三正在准备考试。',
+                reason: '记忆中有新的事实'
+            }
         }).success,
         true
     )
     assert.equal(
-        userProfileResultSchema.safeParse({ content: null }).success,
+        userProfileResultSchema.safeParse({
+            decision: { action: 'keep', reason: '旧画像已涵盖这些记忆' }
+        }).success,
         true
+    )
+    assert.equal(
+        userProfileResultSchema.safeParse({
+            decision: { action: 'keep' }
+        }).success,
+        false
+    )
+    assert.equal(
+        userProfileResultSchema.safeParse({ content: null }).success,
+        false
     )
     assert.match(prompt.inputPrompt, /updatedAt=2026-07-15T12:30:00.000Z/u)
     assert.match(
@@ -205,7 +221,8 @@ it('uses the memory entry format and user profile result schema', () => {
         new RegExp(userProfileResultToolName, 'u')
     )
     assert.match(
-        userProfileResultSchema.shape.content.description ?? '',
+        userProfileResultSchema.shape.decision.options[0].shape.content
+            .description ?? '',
         /不超过 300 个字符/u
     )
 })

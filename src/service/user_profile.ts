@@ -206,8 +206,8 @@ export class LivingMemoryUserProfileService {
             0
         )
         let generated = 0
+        let kept = 0
         let failed = 0
-        let empty = 0
 
         for (const group of pendingGroups) {
             const outcome = await this.generateProfileForGroup(
@@ -221,10 +221,10 @@ export class LivingMemoryUserProfileService {
             )
             if (outcome === 'generated') {
                 generated++
-            } else if (outcome === 'failed') {
-                failed++
+            } else if (outcome === 'kept') {
+                kept++
             } else {
-                empty++
+                failed++
             }
         }
 
@@ -239,7 +239,7 @@ export class LivingMemoryUserProfileService {
                 `selectedMemories=${selectedEntryCount}`,
                 `minimumMemories=${this.config.userProfileMinMemoryCount}`,
                 `unchanged=${profileGroups.length - pendingGroups.length}`,
-                `empty=${empty}`,
+                `kept=${kept}`,
                 `failed=${failed}`
             ].join(' ')
         }
@@ -331,8 +331,8 @@ export class LivingMemoryUserProfileService {
 
     /**
      * 生成并写入单个说话者的画像。返回结果区分：generated 表示已写入，
-     * failed 表示模型调用或结构化校验失败，empty 表示产出为空；
-     * 后两类跳过原因均已通过 logProfileSkipped 记录。
+     * kept 表示模型判断已有画像无需变更，failed 表示模型调用或结构化校验
+     * 失败并已通过 logProfileSkipped 记录。
      */
     private async generateProfileForGroup(
         presetId: string,
@@ -342,7 +342,7 @@ export class LivingMemoryUserProfileService {
         presetPrompt: string,
         logger: LivingMemoryLogger | undefined,
         runLogger: LivingMemoryLogger
-    ): Promise<'generated' | 'failed' | 'empty'> {
+    ): Promise<'generated' | 'kept' | 'failed'> {
         let structuredResult
         try {
             const prompt = buildUserProfilePrompt({
@@ -355,8 +355,18 @@ export class LivingMemoryUserProfileService {
                 prompt,
                 toolName: userProfileResultToolName,
                 toolDescription:
-                    '提交当前用户画像的更新结果。无需更新时将 content 设为 null。',
+                    '提交当前用户画像的处理结果：需要生成或更新时用 update 提交完整画像，已有画像无需变更时用 keep 保留；两者都须说明理由。',
                 schema: userProfileResultSchema,
+                validateResult: ({ decision }) => {
+                    if (
+                        decision.action === 'keep' &&
+                        group.existingProfile == null
+                    ) {
+                        throw new Error(
+                            '当前尚无人物画像，不能使用 keep，必须使用 update 生成画像'
+                        )
+                    }
+                },
                 context: {
                     presetId,
                     conversationId: [
@@ -398,30 +408,20 @@ export class LivingMemoryUserProfileService {
             return 'failed'
         }
 
-        const profileContent = structuredResult.value.content
-        if (profileContent === null) {
-            this.logProfileSkipped(runLogger, {
+        const decision = structuredResult.value.decision
+        if (decision.action === 'keep') {
+            runLogger.diagnostic('user-profile.kept', {
+                workflow: 'dream',
                 presetId,
-                speaker: group.speakerLabel,
-                reason: 'empty-content'
+                speaker: group.speakerLabel
             })
-            return 'empty'
-        }
-
-        const content = profileContent.replace(/\s+/gu, ' ').trim()
-        if (content.length === 0) {
-            this.logProfileSkipped(runLogger, {
-                presetId,
-                speaker: group.speakerLabel,
-                reason: 'empty-content'
-            })
-            return 'empty'
+            return 'kept'
         }
 
         await this.repository.replaceUserProfile(presetId, {
             speakerKey: group.speakerKey,
             speakerLabel: group.speakerLabel,
-            content,
+            content: decision.content.replace(/\s+/gu, ' '),
             sourceMemoryIds: group.entries.map((entry) => entry.id)
         })
         return 'generated'
