@@ -93,7 +93,6 @@ export const defineLivingMemoryTables = (ctx: Context) => {
             id: 'string(64)',
             presetId: 'string(255)',
             conversationId: 'string(255)',
-            strategy: 'string(32)',
             query: 'text',
             items: 'json',
             createdAt: 'timestamp'
@@ -141,12 +140,6 @@ export const defineLivingMemoryTables = (ctx: Context) => {
             presetId: 'string(255)',
             conversationId: 'string(255)',
             kind: 'string(16)',
-            recallStrategy: {
-                type: 'string',
-                length: 32,
-                nullable: true,
-                initial: null
-            },
             status: 'string(16)',
             input: 'text',
             detail: 'text',

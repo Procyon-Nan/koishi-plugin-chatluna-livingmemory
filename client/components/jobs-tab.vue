@@ -18,16 +18,6 @@
                 </template>
             </el-table-column>
             <el-table-column
-                label="召回策略"
-                width="150"
-                align="center"
-                header-align="center"
-            >
-                <template #default="scope">
-                    {{ formatJobRecallStrategy(scope.row.recallStrategy) }}
-                </template>
-            </el-table-column>
-            <el-table-column
                 label="状态"
                 width="120"
                 align="center"
@@ -95,7 +85,6 @@ import * as api from '../api'
 import { usePagedResource } from '../composables/use-paged-resource'
 import type { MemoryJobRecord } from '../types'
 import {
-    formatJobRecallStrategy,
     formatTime,
     getJobKindLabel,
     getJobStatusLabel,

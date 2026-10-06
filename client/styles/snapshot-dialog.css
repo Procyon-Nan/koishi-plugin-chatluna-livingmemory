@@ -112,13 +112,6 @@
     padding-bottom: 8px;
 }
 
-.snapshot-memory-id {
-    font-family: var(--lm-font-mono);
-    font-weight: 600;
-    color: var(--lm-text-secondary);
-    font-size: 12px;
-}
-
 .snapshot-memory-score {
     margin-left: auto;
     font-family: var(--lm-font-mono);
@@ -153,10 +146,4 @@
 
 .snapshot-memory-keywords {
     margin-top: 2px;
-}
-
-.snapshot-memory-missing {
-    color: var(--lm-danger);
-    font-size: 12px;
-    font-family: var(--lm-font-mono);
 }

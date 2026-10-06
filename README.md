@@ -59,7 +59,7 @@ yarn workspace koishi-plugin-chatluna-livingmemory build
 
     由 `subModel` 结合近期对话和当前消息，调用 `living_memory_search` 查询记忆（每次最多 3 条查询短语与 3 个关键词，语义检索与关键词匹配混合计分）；配置 `rerankModel` 后，检索候选按 `memorySearchToolMaxResults` 的 3 倍取出，逐条查询短语重排序并取最高分，截取前 `memorySearchToolMaxResults` 条。模型整理后的最终记忆文本和搜索轨迹写入快照；模型判定没有相关记忆时保留旧快照。
 
-    自 0.26.0 起移除了 `embedding-rerank` 策略及 `recallStrategy`、`enableRecallQueryRewrite`、`recallTopK` 配置项。
+    自 0.26.0 起移除了 `embedding-rerank` 策略及 `recallStrategy`、`enableRecallQueryRewrite`、`recallTopK` 配置项。升级后首次启动会删除旧策略产生的快照，由后续召回重新生成。
 
     `enableConversationIsolation` 默认关闭，同一预设内共享记忆。开启后，自动召回和对话中的 `living_memory_search` 只检索当前会话及来源会话为 `null` 的全局记忆。用户画像继续以用户为核心，Dream 和管理操作保留预设范围；Dream 跨来源合并仍可产生全局记忆。旧快照不清理，后续召回成功产生结果时替换；`living_memory_get_messages` 保留预设归属校验。
 

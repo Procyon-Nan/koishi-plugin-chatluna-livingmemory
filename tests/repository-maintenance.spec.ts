@@ -18,12 +18,7 @@ const createPresetData = async (
         },
         [`${presetId}-speaker`]
     )
-    await repository.upsertSnapshot(
-        scope,
-        'embedding-rerank',
-        `${presetId} query`,
-        []
-    )
+    await repository.upsertSnapshot(scope, `${presetId} query`, [])
     await repository.createJob(scope, 'dream', `${presetId} input`)
     await repository.upsertPresetSpeaker({
         presetId,

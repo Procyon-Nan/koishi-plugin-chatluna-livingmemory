@@ -7,7 +7,6 @@ import type {
 } from '../client/types'
 import {
     formatImportancePercent,
-    isAgenticSnapshot,
     snapshotHitCount
 } from '../client/utils/display'
 import { isVectorWorkflowReady } from '../client/utils/vector-index'
@@ -118,28 +117,12 @@ it('tracks selection state for bulk memory operations', () => {
     assert.equal(selection.selectedCount.value, 0)
 })
 
-it('formats importance values and distinguishes snapshot strategies', () => {
-    const embeddingSnapshot: MemorySnapshotRecord = {
+it('formats importance values and counts snapshot hits', () => {
+    const snapshot: MemorySnapshotRecord = {
         id: 'snapshot-1',
         presetId: 'preset-1',
         conversationId: 'conversation-1',
-        strategy: 'embedding-rerank',
         query: 'query',
-        items: [{ memoryId: 'memory-1', score: 0.8 }],
-        resolvedItems: [
-            {
-                memoryId: 'memory-1',
-                score: 0.8,
-                memory: null,
-                missing: true
-            }
-        ],
-        createdAt: new Date('2026-07-01T00:00:00.000Z')
-    }
-    const agenticSnapshot: MemorySnapshotRecord = {
-        ...embeddingSnapshot,
-        id: 'snapshot-2',
-        strategy: 'agentic-recall',
         items: [
             {
                 finalText: 'result',
@@ -162,13 +145,10 @@ it('formats importance values and distinguishes snapshot strategies', () => {
                 ]
             }
         ],
-        resolvedItems: []
+        createdAt: new Date('2026-07-01T00:00:00.000Z')
     }
 
     assert.equal(formatImportancePercent(null), '0%')
     assert.equal(formatImportancePercent(0.734), '73%')
-    assert.equal(isAgenticSnapshot(embeddingSnapshot), false)
-    assert.equal(isAgenticSnapshot(agenticSnapshot), true)
-    assert.equal(snapshotHitCount(embeddingSnapshot), 1)
-    assert.equal(snapshotHitCount(agenticSnapshot), 1)
+    assert.equal(snapshotHitCount(snapshot), 1)
 })

@@ -10,7 +10,7 @@ import type {
     MemoryJobStatus,
     MemoryMutationInput,
     MemoryUpdatePatch,
-    MemorySnapshotWithResolvedItems,
+    MemorySnapshotRecord,
     PresetPersonaCardInfo,
     PresetSpeakerRecord,
     UserProfileRecord
@@ -103,7 +103,7 @@ export interface LivingMemoryConsoleEvents {
     ) => Promise<{ success: true; deleted: number }>
     'living-memory/listSnapshots': (
         query: SnapshotListQuery
-    ) => Promise<PageResult<MemorySnapshotWithResolvedItems>>
+    ) => Promise<PageResult<MemorySnapshotRecord>>
     'living-memory/deleteSnapshot': (
         snapshotId: string
     ) => Promise<{ success: true }>

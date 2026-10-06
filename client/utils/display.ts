@@ -1,10 +1,4 @@
-import type {
-    AgenticMemorySnapshotItem,
-    MemoryEntryStatus,
-    MemoryJobRecord,
-    MemorySnapshotRecord,
-    MemorySnapshotResolvedItem
-} from '../types'
+import type { MemoryEntryStatus, MemorySnapshotRecord } from '../types'
 
 const memoryTypeLabels: Record<string, string> = {
     identity: '身份',
@@ -72,11 +66,6 @@ export const formatImportance = (value: number | null | undefined): string => {
     return Number.isFinite(value) ? value.toFixed(2) : ''
 }
 
-export const formatScore = (value: number | null | undefined): string => {
-    if (value == null) return '-'
-    return Number.isFinite(value) ? value.toFixed(4) : String(value)
-}
-
 export const getMemoryTypeLabel = (type: string): string => {
     return memoryTypeLabels[type] ?? type
 }
@@ -122,12 +111,6 @@ export const getJobKindLabel = (kind: string): string => {
     return jobKindLabels[kind] ?? kind
 }
 
-export const formatJobRecallStrategy = (
-    strategy: MemoryJobRecord['recallStrategy']
-): string => {
-    return strategy ?? '-'
-}
-
 export const getJobStatusLabel = (status: string): string => {
     return jobStatusLabels[status] ?? status
 }
@@ -138,49 +121,15 @@ export const getJobStatusTagType = (
     return jobStatusTagTypes[status] ?? 'info'
 }
 
-export const isAgenticSnapshotItem = (
-    item: MemorySnapshotRecord['items'][number]
-): item is AgenticMemorySnapshotItem => {
-    return 'finalText' in item
-}
-
-export const snapshotAgenticItems = (
-    snapshot: MemorySnapshotRecord
-): AgenticMemorySnapshotItem[] => {
-    return snapshot.items.filter(isAgenticSnapshotItem)
-}
-
-export const isAgenticSnapshot = (snapshot: MemorySnapshotRecord): boolean => {
-    return snapshot.strategy === 'agentic-recall'
-}
-
 export const snapshotHitCount = (snapshot: MemorySnapshotRecord): number => {
-    if (isAgenticSnapshot(snapshot)) {
-        return snapshotAgenticItems(snapshot).reduce(
-            (total, item) => total + item.matchedMemories.length,
-            0
-        )
-    }
-
-    return snapshot.resolvedItems.length
+    return snapshot.items.reduce(
+        (total, item) => total + item.matchedMemories.length,
+        0
+    )
 }
 
 export const formatSearchTexts = (
     value: readonly string[] | null | undefined
 ): string => {
     return value == null || value.length === 0 ? '-' : value.join('、')
-}
-
-export const snapshotItemStatusLabel = (
-    item: MemorySnapshotResolvedItem
-): string => {
-    if (item.missing) return '缺失'
-    return item.memory?.status === 'archived' ? '历史' : '活跃'
-}
-
-export const snapshotItemTagType = (
-    item: MemorySnapshotResolvedItem
-): 'success' | 'info' | 'danger' => {
-    if (item.missing) return 'danger'
-    return item.memory?.status === 'archived' ? 'info' : 'success'
 }

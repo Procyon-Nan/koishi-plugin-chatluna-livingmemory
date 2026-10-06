@@ -7,11 +7,6 @@ export const memoryEntryTypes = [
     'other'
 ] as const
 
-export const memoryRecallStrategies = [
-    'embedding-rerank',
-    'agentic-recall'
-] as const
-
 export const memoryJobKinds = ['recall', 'extract', 'dream', 'index'] as const
 
 export const memoryJobStatuses = [
@@ -25,7 +20,6 @@ export const memoryEntryStatuses = ['active', 'archived'] as const
 
 export type MemoryEntryType = (typeof memoryEntryTypes)[number]
 export type MemoryEntryStatus = (typeof memoryEntryStatuses)[number]
-export type MemoryRecallStrategy = (typeof memoryRecallStrategies)[number]
 export type MemoryJobKind = (typeof memoryJobKinds)[number]
 export type MemoryJobStatus = (typeof memoryJobStatuses)[number]
 
@@ -68,16 +62,6 @@ export interface LivingMemorySearchDetailedResult extends LivingMemorySearchResu
     rerankScore: number | null
 }
 
-export interface MemoryReference {
-    memoryId: string
-    score?: number | null
-}
-
-export interface MemorySnapshotResolvedReference extends MemoryReference {
-    memory: MemoryEntryRecord | null
-    missing: boolean
-}
-
 export interface AgenticMemorySearchToolCallSummary {
     searchTexts: string[]
     searchKeywords: string[]
@@ -101,8 +85,6 @@ export interface AgenticMemorySnapshotItem {
     toolCallSummary: AgenticMemorySearchToolCallSummary
     matchedMemories: AgenticMemorySnapshotMemoryItem[]
 }
-
-export type MemorySnapshotItem = MemoryReference | AgenticMemorySnapshotItem
 
 export interface MemoryScope {
     conversationId: string
@@ -171,19 +153,9 @@ export interface MemorySnapshotRecord {
     id: string
     presetId: string
     conversationId: string
-    strategy: MemoryRecallStrategy
     query: string
-    items: MemorySnapshotItem[]
+    items: AgenticMemorySnapshotItem[]
     createdAt: Date
-}
-
-export interface MemorySnapshotResolvedItem extends MemoryReference {
-    memory: MemoryEntryRecord | null
-    missing: boolean
-}
-
-export interface MemorySnapshotWithResolvedItems extends MemorySnapshotRecord {
-    resolvedItems: MemorySnapshotResolvedItem[]
 }
 
 export interface MemoryJobRecord {
@@ -191,7 +163,6 @@ export interface MemoryJobRecord {
     presetId: string
     conversationId: string
     kind: MemoryJobKind
-    recallStrategy: MemoryRecallStrategy | null
     status: MemoryJobStatus
     input: string
     detail: string | null

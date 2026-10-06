@@ -3,7 +3,6 @@ import { Context } from 'koishi'
 import type {
     MemoryJobKind,
     MemoryJobRecord,
-    MemoryRecallStrategy,
     MemoryScope
 } from '../../contracts/memory'
 import type { JobRepository } from '../../contracts/workflows'
@@ -15,11 +14,10 @@ export class LivingMemoryJobRepository implements JobRepository {
     async createJob(
         scope: MemoryScope,
         kind: MemoryJobKind,
-        input: string,
-        recallStrategy: MemoryRecallStrategy | null = null
+        input: string
     ): Promise<MemoryJobRecord> {
         const now = new Date()
-        return this.createJobRecord(scope, kind, input, recallStrategy, {
+        return this.createJobRecord(scope, kind, input, {
             status: 'pending',
             error: null,
             createdAt: now,
@@ -34,11 +32,10 @@ export class LivingMemoryJobRepository implements JobRepository {
         kind: MemoryJobKind,
         input: string,
         error: unknown,
-        startedAt: Date,
-        recallStrategy: MemoryRecallStrategy | null = null
+        startedAt: Date
     ): Promise<MemoryJobRecord> {
         const finishedAt = new Date()
-        return this.createJobRecord(scope, kind, input, recallStrategy, {
+        return this.createJobRecord(scope, kind, input, {
             status: 'failed',
             error: summarizeError(error),
             createdAt: startedAt,
@@ -52,7 +49,6 @@ export class LivingMemoryJobRepository implements JobRepository {
         scope: MemoryScope,
         kind: MemoryJobKind,
         input: string,
-        recallStrategy: MemoryRecallStrategy | null,
         state: {
             status: MemoryJobRecord['status']
             error: string | null
@@ -67,7 +63,6 @@ export class LivingMemoryJobRepository implements JobRepository {
             presetId: scope.presetId,
             conversationId: scope.conversationId,
             kind,
-            recallStrategy,
             input,
             detail: null,
             ...state

@@ -17,14 +17,12 @@ it('persists a failed job as one terminal record with its original start time', 
             'recall',
             'query input',
             new Error('recall failure'),
-            startedAt,
-            'embedding-rerank'
+            startedAt
         )
         const stored = await ctx.database.get('living_memory_job', {})
 
         assert.equal(stored.length, 1)
         assert.equal(job.status, 'failed')
-        assert.equal(job.recallStrategy, 'embedding-rerank')
         assert.equal(+job.createdAt, +startedAt)
         assert.equal(+job.startedAt!, +startedAt)
         assert.ok(+job.finishedAt! >= +startedAt)

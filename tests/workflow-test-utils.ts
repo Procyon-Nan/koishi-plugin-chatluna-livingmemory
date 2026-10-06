@@ -53,8 +53,7 @@ export const createJobStore = () => {
     const createJob: JobRepository['createJob'] = async (
         jobScope,
         kind,
-        input,
-        recallStrategy = null
+        input
     ) => {
         const now = new Date()
         const job: MemoryJobRecord = {
@@ -62,7 +61,6 @@ export const createJobStore = () => {
             presetId: jobScope.presetId,
             conversationId: jobScope.conversationId,
             kind,
-            recallStrategy,
             status: 'pending',
             input,
             detail: null,
@@ -81,8 +79,7 @@ export const createJobStore = () => {
         kind,
         input,
         error,
-        startedAt,
-        recallStrategy = null
+        startedAt
     ) => {
         const finishedAt = new Date()
         const job: MemoryJobRecord = {
@@ -90,7 +87,6 @@ export const createJobStore = () => {
             presetId: jobScope.presetId,
             conversationId: jobScope.conversationId,
             kind,
-            recallStrategy,
             status: 'failed',
             input,
             detail: null,
@@ -127,7 +123,6 @@ export const createJobStore = () => {
         markStaleRunningJobsAsFailed
     }
 }
-
 
 export const createMemoryEntry = (
     id: string,

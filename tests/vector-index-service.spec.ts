@@ -15,7 +15,6 @@ import { LivingMemoryLogger } from '../src/service/logging/logger'
 import type {
     MemoryJobKind,
     MemoryJobRecord,
-    MemoryRecallStrategy,
     MemoryScope
 } from '../src/contracts/memory'
 import type {
@@ -115,19 +114,13 @@ class TestVectorIndexRepository {
         this.legacy.clear()
     }
 
-    async createJob(
-        scope: MemoryScope,
-        kind: MemoryJobKind,
-        input: string,
-        recallStrategy: MemoryRecallStrategy | null = null
-    ) {
+    async createJob(scope: MemoryScope, kind: MemoryJobKind, input: string) {
         const now = new Date()
         const job: MemoryJobRecord = {
             id: `job-${this.jobs.length + 1}`,
             presetId: scope.presetId,
             conversationId: scope.conversationId,
             kind,
-            recallStrategy,
             status: 'pending',
             input,
             detail: null,

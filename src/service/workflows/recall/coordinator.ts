@@ -167,7 +167,6 @@ export class LivingMemoryRecallCoordinator {
 
             await this.repository.upsertSnapshot(
                 scope,
-                'agentic-recall',
                 JSON.stringify(trace.item.toolCallSummary),
                 [trace.item]
             )
@@ -189,8 +188,7 @@ export class LivingMemoryRecallCoordinator {
                 'recall',
                 input,
                 error,
-                startedAt,
-                'agentic-recall'
+                startedAt
             )
             throw error
         }

@@ -105,11 +105,10 @@ it('atomically updates an active Dream merge and archives its sources', async ()
             targetIsConsolidated: false
         })
 
-        const entries = await repository.getEntriesByIds([
-            target.id,
-            source1.id,
-            source2.id
-        ])
+        const entries = await repository.getEntriesByPresetAndIds(
+            scope.presetId,
+            [target.id, source1.id, source2.id]
+        )
         const entryById = new Map(entries.map((entry) => [entry.id, entry]))
         const storedTarget = entryById.get(target.id)
 

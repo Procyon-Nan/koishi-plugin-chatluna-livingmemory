@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import type {
-    LivingMemoryTranscriptMessage,
-    MemorySnapshotItem
+    AgenticMemorySnapshotItem,
+    LivingMemoryTranscriptMessage
 } from '../src/contracts/memory'
 import type { LivingMemoryAgenticRecallTrace } from '../src/service/workflows/recall/agentic_recall'
 import {
@@ -62,13 +62,14 @@ const createCoordinator = (options: {
 
 it('persists the agentic snapshot without persisting a successful job', async () => {
     const jobStore = createJobStore()
-    const snapshots: { query: string; items: MemorySnapshotItem[] }[] = []
+    const snapshots: { query: string; items: AgenticMemorySnapshotItem[] }[] =
+        []
     let hydrated = 0
     const captured = createCapturedLogger()
     const coordinator = createCoordinator({
         repository: {
             createFailedJob: jobStore.createFailedJob,
-            upsertSnapshot: async (_scope, _strategy, query, items) => {
+            upsertSnapshot: async (_scope, query, items) => {
                 snapshots.push({ query, items })
             }
         },
@@ -239,7 +240,6 @@ it('persists one failed recall job when the agentic executor throws', async () =
 
     const job = jobStore.jobs[0]
     assert.equal(job?.status, 'failed')
-    assert.equal(job?.recallStrategy, 'agentic-recall')
     assert.equal(job?.input, '记忆查询')
     assert.equal(+job!.createdAt, +job!.startedAt!)
     assert.ok(+job!.finishedAt! >= +job!.startedAt!)

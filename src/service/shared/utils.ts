@@ -68,16 +68,3 @@ export const stringifyModelContent = (content: unknown) => {
 
     return JSON.stringify(content) ?? ''
 }
-
-export const formatDateOnly = (value: Date | string | number) => {
-    const date = new Date(value)
-    if (!Number.isFinite(+date)) {
-        return '未知日期'
-    }
-
-    return [
-        date.getFullYear(),
-        String(date.getMonth() + 1).padStart(2, '0'),
-        String(date.getDate()).padStart(2, '0')
-    ].join('-')
-}

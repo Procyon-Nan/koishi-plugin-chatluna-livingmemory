@@ -1,15 +1,58 @@
 import { randomUUID } from 'crypto'
 import { Context } from 'koishi'
 import type {
-    MemoryRecallStrategy,
+    AgenticMemorySnapshotItem,
     MemoryScope,
-    MemorySnapshotItem,
     MemorySnapshotRecord
 } from '../../contracts/memory'
 import type { SnapshotRepository } from '../../contracts/workflows'
+import type { LivingMemoryTransact } from './types'
+
+const legacyReferenceSnapshotMigrationId =
+    'legacy-reference-snapshot-cleanup-v1'
 
 export class LivingMemorySnapshotRepository implements SnapshotRepository {
-    constructor(private readonly ctx: Context) {}
+    constructor(
+        private readonly ctx: Context,
+        private readonly transact: LivingMemoryTransact
+    ) {}
+
+    /**
+     * 已移除的 embedding-rerank 策略只存记忆 id 引用、不带 finalText；
+     * 策略列已不在模型中，只能按快照项形状识别并删除，交给后续召回重建。
+     */
+    async removeLegacyReferenceSnapshots(): Promise<number> {
+        return await this.transact(async (database) => {
+            const applied = await database.get('living_memory_migration', {
+                id: legacyReferenceSnapshotMigrationId
+            })
+            if (applied.length > 0) {
+                return 0
+            }
+
+            const snapshots = await database.get('living_memory_snapshot', {}, [
+                'id',
+                'items'
+            ])
+            const legacyIds = snapshots
+                .filter((snapshot) =>
+                    snapshot.items.some((item) => !('finalText' in item))
+                )
+                .map((snapshot) => snapshot.id)
+
+            if (legacyIds.length > 0) {
+                await database.remove('living_memory_snapshot', {
+                    id: { $in: legacyIds }
+                })
+            }
+
+            await database.create('living_memory_migration', {
+                id: legacyReferenceSnapshotMigrationId,
+                appliedAt: new Date()
+            })
+            return legacyIds.length
+        })
+    }
 
     async getLatestSnapshotByScope(
         scope: Pick<MemoryScope, 'presetId' | 'conversationId'>
@@ -35,9 +78,8 @@ export class LivingMemorySnapshotRepository implements SnapshotRepository {
 
     async upsertSnapshot(
         scope: MemoryScope,
-        strategy: MemoryRecallStrategy,
         query: string,
-        items: MemorySnapshotItem[]
+        items: AgenticMemorySnapshotItem[]
     ) {
         const createdAt = new Date()
         const sorted = await this.loadSortedSnapshotsByScope(scope)
@@ -48,7 +90,6 @@ export class LivingMemorySnapshotRepository implements SnapshotRepository {
                 'living_memory_snapshot',
                 { id: latest.id },
                 {
-                    strategy,
                     query,
                     items,
                     createdAt
@@ -71,7 +112,6 @@ export class LivingMemorySnapshotRepository implements SnapshotRepository {
             id: randomUUID(),
             presetId: scope.presetId,
             conversationId: scope.conversationId,
-            strategy,
             query,
             items,
             createdAt

@@ -20,6 +20,7 @@ import {
     filterJobList,
     filterMemoryIds,
     filterMemoryList,
+    filterSnapshotList,
     filterUserProfileList
 } from '../../query'
 import type {
@@ -71,10 +72,7 @@ import {
     hydrateLivingMemoryPromptVariable,
     type LivingMemoryPromptSectionsOptions
 } from './prompt_hydration'
-import {
-    listResolvedMemorySnapshots,
-    loadMemorySourceMessages
-} from './query_projections'
+import { loadMemorySourceMessages } from './query_projections'
 import { LivingMemoryLogger } from '../logging/logger'
 import { MessageLogRegistry } from '../transcript/message_log/message_log_registry'
 
@@ -284,6 +282,15 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
                 workflow: 'maintenance',
                 operation: 'index-active-memory-speakers',
                 indexed
+            })
+        }
+        const removedSnapshots =
+            await this.repository.removeLegacyReferenceSnapshots()
+        if (removedSnapshots > 0) {
+            this.memoryLogger.info('startup.migration.completed', {
+                workflow: 'maintenance',
+                operation: 'remove-legacy-reference-snapshots',
+                removed: removedSnapshots
             })
         }
         const droppedIndexes = await this.repository.dropLegacyPendingIndexes()
@@ -655,7 +662,10 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     }
 
     async listSnapshots(query: SnapshotListQuery) {
-        return await listResolvedMemorySnapshots(this.repository, query)
+        const items = await this.repository.listSnapshotsByPreset(
+            query.presetId
+        )
+        return filterSnapshotList(items, query)
     }
 
     async listJobs(query: JobListQuery) {

@@ -81,7 +81,6 @@ class MemoryIndexSinkStub implements MemoryIndexMutationSink {
             presetId: targetPresetId,
             conversationId: 'vector-index',
             kind: 'index',
-            recallStrategy: null,
             status: 'pending',
             input: `reconcile: ${reason}`,
             detail: null,

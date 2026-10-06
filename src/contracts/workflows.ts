@@ -1,4 +1,5 @@
 import type {
+    AgenticMemorySnapshotItem,
     LivingMemorySearchInput,
     LivingMemorySearchResult,
     MemoryEntryRecord,
@@ -6,9 +7,7 @@ import type {
     MemoryJobKind,
     MemoryJobRecord,
     MemoryMutationInput,
-    MemoryRecallStrategy,
     MemoryScope,
-    MemorySnapshotItem,
     MemorySnapshotRecord,
     MemorySourceMessage,
     PresetSpeakerInput,
@@ -199,9 +198,8 @@ export interface SnapshotRepository {
     listSnapshotsByPreset(presetId: string): Promise<MemorySnapshotRecord[]>
     upsertSnapshot(
         scope: MemoryScope,
-        strategy: MemoryRecallStrategy,
         query: string,
-        items: MemorySnapshotItem[]
+        items: AgenticMemorySnapshotItem[]
     ): Promise<void>
     deleteSnapshot(
         snapshotId: string
@@ -215,16 +213,14 @@ export interface JobRepository {
     createJob(
         scope: MemoryScope,
         kind: MemoryJobKind,
-        input: string,
-        recallStrategy?: MemoryRecallStrategy | null
+        input: string
     ): Promise<MemoryJobRecord>
     createFailedJob(
         scope: MemoryScope,
         kind: MemoryJobKind,
         input: string,
         error: unknown,
-        startedAt: Date,
-        recallStrategy?: MemoryRecallStrategy | null
+        startedAt: Date
     ): Promise<MemoryJobRecord>
     updateJob(id: string, patch: Partial<MemoryJobRecord>): Promise<void>
     listJobsByPreset(presetId: string): Promise<MemoryJobRecord[]>

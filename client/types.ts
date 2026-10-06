@@ -17,7 +17,6 @@ export type MemoryEntryType = (typeof memoryEntryTypes)[number]
 export const MAX_MEMORY_KEYWORDS = 12
 
 export type MemoryEntryStatus = 'active' | 'archived'
-export type MemoryRecallStrategy = 'embedding-rerank' | 'agentic-recall'
 
 export type LivingMemorySearchMemoryType = MemoryEntryType | 'all'
 
@@ -82,21 +81,9 @@ export interface MemorySnapshotRecord {
     id: string
     presetId: string
     conversationId: string
-    strategy: MemoryRecallStrategy
     query: string
-    items: MemorySnapshotItem[]
-    resolvedItems: MemorySnapshotResolvedItem[]
+    items: AgenticMemorySnapshotItem[]
     createdAt: Date
-}
-
-export interface MemoryReference {
-    memoryId: string
-    score?: number | null
-}
-
-export interface MemorySnapshotResolvedItem extends MemoryReference {
-    memory: MemoryEntryRecord | null
-    missing: boolean
 }
 
 export interface AgenticMemorySearchToolCallSummary {
@@ -122,14 +109,11 @@ export interface AgenticMemorySnapshotItem {
     matchedMemories: AgenticMemorySnapshotMemoryItem[]
 }
 
-export type MemorySnapshotItem = MemoryReference | AgenticMemorySnapshotItem
-
 export interface MemoryJobRecord {
     id: string
     presetId: string
     conversationId: string
     kind: string
-    recallStrategy: MemoryRecallStrategy | null
     status: string
     input: string
     detail: string | null

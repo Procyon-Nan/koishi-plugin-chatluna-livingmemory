@@ -17,10 +17,6 @@
                     <span>{{ snapshot.id }}</span>
                 </div>
                 <div>
-                    <span class="snapshot-dialog-label">策略</span>
-                    <span>{{ snapshot.strategy }}</span>
-                </div>
-                <div>
                     <span class="snapshot-dialog-label">命中</span>
                     <span>{{ snapshotHitCount(snapshot) }}</span>
                 </div>
@@ -34,169 +30,85 @@
                 </div>
             </div>
 
-            <template v-if="isAgenticSnapshot(snapshot)">
-                <div
-                    v-for="(item, index) in snapshotAgenticItems(snapshot)"
-                    :key="index"
-                    class="snapshot-agentic-item"
-                >
-                    <div v-if="item.finalText" class="snapshot-final-text">
-                        {{ item.finalText }}
-                    </div>
-                    <div class="snapshot-tool-summary">
-                        <span>
-                            查询：{{
-                                formatSearchTexts(
-                                    item.toolCallSummary.searchTexts
-                                )
-                            }}
-                        </span>
-                        <span>
-                            上限：{{ item.toolCallSummary.maxCandidates }}
-                        </span>
-                    </div>
-                    <el-empty
-                        v-if="item.matchedMemories.length === 0"
-                        description="该快照没有命中记忆"
-                        :image-size="64"
-                    />
-                    <div v-else class="snapshot-memory-list">
-                        <div
-                            v-for="(
-                                memory, memoryIndex
-                            ) in item.matchedMemories"
-                            :key="memoryIndex"
-                            class="snapshot-memory-item"
-                        >
-                            <div class="snapshot-memory-header">
-                                <el-tag
-                                    :type="getMemoryTagType(memory.type)"
-                                    size="small"
-                                    effect="plain"
-                                >
-                                    {{ getMemoryTypeLabel(memory.type) }}
-                                </el-tag>
-                                <span class="snapshot-memory-score">
-                                    重要度
-                                    {{
-                                        formatImportance(memory.importance) ||
-                                        '-'
-                                    }}
-                                </span>
-                            </div>
-                            <div class="snapshot-memory-content">
-                                {{ memory.content }}
-                            </div>
-                            <div class="snapshot-memory-meta">
-                                <span>情绪：{{ memory.sentiment || '-' }}</span>
-                                <span>
-                                    记录于：{{ formatTime(memory.createdAt) }}
-                                </span>
-                                <span>
-                                    更新于：{{ formatTime(memory.updatedAt) }}
-                                </span>
-                            </div>
-                            <div
-                                v-if="memory.summary"
-                                class="snapshot-memory-summary"
-                            >
-                                摘要：{{ memory.summary }}
-                            </div>
-                            <el-space
-                                v-if="memory.keywords.length > 0"
-                                wrap
-                                class="snapshot-memory-keywords"
-                            >
-                                <el-tag
-                                    v-for="keyword in memory.keywords"
-                                    :key="keyword"
-                                    size="small"
-                                    effect="plain"
-                                >
-                                    {{ keyword }}
-                                </el-tag>
-                            </el-space>
-                        </div>
-                    </div>
+            <div
+                v-for="(item, index) in snapshot.items"
+                :key="index"
+                class="snapshot-agentic-item"
+            >
+                <div v-if="item.finalText" class="snapshot-final-text">
+                    {{ item.finalText }}
                 </div>
-            </template>
-            <template v-else>
+                <div class="snapshot-tool-summary">
+                    <span>
+                        查询：{{
+                            formatSearchTexts(item.toolCallSummary.searchTexts)
+                        }}
+                    </span>
+                    <span>
+                        上限：{{ item.toolCallSummary.maxCandidates }}
+                    </span>
+                </div>
                 <el-empty
-                    v-if="snapshot.resolvedItems.length === 0"
+                    v-if="item.matchedMemories.length === 0"
                     description="该快照没有命中记忆"
                     :image-size="64"
                 />
                 <div v-else class="snapshot-memory-list">
                     <div
-                        v-for="item in snapshot.resolvedItems"
-                        :key="item.memoryId"
+                        v-for="(memory, memoryIndex) in item.matchedMemories"
+                        :key="memoryIndex"
                         class="snapshot-memory-item"
                     >
                         <div class="snapshot-memory-header">
                             <el-tag
-                                :type="snapshotItemTagType(item)"
+                                :type="getMemoryTagType(memory.type)"
                                 size="small"
                                 effect="plain"
                             >
-                                {{ snapshotItemStatusLabel(item) }}
+                                {{ getMemoryTypeLabel(memory.type) }}
                             </el-tag>
-                            <span class="snapshot-memory-id">
-                                {{ item.memoryId }}
-                            </span>
                             <span class="snapshot-memory-score">
-                                score {{ formatScore(item.score) }}
+                                重要度
+                                {{
+                                    formatImportance(memory.importance) || '-'
+                                }}
                             </span>
                         </div>
-
-                        <template v-if="item.memory != null">
-                            <div class="snapshot-memory-content">
-                                {{ item.memory.content }}
-                            </div>
-                            <div class="snapshot-memory-meta">
-                                <span>类型：{{ item.memory.type }}</span>
-                                <span>
-                                    情绪：{{ item.memory.sentiment || '-' }}
-                                </span>
-                                <span>
-                                    重要度：{{
-                                        formatImportance(
-                                            item.memory.importance
-                                        ) || '-'
-                                    }}
-                                </span>
-                                <span>
-                                    记录于：{{
-                                        formatTime(item.memory.createdAt)
-                                    }}
-                                </span>
-                            </div>
-                            <div
-                                v-if="item.memory.summary"
-                                class="snapshot-memory-summary"
-                            >
-                                摘要：{{ item.memory.summary }}
-                            </div>
-                            <el-space
-                                v-if="item.memory.keywords.length > 0"
-                                wrap
-                                class="snapshot-memory-keywords"
-                            >
-                                <el-tag
-                                    v-for="keyword in item.memory.keywords"
-                                    :key="keyword"
-                                    size="small"
-                                    effect="plain"
-                                >
-                                    {{ keyword }}
-                                </el-tag>
-                            </el-space>
-                        </template>
-                        <div v-else class="snapshot-memory-missing">
-                            记忆已删除或不可用
+                        <div class="snapshot-memory-content">
+                            {{ memory.content }}
                         </div>
+                        <div class="snapshot-memory-meta">
+                            <span>情绪：{{ memory.sentiment || '-' }}</span>
+                            <span>
+                                记录于：{{ formatTime(memory.createdAt) }}
+                            </span>
+                            <span>
+                                更新于：{{ formatTime(memory.updatedAt) }}
+                            </span>
+                        </div>
+                        <div
+                            v-if="memory.summary"
+                            class="snapshot-memory-summary"
+                        >
+                            摘要：{{ memory.summary }}
+                        </div>
+                        <el-space
+                            v-if="memory.keywords.length > 0"
+                            wrap
+                            class="snapshot-memory-keywords"
+                        >
+                            <el-tag
+                                v-for="keyword in memory.keywords"
+                                :key="keyword"
+                                size="small"
+                                effect="plain"
+                            >
+                                {{ keyword }}
+                            </el-tag>
+                        </el-space>
                     </div>
                 </div>
-            </template>
+            </div>
         </template>
     </el-dialog>
 </template>
@@ -206,16 +118,11 @@ import { computed } from 'vue'
 import type { MemorySnapshotRecord } from '../types'
 import {
     formatImportance,
-    formatScore,
     formatSearchTexts,
     formatTime,
     getMemoryTagType,
     getMemoryTypeLabel,
-    isAgenticSnapshot,
-    snapshotAgenticItems,
-    snapshotHitCount,
-    snapshotItemStatusLabel,
-    snapshotItemTagType
+    snapshotHitCount
 } from '../utils/display'
 
 const props = defineProps<{

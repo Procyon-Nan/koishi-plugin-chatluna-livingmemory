@@ -515,24 +515,6 @@ export class LivingMemoryEntryRepository
         return record == null ? undefined : normalizeEntryRecord(record)
     }
 
-    async getEntriesByIds(ids: string[]): Promise<MemoryEntryRecord[]> {
-        if (ids.length === 0) {
-            return []
-        }
-
-        const entries = await this.ctx.database.get(
-            'living_memory_entry',
-            {
-                id: {
-                    $in: ids
-                }
-            },
-            memoryEntryFields
-        )
-
-        return entries.map(normalizeEntryRecord)
-    }
-
     async getEntriesByPresetAndIds(
         presetId: string,
         ids: string[]

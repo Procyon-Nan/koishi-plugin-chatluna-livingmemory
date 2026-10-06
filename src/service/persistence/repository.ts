@@ -1,5 +1,6 @@
 import { Context } from 'koishi'
 import type {
+    AgenticMemorySnapshotItem,
     LivingMemoryPresetExport,
     LivingMemoryPresetExportEntry,
     LivingMemoryPresetImportSummary,
@@ -7,9 +8,7 @@ import type {
     MemoryJobKind,
     MemoryJobRecord,
     MemoryMutationInput,
-    MemoryRecallStrategy,
     MemoryScope,
-    MemorySnapshotItem,
     MemorySnapshotRecord,
     MemorySourceMessage,
     MemoryUpdatePatch,
@@ -108,7 +107,9 @@ export class LivingMemoryRepository
             this.runTransaction(callback)
         )
         this.jobs = new LivingMemoryJobRepository(ctx)
-        this.snapshots = new LivingMemorySnapshotRepository(ctx)
+        this.snapshots = new LivingMemorySnapshotRepository(ctx, (callback) =>
+            this.runTransaction(callback)
+        )
         this.userProfiles = new LivingMemoryUserProfileRepository(
             ctx,
             (callback) => this.runTransaction(callback)
@@ -159,6 +160,10 @@ export class LivingMemoryRepository
 
     migrateActiveMemorySpeakers(): Promise<number> {
         return this.entries.migrateActiveMemorySpeakers()
+    }
+
+    removeLegacyReferenceSnapshots(): Promise<number> {
+        return this.snapshots.removeLegacyReferenceSnapshots()
     }
 
     dropLegacyPendingIndexes(): Promise<string[]> {
@@ -252,10 +257,6 @@ export class LivingMemoryRepository
         return this.entries.getEntryById(id)
     }
 
-    getEntriesByIds(ids: string[]): Promise<MemoryEntryRecord[]> {
-        return this.entries.getEntriesByIds(ids)
-    }
-
     getEntriesByPresetAndIds(
         presetId: string,
         ids: string[]
@@ -341,11 +342,10 @@ export class LivingMemoryRepository
 
     upsertSnapshot(
         scope: MemoryScope,
-        strategy: MemoryRecallStrategy,
         query: string,
-        items: MemorySnapshotItem[]
+        items: AgenticMemorySnapshotItem[]
     ): Promise<void> {
-        return this.snapshots.upsertSnapshot(scope, strategy, query, items)
+        return this.snapshots.upsertSnapshot(scope, query, items)
     }
 
     deleteSnapshot(
@@ -367,10 +367,9 @@ export class LivingMemoryRepository
     createJob(
         scope: MemoryScope,
         kind: MemoryJobKind,
-        input: string,
-        recallStrategy: MemoryRecallStrategy | null = null
+        input: string
     ): Promise<MemoryJobRecord> {
-        return this.jobs.createJob(scope, kind, input, recallStrategy)
+        return this.jobs.createJob(scope, kind, input)
     }
 
     createFailedJob(
@@ -378,17 +377,9 @@ export class LivingMemoryRepository
         kind: MemoryJobKind,
         input: string,
         error: unknown,
-        startedAt: Date,
-        recallStrategy: MemoryRecallStrategy | null = null
+        startedAt: Date
     ): Promise<MemoryJobRecord> {
-        return this.jobs.createFailedJob(
-            scope,
-            kind,
-            input,
-            error,
-            startedAt,
-            recallStrategy
-        )
+        return this.jobs.createFailedJob(scope, kind, input, error, startedAt)
     }
 
     updateJob(id: string, patch: Partial<MemoryJobRecord>): Promise<void> {

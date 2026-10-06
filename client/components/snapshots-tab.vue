@@ -8,13 +8,6 @@
                 header-align="center"
             />
             <el-table-column
-                prop="strategy"
-                label="策略"
-                width="140"
-                align="center"
-                header-align="center"
-            />
-            <el-table-column
                 prop="query"
                 label="查询"
                 min-width="180"
