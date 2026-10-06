@@ -352,12 +352,14 @@ it('builds the index once and reuses its manifest after restart', async () => {
         assert.ok(
             firstCalls.some((texts) => texts.includes('content memory-a'))
         )
-        const semanticHits = await first.searchSemantic({
+        const semanticHits = await first.searchHybrid({
             presetId: 'preset-a',
             searchTexts: ['content memory-a'],
+            keywords: [],
             memoryTypes: ['fact'],
             memoryStatus: 'active',
-            maxCandidates: 2
+            maxCandidates: 2,
+            minSimilarity: 0
         })
         assert.deepEqual(
             semanticHits.map((hit) => hit.memoryId),
@@ -581,12 +583,14 @@ it('clears orphaned preset state rows during startup reconcile', async () => {
             ['preset-a']
         )
         assert.doesNotThrow(() => second.assertPresetReady('preset-a'))
-        const hits = await second.searchSemantic({
+        const hits = await second.searchHybrid({
             presetId: 'preset-a',
             searchTexts: ['content memory-a'],
+            keywords: [],
             memoryTypes: null,
             memoryStatus: 'active',
-            maxCandidates: 2
+            maxCandidates: 2,
+            minSimilarity: 0
         })
         assert.deepEqual(
             hits.map((hit) => hit.memoryId),

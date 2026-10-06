@@ -39,7 +39,6 @@ const createRepository = (entries: MemoryEntryRecord[]) => ({
 const createVectorSearch = (
     overrides: Partial<MemoryVectorSearch>
 ): MemoryVectorSearch => ({
-    searchSemantic: async () => [],
     searchHybrid: async () => [],
     ...overrides
 })

@@ -9,11 +9,9 @@ import type {
     MemoryHybridSearchInput,
     MemoryIndexMutationBatch,
     MemoryIndexMutationSink,
-    MemorySemanticSearchInput,
     MemoryVectorIndexState,
     MemoryVectorIndexStatus,
-    MemoryVectorSearch,
-    MemoryVectorSearchHit
+    MemoryVectorSearch
 } from '../../contracts/vector_index'
 import { summarizeError, toError } from '../shared/utils'
 import { LivingMemoryVectorIndexError } from './errors'
@@ -257,49 +255,13 @@ export class LivingMemoryVectorIndexService
         })
     }
 
-    async searchSemantic(
-        input: MemorySemanticSearchInput
-    ): Promise<MemoryVectorSearchHit[]> {
-        return this.operationGate.run(async () => {
-            const vectors = await this.prepareSearchVectors(input)
-
-            const bestScores = new Map<string, number>()
-            for (const vector of vectors) {
-                const hits = await this.requireWorker().queryKnn({
-                    presetId: input.presetId,
-                    conversationId: input.conversationId,
-                    types: input.memoryTypes,
-                    isConsolidated: null,
-                    memoryStatus: input.memoryStatus,
-                    limit: input.maxCandidates,
-                    vector
-                })
-                for (const hit of hits) {
-                    const current = bestScores.get(hit.memoryId)
-                    if (current === undefined || hit.cosineScore > current) {
-                        bestScores.set(hit.memoryId, hit.cosineScore)
-                    }
-                }
-            }
-
-            return [...bestScores]
-                .map(([memoryId, cosineScore]) => ({ memoryId, cosineScore }))
-                .sort((left, right) => {
-                    const scoreDifference = right.cosineScore - left.cosineScore
-                    if (scoreDifference !== 0) {
-                        return scoreDifference
-                    }
-                    return left.memoryId.localeCompare(right.memoryId)
-                })
-                .slice(0, input.maxCandidates)
-        })
-    }
-
     async searchHybrid(
         input: MemoryHybridSearchInput
     ): Promise<MemoryHybridSearchHit[]> {
         return this.operationGate.run(async () => {
-            const vectors = await this.prepareSearchVectors(input)
+            this.assertPresetReady(input.presetId)
+            const vectors = await this.embedSearchTexts(input.searchTexts)
+            await this.awaitPresetReadBarrier(input.presetId)
 
             const bestHits = new Map<string, MemoryHybridSearchHit>()
             for (const vector of vectors) {
@@ -526,15 +488,6 @@ export class LivingMemoryVectorIndexService
             }
             await unlink(resolve(this.indexDirectory, filename))
         }
-    }
-
-    private async prepareSearchVectors(
-        input: Pick<MemorySemanticSearchInput, 'presetId' | 'searchTexts'>
-    ) {
-        this.assertPresetReady(input.presetId)
-        const vectors = await this.embedSearchTexts(input.searchTexts)
-        await this.awaitPresetReadBarrier(input.presetId)
-        return vectors
     }
 
     private async embedSearchTexts(searchTexts: string[]) {

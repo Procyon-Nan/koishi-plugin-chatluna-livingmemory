@@ -89,26 +89,20 @@ export interface MemoryIndexMutationBatch {
     deletes: MemoryIndexDelete[]
 }
 
-export interface MemoryVectorSearchHit {
+export interface MemoryHybridSearchHit {
     memoryId: string
     cosineScore: number
-}
-
-export interface MemoryHybridSearchHit extends MemoryVectorSearchHit {
     keywordMatchCount: number
     boostedScore: number
 }
 
-export interface MemorySemanticSearchInput {
+export interface MemoryHybridSearchInput {
     presetId: string
     conversationId?: string
     searchTexts: string[]
     memoryTypes: MemoryEntryType[] | null
     memoryStatus: MemorySearchStatus
     maxCandidates: number
-}
-
-export interface MemoryHybridSearchInput extends MemorySemanticSearchInput {
     keywords: string[]
     minSimilarity: number
 }
@@ -121,9 +115,6 @@ export interface IncrementalDreamNeighborInput {
 }
 
 export interface MemoryVectorSearch {
-    searchSemantic(
-        input: MemorySemanticSearchInput
-    ): Promise<MemoryVectorSearchHit[]>
     searchHybrid(
         input: MemoryHybridSearchInput
     ): Promise<MemoryHybridSearchHit[]>
