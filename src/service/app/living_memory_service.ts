@@ -138,6 +138,11 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             this.vectorIndex
         )
         this.snapshotCache = new LivingMemorySnapshotCache(this.repository)
+        this.presetCatalog = new LivingMemoryPresetCatalog(
+            ctx,
+            this.repository,
+            this.memoryLogger
+        )
         this.presetPersona = new LivingMemoryPresetPersonaService(
             ctx,
             config,
@@ -156,11 +161,6 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         this.recallCoordinator = this.createRecallCoordinator(config)
         this.dreamCoordinator = this.createDreamCoordinator(config)
         this.extractionCoordinator = this.createExtractionCoordinator(config)
-        this.presetCatalog = new LivingMemoryPresetCatalog(
-            ctx,
-            this.repository,
-            this.memoryLogger
-        )
 
         this.repository.defineTables()
         this.scheduleDailyMaintenance()
