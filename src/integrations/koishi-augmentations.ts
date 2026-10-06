@@ -11,6 +11,7 @@ import type { ChatLunaLivingMemoryService } from '../service/app/living_memory_s
 import type {
     LivingMemoryEntrySpeakerRecord,
     LivingMemoryEntryTableRecord,
+    PresetPersonaTableRecord,
     PresetSpeakerTableRecord
 } from '../service/persistence/types'
 
@@ -27,6 +28,7 @@ declare module 'koishi' {
         living_memory_job: MemoryJobRecord
         living_memory_user_profile: UserProfileRecord
         living_memory_preset_speaker: PresetSpeakerTableRecord
+        living_memory_preset_persona: PresetPersonaTableRecord
     }
 }
 
