@@ -54,7 +54,6 @@ import { LivingMemoryPresetCatalog } from '../memory/preset_catalog'
 import { LivingMemoryPresetPersonaService } from '../memory/preset_persona'
 import type { QueueExtractionOptions } from '../memory/helpers'
 import { LivingMemoryRecallCoordinator } from '../workflows/recall/coordinator'
-import { LivingMemorySnapshotCache } from '../memory/snapshot/snapshot_cache'
 import { LivingMemoryVectorIndexService } from '../vector_index/service'
 import { LivingMemoryMutationService } from './memory_mutation_service'
 import { LivingMemoryAgenticRecallExecutor } from '../workflows/recall/agentic_recall'
@@ -83,7 +82,6 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     /** 会话消息日志：召回与提取共用的唯一消息历史视界。 */
     readonly messageLog: MessageLogRegistry
     private readonly repository: LivingMemoryRepository
-    private readonly snapshotCache: LivingMemorySnapshotCache
     private readonly recallCoordinator: LivingMemoryRecallCoordinator
     private readonly extractionCoordinator: LivingMemoryExtractionCoordinator
     private readonly dreamCoordinator: LivingMemoryDreamCoordinator
@@ -135,7 +133,6 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             this.vectorIndex,
             this.memoryLogger
         )
-        this.snapshotCache = new LivingMemorySnapshotCache(this.repository)
         this.presetCatalog = new LivingMemoryPresetCatalog(
             ctx,
             this.repository,
@@ -176,7 +173,6 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             this.messageLog,
             this.repository,
             agenticRecall,
-            this.snapshotCache,
             this.memoryLogger
         )
     }
@@ -210,7 +206,6 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         const dreamJobRunner = new LivingMemoryDreamJobRunner(
             dream,
             incrementalDream,
-            this.snapshotCache,
             jobTracker,
             this.memoryLogger
         )
@@ -449,7 +444,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         scope: Pick<MemoryScope, 'presetId' | 'conversationId'>
     ) {
         return await hydrateLivingMemoryPromptVariable(
-            { snapshotCache: this.snapshotCache },
+            { snapshots: this.repository },
             scope
         )
     }
@@ -460,7 +455,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     ) {
         return await hydrateLivingMemoryPromptSections(
             {
-                snapshotCache: this.snapshotCache,
+                snapshots: this.repository,
                 userProfiles: this.userProfiles
             },
             scope,
@@ -494,7 +489,6 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
 
     async cleanupConversation(conversationId: string) {
         await this.repository.deleteSnapshotsByConversation(conversationId)
-        this.snapshotCache.clearByConversation(conversationId)
         this.recallCoordinator.clearByConversation(conversationId)
         this.extractionCoordinator.clearByConversation(conversationId)
         this.messageLog.clear(conversationId)
@@ -590,11 +584,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     }
 
     async archiveActiveMemories(presetId: string, ids: string[]) {
-        try {
-            return await this.mutations.archiveActiveMemories(presetId, ids)
-        } finally {
-            this.snapshotCache.clearByPreset(presetId)
-        }
+        return await this.mutations.archiveActiveMemories(presetId, ids)
     }
 
     async getMemory(memoryId: string) {
@@ -655,10 +645,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     }
 
     async deleteSnapshot(snapshotId: string) {
-        const deleted = await this.repository.deleteSnapshot(snapshotId)
-        if (deleted != null) {
-            this.snapshotCache.clearByScope(deleted)
-        }
+        await this.repository.deleteSnapshot(snapshotId)
     }
 
     async listSnapshots(query: SnapshotListQuery) {
@@ -716,12 +703,8 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     }
 
     async clearPresetData(presetId: string) {
-        try {
-            await this.mutations.clearPresetData(presetId)
-            await this.presetPersona.clearCard(presetId)
-        } finally {
-            this.snapshotCache.clearByPreset(presetId)
-        }
+        await this.mutations.clearPresetData(presetId)
+        await this.presetPersona.clearCard(presetId)
     }
 
     async exportPreset(presetId: string): Promise<LivingMemoryPresetExport> {
@@ -732,11 +715,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         targetPresetId: string,
         data: LivingMemoryPresetExport
     ): Promise<LivingMemoryPresetImportResult> {
-        try {
-            return await this.mutations.importPreset(targetPresetId, data)
-        } finally {
-            this.snapshotCache.clearByPreset(targetPresetId)
-        }
+        return await this.mutations.importPreset(targetPresetId, data)
     }
 
     async cleanupStaleJobs(maxAge: number = Time.week) {

@@ -1,9 +1,10 @@
 import type { MemoryScope } from '../../contracts/memory'
-import type { LivingMemorySnapshotCache } from '../memory/snapshot/snapshot_cache'
+import type { SnapshotRepository } from '../../contracts/workflows'
+import { renderSnapshotText } from '../memory/snapshot/snapshot_text'
 import type { LivingMemoryUserProfileService } from '../user_profile'
 
 export interface LivingMemoryPromptHydrationDependencies {
-    snapshotCache: LivingMemorySnapshotCache
+    snapshots: Pick<SnapshotRepository, 'getLatestSnapshotByScope'>
     userProfiles: LivingMemoryUserProfileService
 }
 
@@ -13,13 +14,12 @@ export interface LivingMemoryPromptSectionsOptions {
 }
 
 export const hydrateLivingMemoryPromptVariable = async (
-    dependencies: Pick<
-        LivingMemoryPromptHydrationDependencies,
-        'snapshotCache'
-    >,
+    dependencies: Pick<LivingMemoryPromptHydrationDependencies, 'snapshots'>,
     scope: Pick<MemoryScope, 'presetId' | 'conversationId'>
 ) => {
-    return await dependencies.snapshotCache.hydrate(scope)
+    const snapshot =
+        await dependencies.snapshots.getLatestSnapshotByScope(scope)
+    return renderSnapshotText(snapshot?.items ?? [])
 }
 
 export const hydrateLivingMemoryPromptSections = async (
@@ -30,7 +30,7 @@ export const hydrateLivingMemoryPromptSections = async (
     const [snapshot, userProfiles] = await Promise.all([
         options.includeSnapshot === false
             ? Promise.resolve('')
-            : dependencies.snapshotCache.hydrate(scope),
+            : hydrateLivingMemoryPromptVariable(dependencies, scope),
         dependencies.userProfiles.renderForSpeakers(
             scope.presetId,
             options.speakerKeys ?? []

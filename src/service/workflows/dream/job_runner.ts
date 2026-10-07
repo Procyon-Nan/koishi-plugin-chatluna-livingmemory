@@ -1,7 +1,6 @@
 import type { MemoryScope } from '../../../contracts/memory'
 import type { LivingMemoryLogger } from '../../logging/logger'
 import { summarizeError } from '../../shared/utils'
-import type { LivingMemorySnapshotCache } from '../../memory/snapshot/snapshot_cache'
 import type { LivingMemoryJobTracker } from '../job_tracker'
 import type { LivingMemoryIncrementalDreamService } from './incremental'
 import type { LivingMemoryDreamService } from './index'
@@ -9,7 +8,6 @@ import type { DreamRunResult } from './types'
 
 type DreamService = Pick<LivingMemoryDreamService, 'run'>
 type IncrementalDreamService = Pick<LivingMemoryIncrementalDreamService, 'run'>
-type DreamSnapshotCache = Pick<LivingMemorySnapshotCache, 'clearByPreset'>
 type DreamJobTracker = Pick<
     LivingMemoryJobTracker,
     'markRunning' | 'markCompleted' | 'markFailed'
@@ -23,7 +21,6 @@ export class LivingMemoryDreamJobRunner {
     constructor(
         private readonly dream: DreamService,
         private readonly incrementalDream: IncrementalDreamService,
-        private readonly snapshotCache: DreamSnapshotCache,
         private readonly jobTracker: DreamJobTracker,
         private readonly logger: LivingMemoryLogger
     ) {}
@@ -68,19 +65,14 @@ export class LivingMemoryDreamJobRunner {
             presetId: scope.presetId,
             trigger
         })
-        let workflowStarted = false
         let failureDetail: string | null = null
         let workflowFailure: unknown
         try {
             await this.jobTracker.markRunning(jobId)
             jobLogger.info('dream.started')
-            workflowStarted = true
 
             const outcome = await workflow(jobLogger)
             const { result } = outcome
-            if (hasMemoryChanges(result)) {
-                this.clearSnapshotCache(scope.presetId)
-            }
             if (outcome.success === true) {
                 await this.jobTracker.markCompleted(jobId, result.detail)
                 this.logCompletion(jobLogger, result)
@@ -99,9 +91,6 @@ export class LivingMemoryDreamJobRunner {
                 detail: result.detail
             })
         } catch (error) {
-            if (workflowStarted) {
-                this.clearSnapshotCache(scope.presetId)
-            }
             if (failureDetail == null && trigger === 'automatic') {
                 failureDetail = `dream automatic incremental failed: ${summarizeError(error)}`
             }
@@ -140,11 +129,4 @@ export class LivingMemoryDreamJobRunner {
             skipped: result.skipped
         })
     }
-
-    private clearSnapshotCache(presetId: string) {
-        this.snapshotCache.clearByPreset(presetId)
-    }
 }
-
-const hasMemoryChanges = (result: DreamRunResult) =>
-    result.merged > 0 || result.updated > 0 || result.archived > 0

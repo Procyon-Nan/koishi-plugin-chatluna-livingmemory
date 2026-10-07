@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { isModelConfigured, summarizeError } from '../../shared/utils'
 import { normalizeText, scopeKey } from '../../memory/helpers'
 import type { LivingMemoryLogger } from '../../logging/logger'
-import type { LivingMemorySnapshotCache } from '../../memory/snapshot/snapshot_cache'
+import { renderSnapshotText } from '../../memory/snapshot/snapshot_text'
 import type { LivingMemoryAgenticRecallExecutor } from './agentic_recall'
 import type {
     JobRepository,
@@ -24,7 +24,6 @@ type LivingMemoryRecallCoordinatorConfig = Pick<
 type RecallMessageLog = Pick<MessageLogRegistry, 'tailSeq'>
 
 type RecallAgenticExecutor = Pick<LivingMemoryAgenticRecallExecutor, 'run'>
-type RecallSnapshotCache = Pick<LivingMemorySnapshotCache, 'hydrate'>
 export type RecallWorkflowRepository = Pick<JobRepository, 'createFailedJob'> &
     Pick<SnapshotRepository, 'upsertSnapshot'>
 
@@ -41,7 +40,6 @@ export class LivingMemoryRecallCoordinator {
         private readonly messageLog: RecallMessageLog,
         private readonly repository: RecallWorkflowRepository,
         private readonly agenticRecall: RecallAgenticExecutor,
-        private readonly snapshotCache: RecallSnapshotCache,
         private readonly logger: LivingMemoryLogger
     ) {}
 
@@ -170,7 +168,6 @@ export class LivingMemoryRecallCoordinator {
                 JSON.stringify(trace.item.toolCallSummary),
                 [trace.item]
             )
-            const content = await this.snapshotCache.hydrate(scope)
             logger.info(
                 'recall.snapshot.updated',
                 { matched: trace.item.matchedMemories.length },
@@ -178,7 +175,7 @@ export class LivingMemoryRecallCoordinator {
                     {
                         title: 'snapshot.content',
                         key: 'content',
-                        value: content
+                        value: renderSnapshotText([trace.item])
                     }
                 ]
             )

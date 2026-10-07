@@ -29,7 +29,6 @@ const defaultRun: AgenticRun = async () => createAgenticTrace('记得')
 const createCoordinator = (options: {
     repository?: Partial<RecallWorkflowRepository>
     run?: AgenticRun
-    hydrate?: () => Promise<string>
     tailSeq?: () => number
     recallIntervalMessages?: number
     subModel?: string
@@ -55,7 +54,6 @@ const createCoordinator = (options: {
                 runLogger: LivingMemoryLogger
             ) => await run(historyMessages, runLogger)
         },
-        { hydrate: options.hydrate ?? (async () => '') },
         options.logger ?? logger
     )
 }
@@ -64,7 +62,6 @@ it('persists the agentic snapshot without persisting a successful job', async ()
     const jobStore = createJobStore()
     const snapshots: { query: string; items: AgenticMemorySnapshotItem[] }[] =
         []
-    let hydrated = 0
     const captured = createCapturedLogger()
     const coordinator = createCoordinator({
         repository: {
@@ -75,21 +72,23 @@ it('persists the agentic snapshot without persisting a successful job', async ()
         },
         run: async (_history, runLogger) => {
             runLogger.diagnostic('test.agentic.context')
-            return createAgenticTrace('remembered context')
-        },
-        hydrate: async () => {
-            hydrated += 1
-            return 'first memory\nsecond memory'
+            return createAgenticTrace('  remembered context  ')
         },
         logger: captured.logger
     })
 
     await coordinator.queue(scope, currentMessage, async () => [])
-    await waitFor(() => hydrated === 1, 'agentic recall hydration')
+    await waitFor(
+        () =>
+            captured.info.some((message) =>
+                message.includes('event=recall.snapshot.updated')
+            ),
+        'agentic recall snapshot update'
+    )
 
     assert.equal(jobStore.jobs.length, 0)
     assert.equal(snapshots.length, 1)
-    const trace = createAgenticTrace('remembered context')!
+    const trace = createAgenticTrace('  remembered context  ')!
     assert.equal(snapshots[0].query, JSON.stringify(trace.item.toolCallSummary))
     assert.deepEqual(snapshots[0].items, [trace.item])
     const snapshotLog = captured.info.find((message) =>
@@ -98,7 +97,7 @@ it('persists the agentic snapshot without persisting a successful job', async ()
     assert.match(snapshotLog ?? '', /matched=/u)
     assert.match(
         snapshotLog ?? '',
-        /--- snapshot\.content ---\nfirst memory\nsecond memory\n--- end recall\.snapshot\.updated ---$/u
+        /--- snapshot\.content ---\nremembered context\n--- end recall\.snapshot\.updated ---$/u
     )
     assert.ok(
         captured.info.some((message) =>
@@ -112,7 +111,6 @@ it('persists the agentic snapshot without persisting a successful job', async ()
 it('keeps the previous snapshot without persisting a job for <NO_MEMORY>', async () => {
     const jobStore = createJobStore()
     let snapshotWrites = 0
-    let hydrateCalls = 0
     const captured = createCapturedLogger()
     const coordinator = createCoordinator({
         repository: {
@@ -122,10 +120,6 @@ it('keeps the previous snapshot without persisting a job for <NO_MEMORY>', async
             }
         },
         run: async () => createAgenticTrace(''),
-        hydrate: async () => {
-            hydrateCalls += 1
-            return ''
-        },
         logger: captured.logger
     })
 
@@ -139,7 +133,6 @@ it('keeps the previous snapshot without persisting a job for <NO_MEMORY>', async
     )
 
     assert.equal(snapshotWrites, 0)
-    assert.equal(hydrateCalls, 0)
     assert.equal(jobStore.jobs.length, 0)
 })
 
@@ -246,19 +239,21 @@ it('persists one failed recall job when the agentic executor throws', async () =
     assert.match(job?.error ?? '', /agentic failure/u)
 })
 
-it('persists one failed recall job when snapshot hydration throws', async () => {
+it('persists one failed recall job when snapshot persistence throws', async () => {
     const jobStore = createJobStore()
     const coordinator = createCoordinator({
-        repository: { createFailedJob: jobStore.createFailedJob },
-        hydrate: async () => {
-            throw new Error('hydrate failure')
+        repository: {
+            createFailedJob: jobStore.createFailedJob,
+            upsertSnapshot: async () => {
+                throw new Error('snapshot write failure')
+            }
         }
     })
 
     await coordinator.queue(scope, currentMessage, async () => [])
-    await waitFor(() => jobStore.jobs.length === 1, 'failed snapshot hydration')
+    await waitFor(() => jobStore.jobs.length === 1, 'failed snapshot write')
 
-    assert.match(jobStore.jobs[0]?.error ?? '', /hydrate failure/u)
+    assert.match(jobStore.jobs[0]?.error ?? '', /snapshot write failure/u)
 })
 
 it('logs recall scope and preserves the original background error', async () => {
@@ -292,17 +287,18 @@ it('logs recall scope and preserves the original background error', async () => 
 it('continues recall with empty history without persisting a job', async () => {
     const jobStore = createJobStore()
     let receivedHistory: LivingMemoryTranscriptMessage[] | undefined
-    let hydrated = 0
+    let snapshotWrites = 0
     const captured = createCapturedLogger()
     const coordinator = createCoordinator({
-        repository: { createFailedJob: jobStore.createFailedJob },
+        repository: {
+            createFailedJob: jobStore.createFailedJob,
+            upsertSnapshot: async () => {
+                snapshotWrites += 1
+            }
+        },
         run: async (historyMessages) => {
             receivedHistory = historyMessages
             return createAgenticTrace('remembered context')
-        },
-        hydrate: async () => {
-            hydrated += 1
-            return ''
         },
         logger: captured.logger
     })
@@ -310,7 +306,7 @@ it('continues recall with empty history without persisting a job', async () => {
     await coordinator.queue(scope, currentMessage, async () => {
         throw new Error('private history failure detail')
     })
-    await waitFor(() => hydrated === 1, 'recall after history failure')
+    await waitFor(() => snapshotWrites === 1, 'recall after history failure')
 
     assert.deepEqual(receivedHistory, [])
     assert.equal(jobStore.jobs.length, 0)
