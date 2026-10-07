@@ -2,13 +2,10 @@
 
 ## 项目定位
 
-`chatluna-livingmemory`（npm 包名
-`koishi-plugin-chatluna-livingmemory`）是 ChatLuna 生态下的 Koishi 长期记忆
-插件，位于 `koishi-dev` 工作区的 `external/chatluna-livingmemory`。本地运行
-环境由工作区根目录的 Koishi 实例提供。
+`chatluna-livingmemory`（npm 包名 `koishi-plugin-chatluna-livingmemory`）是 ChatLuna 生态下的 Koishi 长期记忆插件，位于 `koishi-dev` 工作区的 `external/chatluna-livingmemory`。
+本地运行环境由工作区根目录的 Koishi 实例提供。
 
-模型供应商适配、ChatLuna 核心会话管理、Character 预设存储与调度、Koishi
-数据库驱动和 Console 框架本身都不属于本项目职责。
+模型供应商适配、ChatLuna 核心会话管理、Character 预设存储与调度、Koishi 数据库驱动和 Console 框架本身都不属于本项目职责。
 
 ## 代码文件结构
 
@@ -40,258 +37,123 @@ chatluna-livingmemory/
 └── scripts/                     # Worker 构建与向量索引基准脚本
 ```
 
-新增、删除、移动或重命名源码目录、测试目录或脚本目录时，必须在同一次变更中
-同步更新本节。目录内新增或重命名单个文件不需要更新。
+新增、删除、移动或重命名源码目录、测试目录或脚本目录时，必须在同一次变更中同步更新本节。
+目录内新增或重命名单个文件不需要更新。
 
 ## 设计约束
 
 1. 预设、会话与身份边界
-   - 长期记忆、用户画像和 Dream 任务按 `presetId` 隔离；召回快照按
-     `presetId + conversationId` 隔离。
-   - ChatLuna 预设 ID 保持原值；Character 预设统一经
-     `toCharacterMemoryPresetId()` 转换。不得在调用点自行拼接 Character
-     后缀。
-   - 用户关联使用稳定 `speakerKey`，由平台与用户 ID 生成；昵称只作为
-     模型可读标签。昵称变化不得产生新的用户身份。
-   - 任何把新 `speakerKey` 写上记忆的通道必须同步确保
-     `living_memory_preset_speaker` 有对应行：提取落库以窗口说话人补齐
-     缺失行，WebUI/公共创建与更新对调用方直供的键以合成标签在落库前
-     补齐，Dream 启动前经预设级队列入口重读活跃键、为缺行键以合成
-     标签兜底，导入为活跃条目携带的未知键合成行且不覆盖既有行。上述
-     四类补齐注册均在预设级队列内执行，不得因陈旧读取在清空后的预设
-     上写回孤儿注册行；reconcile 的身份注册不在此列——它是当次对话者
-     的前瞻注册（首次接触即先于记忆写行），单事务经仓储串行事务入口
-     提交，清空后的下一条消息重写一行是预设随对话恢复，不是孤儿复活。
-     身份字段缺失的注册行由 reconcile 在该用户下次直接对话时升级。
-   - `speakerKeys` 允许为空，表示记忆只与角色自身有关；不得为了满足字段
-     形式强行关联当前对话中的用户。
+   - 长期记忆、用户画像和 Dream 任务按 `presetId` 隔离；召回快照按 `presetId + conversationId` 隔离。
+   - ChatLuna 预设 ID 保持原值；Character 预设统一经 `toCharacterMemoryPresetId()` 转换，不得在调用点自行拼接后缀。
+   - 用户身份是由平台与用户 ID 生成的 `speakerKey`；昵称只是模型可读标签，昵称变化不得产生新身份。
+   - 任何把新 `speakerKey` 写上记忆的通道（提取、WebUI 与公共接口的创建和更新、Dream、导入），都必须在预设级队列内补齐 `living_memory_preset_speaker` 的对应行，避免在已清空的预设上写回孤儿行。
+     reconcile 对当次对话者的身份注册不受此限。
+   - `speakerKeys` 允许为空，表示记忆只与角色自身有关；不得为满足字段形式强行关联当前对话中的用户。
 
 2. ChatLuna 与 Character 集成
-   - 两条集成路径保持独立。它们使用不同事件载荷、聊天记录适配器、预设
-     标识和注入机制，不得为表面复用合并成统一中间件。
-   - ChatLuna 通过 `before-chat` 注入已缓存快照与用户画像，通过
-     `after-chat` 追加本次实际发出的回复段并触发提取排干。
-   - Character 通过专用生命周期事件维护上下文，并由预设中的
-     `{living_memory}` 变量注入；不得套用 ChatLuna 的请求级注入方式。
-   - 清空会话历史时同步清除对应快照、召回锚点、提取游标与消息日志条目，
-     并推进日志纪元以拒绝清空时点之前时间戳的回填消息。
+   - 两条集成路径的事件载荷、聊天记录适配器、预设标识和注入机制都不同，保持独立，不得合并成统一中间件。
+   - ChatLuna 在 `before-chat` 注入已缓存的快照与用户画像，在 `after-chat` 追加本次实际发出的回复并触发提取。
+   - Character 经专用生命周期事件维护上下文，由预设中的 `{living_memory}` 变量注入；不得套用 ChatLuna 的请求级注入方式。
+   - 清空会话历史时同步清除快照、召回锚点、提取游标与消息日志，并推进日志纪元，拒绝清空时点之前的回填消息。
 
 3. 聊天记录与 speaker 归属
-   - 会话消息日志（`src/service/transcript/message_log/`）是召回与提取共用
-     的唯一历史视界，经平台实时监听、after-chat 回复段追加和冷启动回填三个
-     通道写入。消息角色（user/assistant）在写入时确定，读取方不得重新判定。
-   - 日志历史的模型可见转换统一经 `toLogTranscriptMessages`；当前触发消息
-     与单条载荷消息仍由各自 transcript adapter 转换。不得在调用点自行拼装
-     历史视图。
-   - 模型可见聊天记录统一使用用户昵称：写入侧直读 `event.user.name` 或经
-     `resolveUserSpeaker`（`bot.getUser().name`），缺失退 userId。
-     `author.nick`、`member`、`session.username` 是群名片口径，不得采信
-     （`session.author` getter 会用 `member` 覆盖 `user`）。聊天记录用
-     `<chat_history>` 包裹；存在独立末条消息时使用 `<last_message>`。
-   - 非文本消息元素（图片、语音、合并转发、卡片、@ 等）写入日志时统一
-     替换为占位说明，元素标签的序列化形式不得进入模型可见历史；文字
-     格式容器（b、code、a 等）递归提取正文，br/段落边界换行。at 按目标
-     用户昵称解析（与说话人同口径，不采信群名片 name 属性），采集侧
-     缓存命中才渲染昵称、未命中先记 @id 并后台预热；QQ 卡片 json 只取
-     标题、来源应用与分享者。占位提取是消息日志模块的同步纯函数，
-     采集与回填（含仅 content 的历史消息，经 h.parse）共用，不得各自
-     拼装；渲染与实时入账不得为昵称解析让出事件循环（seq 按到达分配，
-     召回边界与提取段归属依赖入账顺序），异步查询留在通道层，回填的
-     at 查询范围与渲染可见范围一致（占位元素内部不查询）。
-   - Extraction 返回 `speakerLabels`，服务端只根据本次 transcript 中建立的
-     昵称映射转换为 `speakerKeys`。模型不得直接生成或猜测稳定身份键。
-   - 来源消息序列化与记忆正文分开保存；查询原始消息时以持久化来源关系为
-     准，不从记忆正文反推。
+   - 会话消息日志（`src/service/transcript/message_log/`）是召回与提取共用的唯一历史来源。
+     消息角色（user/assistant）在写入时确定，读取方不得重新判定。
+   - 日志历史的模型可见转换统一经 `toLogTranscriptMessages`，不得在调用点自行拼装历史视图。
+   - 模型可见的说话人与 at 目标统一取用户昵称（`event.user.name` 或 `resolveUserSpeaker`），缺失时退回 userId。
+     `author.nick`、`member`、`session.username` 是群名片，不得采信。
+   - 非文本消息元素写入日志时替换为占位说明，元素标签的序列化形式不得进入模型可见历史。
+     占位提取是同步纯函数，采集与回填共用：渲染与入账不得让出事件循环，因为召回边界与提取分段依赖入账顺序。
+   - 模型只返回 `speakerLabels`，服务端按本次聊天记录的昵称映射转换为 `speakerKeys`；模型不得生成或猜测身份键。
+   - 来源消息与记忆正文分开保存；查询来源以持久化的来源关系为准，不从正文反推。
 
 4. Recall 工作流
-   - Recall 是异步流程。当前请求注入开始前已水合的快照；本轮新生成的快照
-     只供后续轮次使用，不得改成阻塞当前模型请求。
-   - 自动召回按消息间隔触发：`recallIntervalMessages = 0` 时关闭；否则预设
-     会话首次触发立即召回，此后当会话日志自上次召回锚点起累计的消息条数
-     达到该值时执行，闲聊同样推进间隔。锚点只存在内存中并按预设会话隔离，
-     插件或相关集成重启后重新计数。
-   - 召回上下文为会话日志最近 `recallHistoryMessages` 条消息（以当前
-     触发消息为边界、取其之前），由 before-chat 时点惰性加载并等待回填
-     完成；等待期间追加的后续闲聊不挤入边界。
-   - 召回只有 Agentic Recall 一种实现：`subModel` 经召回内部的
-     `living_memory_search` 只从活跃记忆中检索，快照只保存模型整理后的
-     文本和搜索轨迹，不保存记忆引用。不得恢复多策略分派或在协调器内
-     另写检索路径。
-   - Reranker 只在 `LivingMemoryEmbeddingSearchEngine` 中接入：配置后
-     混合检索按结果上限的 3 倍取候选，每条查询短语各自重排并取最大分；
-     重排失败回退混合检索排序，不得阻断检索。召回内部检索、主对话工具
-     与 WebUI 检索测试共用这一条路径。
-   - 没有可靠结果时保留既有快照，不以空结果覆盖。召回失败记录任务和诊断
-     信息，但不得阻断正常对话。`subModel` 未配置属于配置缺失而非召回
-     失败：协调器在入队时跳过并只记诊断，不写任务，由配置状态告警提示。
-   - 用户关联信息可用于说明记忆归属，但不得成为召回门槛。
+   - Recall 异步执行：当前请求注入已有的快照，本轮新生成的快照只供后续轮次使用，不得阻塞当前模型请求。
+   - `recallIntervalMessages` 控制召回间隔，为 0 时关闭。
+     会话首次触发立即召回，之后按日志消息条数计算间隔，闲聊同样计入；召回锚点只存在内存中，重启后重新计数。
+   - 召回上下文为当前触发消息之前的最近 `recallHistoryMessages` 条日志消息。
+   - 召回只有 Agentic Recall 一种实现：`subModel` 经召回内部的 `living_memory_search` 检索活跃记忆，快照只保存模型整理后的文本与搜索轨迹，不保存记忆引用。
+     不得恢复多策略分派，也不得在协调器内另写检索路径。
+   - Reranker 只在 `LivingMemoryEmbeddingSearchEngine` 中接入，召回、主对话工具与 WebUI 检索测试共用这一条路径；重排失败回退混合检索排序，不得阻断检索。
+   - 没有可靠结果（含 `<NO_MEMORY>`）时保留既有快照，不以空结果覆盖。
+   - 召回失败记录任务与诊断，但不得阻断对话。
+     `subModel` 未配置属于配置缺失而非召回失败：入队时跳过，只记诊断、不写任务。
+   - 用户关联信息可以说明记忆归属，但不得成为召回门槛。
 
 5. Extraction 工作流
-   - Extraction 以会话日志游标排干为模型：after-chat 时检查自游标起的
-     积压，达到 `extractionWindowMessages` 即按段锚定打包排干；同会话
-     串行，跨会话并行。`extractionWindowMessages = 0` 时关闭自动提取。
-   - 段以连续 assistant 消息 run 的末条闭合，无 assistant 收尾的尾巴不
-     消费。段＝闲聊头＋一次交流（触发消息＋回复 run）；触发消息未被记录
-     的孤儿回复 run 整段视为交流。交流是不可分割的原子单位，切块不得
-     从中截断。触发交流及其前方一个
-     `extractionWindowMessages` 内的消息无条件纳入，核心边界切进交流时
-     整段交流保留；核心之外的闲聊不受保护。两种模式共用同一装包规则：
-     从最新向旧并入整段成块，累计不超过窗口加其二分之一即并入同块——
-     窗口是模糊预算而非硬上限，盈余不超过半窗不开新块，最新一轮不因
-     回复多条被拆开或切走上下文。窗口之外的消息：锚定模式（默认）只
-     保留其中的交流、丢弃闲聊，被丢弃的闲聊随游标推进不再提取；旁听
-     模式（`extractionIncludeOverheard`）全量保留，超出预算的超长段先
-     切成不超过预算的子块（边界尽量落在 assistant 之后）再按同一规则
-     装包，是交流原子原则的唯一例外。冷启动游标取首个合规 after-chat
-     时点的日志末位，不重提取回填历史；回填失败待重试的会话顺延至
-     重试成功后的首个 after-chat。会话清理即时终止在途排干的后续消费。
-   - 单块失败连续 3 次后记录 failed job 并放弃该块、继续后续块（积压
-     超出单块预算时两种模式同样多块串行）；不足 3 次中断本次排干，连同
-     新消息下次重试。不得重复处理已成功推进游标的消息，也不得在失败后
-     错误丢弃未消费消息。
-   - `enableExtractionWhitelist` 开启时只有白名单会话进入提取：群聊比对
-     `scope.guildId`，私聊比对 `scope.userId`，均为原始平台 id。未命中的
-     会话不初始化提取游标，后续加入白名单从当时刻重新起算；消息日志照常
-     收集，召回、快照与画像注入以及 `living_memory_create_memory` 不受
-     白名单影响。
-   - 提取必须取得对应预设提示词，并使用本次聊天记录附带的 speaker 映射。
-   - 模型输出经结构化结果工具校验后才能写入；模型格式错误遵循统一纠错
-     流程，不得在 Extraction 内另写一套解析或兜底。
+   - 提取按会话日志游标消费：积压达到 `extractionWindowMessages` 时打包提取，为 0 时关闭；同会话串行，跨会话并行。
+   - 一次交流（触发消息与其回复）是不可分割的单位，分块不得从中截断。
+     唯一例外是旁听模式（`extractionIncludeOverheard`）下超出预算的超长段。
+   - 冷启动时游标从当时的日志末尾开始，不重新提取回填的历史。
+   - 单块连续失败 3 次后记录 failed job 并跳过该块；未达 3 次则中断本次提取，下次重试。
+     不得重复处理已推进游标的消息，也不得在失败后丢弃未消费的消息。
+   - `enableExtractionWhitelist` 只限制自动提取，按原始平台 id 匹配（群聊为 `scope.guildId`，私聊为 `scope.userId`）。
+     未命中的会话不初始化游标，消息日志、召回、注入与主动创建工具不受影响。
+   - 模型输出经结构化结果工具校验后才能写入，格式错误走统一纠错流程，不得另写解析或兜底。
 
 6. Dream 与用户画像
-   - Dream 只处理活跃记忆。归档记忆不参与聚类、增量邻居查询、整理或用户
-     画像生成。
-   - 预设活跃记忆少于一个整理单元（30 条）时两种触发都不启动任务：手动触发
-     返回 `insufficient-memories` 供 WebUI 提示，自动触发只写跳过日志。用户
-     画像只在 Dream 内生成，该门槛同时推迟小预设的画像生成。
-   - `archive` 可将当前活跃记忆归档；`merge` 原子更新目标记忆并归档来源
-     记忆。合并必须通过 `applyDreamMerge()` 完成，不得拆成多个独立写操作。
-   - Dream 的 update 与 merge 结果完整覆盖模型生成的 `speakerKeys` 和其余
-     可变字段，不对旧关联用户做并集保留。
-   - Dream 每个整理单元的模型结果必须用恰好一个操作覆盖簇内每条记忆：无需
-     改动的记忆用 `keep` 保留，禁止空 operations 或遗漏记忆。覆盖校验在落库前
-     执行，缺漏、重复或越簇 id 走结构化输出纠错重试，仍不达标则该单元记为失败
-     跳过、不推进相关记忆的固化。manual、incremental-batch、incremental-seed
-     三种模式统一适用，其中增量种子单元带入的候选邻居同样须由 keep 覆盖。
-   - 保留阶段动作白名单、单次任务 touched-memory 防重复处理、完整生成元
-     数据和预设级任务串行约束。
-   - 全量 Dream 的聚类与 HDBSCAN 计算交给 Dream Worker；增量 Dream 只处理
-     pending 批次及其已 consolidation 邻居，不得扩大为无界全库扫描。
-   - 用户画像生成和注入受 `enableUserProfileInjection` 控制；speaker 发现与
-     画像开关无关。WebUI 手工编辑画像后，后续 Dream 仍可覆盖画像内容。
+   - Dream 只处理活跃记忆，归档记忆不参与聚类、邻居查询、整理或画像生成。
+   - 预设活跃记忆少于 30 条时两种触发都不启动：手动触发返回 `insufficient-memories`，自动触发只记跳过日志。
+   - `archive` 归档活跃记忆；`merge` 必须经 `applyDreamMerge()` 原子完成，不得拆成多个独立写操作。
+   - update 与 merge 完整覆盖 `speakerKeys` 和其余可变字段，不与旧关联用户取并集。
+   - 每个整理单元的模型结果必须用恰好一个操作覆盖单元内每条记忆（无需改动的用 `keep`），覆盖校验在落库前执行。
+     不达标走纠错重试，仍失败则该单元记为失败，不推进其记忆的固化。
+   - 同一任务内已处理过的记忆不得被再次操作；同一预设的 Dream 任务串行执行。
+   - 全量 Dream 的聚类交给 Dream Worker；增量 Dream 只处理待整理批次及其邻居，不得扩大为全库扫描。
+   - 用户画像只在 Dream 内生成（全量与增量均是），生成与注入受 `enableUserProfileInjection` 控制；speaker 发现与该开关无关。
+     WebUI 手工编辑的画像仍可被后续 Dream 覆盖。
 
 7. 模型工具、提示词与结构化输出
-   - `src/service/prompts/` 是工作流提示词和 Zod schema 的唯一来源；字段说明
-     优先放在结果工具参数描述中，不在 prompt 正文重复维护。
-   - 送入模型阅读的记忆视图由 `prompts/memory_entries.ts` 的
-     `renderMemoriesForModel` 统一渲染，各工作流不得自行拼装记忆视图。记忆 ID
-     只在模型需要引用记忆时渲染：`living_memory_search` 渲染 ID 供
-     `living_memory_get_messages` 使用，Agentic Recall 与用户画像不渲染 ID。
-   - 注入记忆写入类工作流（extraction、Dream、用户画像）的角色人设统一取
-     预设人设卡片，不直接注入预设原文。卡片原文取预设 system 部分的未渲染
-     模板（ChatLuna 的 system 消息、Character 的 `system.rawString`），不经
-     渲染器、不取任何变量值。卡片由 `preset_persona.ts` 把原文按行删减掉纯
-     操作性内容（工具调用指南、输出与格式规范、状态模板、安保约束等）得到，
-     保留部分为原字节拼接，模型只在编号空间选择待删行，不重写正文；删除比例
-     过高、剪出结果过短或模型不可用时回退原文。卡片按预设落库
-     （`living_memory_preset_persona`，主键 presetId），落库行是卡片的唯一
-     状态、卡片服务是唯一写入方，不设内存缓存：三个工作流经构造注入的
-     `resolve(presetId)` 取卡片，按原文哈希懒更新；生成结果在按 presetId 串行
-     的写队列内重读行后落库，不覆盖期间保存的手工卡片，清空预设数据之后不
-     写回。WebUI 手改的卡片 `source='manual'`，预设变动时不自动覆盖；清空预设
-     数据一并删除卡片（含手工卡片）。Console 经只读视图查看与手工编辑：
-     `stale` 只对手工卡片重算原文比哈希（预设已不可读时按新鲜处理），
-     `usedRawFallback` 提示回退原文。recall 不注入预设，不接入。
-   - 用户画像提示词在记忆列表前说明关联记忆总数与实际送入条数；画像输出只有
-     正文，没有操作引用记忆 ID，送入的记忆也一律等权使用。画像结果为
-     `update`（提交完整新画像）或 `keep`（保留已有画像）二选一，两者都须
-     填写理由，不设空结果通道；尚无画像时 `keep` 被校验拒绝并走纠错重试。
-     `keep` 不改写正文，但记下本次送入的记忆 id 并刷新审阅时刻，输入未变
-     的后续 Dream 跳过该用户，不重复询问模型。
-   - 动态文本经 `prompt_format.ts` 负责的 XML 块转义和 System/Human 消息
-     组合进入模型。不得在各工作流中复制 XML 拼接或转义逻辑。
-   - 结构化结果工具是单次调用内部工具。工具 schema、提示词规则、校验、
-     纠错次数和工作流失败处理必须保持一致。
-   - `living_memory_search` 只查询活跃记忆；`living_memory_get_messages` 根据
-     已返回的记忆 ID 全量返回其来源消息；主动创建工具允许 speaker 关联为空。
-   - Agentic Recall 在找不到相关记忆时输出 `<NO_MEMORY>`；解析到该结果时不
-     更新快照。工具参数持续错误达到上限时直接终止本次召回，不再发起额外
-     finalization 调用。
+   - `src/service/prompts/` 是提示词与 Zod schema 的唯一来源；字段说明放在结果工具参数描述中，不在提示词正文重复。
+   - 送入模型的记忆视图统一经 `renderMemoriesForModel` 渲染。
+     只有模型需要引用记忆时才渲染 ID：主对话的 `living_memory_search` 渲染，Agentic Recall 与用户画像不渲染。
+   - 动态文本经 `prompt_format.ts` 转义并组合为 System/Human 消息，不得在工作流中复制 XML 拼接或转义。
+   - 结构化结果工具是单次调用内部工具，其 schema、提示词规则、校验、纠错次数与工作流失败处理必须一致。
+   - 提取、Dream 与用户画像的角色人设统一取预设人设卡片（`preset_persona.ts`），不注入预设原文；recall 不使用人设。
+     - 卡片原文取预设 system 部分的未渲染模板，模型只选择要删除的行，保留部分与原文逐字节一致，不重写正文。
+     - 落库行是卡片的唯一状态，卡片服务是唯一写入方，不设内存缓存；工作流经 `resolve(presetId)` 取卡片，按原文哈希懒更新。
+     - 写入在按预设串行的队列内重读后落库，不覆盖期间保存的手工卡片，清空预设数据后不写回。
+     - 手工卡片（`source='manual'`）不随预设变动自动覆盖；清空预设数据时一并删除。
+     - 外部插件只有只读接口 `resolvePresetPersona` 与 `getPresetPersonaCard`，前者在无卡片时返回原文，不调模型、不落库。
+   - 用户画像结果为 `update` 或 `keep`，均须填写理由；尚无画像时 `keep` 被拒绝并走纠错重试。
+     `keep` 不改写正文，但记下本次输入，输入未变的后续 Dream 跳过该用户。
+   - `living_memory_get_messages` 按 `living_memory_search` 返回的 ID 查看来源消息；主动创建工具允许 speaker 关联为空。
+   - Agentic Recall 的工具参数持续出错达到上限时直接终止，不再额外发起 finalization 调用。
 
 8. 持久化、变更与缓存一致性
-   - `src/service/persistence/` 负责表定义和表级仓库，
-     `LivingMemoryRepository` 是上层持久化门面。工作流不得直接操作 Koishi
-     数据库表。
-   - 一次逻辑写入需要多于一条语句、且中间状态对并发读者非法时必须使用事务；
-     单语句写入本身原子，不需要事务。不满足事务条件的多语句写入必须在代码中
-     写明依据。
-   - 事务只能通过 `LivingMemoryRepository` 的串行入口开启。持久化子模块通过
-     构造注入的 `transact` 取得事务句柄，不得直接调用 `ctx.database.transact`
-     或 `withTransaction`。单连接数据库无法并发开启事务，绕过该入口的失效方式
-     是死锁或索引漂移，类型检查和测试都不会暴露。
-   - `living_memory_entry.speakerKeys` 是用户关联事实；
-     `living_memory_entry_speaker` 只索引活跃记忆。`status` 或 `speakerKeys`
-     变更必须与关联行重写在同一事务内提交。不得增加独立计数字段或为归档记忆
-     保留关联行。
-   - schema 变更必须同步更新公共契约、表定义、normalizer、仓库、迁移兼容
-     和受影响的 RPC/客户端类型。
-   - 记忆正文、摘要或关键词变化时必须使旧 embedding 失效并安排索引同步；
-     仅状态变化时保留可复用向量。
-   - 快照内容变化、记忆删除或会话清理必须清除对应 snapshot cache。不得让
-     内存缓存继续暴露已经失效的数据库状态。
-   - 管理指令的 text/user 删除只匹配活跃记忆，确认后执行归档；profile
-     删除只删除目标画像。所有删除操作保留 60 秒明确确认流程。
+   - `src/service/persistence/` 负责表定义与表级仓库，`LivingMemoryRepository` 是上层门面；工作流不得直接操作数据库表。
+   - 多语句写入的中间状态对并发读者非法时必须使用事务；不满足该条件的多语句写入须在代码中写明依据。
+   - 事务只能经 `LivingMemoryRepository` 的串行入口开启，子模块通过构造注入的 `transact` 取得句柄，不得直接调用 `ctx.database.transact` 或 `withTransaction`：单连接数据库无法并发开启事务。
+   - `living_memory_entry.speakerKeys` 是用户关联事实，`living_memory_entry_speaker` 只索引活跃记忆。
+     `status` 或 `speakerKeys` 变更必须与关联行重写在同一事务内；不得增加独立计数字段或为归档记忆保留关联行。
+   - schema 变更须同步公共契约、表定义、normalizer、仓库、迁移兼容与受影响的 RPC/客户端类型。
+   - 记忆正文、摘要或关键词变化时必须使旧 embedding 失效并安排索引同步；仅状态变化时保留向量。
+   - 快照内容变化、记忆删除或会话清理必须清除对应的快照缓存。
+   - 管理指令的 text/user 删除只匹配活跃记忆并执行归档，profile 删除只删目标画像；所有删除保留 60 秒确认。
 
 9. 向量索引与 Worker 生命周期
-   - PGlite/pgvector 是持久化向量索引；Koishi 主数据库仍是记忆事实来源，
-     向量索引必须能够据此 reconcile 或 rebuild。
-   - PGlite 连接和目录所有权端点由同一个向量索引 Worker 持有。Worker 先
-     取得所有权再打开数据库，关闭时先关闭 PGlite 再释放所有权。
-   - 所有权只保证遵循本插件协议的同机进程互斥，不支持多进程共享同一个运行中
-     的索引目录。
-   - Windows 使用命名管道、Linux 使用抽象 Unix Socket，以规范化目录的
-     稳定哈希作为端点标识；不得重新引入锁文件、PID、mtime、心跳或
-     `fs-native-extensions`。
-   - 重建期间同一个 Worker 持续持有活动目录所有权；关闭当前连接、切换
-     目录并重新打开的过程不得产生无所有权窗口。
-   - 服务停止时先停止接收新操作，再排空在途操作并等待 Worker 完整退出；
-     关闭失败时才终止 Worker。新 HMR generation 必须等待旧 generation 的
-     Worker 结束后启动。
-   - 索引查询按调用方声明的 `memoryStatus` 过滤。主对话注册的
-     `living_memory_search` 以必填参数允许模型检索活跃、归档或全部记忆；
-     召回内部搜索和 Dream 邻居查询固定只查活跃记忆。归档向量随 rebuild
-     与 reconcile 完整维护，WebUI 重新激活记忆时可直接复用。
-   - 预设状态账本（`lm_index_preset_state`）只落盘终态 `ready`/`dirty`；
-     `building`、`unavailable` 等进行中或瞬态条件只存在于主进程状态
-     overlay，不得持久化。账本行的生命周期不变量为「行存在 ⇔ 预设存在于
-     DB 条目 ∪ 索引文档」，全量对账负责清除只剩状态行的孤儿。
-   - 就绪门禁按预设独立判定：只有索引级条件（manifest 未建立、全局维护
-     窗口进行中、worker 故障）拦截全部读取；单个预设的非终态或 dirty 不
-     得阻断其他预设的召回。
+   - PGlite/pgvector 是派生索引，Koishi 主数据库是记忆事实来源，索引必须能据此 reconcile 或 rebuild。
+   - PGlite 连接与目录所有权由同一个 Worker 持有：先取得所有权再打开数据库，先关闭数据库再释放所有权；重建切换目录期间不得出现无所有权窗口。
+   - 所有权只保证同机进程互斥，不支持多进程共享运行中的索引目录。
+     端点为 Windows 命名管道或 Linux 抽象 Unix Socket，标识取规范化目录的稳定哈希；不得重新引入锁文件、PID、mtime、心跳或 `fs-native-extensions`。
+   - 服务停止时先停止接收新操作，再排空在途操作并等待 Worker 退出，关闭失败才终止；新 HMR generation 必须等旧 generation 的 Worker 结束后再启动。
+   - 索引查询按调用方声明的 `memoryStatus` 过滤：主对话的 `living_memory_search` 由模型以必填参数选择活跃、归档或全部，召回内部检索与 Dream 邻居查询固定只查活跃。
+     归档向量照常维护，重新激活时直接复用。
+   - 预设状态账本（`lm_index_preset_state`）只落盘终态 `ready`/`dirty`，`building`、`unavailable` 等瞬态只存在于主进程，不得持久化。
+     账本行存在当且仅当该预设存在于 DB 条目或索引文档中，孤儿行由全量对账清除。
+   - 就绪门禁按预设独立判定：只有索引级条件（manifest 未建立、全局维护窗口、Worker 故障）拦截全部读取，单个预设未就绪不得阻断其他预设。
 
 10. WebUI 与 RPC
-   - Console RPC 变更必须同步更新 `src/contracts/rpc.ts`、Koishi declaration
-     merging、`src/plugins/webui.ts`、`client/api.ts`、`client/types.ts` 和受
-     影响的 Vue 状态或组件。
-   - 浏览器侧不得直接导入仅服务端可运行的模块；共享数据形状使用浏览器
-     安全的契约镜像。
-   - 分页、选中状态和弹窗编辑复用现有 composable 与组件边界，不在页面中
-     复制资源加载和变更逻辑。
-   - WebUI 的编辑、删除、导入导出、Dream、索引维护操作一律调用公开 RPC，
-     不绕过应用服务直接访问数据库或索引。
-   - 预设人设卡片对 Console 开放查看与手工编辑（编辑落 `source='manual'`
-     并自此不再自动覆盖，另有重新生成入口），对外部插件只提供只读接口：
-     `resolvePresetPersona` 取卡片正文（无卡片时取预设 system 部分原文，不调
-     模型、不落库）、`getPresetPersonaCard` 取带异常提示的只读视图，不开放
-     写入口。
+    - Console RPC 变更须同步 `src/contracts/rpc.ts`、Koishi declaration merging、`src/plugins/webui.ts`、`client/api.ts`、`client/types.ts` 与受影响的组件。
+    - 浏览器侧不得导入仅服务端可运行的模块，共享数据形状使用浏览器安全的契约镜像。
+    - 分页、选中状态与弹窗编辑复用现有 composable 与组件，不在页面中复制资源加载与变更逻辑。
+    - WebUI 的所有数据操作一律调用公开 RPC，不绕过应用服务直接访问数据库或索引。
 
 11. Koishi 生命周期与后台任务
-   - 必需服务为 `chatluna` 与 `database`；`console` 和
-     `chatluna_character` 仅在各自 `ctx.inject()` 片段中装配。
-   - 后台工作流保持非阻塞，并保留既有任务记录、错误日志和审计语义。
-   - 定时器、事件监听、Worker 和缓存必须绑定插件生命周期；dispose 后不得
-     接受新的数据库、索引或模型任务。
-   - 日志统一经 `LivingMemoryLogger` 或 Koishi logger 输出。
+    - 必需服务为 `chatluna` 与 `database`；`console` 与 `chatluna_character` 只在各自的 `ctx.inject()` 片段中装配。
+    - 后台工作流保持非阻塞，保留既有的任务记录与错误日志。
+    - 定时器、事件监听、Worker 与缓存必须绑定插件生命周期；dispose 后不得接受新的数据库、索引或模型任务。
+    - 日志统一经 `LivingMemoryLogger` 或 Koishi logger 输出。
 
 ## 工程原则
 
@@ -302,11 +164,9 @@ chatluna-livingmemory/
 ## 验证要求
 
 1. 仅文档变更：运行 `git diff --check`。
-2. 服务端源码变更：运行 `yarn lint`（oxlint 加 `oxfmt --check`，含格式
-   检查；`*.md` 经 `.prettierignore` 排除）与 `git diff --check`。
-3. 契约、持久化或 RPC 变更：另运行
-   `yarn atsc -p tsconfig.json --noEmit`。
+2. 服务端源码变更：运行 `yarn lint`（oxlint 加 `oxfmt --check`）、`yarn test` 与 `git diff --check`。
+3. 契约、持久化或 RPC 变更：另运行 `yarn atsc -p tsconfig.json --noEmit`。
 4. 客户端或 Console 变更：另运行 `yarn build:client`。
-5. 服务端构建、Worker 或包边界变更：运行 `yarn build:server`；同时涉及客户
-   端时运行完整 `yarn build`。构建脚本依赖 win32-only 二进制，在 WSL 下无法
-   执行，此时如实说明该级验证未完成。
+5. 服务端构建、Worker 或包边界变更：运行 `yarn build:server`；同时涉及客户端时运行完整 `yarn build`。
+
+在 WSL 环境下无法执行完整测试，需要 Windows 环境执行。

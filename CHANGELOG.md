@@ -4,6 +4,7 @@
 
 - pending: 精简 README、配置项描述与 WebUI 指南的措辞，并按代码修正已过时的内容。README 的模型表把 `mainModel`、`embeddingModel` 的「启用自动提取或 Dream 时必需」「记忆召回和 Dream 均必需」统一为「必需」，`rerankModel` 只写「可选」，不再在该列说明未配置或失败的后果；召回一节只描述用户可感知的行为，删除候选倍数、逐短语取最大分等实现细节，以及 0.26.0 移除召回策略、首次升级补齐向量索引来源字段这两段升级说明（已记录在 CHANGELOG）。「记忆查询工具」一节按现行实现重写：`living_memory_search` 的模型参数是 `memoryStatus`，没有 `memoryTypes`，返回字段为 id、类别、更新时间、情绪色彩、来源会话与正文；`living_memory_get_messages` 每次只查看一条记忆，没有批量上限与 `notFoundMemoryIds`；`living_memory_create_memory` 的记忆字段补上 `speakerLabels`。`src/index.ts` 的配置描述删除「（必需）」标注、未配置或失败时的后果说明，以及与相邻配置项重复的内容；`enableSnapshotInjection` 不再在描述中说明 Character 注入方式。README、`debug` 配置描述与 AGENTS.md §11 删除「仅应在访问受控的环境启用」与凭证掩码的说明：Koishi 控制台与日志只有实例拥有者可见，该提示没有对象。`docs/WEBUI_GUIDE.md` 按现有实现更新文件清单（实际包含 `client/tsconfig.json`、`env.d.ts` 及组件目录）、入口路径解析（开发入口取真实路径，生产入口固定为 `node_modules` 路径）、客户端入口与 RPC 事件类型的两侧声明方式。
 - pending: 修正 README 中「自动增量 Dream 不生成用户画像」的错误描述。增量 Dream 自 8352be7 起会在批次结束后为本批涉及的用户重新生成画像（同样受 `enableUserProfileInjection` 控制），README 的旧表述未随之更新，596ef62 精简措辞时沿用了该错误。
+- pending: 重写 AGENTS.md，设计约束只保留不变量、禁止项与必要原因。装包算法、占位渲染、卡片生成流程等实现细节删去（代码注释已有记载），并去掉为约束辩护或交代来历的句子；行文按语义断行，不再按固定列宽手工折行。修正三处与代码不符的表述：§7 称 `living_memory_search` 只查询活跃记忆，与 §9 及实现矛盾（主对话工具由模型以必填 `memoryStatus` 选择范围，仅召回内部实例固定查活跃），现删去该句，以 §9 为准；§5「提取必须取得对应预设提示词」已被人设卡片取代，并入 §7 人设卡片一条；§6 补明全量与增量 Dream 都会生成画像。§10 的人设卡片只读接口并入 §7，消除重复。验证要求为服务端源码变更补上 `yarn test`，WSL 说明改为整体说明：在 WSL 环境下无法执行完整测试，需要 Windows 环境执行。
 
 ## 2026-10-07 version:0.26.0
 
