@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict'
-import { Context } from 'koishi'
-import SQLiteDriver from '@koishijs/plugin-database-sqlite'
 import type { MemoryEntryStatus } from '../src/contracts/memory'
 import type {
     AttributedMemoryItem,
     DreamMemoryMutation
 } from '../src/contracts/workflows'
 import { LivingMemoryRepository } from '../src/service/persistence/repository'
-import { createTestContext } from './persistence-test-utils'
+import {
+    createTestContext,
+    withLivingMemoryRepository as withRepository
+} from './persistence-test-utils'
 
 const scope = {
     conversationId: 'conversation-1',
@@ -55,25 +56,6 @@ const createMemory = (
         },
         [`${label}-speaker`]
     )
-
-const withRepository = async (
-    callback: (
-        ctx: Context,
-        repository: LivingMemoryRepository
-    ) => Promise<void>
-) => {
-    const ctx = createTestContext()
-    ctx.plugin(SQLiteDriver, { path: ':memory:' })
-    const repository = new LivingMemoryRepository(ctx)
-    repository.defineTables()
-    await ctx.start()
-
-    try {
-        await callback(ctx, repository)
-    } finally {
-        await ctx.stop()
-    }
-}
 
 it('atomically updates an active Dream merge and archives its sources', async () => {
     await withRepository(async (ctx, repository) => {

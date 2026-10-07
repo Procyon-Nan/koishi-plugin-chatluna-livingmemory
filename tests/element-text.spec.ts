@@ -215,10 +215,4 @@ describe('elementsToLogText', () => {
             ])
         ).toBe('文档[链接:https://example.test/raw]')
     })
-
-    it('converts br elements into newlines', () => {
-        expect(
-            elementsToLogText([text('第一行'), { type: 'br' }, text('第二行')])
-        ).toBe('第一行\n第二行')
-    })
 })

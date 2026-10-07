@@ -133,10 +133,6 @@ it('reuses semantic scores for keyword candidates in the top-k intersection', as
         }
     ])
     assert.equal(calls.length, 2)
-    assert.match(
-        calls[1].text,
-        /WHEN m\.memory_id = ANY\(\$\d+::text\[\]\)\s+THEN NULL/u
-    )
     assert.deepEqual(calls[1].parameters?.at(-1), [
         'semantic-alpha',
         'semantic-only'

@@ -70,10 +70,7 @@ it('persists the agentic snapshot without persisting a successful job', async ()
                 snapshots.push({ query, items })
             }
         },
-        run: async (_history, runLogger) => {
-            runLogger.diagnostic('test.agentic.context')
-            return createAgenticTrace('  remembered context  ')
-        },
+        run: async () => createAgenticTrace('  remembered context  '),
         logger: captured.logger
     })
 
@@ -91,21 +88,6 @@ it('persists the agentic snapshot without persisting a successful job', async ()
     const trace = createAgenticTrace('  remembered context  ')!
     assert.equal(snapshots[0].query, JSON.stringify(trace.item.toolCallSummary))
     assert.deepEqual(snapshots[0].items, [trace.item])
-    const snapshotLog = captured.info.find((message) =>
-        message.includes('event=recall.snapshot.updated')
-    )
-    assert.match(snapshotLog ?? '', /matched=/u)
-    assert.match(
-        snapshotLog ?? '',
-        /--- snapshot\.content ---\nremembered context\n--- end recall\.snapshot\.updated ---$/u
-    )
-    assert.ok(
-        captured.info.some((message) =>
-            /event=test.agentic.context workflow=recall runId=[^ ]+ presetId=preset-1 conversationId=conversation-1/u.test(
-                message
-            )
-        )
-    )
 })
 
 it('keeps the previous snapshot without persisting a job for <NO_MEMORY>', async () => {
@@ -189,6 +171,7 @@ it('serializes recall runs for the same scope without persisted running state', 
     const jobStore = createJobStore()
     let resolveRun: ((trace: null) => void) | undefined
     let runCalls = 0
+    let tail = 100
     const captured = createCapturedLogger()
     const pendingRun = new Promise<null>((resolve) => {
         resolveRun = resolve
@@ -199,11 +182,15 @@ it('serializes recall runs for the same scope without persisted running state', 
             runCalls += 1
             return await pendingRun
         },
+        tailSeq: () => tail,
         logger: captured.logger
     })
 
     await coordinator.queue(scope, currentMessage, async () => [])
+    // 间隔已满足：第二次请求越过间隔检查，只能被运行锁拦下
+    tail = 101
     await coordinator.queue(scope, currentMessage, async () => [])
+    await new Promise((resolve) => setTimeout(resolve, 20))
     assert.equal(runCalls, 1)
 
     assert.ok(resolveRun)
@@ -256,32 +243,28 @@ it('persists one failed recall job when snapshot persistence throws', async () =
     assert.match(jobStore.jobs[0]?.error ?? '', /snapshot write failure/u)
 })
 
-it('logs recall scope and preserves the original background error', async () => {
-    const backgroundError = new Error('failed to persist recall failure')
-    const captured = createCapturedLogger()
+it('retries immediately after a failed recall instead of waiting out the interval', async () => {
+    const jobStore = createJobStore()
+    let runCalls = 0
     const coordinator = createCoordinator({
-        repository: {
-            createFailedJob: async () => {
-                throw backgroundError
-            }
-        },
+        repository: { createFailedJob: jobStore.createFailedJob },
         run: async () => {
-            throw new Error('agentic failure')
+            runCalls += 1
+            if (runCalls === 1) {
+                throw new Error('agentic failure')
+            }
+            return createAgenticTrace('记得')
         },
-        logger: captured.logger
+        recallIntervalMessages: 10
     })
 
     await coordinator.queue(scope, currentMessage, async () => [])
-    await waitFor(
-        () => captured.warnings.length === 1,
-        'recall background warning'
-    )
+    await waitFor(() => jobStore.jobs.length === 1, 'failed first recall')
+    await new Promise((resolve) => setTimeout(resolve, 0))
 
-    assert.match(
-        String(captured.warnings[0]?.[0]),
-        /event=recall.failed workflow=recall .*presetId=preset-1.*conversationId=conversation-1/u
-    )
-    assert.equal(captured.warnings[0]?.[1], backgroundError)
+    // 日志没有新消息：锚点若未清除，这次请求会被间隔拦下
+    await coordinator.queue(scope, currentMessage, async () => [])
+    await waitFor(() => runCalls === 2, 'immediate retry')
 })
 
 it('continues recall with empty history without persisting a job', async () => {

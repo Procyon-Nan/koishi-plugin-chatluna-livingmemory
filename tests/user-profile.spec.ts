@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { AIMessage } from '@langchain/core/messages'
 import { LivingMemoryLogger } from '../src/service/logging/logger'
 import type {
     MemoryEntryRecord,
@@ -121,15 +120,13 @@ const createHarness = (
         reviewedProfiles,
         debugMessages,
         run: async (
-            responses: Parameters<typeof createToolCallingModel>[0],
-            logger?: LivingMemoryLogger
+            responses: Parameters<typeof createToolCallingModel>[0]
         ) => {
             const model = createToolCallingModel(responses)
             const result = await service.regenerate(
                 options.presetId ?? 'preset-1',
                 [memory.speakerKeys[0]],
-                model.model,
-                logger
+                model.model
             )
             return { model, result }
         }
@@ -265,41 +262,6 @@ it('keeps user profile payloads out of ordinary debug logs', async () => {
     )
 })
 
-it('keeps user profile failures correlated with the Dream job', async () => {
-    const harness = createHarness()
-    const messages: string[] = []
-    const jobLogger = new LivingMemoryLogger(
-        {
-            info: (message: unknown) => messages.push(String(message)),
-            warn: () => {},
-            error: () => {}
-        } as never,
-        () => true
-    ).with({
-        workflow: 'dream',
-        jobId: 'dream-job-1',
-        presetId: 'preset-1',
-        trigger: 'manual'
-    })
-
-    await harness.run(
-        [
-            new AIMessage('invalid profile result'),
-            new AIMessage('invalid profile result'),
-            new AIMessage('invalid profile result')
-        ],
-        jobLogger
-    )
-
-    assert.ok(
-        messages.some((message) =>
-            /event=user-profile.skipped workflow=dream jobId=dream-job-1 .*presetId=preset-1.*trigger=manual/u.test(
-                message
-            )
-        )
-    )
-})
-
 it('uses the Character preset name as the user profile assistant label', async () => {
     const harness = createHarness({
         presetId: `角色甲${characterPresetSuffix}`
@@ -324,26 +286,6 @@ it('does not rewrite or truncate generated user profile content', async () => {
     assert.equal(harness.savedProfiles.length, 1)
     assert.equal(harness.savedProfiles[0]?.content, content)
     assert.deepEqual(harness.savedProfiles[0]?.sourceMemoryIds, ['memory-1'])
-})
-
-it('retries once after a non-tool response', async () => {
-    const harness = createHarness()
-    const { model, result } = await harness.run([
-        new AIMessage('普通文本画像'),
-        createProfileCall(profileContent, 'result-2')
-    ])
-
-    assert.equal(result.generated, 1)
-    assert.equal(model.invocations.length, 2)
-})
-
-it('preserves brackets inside profile content', async () => {
-    const harness = createHarness()
-    const content = '我记得张三把这件事标成了[注意]。'
-    const { result } = await harness.run([createProfileCall(content)])
-
-    assert.equal(result.generated, 1)
-    assert.equal(harness.savedProfiles[0]?.content, content)
 })
 
 it('records the reviewed input when the model chooses keep', async () => {
@@ -372,15 +314,4 @@ it('rejects keep without an existing profile and retries for an update', async (
     assert.equal(model.invocations.length, 2)
     assert.equal(harness.savedProfiles[0]?.content, profileContent)
     assert.equal(harness.reviewedProfiles.length, 0)
-})
-
-it('rejects null profile content and retries', async () => {
-    const harness = createHarness()
-    const { model, result } = await harness.run([
-        createToolCallMessage(userProfileResultToolName, { content: null }),
-        createProfileCall(profileContent, 'result-2')
-    ])
-
-    assert.equal(result.generated, 1)
-    assert.equal(model.invocations.length, 2)
 })

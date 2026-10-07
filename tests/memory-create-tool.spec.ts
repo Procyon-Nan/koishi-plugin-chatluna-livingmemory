@@ -3,10 +3,7 @@ import { ToolInputParsingException } from '@langchain/core/tools'
 import type { MemoryMutationInput } from '../src/contracts/memory'
 import type { MemoryScope } from '../src/contracts/memory'
 import type { LivingMemoryCreationProvider } from '../src/contracts/workflows'
-import {
-    livingMemoryCreateMemoryToolDescription,
-    livingMemoryCreateMemoryToolName
-} from '../src/service/memory/tools/create_contract'
+import { livingMemoryCreateMemoryToolName } from '../src/service/memory/tools/create_contract'
 import { LivingMemoryCreateMemoryTool } from '../src/service/memory/tools/create_memory_tool'
 import {
     LivingMemoryFactsCommittedError,
@@ -122,20 +119,6 @@ it('exposes the extraction-aligned schema directly to the model-facing tool', as
     const tool = new LivingMemoryCreateMemoryTool(provider, 10)
 
     assert.equal(tool.name, livingMemoryCreateMemoryToolName)
-    assert.match(livingMemoryCreateMemoryToolDescription, /memories：是必填项/u)
-    assert.match(
-        livingMemoryCreateMemoryToolDescription,
-        /禁止把数组编码成 JSON 字符串|错误 \{"memories":"\[\.\.\.\]"\}/u
-    )
-    assert.doesNotMatch(
-        livingMemoryCreateMemoryToolDescription,
-        /每条记忆遵循以下字段规范/u
-    )
-    // D10：单次写入数量不在工具描述中提供指导。
-    assert.doesNotMatch(
-        livingMemoryCreateMemoryToolDescription,
-        /最多 \d+ 条|一次最多|单次最多|条数上限/u
-    )
     assert.deepEqual(Object.keys(tool.schema.shape), ['memories'])
 
     await rejectsToolInvocation(

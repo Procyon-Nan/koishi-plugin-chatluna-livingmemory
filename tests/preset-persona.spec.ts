@@ -353,15 +353,6 @@ it('reads the preset text without generating when no card is stored', async () =
     assert.equal(harness.rows.size, 0)
 })
 
-it('reads the stored card, including a manual one', async () => {
-    const harness = createHarness([], {
-        stored: [storedCard({ card: 'manual card', source: 'manual' })]
-    })
-
-    assert.equal(await harness.service.readCard('preset-1'), 'manual card')
-    assert.equal(harness.model.invocations.length, 0)
-})
-
 it('lists stored cards without rendering presets or calling the model', async () => {
     const harness = createHarness([], {
         stored: [

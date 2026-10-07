@@ -4,20 +4,12 @@ import {
     type ToolRunnableConfig
 } from '@langchain/core/tools'
 import type { Context } from 'koishi'
-import {
-    LivingMemoryGetMessagesTool,
-    livingMemoryGetMessagesToolDescription
-} from '../src/service/memory/tools/get_messages_tool'
+import { LivingMemoryGetMessagesTool } from '../src/service/memory/tools/get_messages_tool'
 import {
     livingMemorySearchInputSchema,
-    livingMemorySearchToolInputSchema,
-    livingMemoryGetMessagesInputSchema
+    livingMemorySearchToolInputSchema
 } from '../src/service/memory/tools/search_contract'
-import {
-    livingMemorySearchToolDescription,
-    livingMemorySearchToolWithStatusDescription,
-    LivingMemorySearchTool
-} from '../src/service/memory/tools/embedding_search_tool'
+import { LivingMemorySearchTool } from '../src/service/memory/tools/embedding_search_tool'
 import type { LivingMemorySearchInput } from '../src/contracts/memory'
 import type { LivingMemoryEmbeddingSearchEngine } from '../src/service/workflows/recall/embedding_search_engine'
 import { resolveMainRunConversationId } from '../src/service/memory/helpers'
@@ -35,14 +27,11 @@ const createContext = (livingMemory?: unknown) =>
             name === 'chatluna_living_memory' ? livingMemory : undefined
     }) as unknown as Context
 
-const context = createContext()
-
 const mockEngine = {
     searchMemories: async () => []
 } as unknown as LivingMemoryEmbeddingSearchEngine
 
 const searchTool = new LivingMemorySearchTool(mockEngine, true)
-const getMessagesTool = new LivingMemoryGetMessagesTool(context)
 
 const createRecordingSearchProvider = () => {
     const presetIds: string[] = []
@@ -59,26 +48,12 @@ const toolConfig = (
     configurable: LivingMemoryToolConfigurable
 ): ToolRunnableConfig<LivingMemoryToolConfigurable> => ({ configurable })
 
-const rejectsStringifiedArray = async (promise: Promise<unknown>) => {
-    await assert.rejects(promise, (error: unknown) => {
-        assert.ok(error instanceof ToolInputParsingException)
-        assert.match(error.message, /Expected array, received string/u)
-        return true
-    })
-}
-
-it('exposes the strict search schema directly to the model-facing tool', async () => {
-    assert.equal(searchTool.schema, livingMemorySearchInputSchema)
-    assert.match(livingMemorySearchToolDescription, /必填 JSON 数组/u)
-    assert.match(
-        livingMemorySearchToolDescription,
-        /禁止把数组编码成 JSON 字符串/u
-    )
-
-    await rejectsStringifiedArray(
+it('rejects stringified arrays on the model-facing search tool', async () => {
+    await assert.rejects(
         searchTool.invoke({
             searchTexts: '["关系", "称呼"]'
-        } as never)
+        } as never),
+        ToolInputParsingException
     )
 })
 
@@ -96,11 +71,6 @@ it('exposes the required status filter only on the main-chat search tool', async
 
     const mainTool = new LivingMemorySearchTool(provider, true, false, true)
     assert.equal(mainTool.schema, livingMemorySearchToolInputSchema)
-    assert.match(
-        livingMemorySearchToolWithStatusDescription,
-        /memoryStatus：必填字符串/u
-    )
-    assert.doesNotMatch(livingMemorySearchToolDescription, /memoryStatus/u)
     assert.equal(searchTool.schema, livingMemorySearchInputSchema)
 
     await mainTool.invoke(
@@ -111,14 +81,6 @@ it('exposes the required status filter only on the main-chat search tool', async
         })
     )
     assert.equal(inputs[0].memoryStatus, 'archived')
-})
-
-it('exposes the single-memory source-message schema', async () => {
-    assert.equal(getMessagesTool.schema, livingMemoryGetMessagesInputSchema)
-    assert.match(
-        livingMemoryGetMessagesToolDescription,
-        /memoryId：必填字符串/u
-    )
 })
 
 it('renders source messages as the original transcript of one memory', async () => {

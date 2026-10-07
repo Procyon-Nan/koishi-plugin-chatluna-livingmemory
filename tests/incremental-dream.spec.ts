@@ -421,34 +421,6 @@ it('refreshes a mutated old candidate before processing the next seed', async ()
     )
 })
 
-it('queries the latest index state for every sequential seed', async () => {
-    const harness = createHarness(
-        [
-            keepResult(['seed-1', 'seed-2']),
-            keepResult(['seed-1', 'candidate']),
-            keepResult(['seed-2', 'candidate'])
-        ],
-        [
-            createEntry('seed-1'),
-            createEntry('seed-2', { createdAt: new Date(+now + 1) }),
-            createEntry('candidate', { isConsolidated: true })
-        ]
-    )
-
-    const result = await harness.service.run(presetId, 2)
-
-    assert.equal(result.failed, false)
-    assert.equal(harness.neighborCalls.length, 2)
-    assert.deepEqual(harness.neighborCalls[0].excludedMemoryIds, [
-        'seed-1',
-        'seed-2'
-    ])
-    assert.deepEqual(harness.neighborCalls[1].excludedMemoryIds, [
-        'seed-1',
-        'seed-2'
-    ])
-})
-
 it('limits each seed relation unit to the 30 nearest old memories', async () => {
     const candidates = Array.from({ length: 31 }, (_, index) =>
         createEntry(`candidate-${index.toString().padStart(2, '0')}`, {

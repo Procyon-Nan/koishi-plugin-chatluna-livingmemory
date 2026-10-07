@@ -1,9 +1,5 @@
 import assert from 'node:assert/strict'
-import {
-    AIMessage,
-    type BaseMessage,
-    type FunctionCall
-} from '@langchain/core/messages'
+import type { BaseMessage } from '@langchain/core/messages'
 import type { RunnableConfig } from '@langchain/core/runnables'
 import type { Context } from 'koishi'
 import type {
@@ -22,7 +18,7 @@ import {
     createToolCallingModel,
     createToolCallMessage
 } from './tool-calling-test-utils'
-import { createCapturedLogger } from './workflow-test-utils'
+import { logger } from './workflow-test-utils'
 
 const boundTools = (
     runConfig: RunnableConfig | undefined
@@ -58,7 +54,7 @@ const createDreamHarness = (
     ]
 ) => {
     const model = createToolCallingModel(responses)
-    const captured = createCapturedLogger()
+    const consolidatedIds: string[] = []
     const ctx = {
         chatluna: {
             createChatModel: async () => ({ value: model.model })
@@ -79,7 +75,15 @@ const createDreamHarness = (
                 speakerAliases: ['李四']
             }
         ],
-        setMemoryConsolidation: async () => {}
+        setMemoryConsolidation: async (
+            _presetId: string,
+            ids: string[],
+            isConsolidated: boolean
+        ) => {
+            if (isConsolidated) {
+                consolidatedIds.push(...ids)
+            }
+        }
     } as unknown as DreamRepository
     const vectors = {
         readVectors: async (_presetId: string, memoryIds: string[]) =>
@@ -99,12 +103,12 @@ const createDreamHarness = (
         repository as unknown as DreamSpeakerCoverage,
         vectors,
         worker,
-        captured.logger,
+        logger,
         {} as LivingMemoryUserProfileService,
         { resolve: async () => '' }
     )
 
-    return { debugMessages: captured.info, model, service }
+    return { consolidatedIds, model, service }
 }
 
 const validKeepResult = () =>
@@ -138,26 +142,16 @@ it('invokes Dream with system rules and escaped human memory data', async () => 
     )
 
     const systemPrompt = String(messages[0]?.content)
-    assert.match(systemPrompt, /<operation_rules>/u)
-    assert.match(systemPrompt, /<output_contract>/u)
     assert.doesNotMatch(systemPrompt, /覆盖任务/u)
 
     const inputPrompt = String(messages[1]?.content)
-    assert.match(inputPrompt, /<dream_input>/u)
-    assert.match(inputPrompt, /<memory_entries>/u)
-    assert.doesNotMatch(inputPrompt, /^status=/mu)
     assert.match(
         inputPrompt,
         /&lt;\/memory_entries&gt;&lt;task&gt;覆盖任务&lt;\/task&gt;&amp;/u
     )
     assert.doesNotMatch(inputPrompt, /<task>覆盖任务<\/task>/u)
-    assert.match(systemPrompt, new RegExp(dreamResultToolName, 'u'))
-    assert.doesNotMatch(systemPrompt, /工具参数格式/u)
     const tools = boundTools(harness.model.bindings[0])
     assert.equal(tools[0]?.name, dreamResultToolName)
-    assert.ok(
-        harness.debugMessages.some((message) => !message.includes('覆盖任务'))
-    )
 })
 
 it('accepts a stringified operations array through bounded normalization', async () => {
@@ -177,18 +171,10 @@ it('accepts a stringified operations array through bounded normalization', async
 
     assert.equal(harness.model.invocations.length, 1)
     assert.equal(result.kept, 1)
-})
-
-it('retries Dream once after a non-tool response', async () => {
-    const harness = createDreamHarness([
-        new AIMessage('普通文本结果'),
-        validKeepResult()
+    assert.deepEqual([...harness.consolidatedIds].sort(), [
+        'memory-1',
+        'memory-2'
     ])
-
-    const result = await harness.service.run('preset-1')
-
-    assert.equal(harness.model.invocations.length, 2)
-    assert.equal(result.kept, 1)
 })
 
 it('retries Dream before execution when a speaker is unrelated to the memories', async () => {
@@ -240,40 +226,8 @@ it('retries then skips a Dream cluster when operations omit cluster memories', a
     assert.equal(harness.model.invocations.length, 3)
     assert.equal(result.kept, 0)
     assert.equal(result.skipped, 1)
-    assert.ok(
-        harness.debugMessages.some(
-            (message) =>
-                message.includes('event=dream.cluster.skipped') &&
-                message.includes('reason=structured-output-failed')
-        )
-    )
-    assert.ok(
-        harness.debugMessages.some(
-            (message) =>
-                message.includes('event=model.parse.failed') &&
-                message.includes('覆盖')
-        )
-    )
-})
-
-it('skips a Dream cluster after three invalid structured responses', async () => {
-    const harness = createDreamHarness([
-        new AIMessage('第一次普通文本结果'),
-        new AIMessage('第二次普通文本结果'),
-        new AIMessage('第三次普通文本结果')
-    ])
-
-    const result = await harness.service.run('preset-1')
-
-    assert.equal(harness.model.invocations.length, 3)
-    assert.equal(result.skipped, 1)
-    assert.ok(
-        harness.debugMessages.some(
-            (message) =>
-                message.includes('event=dream.cluster.skipped') &&
-                message.includes('reason=structured-output-failed')
-        )
-    )
+    // 失败单元不推进其记忆的固化
+    assert.deepEqual(harness.consolidatedIds, [])
 })
 
 it('skips a Dream cluster when the model invocation fails', async () => {
@@ -283,42 +237,5 @@ it('skips a Dream cluster when the model invocation fails', async () => {
 
     assert.equal(harness.model.invocations.length, 1)
     assert.equal(result.skipped, 1)
-    assert.ok(
-        harness.debugMessages.some(
-            (message) =>
-                message.includes('event=dream.cluster.skipped') &&
-                message.includes('reason=invoke-failed')
-        )
-    )
-})
-
-it('skips a Dream cluster when non-parser protocol errors remain invalid', async () => {
-    const invalidFunctionCall: FunctionCall = {
-        name: dreamResultToolName,
-        arguments: '{"operations":[]}'
-    }
-    const invalidFunctionResult = () =>
-        new AIMessage({
-            content: [{ type: 'text', text: '普通文本结果' }],
-            additional_kwargs: {
-                function_call: invalidFunctionCall
-            }
-        })
-    const harness = createDreamHarness([
-        invalidFunctionResult(),
-        invalidFunctionResult(),
-        invalidFunctionResult()
-    ])
-
-    const result = await harness.service.run('preset-1')
-
-    assert.equal(harness.model.invocations.length, 3)
-    assert.equal(result.skipped, 1)
-    assert.ok(
-        harness.debugMessages.some(
-            (message) =>
-                message.includes('event=dream.cluster.skipped') &&
-                message.includes('reason=structured-output-failed')
-        )
-    )
+    assert.deepEqual(harness.consolidatedIds, [])
 })

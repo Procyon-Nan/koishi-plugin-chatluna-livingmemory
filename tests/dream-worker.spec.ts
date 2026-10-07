@@ -7,7 +7,6 @@ import {
 } from '../src/service/workflows/dream/hdbscan/algorithm'
 import { partitionDreamEntries } from '../src/service/workflows/dream/partitioning'
 import { LivingMemoryDreamWorkerClient } from '../src/service/workflows/dream/worker/client'
-import type { DreamHdbscanProgress } from '../src/service/workflows/dream/worker/protocol'
 import { LivingMemoryVectorIndexWorkerClient } from '../src/service/vector_index/worker_client'
 import { dreamWorkerPath, vectorIndexWorkerPath } from './worker-test-utils'
 
@@ -142,77 +141,6 @@ it('keeps the main event loop responsive during partitioning', async () => {
     assert.equal(partitions.length, 17)
     assert.equal(partitions.flat().length, entries.length)
     assert.ok(partitions.every((partition) => partition.length <= 350))
-    await client.stop()
-})
-
-it('reports progress only for requests that enable it', async () => {
-    const progress = new Array<DreamHdbscanProgress>()
-    const client = new LivingMemoryDreamWorkerClient({
-        workerPath: dreamWorkerPath
-    })
-    await client.start()
-    const rows = Array.from({ length: 64 }, (_, index) => [
-        Math.cos(index),
-        Math.sin(index),
-        1
-    ])
-
-    await client.runHdbscan(createMatrix(rows))
-    assert.equal(progress.length, 0)
-
-    await client.runHdbscan(
-        createMatrix(rows),
-        (update: DreamHdbscanProgress) => {
-            progress.push(update)
-        }
-    )
-    const phases: DreamHdbscanProgress['phase'][] = progress.map(
-        ({ phase }) => phase
-    )
-    assert.ok(phases.includes('normalizing'))
-    assert.ok(phases.includes('building-mst'))
-    assert.ok(phases.includes('building-hierarchy'))
-    assert.ok(phases.includes('selecting-clusters'))
-    assert.ok(progress.every(({ elapsedMs }) => elapsedMs >= 0))
-    assert.ok(progress.length < 40)
-    await client.stop()
-})
-
-it('routes progress to the callback for each concurrent request', async () => {
-    const client = new LivingMemoryDreamWorkerClient({
-        workerPath: dreamWorkerPath
-    })
-    await client.start()
-    const createRows = (count: number) =>
-        Array.from({ length: count }, (_, index) => [
-            Math.cos(index),
-            Math.sin(index),
-            1
-        ])
-    const firstProgress: DreamHdbscanProgress[] = []
-    const secondProgress: DreamHdbscanProgress[] = []
-
-    await Promise.all([
-        client.runHdbscan(createMatrix(createRows(48)), (update) =>
-            firstProgress.push(update)
-        ),
-        client.runHdbscan(createMatrix(createRows(72)), (update) =>
-            secondProgress.push(update)
-        )
-    ])
-
-    assert.ok(firstProgress.length > 0)
-    assert.ok(secondProgress.length > 0)
-    const firstNormalizing = firstProgress.filter(
-        ({ phase }) => phase === 'normalizing'
-    )
-    const secondNormalizing = secondProgress.filter(
-        ({ phase }) => phase === 'normalizing'
-    )
-    assert.ok(firstNormalizing.length > 0)
-    assert.ok(secondNormalizing.length > 0)
-    assert.ok(firstNormalizing.every(({ total }) => total === 48))
-    assert.ok(secondNormalizing.every(({ total }) => total === 72))
     await client.stop()
 })
 

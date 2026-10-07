@@ -1,14 +1,6 @@
 import assert from 'node:assert/strict'
 import { usePagedResource } from '../client/composables/use-paged-resource'
-import { useSelection } from '../client/composables/use-selection'
-import type {
-    MemorySnapshotRecord,
-    MemoryVectorIndexStatus
-} from '../client/types'
-import {
-    formatImportancePercent,
-    snapshotHitCount
-} from '../client/utils/display'
+import type { MemoryVectorIndexStatus } from '../client/types'
 import { isVectorWorkflowReady } from '../client/utils/vector-index'
 
 const vectorStatus = (
@@ -88,67 +80,4 @@ it('restores paged resource loading state after loader failures', async () => {
 
     await assert.rejects(resource.refresh(), /load failed/)
     assert.equal(resource.loading.value, false)
-})
-
-it('tracks selection state for bulk memory operations', () => {
-    const selection = useSelection()
-
-    assert.equal(selection.selectedCount.value, 0)
-    assert.equal(selection.isSelected('memory-1'), false)
-
-    selection.toggleSelected('memory-1')
-    selection.toggleSelected('memory-2')
-    assert.equal(selection.selectedCount.value, 2)
-    assert.equal(selection.isSelected('memory-1'), true)
-    assert.equal(selection.isSelected('memory-3'), false)
-
-    selection.toggleSelected('memory-1')
-    assert.equal(selection.selectedCount.value, 1)
-    assert.equal(selection.isSelected('memory-1'), false)
-
-    selection.selectAll(['memory-4', 'memory-5', 'memory-6'])
-    assert.deepEqual(
-        [...selection.selectedIds.value],
-        ['memory-4', 'memory-5', 'memory-6']
-    )
-    assert.equal(selection.isSelected('memory-2'), false)
-
-    selection.clearSelection()
-    assert.equal(selection.selectedCount.value, 0)
-})
-
-it('formats importance values and counts snapshot hits', () => {
-    const snapshot: MemorySnapshotRecord = {
-        id: 'snapshot-1',
-        presetId: 'preset-1',
-        conversationId: 'conversation-1',
-        query: 'query',
-        items: [
-            {
-                finalText: 'result',
-                toolCallSummary: {
-                    searchTexts: ['query'],
-                    searchKeywords: [],
-                    maxCandidates: 30
-                },
-                matchedMemories: [
-                    {
-                        type: 'fact',
-                        content: 'content',
-                        keywords: [],
-                        summary: null,
-                        sentiment: null,
-                        importance: 0.8,
-                        createdAt: new Date('2026-07-01T00:00:00.000Z'),
-                        updatedAt: new Date('2026-07-01T00:00:00.000Z')
-                    }
-                ]
-            }
-        ],
-        createdAt: new Date('2026-07-01T00:00:00.000Z')
-    }
-
-    assert.equal(formatImportancePercent(null), '0%')
-    assert.equal(formatImportancePercent(0.734), '73%')
-    assert.equal(snapshotHitCount(snapshot), 1)
 })

@@ -223,6 +223,12 @@ const queueExtraction = async (harness: CoordinatorHarness) => {
     })
 }
 
+/**
+ * 排干在 queue 返回之后才调用提取器，断言「没有提取」前须先让出，
+ * 否则本不该发生的提取尚未开始，断言恒成立。
+ */
+const settleDrain = () => new Promise((resolve) => setTimeout(resolve, 20))
+
 describe('planExtractionChunks', () => {
     const log = (roles: ('user' | 'assistant')[]): ConversationLogMessage[] =>
         roles.map((role, index) => ({
@@ -448,11 +454,13 @@ describe('LivingMemoryExtractionCoordinator', () => {
 
     it('skips extraction entirely when the window is zero', async () => {
         const harness = createHarness({ window: 0 })
+        await queueExtraction(harness)
         harness.messageLog.appendReply(scope.conversationId, [
             entry('user', 'a'),
             entry('assistant', 'b')
         ])
         await queueExtraction(harness)
+        await settleDrain()
         expect(harness.getExtractorCalls()).toBe(0)
     })
 
@@ -496,6 +504,7 @@ describe('LivingMemoryExtractionCoordinator', () => {
             entry('user', '更多闲聊')
         ])
         await queueExtraction(harness)
+        await settleDrain()
         expect(harness.getExtractorCalls()).toBe(1)
     })
 
@@ -733,6 +742,7 @@ describe('LivingMemoryExtractionCoordinator', () => {
 
         // 解析失败视为该块已消费，不重试
         await queueExtraction(harness)
+        await settleDrain()
         expect(harness.getExtractorCalls()).toBe(1)
     })
 
@@ -752,6 +762,7 @@ describe('LivingMemoryExtractionCoordinator', () => {
         ])
         await queueExtraction(harness)
         // 清空后游标重置为当前末尾，重新起算
+        await settleDrain()
         expect(harness.getExtractorCalls()).toBe(0)
     })
 

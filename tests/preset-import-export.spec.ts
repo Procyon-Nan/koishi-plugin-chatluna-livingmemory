@@ -139,7 +139,7 @@ it('copies preset data without moving source records', async () => {
     })
 })
 
-it('preserves consolidation only for same-preset version 3 restores', async () => {
+it('preserves consolidation when restoring an export into its own preset', async () => {
     await withLivingMemoryRepository(async (_ctx, repository) => {
         const presetId = 'preset-consolidation'
         const memory = await repository.createMemory(

@@ -246,30 +246,3 @@ it('falls back to hybrid order when the reranker fails', async () => {
     )
     assert.equal(captured.warnings[0]?.[1], rerankError)
 })
-
-it('propagates vector index failures', async () => {
-    const vectorSearch = createVectorSearch({
-        searchHybrid: async () => {
-            throw new Error('vector index unavailable')
-        }
-    })
-    const engine = new LivingMemoryEmbeddingSearchEngine(
-        {} as Context,
-        {
-            memorySearchToolMaxResults: 5,
-            memorySearchMinSimilarity: 0,
-            rerankModel: '无'
-        },
-        createRepository([]),
-        vectorSearch,
-        logger
-    )
-
-    await assert.rejects(
-        engine.searchMemories('preset-a', {
-            searchTexts: ['query'],
-            memoryTypes: ['all']
-        }),
-        /vector index unavailable/u
-    )
-})

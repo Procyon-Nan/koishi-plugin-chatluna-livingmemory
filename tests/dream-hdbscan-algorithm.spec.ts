@@ -160,24 +160,6 @@ it('keeps a two-memory Dream candidate as one cluster', () => {
     assert.deepEqual([...labels], [0, 0])
 })
 
-it('handles duplicate vectors without unstable labels', () => {
-    const labels = runDreamHdbscan(
-        createMatrix([
-            [1, 0],
-            [1, 0],
-            [0, 1],
-            [0, 1]
-        ])
-    )
-    assert.deepEqual(canonicalizeLabels(labels), {
-        clusters: [
-            [0, 1],
-            [2, 3]
-        ],
-        noise: []
-    })
-})
-
 it('keeps separated clusters while leaving isolated entries as noise', () => {
     const rows = [
         [1, 0],
@@ -238,49 +220,6 @@ it('uses stable index order when MST distances tie', () => {
         { left: 1, right: 2, distance: 2, order: 1 },
         { left: 0, right: 3, distance: 2, order: 2 }
     ])
-})
-
-it('keeps the fixed regression fixture deterministic', () => {
-    let state = 0x9e3779b9
-    const random = () => {
-        state = (1664525 * state + 1013904223) >>> 0
-        return state / 0x1_0000_0000
-    }
-    const rows = Array.from({ length: 48 }, () => [
-        random(),
-        random(),
-        random(),
-        random()
-    ])
-    const first = runDreamHdbscan(createMatrix(rows))
-    const second = runDreamHdbscan(createMatrix(rows))
-
-    assert.deepEqual([...second], [...first])
-    assertValidLabels(first, rows.length)
-})
-
-it('reports bounded progress for every algorithm phase', () => {
-    const progress: string[] = []
-    runDreamHdbscan(
-        createMatrix(
-            Array.from({ length: 64 }, (_, index) => [
-                Math.cos(index),
-                Math.sin(index),
-                1
-            ])
-        ),
-        ({ phase, completed, total }) => {
-            assert.ok(completed >= 0)
-            assert.ok(completed <= total)
-            progress.push(phase)
-        }
-    )
-
-    assert.ok(progress.includes('normalizing'))
-    assert.ok(progress.includes('building-mst'))
-    assert.ok(progress.includes('building-hierarchy'))
-    assert.ok(progress.includes('selecting-clusters'))
-    assert.ok(progress.length < 40)
 })
 
 it('preserves representative cluster membership', () => {

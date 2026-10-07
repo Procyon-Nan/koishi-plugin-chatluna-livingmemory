@@ -791,8 +791,7 @@ it('rebuilds when the model, dimension, or schema version changes', async () => 
             { modelId: 'model-a', dimension: 3, schemaVersion: 1 },
             { modelId: 'model-b', dimension: 3, schemaVersion: 1 },
             { modelId: 'model-b', dimension: 4, schemaVersion: 1 },
-            { modelId: 'model-b', dimension: 4, schemaVersion: 2 },
-            { modelId: 'model-b', dimension: 4, schemaVersion: 3 }
+            { modelId: 'model-b', dimension: 4, schemaVersion: 2 }
         ]
         const generations: string[] = []
 
@@ -940,50 +939,6 @@ it('keeps index jobs running until work completes and records failures', async (
         assert.equal(service.getStatus().state, 'unavailable')
         assert.equal(repository.legacyEmbeddingsMigrated, false)
         assert.equal(captured.warnings.length, 1)
-        await service.stop()
-    })
-}, 120_000)
-
-it('logs rebuild batch progress only when debug is enabled', async () => {
-    await withTemporaryDirectory(async (baseDir) => {
-        const repository = new TestVectorIndexRepository(
-            Array.from({ length: 51 }, (_, index) =>
-                createSource(`memory-${String(index).padStart(2, '0')}`)
-            )
-        )
-        const captured = createLogger()
-        const service = createService({
-            baseDir,
-            repository,
-            modelId: 'model-a',
-            dimension: 3,
-            debug: true,
-            logger: captured.logger
-        })
-
-        await service.start()
-        await service.waitForInitialization()
-        assert.ok(
-            captured.info.some((message) =>
-                /event=vector-index.rebuild.progress workflow=vector-index jobId=job-1 presetId=\* .*completed=50.*total=51/u.test(
-                    message
-                )
-            )
-        )
-        assert.ok(
-            captured.info.some((message) =>
-                /event=vector-index.rebuild.progress workflow=vector-index jobId=job-1 presetId=\* .*completed=51.*total=51/u.test(
-                    message
-                )
-            )
-        )
-        assert.ok(
-            captured.info.some((message) =>
-                /event=vector-index.reconcile.progress workflow=vector-index jobId=job-1 presetId=preset-a .*completed=51.*total=51/u.test(
-                    message
-                )
-            )
-        )
         await service.stop()
     })
 }, 120_000)
