@@ -77,7 +77,7 @@ input: |
 
 - 预设的活跃记忆少于 30 条时不执行 Dream。
 - 在 WebUI 中手动执行 Dream 会对预设的全部活跃记忆聚类整理；开启 `enableUserProfileInjection` 时，完成后更新用户画像。
-- 开启 `enableAutoDream` 后，未整理的记忆达到 `autoDreamMemoryGrowthThreshold` 条时自动执行增量 Dream。每次只整理最早的一批（条数同该阈值），并与相关的已整理记忆一同比对，不生成用户画像。
+- 开启 `enableAutoDream` 后，未整理的记忆达到 `autoDreamMemoryGrowthThreshold` 条时自动执行增量 Dream。每次只整理最早的一批（条数同该阈值），并与相关的已整理记忆一同比对；开启 `enableUserProfileInjection` 时，完成后更新本批涉及用户的画像。
 - Dream 失败时，未整理的记忆保留到下一次 Dream 继续处理。
 - 导入预设不会触发自动 Dream。跨预设导入的记忆以未整理状态写入，导入完成后 WebUI 会提示手动执行一次 Dream。
 
