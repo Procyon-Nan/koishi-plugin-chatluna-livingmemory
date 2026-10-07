@@ -127,7 +127,8 @@ chatluna-livingmemory/
    - `living_memory_entry.speakerKeys` 是用户关联事实，`living_memory_entry_speaker` 只索引活跃记忆。
      `status` 或 `speakerKeys` 变更必须与关联行重写在同一事务内；不得增加独立计数字段或为归档记忆保留关联行。
    - schema 变更须同步公共契约、表定义、normalizer、仓库、迁移兼容与受影响的 RPC/客户端类型。
-   - 记忆正文、摘要或关键词变化时必须使旧 embedding 失效并安排索引同步；仅状态变化时保留向量。
+   - embedding 只由正文生成：正文变化时必须重新生成，其余字段变化（含状态）保留向量。
+     任何字段变化都须同步索引文档，关键词索引随之重写。
    - 快照内容变化、记忆删除或会话清理必须清除对应的快照缓存。
    - 管理指令的 text/user 删除只匹配活跃记忆并执行归档，profile 删除只删目标画像；所有删除保留 60 秒确认。
 
