@@ -31,7 +31,8 @@ export class LivingMemoryRecallCoordinator {
     private readonly recallLockByConversation = new Set<string>()
     /**
      * 召回窗口锚点：上次实际执行召回时点的日志末序号。间隔按此后累计
-     * 进入日志的消息条数（含闲聊）计；锚点只在召回实际执行时前移。
+     * 进入日志的消息条数（含闲聊）计；锚点只在召回实际执行时前移，
+     * 召回失败时清除，使下次触发立即重试。
      */
     private readonly anchorSeqByScope = new Map<string, number>()
 
@@ -109,6 +110,7 @@ export class LivingMemoryRecallCoordinator {
         })
         this.run(scope, currentMessage, loadHistoryMessages, runLogger)
             .catch((error) => {
+                this.anchorSeqByScope.delete(lockKey)
                 runLogger.warn('recall.failed', { operation: 'run' }, error)
             })
             .finally(() => {
