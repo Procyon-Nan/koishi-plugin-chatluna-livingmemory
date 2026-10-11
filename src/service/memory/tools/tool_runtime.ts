@@ -54,7 +54,7 @@ const isCharacterToolSource = (
 
 export type LivingMemoryToolPresetIdResolution =
     | { ok: true; presetId: string }
-    | { ok: false; reason: 'missing-preset' | 'subagent-tool-call' }
+    | { ok: false; reason: 'missing-preset' }
 
 /**
  * 解析工具调用所属的记忆预设。
@@ -69,10 +69,6 @@ export const resolveToolMemoryPresetId = (
     const preset = toNonEmptyString(configurable?.preset)
     if (preset == null) {
         return { ok: false, reason: 'missing-preset' }
-    }
-
-    if (isSubagentRunContext(configurable?.agentContext)) {
-        return { ok: false, reason: 'subagent-tool-call' }
     }
 
     if (isCharacterToolSource(configurable)) {
@@ -111,6 +107,10 @@ export const resolveToolMemoryScopeConfigurable = (
     }
 
     const agentContext = toAgentRunContextFields(configurable?.agentContext)
+    if (isSubagentRunContext(agentContext)) {
+        return { ok: false, reason: 'subagent-tool-call' }
+    }
+
     const session = toToolSessionFields(configurable?.session)
 
     if (isCharacterToolSource(configurable)) {

@@ -104,7 +104,7 @@ input: |
 
 ## 记忆工具
 
-`enableMemoryTools` 统一控制以下五个工具是否供 ChatLuna 主 agent 使用，默认关闭。子 agent 不提供这些工具，调用时也会被拒绝。此开关只控制对话工具注册，不影响后台召回内部的检索工具。
+`enableMemoryTools` 统一控制以下五个工具是否供 ChatLuna 主 agent 使用，默认关闭。工具默认不向子 agent 提供；ChatLuna 的工具权限配置可以覆盖这一默认设置。此开关只控制对话工具注册，不影响后台召回内部的检索工具。
 
 升级后请使用新开关重新开启工具；原 `enableMemoryCreationTool` 已移除，检索与来源工具也不再始终注册。`memoryCreateToolMaxMemories` 仍控制单次创建记忆的数量。
 

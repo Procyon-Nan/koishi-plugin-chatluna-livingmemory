@@ -2,14 +2,15 @@
 
 ## 2026-10-11 version:0.26.3
 
-- pending: 新增按预设更新活跃记忆的应用接口，在预设串行队列内校验记忆归属与状态，复用事务、speaker 关联和向量索引同步，供记忆更新工具调用。
-- pending: 五个对话记忆工具仅允许主 agent 使用，统一注册元数据关闭子 agent 可见性，并将现有子代理拒绝检查收敛到共享预设解析入口，覆盖检索、来源消息、创建、更新和归档调用；同步配置描述与 README。
-- pending: 移除独立的 `LivingMemorySearchToolInput` 类型别名，搜索工具、召回和既有测试统一直接从 `memorySearchTool.schema` 推导参数类型。
-- pending: 按 ChatLuna 已移除工具参数自动修复的前提，简化记忆检索参数 schema，使用 Zod 原生数组、去除首尾空白与长度校验，移除字符串化数组拦截正则及规则包装。参数错误继续通过现有工具校验返回失败原因，由模型纠正后重新调用。
-- pending: 将五个记忆工具的名称、描述和参数 schema 统一收敛到 `src/service/prompts/memory_tools.ts`，按工具组织定义对象，移除分散的 contract 文件与实现文件内描述。工具实现、召回和平台注册共用定义，注册入口统一装配与注销。
-- pending: 统一主对话与召回的 `living_memory_search`，固定只检索活跃记忆，移除模型侧状态参数、双份工具定义及构造开关，输入类型直接从 schema 推导；归档记忆保留供人工查看。同步既有工具用例、README 与 AGENTS 约束。
+- pending: 记忆工具通过注册元数据由 ChatLuna 在组装子 agent 工具列表时排除，移除共享预设解析入口新增的子 agent 调用拦截，恢复真实会话作用域解析的原有校验；配置与 README 明确默认可见性以及宿主权限配置可覆盖的边界。
+- 8b2687e: 新增按预设更新活跃记忆的应用接口，在预设串行队列内校验记忆归属与状态，复用事务、speaker 关联和向量索引同步，供记忆更新工具调用。
+- cb56505: 五个对话记忆工具仅允许主 agent 使用，统一注册元数据关闭子 agent 可见性，并将现有子代理拒绝检查收敛到共享预设解析入口，覆盖检索、来源消息、创建、更新和归档调用；同步配置描述与 README。
+- cb56505: 移除独立的 `LivingMemorySearchToolInput` 类型别名，搜索工具、召回和既有测试统一直接从 `memorySearchTool.schema` 推导参数类型。
+- cb56505: 按 ChatLuna 已移除工具参数自动修复的前提，简化记忆检索参数 schema，使用 Zod 原生数组、去除首尾空白与长度校验，移除字符串化数组拦截正则及规则包装。参数错误继续通过现有工具校验返回失败原因，由模型纠正后重新调用。
+- cb56505: 将五个记忆工具的名称、描述和参数 schema 统一收敛到 `src/service/prompts/memory_tools.ts`，按工具组织定义对象，移除分散的 contract 文件与实现文件内描述。工具实现、召回和平台注册共用定义，注册入口统一装配与注销。
+- cb56505: 统一主对话与召回的 `living_memory_search`，固定只检索活跃记忆，移除模型侧状态参数、双份工具定义及构造开关，输入类型直接从 schema 推导；归档记忆保留供人工查看。同步既有工具用例、README 与 AGENTS 约束。
 
-- pending: 新增 `living_memory_update_memory` 与 `living_memory_delete_memory` 工具，分别完整更新当前预设的活跃记忆和执行归档；更新在预设级队列内校验目标归属与状态，复用现有事务、speaker 关联和索引同步，索引同步失败时如实返回事实已保存。以默认关闭的 `enableMemoryTools` 统一控制五个记忆工具是否供 ChatLuna 主对话使用，移除 `enableMemoryCreationTool`，保留单次创建数量配置；同步工具文档与配置测试夹具。后台召回与 Dream 流程不变。
+- cb56505: 新增 `living_memory_update_memory` 与 `living_memory_delete_memory` 工具，分别完整更新当前预设的活跃记忆和执行归档；更新在预设级队列内校验目标归属与状态，复用现有事务、speaker 关联和索引同步，索引同步失败时如实返回事实已保存。以默认关闭的 `enableMemoryTools` 统一控制五个记忆工具是否供 ChatLuna 主对话使用，移除 `enableMemoryCreationTool`，保留单次创建数量配置；同步工具文档与配置测试夹具。后台召回与 Dream 流程不变。
 
 - fcba6ed: 修复 Dream 更新与合并记忆时，将已在当前预设注册但未关联原记忆的用户误判为非法 speakerLabels 的问题。移除用户必须属于操作前记忆关联集合的限制，允许按记忆内容补齐遗漏关联；保留预设昵称映射校验、未知昵称纠错重试与记忆覆盖校验，全量和增量 Dream 共用此修复。同步调整既有未知用户校验用例。
 

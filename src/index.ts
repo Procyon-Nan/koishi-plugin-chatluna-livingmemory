@@ -90,7 +90,7 @@ export const Config: Schema<Config> = Schema.intersect([
             .default(0),
         enableMemoryTools: Schema.boolean()
             .description(
-                '向 ChatLuna 主 agent 提供记忆工具，包括检索记忆、查看来源消息、创建、更新和删除（归档）记忆；不允许子 agent 调用。'
+                '向 ChatLuna 注册本插件的记忆工具，包括查询、查看来源、创建、更新和删除工具。'
             )
             .default(false),
         memoryCreateToolMaxMemories: Schema.number()
