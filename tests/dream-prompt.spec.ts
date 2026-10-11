@@ -177,7 +177,7 @@ it('accepts a stringified operations array through bounded normalization', async
     ])
 })
 
-it('retries Dream before execution when a speaker is unrelated to the memories', async () => {
+it('retries Dream before execution when a speaker is not registered in the preset', async () => {
     const harness = createDreamHarness([
         createToolCallMessage(dreamResultToolName, {
             operations: [
@@ -189,7 +189,7 @@ it('retries Dream before execution when a speaker is unrelated to the memories',
                         content: '错误关联了不存在的用户',
                         summary: '错误用户关联',
                         keywords: ['错误关联'],
-                        speakerLabels: ['李四'],
+                        speakerLabels: ['未注册用户'],
                         sentiment: '平静',
                         importance: 0.5
                     },
