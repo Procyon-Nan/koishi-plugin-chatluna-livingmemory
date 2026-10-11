@@ -191,29 +191,57 @@ export class LivingMemoryMutationService
             // 队列外读到的条目可能已被同预设清空/删除：进队列后重读确认，
             // 否则会为已不存在的目标补注册行，清空后的预设因孤儿注册行
             // 被 listDistinctPresetIds 重新列为存量。
-            if ((await this.repository.getEntryById(id)) === undefined) {
+            const latest = await this.repository.getEntryById(id)
+            if (latest === undefined) {
                 return null
             }
-            await this.registerCallerSpeakerKeys(
-                current.presetId,
-                patch.speakerKeys
-            )
-            const result = await this.repository.updateMemory(id, patch)
-            if (result === null) {
-                return null
-            }
-            await this.applyCommittedMutation({
-                presetId: result.record.presetId,
-                upserts: [
-                    this.upsert(
-                        result.record,
-                        this.vectorAction(result.contentChanged)
-                    )
-                ],
-                deletes: []
-            })
-            return result
+            return this.persistMemoryUpdate(latest, patch)
         })
+    }
+
+    async updateActiveMemory(
+        presetId: string,
+        id: string,
+        patch: Omit<MemoryUpdatePatch, 'status'>
+    ): Promise<MemoryEntryRecord | null> {
+        return this.runPresetMutation(presetId, async () => {
+            const current = await this.repository.getEntryById(id)
+            if (
+                current === undefined ||
+                current.presetId !== presetId ||
+                current.status !== 'active'
+            ) {
+                return null
+            }
+            const result = await this.persistMemoryUpdate(current, patch)
+            return result?.record ?? null
+        })
+    }
+
+    // 调用方已持有预设队列并重读目标，此处只复用写入步骤，不再次入队。
+    private async persistMemoryUpdate(
+        current: MemoryEntryRecord,
+        patch: MemoryUpdatePatch
+    ) {
+        await this.registerCallerSpeakerKeys(
+            current.presetId,
+            patch.speakerKeys
+        )
+        const result = await this.repository.updateMemory(current.id, patch)
+        if (result === null) {
+            return null
+        }
+        await this.applyCommittedMutation({
+            presetId: result.record.presetId,
+            upserts: [
+                this.upsert(
+                    result.record,
+                    this.vectorAction(result.contentChanged)
+                )
+            ],
+            deletes: []
+        })
+        return result
     }
 
     /**

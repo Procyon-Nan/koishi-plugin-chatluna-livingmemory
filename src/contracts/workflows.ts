@@ -7,6 +7,7 @@ import type {
     MemoryJobKind,
     MemoryJobRecord,
     MemoryMutationInput,
+    MemoryUpdatePatch,
     MemoryScope,
     MemorySnapshotRecord,
     MemorySourceMessage,
@@ -189,6 +190,22 @@ export interface LivingMemoryCreationProvider {
         input: MemoryMutationInput,
         speakerKeys: string[]
     ): Promise<MemoryEntryRecord>
+}
+
+export interface LivingMemoryUpdateProvider {
+    listPresetSpeakers(presetId: string): Promise<PresetSpeakerRecord[]>
+    updateActiveMemory(
+        presetId: string,
+        memoryId: string,
+        patch: Omit<MemoryUpdatePatch, 'status'>
+    ): Promise<MemoryEntryRecord | null>
+}
+
+export interface LivingMemoryArchiveProvider {
+    archiveActiveMemories(
+        presetId: string,
+        memoryIds: string[]
+    ): Promise<{ archived: number }>
 }
 
 export interface SnapshotRepository {

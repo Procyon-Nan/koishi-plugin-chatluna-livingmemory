@@ -636,6 +636,18 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         await this.mutations.updateMemory(memoryId, patch)
     }
 
+    async updateActiveMemory(
+        presetId: string,
+        memoryId: string,
+        patch: Omit<MemoryUpdatePatch, 'status'>
+    ) {
+        return await this.mutations.updateActiveMemory(
+            presetId,
+            memoryId,
+            patch
+        )
+    }
+
     async deleteMemory(memoryId: string) {
         await this.mutations.deleteMemory(memoryId)
     }
