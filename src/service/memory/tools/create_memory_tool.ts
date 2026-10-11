@@ -3,11 +3,7 @@ import type { ToolRunnableConfig } from '@langchain/core/tools'
 import type { z } from 'zod'
 import type { LivingMemoryCreationProvider } from '../../../contracts/workflows'
 import { LivingMemoryFactsCommittedError } from '../../vector_index/errors'
-import {
-    createLivingMemoryCreateInputSchema,
-    livingMemoryCreateMemoryToolDescription,
-    livingMemoryCreateMemoryToolName
-} from './create_contract'
+import { memoryCreateTool } from '../../prompts/memory_tools'
 import {
     describeLivingMemoryToolScopeFailure,
     getLivingMemoryToolConfigurable,
@@ -16,20 +12,20 @@ import {
 import { resolveSpeakerKeysByLabels } from '../speaker_identity'
 
 type LivingMemoryCreateMemoryToolInput = z.infer<
-    ReturnType<typeof createLivingMemoryCreateInputSchema>
+    ReturnType<typeof memoryCreateTool.schema>
 >
 
 export class LivingMemoryCreateMemoryTool extends StructuredTool {
-    name = livingMemoryCreateMemoryToolName
-    description = livingMemoryCreateMemoryToolDescription
-    schema: ReturnType<typeof createLivingMemoryCreateInputSchema>
+    name = memoryCreateTool.name
+    description = memoryCreateTool.description
+    schema: ReturnType<typeof memoryCreateTool.schema>
 
     constructor(
         private readonly creation: LivingMemoryCreationProvider,
         maxMemories: number
     ) {
         super({ verboseParsingErrors: true })
-        this.schema = createLivingMemoryCreateInputSchema(maxMemories)
+        this.schema = memoryCreateTool.schema(maxMemories)
     }
 
     async _call(

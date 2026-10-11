@@ -5,10 +5,7 @@ import {
 } from '@langchain/core/tools'
 import type { Context } from 'koishi'
 import { LivingMemoryGetMessagesTool } from '../src/service/memory/tools/get_messages_tool'
-import {
-    livingMemorySearchInputSchema,
-    livingMemorySearchToolInputSchema
-} from '../src/service/memory/tools/search_contract'
+import { memorySearchTool } from '../src/service/prompts/memory_tools'
 import { LivingMemorySearchTool } from '../src/service/memory/tools/embedding_search_tool'
 import type { LivingMemorySearchInput } from '../src/contracts/memory'
 import type { LivingMemoryEmbeddingSearchEngine } from '../src/service/workflows/recall/embedding_search_engine'
@@ -57,7 +54,7 @@ it('rejects stringified arrays on the model-facing search tool', async () => {
     )
 })
 
-it('exposes the required status filter only on the main-chat search tool', async () => {
+it('always searches active memories with the shared tool schema', async () => {
     const inputs: LivingMemorySearchInput[] = []
     const provider = {
         searchMemories: async (
@@ -69,18 +66,27 @@ it('exposes the required status filter only on the main-chat search tool', async
         }
     } as unknown as LivingMemoryEmbeddingSearchEngine
 
-    const mainTool = new LivingMemorySearchTool(provider, true, false, true)
-    assert.equal(mainTool.schema, livingMemorySearchToolInputSchema)
-    assert.equal(searchTool.schema, livingMemorySearchInputSchema)
+    const mainTool = new LivingMemorySearchTool(provider, true)
+    assert.equal(mainTool.schema, memorySearchTool.schema)
+    assert.equal(searchTool.schema, memorySearchTool.schema)
+    assert.deepEqual(Object.keys(mainTool.schema.shape), [
+        'searchTexts',
+        'searchKeywords'
+    ])
 
     await mainTool.invoke(
-        { searchTexts: ['我们聊过的事情'], memoryStatus: 'archived' },
+        { searchTexts: ['我们聊过的事情'], memoryStatus: 'archived' } as never,
         toolConfig({
             preset: 'default',
             agentContext: { kind: 'main', source: 'chatluna' }
         })
     )
-    assert.equal(inputs[0].memoryStatus, 'archived')
+    assert.equal(inputs[0].memoryStatus, 'active')
+    await mainTool.runSearch(
+        { searchTexts: ['我们聊过的事情'], memoryStatus: 'all' } as never,
+        toolConfig({ preset: 'default' })
+    )
+    assert.equal(inputs[1].memoryStatus, 'active')
 })
 
 it('renders source messages as the original transcript of one memory', async () => {

@@ -24,7 +24,7 @@ const createConfig = (
     extractionWhitelist: [],
     memorySearchToolMaxResults: 30,
     memorySearchMinSimilarity: 0,
-    enableMemoryCreationTool: false,
+    enableMemoryTools: false,
     memoryCreateToolMaxMemories: 10,
     debug: false,
     ...overrides

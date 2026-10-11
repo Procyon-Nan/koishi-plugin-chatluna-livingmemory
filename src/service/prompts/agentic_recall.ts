@@ -1,4 +1,4 @@
-import { livingMemorySearchToolName } from '../memory/tools/search_contract'
+import { memorySearchTool } from './memory_tools'
 import {
     escapeXmlText,
     formatXmlBlock,
@@ -24,7 +24,7 @@ export const buildAgenticRecallPrompt = (params: AgenticRecallPromptInput) => {
         '',
         '<task>',
         '1. 结合聊天记录和最后一条信息，思考接下来可能讨论的话题内容，预测聊天走向。',
-        `2. 调用 ${livingMemorySearchToolName} 工具查询相关记忆。`,
+        `2. 调用 ${memorySearchTool.name} 工具查询相关记忆。`,
         '3. 根据查询到的记忆结果，输出纯文本的记忆内容。',
         '</task>',
         '',
@@ -34,7 +34,7 @@ export const buildAgenticRecallPrompt = (params: AgenticRecallPromptInput) => {
         '</input_policy>',
         '',
         '<tool_policy>',
-        `- 你必须调用且只可以调用 ${livingMemorySearchToolName} 工具查询记忆。`,
+        `- 你必须调用且只可以调用 ${memorySearchTool.name} 工具查询记忆。`,
         '- 请严格遵循工具描述的指导进行调用。如果工具参数错误，应根据错误信息修正参数后重试。',
         '</tool_policy>',
         '',

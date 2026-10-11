@@ -104,15 +104,18 @@ input: |
 
 ## 记忆工具
 
+`enableMemoryTools` 统一控制以下五个工具是否供 ChatLuna 主 agent 使用，默认关闭。子 agent 不提供这些工具，调用时也会被拒绝。此开关只控制对话工具注册，不影响后台召回内部的检索工具。
+
+升级后请使用新开关重新开启工具；原 `enableMemoryCreationTool` 已移除，检索与来源工具也不再始终注册。`memoryCreateToolMaxMemories` 仍控制单次创建记忆的数量。
+
 ### `living_memory_search`
 
-在当前预设中检索记忆，结果按相关度排序。
+在当前预设中检索活跃记忆，结果按相关度排序。工具不提供状态选择，归档记忆仅供人工查看。
 
 | 参数             | 说明                                                                  |
 | ---------------- | --------------------------------------------------------------------- |
 | `searchTexts`    | 必填，1 到 3 条第一人称的完整句子，每条 2 到 100 个字符，用于语义检索 |
 | `searchKeywords` | 选填，最多 3 个实体名称，每个 2 到 10 个字符，用于关键词匹配          |
-| `memoryStatus`   | 必填，`active`（活跃记忆）、`archived`（已归档记忆）或 `all`          |
 
 返回每条记忆的 `id`、类别、更新时间、情绪色彩、来源会话和正文。返回条数上限由 `memorySearchToolMaxResults` 设置，语义相似度门槛由 `memorySearchMinSimilarity` 设置。
 
@@ -122,11 +125,25 @@ input: |
 
 ### `living_memory_create_memory`
 
-开启 `enableMemoryCreationTool` 后注册，允许模型在对话中主动创建记忆，用于响应用户“记住这个”之类的请求，或记录模型认为重要的信息。
+允许模型在对话中主动创建记忆，用于响应用户“记住这个”之类的请求，或记录模型认为重要的信息。
 
 参数 `memories` 是记忆数组，单次条数上限由 `memoryCreateToolMaxMemories` 设置。每条记忆的字段与自动提取一致：`type`、`content`、`summary`、`keywords`、`speakerLabels`、`sentiment`、`importance`。
 
 返回已创建记忆的 `id` 与类别。此工具创建的记忆没有来源消息。与自动提取同时开启时，同一件事可能被记录两次，由 Dream 合并。
+
+### `living_memory_update_memory`
+
+更新当前预设中的一条活跃记忆。参数为 `memoryId` 和 `memory`：ID 从检索结果取得，`memory` 完整填写与创建工具相同的七个字段，覆盖原内容与关联用户。`speakerLabels` 为空数组表示清空关联，未知昵称会被拒绝。
+
+更新保留来源消息和来源会话，不恢复归档记忆，也不改变 Dream 固化状态。已有召回快照沿用原机制，在后续召回时刷新。
+
+返回 `memoryId`、`updated` 与 `warnings`。主库已保存但索引同步失败时，仍返回更新成功并附警告，后台自动对账。
+
+### `living_memory_delete_memory`
+
+删除当前预设中的一条活跃记忆，参数为检索结果中的 `memoryId`。删除实际执行归档，保留记忆正文、来源消息与向量，并清除该预设已有的召回快照。
+
+返回 `memoryId`、`deleted` 与 `warnings`。目标已归档、不存在或属于其他预设时，`deleted` 为 `false`，不产生变更；主库已归档但索引同步失败时，返回成功并附警告，后台自动对账。
 
 ## 日志
 

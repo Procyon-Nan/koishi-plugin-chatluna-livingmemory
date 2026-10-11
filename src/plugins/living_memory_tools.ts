@@ -1,115 +1,95 @@
+import type { StructuredTool } from '@langchain/core/tools'
 import type { Context } from 'koishi'
 import type { ChatLunaTool } from 'koishi-plugin-chatluna/llm-core/platform/types'
 import type { LivingMemoryConfig } from '../contracts/workflows'
 import {
-    LivingMemoryGetMessagesTool,
-    livingMemoryGetMessagesToolDescription
-} from '../service/memory/tools/get_messages_tool'
-import {
-    LivingMemorySearchTool,
-    livingMemorySearchToolDescription
-} from '../service/memory/tools/embedding_search_tool'
-import {
-    livingMemoryGetMessagesToolName,
-    livingMemorySearchToolName
-} from '../service/memory/tools/search_contract'
+    memorySearchTool,
+    memoryGetMessagesTool,
+    memoryCreateTool,
+    memoryUpdateTool,
+    memoryDeleteTool
+} from '../service/prompts/memory_tools'
+import { LivingMemorySearchTool } from '../service/memory/tools/embedding_search_tool'
+import { LivingMemoryGetMessagesTool } from '../service/memory/tools/get_messages_tool'
 import { LivingMemoryCreateMemoryTool } from '../service/memory/tools/create_memory_tool'
-import {
-    livingMemoryCreateMemoryToolDescription,
-    livingMemoryCreateMemoryToolName
-} from '../service/memory/tools/create_contract'
-
-const toChatLunaStructuredTool = (
-    tool:
-        | LivingMemorySearchTool
-        | LivingMemoryGetMessagesTool
-        | LivingMemoryCreateMemoryTool
-): ReturnType<ChatLunaTool['createTool']> => {
-    // ChatLuna and this package can resolve different @langchain/core copies in
-    // local workspaces, so keep the cast at the registration boundary.
-    return tool as unknown as ReturnType<ChatLunaTool['createTool']>
-}
-
-const livingMemoryToolMeta = {
-    source: 'extension',
-    group: 'living-memory',
-    defaultAvailability: {
-        enabled: true,
-        main: true,
-        chatluna: true,
-        characterScope: 'all' as const
-    }
-}
+import { LivingMemoryUpdateMemoryTool } from '../service/memory/tools/update_memory_tool'
+import { LivingMemoryDeleteMemoryTool } from '../service/memory/tools/delete_memory_tool'
 
 export function apply(ctx: Context, config: LivingMemoryConfig) {
+    if (!config.enableMemoryTools) {
+        return
+    }
+
     ctx.on('ready', () => {
-        const registerLivingMemoryTool = (
-            name: string,
-            options: {
-                description: string
-                tags: string[]
-                createTool: () => ReturnType<ChatLunaTool['createTool']>
-            }
+        const register = (
+            definition: { name: string; description: string },
+            tags: string[],
+            createTool: () => StructuredTool
         ) =>
-            ctx.chatluna.platform.registerTool(name, {
-                description: options.description,
-                selector(_history: unknown[]) {
-                    return true
-                },
+            ctx.chatluna.platform.registerTool(definition.name, {
+                description: definition.description,
+                selector: () => true,
                 meta: {
-                    ...livingMemoryToolMeta,
-                    tags: options.tags
+                    source: 'extension',
+                    group: 'living-memory',
+                    tags: ['living-memory', ...tags],
+                    defaultAvailability: {
+                        enabled: true,
+                        main: true,
+                        subAgent: false,
+                        chatluna: true,
+                        characterScope: 'all'
+                    }
                 },
-                createTool: options.createTool
+                // 工作区可能解析到多份 LangChain，类型转换只保留在注册边界。
+                createTool: () =>
+                    createTool() as unknown as ReturnType<
+                        ChatLunaTool['createTool']
+                    >
             })
 
-        const disposeSearch = registerLivingMemoryTool(
-            livingMemorySearchToolName,
-            {
-                description: livingMemorySearchToolDescription,
-                tags: ['living-memory', 'search'],
-                createTool: () =>
-                    toChatLunaStructuredTool(
-                        new LivingMemorySearchTool(
-                            ctx.chatluna_living_memory,
-                            true,
-                            config.enableConversationIsolation,
-                            true
-                        )
+        const disposers = [
+            register(
+                memorySearchTool,
+                ['search'],
+                () =>
+                    new LivingMemorySearchTool(
+                        ctx.chatluna_living_memory,
+                        true,
+                        config.enableConversationIsolation
                     )
-            }
-        )
-        const disposeGetMessages = registerLivingMemoryTool(
-            livingMemoryGetMessagesToolName,
-            {
-                description: livingMemoryGetMessagesToolDescription,
-                tags: ['living-memory', 'source', 'messages'],
-                createTool: () =>
-                    toChatLunaStructuredTool(
-                        new LivingMemoryGetMessagesTool(ctx)
+            ),
+            register(
+                memoryGetMessagesTool,
+                ['source', 'messages'],
+                () => new LivingMemoryGetMessagesTool(ctx)
+            ),
+            register(
+                memoryCreateTool,
+                ['create', 'write'],
+                () =>
+                    new LivingMemoryCreateMemoryTool(
+                        ctx.chatluna_living_memory,
+                        config.memoryCreateToolMaxMemories
                     )
-            }
-        )
-        // 写入型工具默认不注册，由 enableMemoryCreationTool 显式开启。
-        const disposeCreateMemory = config.enableMemoryCreationTool
-            ? registerLivingMemoryTool(livingMemoryCreateMemoryToolName, {
-                  description: livingMemoryCreateMemoryToolDescription,
-                  tags: ['living-memory', 'create', 'write'],
-                  createTool: () =>
-                      toChatLunaStructuredTool(
-                          new LivingMemoryCreateMemoryTool(
-                              ctx.chatluna_living_memory,
-                              config.memoryCreateToolMaxMemories
-                          )
-                      )
-              })
-            : null
+            ),
+            register(
+                memoryUpdateTool,
+                ['update', 'write'],
+                () =>
+                    new LivingMemoryUpdateMemoryTool(ctx.chatluna_living_memory)
+            ),
+            register(
+                memoryDeleteTool,
+                ['delete', 'write'],
+                () =>
+                    new LivingMemoryDeleteMemoryTool(ctx.chatluna_living_memory)
+            )
+        ]
 
-        ctx.effect(() => {
-            return () => {
-                disposeSearch()
-                disposeGetMessages()
-                disposeCreateMemory?.()
+        ctx.effect(() => () => {
+            for (const dispose of disposers) {
+                dispose()
             }
         })
     })

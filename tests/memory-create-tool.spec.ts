@@ -3,7 +3,7 @@ import { ToolInputParsingException } from '@langchain/core/tools'
 import type { MemoryMutationInput } from '../src/contracts/memory'
 import type { MemoryScope } from '../src/contracts/memory'
 import type { LivingMemoryCreationProvider } from '../src/contracts/workflows'
-import { livingMemoryCreateMemoryToolName } from '../src/service/memory/tools/create_contract'
+import { memoryCreateTool } from '../src/service/prompts/memory_tools'
 import { LivingMemoryCreateMemoryTool } from '../src/service/memory/tools/create_memory_tool'
 import {
     LivingMemoryFactsCommittedError,
@@ -118,7 +118,7 @@ it('exposes the extraction-aligned schema directly to the model-facing tool', as
     const { provider } = createRecordingProvider()
     const tool = new LivingMemoryCreateMemoryTool(provider, 10)
 
-    assert.equal(tool.name, livingMemoryCreateMemoryToolName)
+    assert.equal(tool.name, memoryCreateTool.name)
     assert.deepEqual(Object.keys(tool.schema.shape), ['memories'])
 
     await rejectsToolInvocation(

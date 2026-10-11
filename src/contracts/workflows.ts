@@ -163,7 +163,7 @@ export interface LivingMemoryConfig {
     extractionWhitelist: string[]
     memorySearchToolMaxResults: number
     memorySearchMinSimilarity: number
-    enableMemoryCreationTool: boolean
+    enableMemoryTools: boolean
     memoryCreateToolMaxMemories: number
     debug: boolean
 }

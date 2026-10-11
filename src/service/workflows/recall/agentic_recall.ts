@@ -6,6 +6,7 @@ import { type RunnableConfig, RunnableLambda } from '@langchain/core/runnables'
 import { StructuredTool, type ToolRunnableConfig } from '@langchain/core/tools'
 import type { ChainValues } from '@langchain/core/utils/types'
 import type { Context } from 'koishi'
+import type { z } from 'zod'
 import {
     AgentRunner,
     createOpenAIAgent
@@ -31,15 +32,8 @@ import { buildAgenticRecallPrompt } from '../../prompts'
 import type { AgenticRecallPromptMessages } from '../../prompts'
 import type { LivingMemoryLogger } from '../../logging/logger'
 import { createLoggedModel } from '../../logging/model_calls'
-import {
-    livingMemorySearchInputSchema,
-    livingMemorySearchToolName,
-    type LivingMemorySearchToolInput
-} from '../../memory/tools/search_contract'
-import {
-    LivingMemorySearchTool,
-    livingMemorySearchToolDescription
-} from '../../memory/tools/embedding_search_tool'
+import { memorySearchTool } from '../../prompts/memory_tools'
+import { LivingMemorySearchTool } from '../../memory/tools/embedding_search_tool'
 import { resolveScopeAssistantLabel } from '../../memory/helpers'
 import type { LivingMemoryEmbeddingSearchEngine } from './embedding_search_engine'
 
@@ -53,7 +47,7 @@ type LivingMemoryAgenticRecallConfig = Pick<
 
 interface RecordedAgenticSearchCall {
     inputKey: string
-    input: LivingMemorySearchToolInput
+    input: z.infer<typeof memorySearchTool.schema>
     results: LivingMemorySearchResult[]
 }
 
@@ -90,7 +84,7 @@ const uniqueTexts = (groups: (readonly string[] | undefined)[]) => {
 }
 
 const normalizeToolCallSummary = (
-    input: LivingMemorySearchToolInput,
+    input: z.infer<typeof memorySearchTool.schema>,
     maxCandidates: number
 ): AgenticMemorySearchToolCallSummary => ({
     searchTexts: input.searchTexts,
@@ -145,7 +139,7 @@ const uniqueSnapshotMemoryItems = (
 }
 
 const createSearchInputKey = (input: unknown) => {
-    const parsedInput = livingMemorySearchInputSchema.safeParse(input)
+    const parsedInput = memorySearchTool.schema.safeParse(input)
     return JSON.stringify(parsedInput.success ? parsedInput.data : input)
 }
 
@@ -162,7 +156,7 @@ const orderRecordedSearchCalls = (
 
     const ordered: RecordedAgenticSearchCall[] = []
     for (const step of steps ?? []) {
-        if (step.action.tool !== livingMemorySearchToolName) {
+        if (step.action.tool !== memorySearchTool.name) {
             continue
         }
 
@@ -179,9 +173,9 @@ const orderRecordedSearchCalls = (
 }
 
 class RecordingLivingMemorySearchTool extends StructuredTool {
-    name = livingMemorySearchToolName
-    description = livingMemorySearchToolDescription
-    schema = livingMemorySearchInputSchema
+    name = memorySearchTool.name
+    description = memorySearchTool.description
+    schema = memorySearchTool.schema
 
     constructor(
         private readonly delegate: LivingMemorySearchTool,
@@ -193,7 +187,7 @@ class RecordingLivingMemorySearchTool extends StructuredTool {
     }
 
     async _call(
-        input: LivingMemorySearchToolInput,
+        input: z.infer<typeof memorySearchTool.schema>,
         _runManager: unknown,
         runConfig?: ToolRunnableConfig
     ) {

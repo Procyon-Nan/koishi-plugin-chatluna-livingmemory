@@ -8,6 +8,7 @@ import {
 import type { ToolCall } from '@langchain/core/messages/tool'
 import { type RunnableConfig, RunnableLambda } from '@langchain/core/runnables'
 import type { Context } from 'koishi'
+import type { z } from 'zod'
 import { LivingMemoryLogger } from '../src/service/logging/logger'
 import type { ChatLunaChatModel } from 'koishi-plugin-chatluna/llm-core/platform/model'
 import type {
@@ -15,10 +16,7 @@ import type {
     LivingMemorySearchResult,
     MemoryScope
 } from '../src/contracts/memory'
-import {
-    livingMemorySearchToolName,
-    type LivingMemorySearchToolInput
-} from '../src/service/memory/tools/search_contract'
+import { memorySearchTool } from '../src/service/prompts/memory_tools'
 import { LivingMemoryAgenticRecallExecutor } from '../src/service/workflows/recall/agentic_recall'
 import type { LivingMemoryEmbeddingSearchEngine } from '../src/service/workflows/recall/embedding_search_engine'
 import { currentMessage, scope } from './workflow-test-utils'
@@ -55,7 +53,9 @@ const testScope: MemoryScope = {
     presetLabel: '助手<&'
 }
 
-const validSearchInput = (text: string): LivingMemorySearchToolInput => ({
+const validSearchInput = (
+    text: string
+): z.infer<typeof memorySearchTool.schema> => ({
     searchTexts: [text]
 })
 
@@ -67,7 +67,7 @@ const createSearchCall = (
         content: '',
         tool_calls: [
             {
-                name: livingMemorySearchToolName,
+                name: memorySearchTool.name,
                 args: input,
                 id,
                 type: 'tool_call'
@@ -77,12 +77,12 @@ const createSearchCall = (
 }
 
 const createMultipleSearchCalls = (
-    calls: { id: string; input: LivingMemorySearchToolInput }[]
+    calls: { id: string; input: z.infer<typeof memorySearchTool.schema> }[]
 ) => {
     return new AIMessage({
         content: '',
         tool_calls: calls.map((call) => ({
-            name: livingMemorySearchToolName,
+            name: memorySearchTool.name,
             args: call.input,
             id: call.id,
             type: 'tool_call' as const
@@ -324,7 +324,7 @@ it('recovers from malformed raw tool arguments through parser observation', asyn
         id: 'malformed-1',
         type: 'function',
         function: {
-            name: livingMemorySearchToolName,
+            name: memorySearchTool.name,
             arguments: '{'
         }
     }

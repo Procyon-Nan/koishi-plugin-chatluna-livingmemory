@@ -138,7 +138,7 @@ chatluna-livingmemory/
    - 所有权只保证同机进程互斥，不支持多进程共享运行中的索引目录。
      端点为 Windows 命名管道或 Linux 抽象 Unix Socket，标识取规范化目录的稳定哈希；不得重新引入锁文件、PID、mtime、心跳或 `fs-native-extensions`。
    - 服务停止时先停止接收新操作，再排空在途操作并等待 Worker 退出，关闭失败才终止；新 HMR generation 必须等旧 generation 的 Worker 结束后再启动。
-   - 索引查询按调用方声明的 `memoryStatus` 过滤：主对话的 `living_memory_search` 由模型以必填参数选择活跃、归档或全部，召回内部检索与 Dream 邻居查询固定只查活跃。
+   - 模型的 `living_memory_search` 工具统一只查活跃记忆，不暴露状态参数；主对话、召回内部检索与 Dream 邻居查询均固定只查活跃。归档记忆供人工查看，底层索引保留按 `memoryStatus` 查询的能力。
      归档向量照常维护，重新激活时直接复用。
    - 预设状态账本（`lm_index_preset_state`）只落盘终态 `ready`/`dirty`，`building`、`unavailable` 等瞬态只存在于主进程，不得持久化。
      账本行存在当且仅当该预设存在于 DB 条目或索引文档中，孤儿行由全量对账清除。

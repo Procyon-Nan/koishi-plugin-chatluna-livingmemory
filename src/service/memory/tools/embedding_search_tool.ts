@@ -1,81 +1,34 @@
 import { StructuredTool } from '@langchain/core/tools'
 import type { ToolRunnableConfig } from '@langchain/core/tools'
+import type { z } from 'zod'
 import type { LivingMemorySearchResult } from '../../../contracts/memory'
 import type { LivingMemorySearchProvider } from '../../../contracts/workflows'
 import { renderMemoriesForModel } from '../../prompts/memory_entries'
-import {
-    formatSearchTextLengthRange,
-    livingMemorySearchInputSchema,
-    livingMemorySearchToolInputSchema,
-    livingMemorySearchToolName,
-    memorySearchMaxKeywordCount,
-    memorySearchMaxTextCount,
-    searchKeywordRule,
-    searchTextRule,
-    type LivingMemorySearchToolInput
-} from './search_contract'
+import { memorySearchTool } from '../../prompts/memory_tools'
 import {
     describeLivingMemoryToolScopeFailure,
     getLivingMemoryToolConfigurable,
     resolveToolMemoryPresetId,
     resolveToolMemoryScopeConfigurable
 } from './tool_runtime'
-const livingMemorySearchToolDescriptionLines = [
-    '在你的记忆库中搜索记忆。',
-    '',
-    '当你需要查找自己的记忆时使用此工具。',
-    `- searchTexts：必填 JSON 数组，包含 1 到 ${memorySearchMaxTextCount} 条语义查询短语，` +
-        `每条在去除首尾空白后须为 ${formatSearchTextLengthRange(searchTextRule)} 个字符。` +
-        '必须包含完整的句子结构（如主谓宾、人物+动作+场景、主语+的+形容词等），' +
-        '使用第一人称的自然语言描述。不同短语应覆盖不同的语义角度。',
-    `- searchKeywords：选填 JSON 数组，最多 ${memorySearchMaxKeywordCount} 个精确关键词，` +
-        `每个在去除首尾空白后须为 ${formatSearchTextLengthRange(searchKeywordRule)} 个字符。` +
-        '关键词应为具体的事物、活动、地点等实体名称，不应是完整句子。' +
-        '禁止使用用户昵称、用户名或称呼作为关键词，这类词匹配无意义。',
-    '- 直接传递数组，禁止把数组编码成 JSON 字符串。'
-]
-
-export const livingMemorySearchToolDescription = [
-    ...livingMemorySearchToolDescriptionLines,
-    '- 本工具返回的记忆条目依照计算后的相关度得分排序。'
-].join('\n')
-
-// 主对话实例专用描述：开放 memoryStatus 检索范围，召回内部实例不暴露该参数。
-export const livingMemorySearchToolWithStatusDescription = [
-    ...livingMemorySearchToolDescriptionLines,
-    '- memoryStatus：必填字符串。active 为当前活跃的记忆，通常使用它；' +
-        'archived 为已归档（被整理或合并）的旧记忆；all 为两者全部。',
-    '- 本工具返回的记忆条目依照计算后的相关度得分排序。'
-].join('\n')
-
 const noMemoryFoundMessage = '没有找到相关记忆。'
 
 export class LivingMemorySearchTool extends StructuredTool {
-    name = livingMemorySearchToolName
+    name = memorySearchTool.name
 
-    schema:
-        | typeof livingMemorySearchInputSchema
-        | typeof livingMemorySearchToolInputSchema
-
-    description: string
+    schema = memorySearchTool.schema
+    description = memorySearchTool.description
 
     constructor(
         private readonly searchProvider: LivingMemorySearchProvider,
         private readonly includeMemoryIds: boolean,
-        private readonly enableConversationIsolation = false,
-        private readonly exposeStatusFilter = false
+        private readonly enableConversationIsolation = false
     ) {
         super({ verboseParsingErrors: true })
-        this.schema = exposeStatusFilter
-            ? livingMemorySearchToolInputSchema
-            : livingMemorySearchInputSchema
-        this.description = exposeStatusFilter
-            ? livingMemorySearchToolWithStatusDescription
-            : livingMemorySearchToolDescription
     }
 
     async runSearch(
-        input: LivingMemorySearchToolInput,
+        input: z.infer<typeof memorySearchTool.schema>,
         runConfig?: ToolRunnableConfig
     ): Promise<{ results: LivingMemorySearchResult[]; output: string }> {
         const configurable = getLivingMemoryToolConfigurable(runConfig)
@@ -104,7 +57,7 @@ export class LivingMemorySearchTool extends StructuredTool {
 
         const results = await this.searchProvider.searchMemories(
             presetId,
-            { ...input, memoryTypes: ['all'] },
+            { ...input, memoryTypes: ['all'], memoryStatus: 'active' },
             conversationId
         )
 
@@ -112,7 +65,7 @@ export class LivingMemorySearchTool extends StructuredTool {
     }
 
     async _call(
-        input: LivingMemorySearchToolInput,
+        input: z.infer<typeof memorySearchTool.schema>,
         _runManager: unknown,
         runConfig?: ToolRunnableConfig
     ) {

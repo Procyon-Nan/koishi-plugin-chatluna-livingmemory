@@ -88,9 +88,9 @@ export const Config: Schema<Config> = Schema.intersect([
                 '记忆检索的最低余弦相似度，召回与 living_memory_search 共用。关键词命中的记忆不受限制；设为 0 表示不限制。'
             )
             .default(0),
-        enableMemoryCreationTool: Schema.boolean()
+        enableMemoryTools: Schema.boolean()
             .description(
-                '注册 living_memory_create_memory 工具，允许模型在对话中主动创建记忆。'
+                '向 ChatLuna 主 agent 提供记忆工具，包括检索记忆、查看来源消息、创建、更新和删除（归档）记忆；不允许子 agent 调用。'
             )
             .default(false),
         memoryCreateToolMaxMemories: Schema.number()
