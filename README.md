@@ -121,7 +121,7 @@ input: |
 
 ### `living_memory_get_messages`
 
-按 `living_memory_search` 返回的记忆 `id` 查看单条记忆的全部来源消息。
+按 `living_memory_search` 返回的记忆 `id` 查看当前预设中单条活跃记忆的全部来源消息。
 
 ### `living_memory_create_memory`
 
@@ -129,7 +129,7 @@ input: |
 
 参数 `memories` 是记忆数组，单次条数上限由 `memoryCreateToolMaxMemories` 设置。每条记忆的字段与自动提取一致：`type`、`content`、`summary`、`keywords`、`speakerLabels`、`sentiment`、`importance`。
 
-返回已创建记忆的 `id` 与类别。此工具创建的记忆没有来源消息。与自动提取同时开启时，同一件事可能被记录两次，由 Dream 合并。
+此工具创建的记忆没有来源消息。与自动提取同时开启时，同一件事可能被记录两次，由 Dream 合并。
 
 ### `living_memory_update_memory`
 
@@ -137,13 +137,9 @@ input: |
 
 更新保留来源消息和来源会话，不恢复归档记忆，也不改变 Dream 固化状态。已有召回快照沿用原机制，在后续召回时刷新。
 
-返回 `memoryId`、`updated` 与 `warnings`。主库已保存但索引同步失败时，仍返回更新成功并附警告，后台自动对账。
-
 ### `living_memory_delete_memory`
 
 删除当前预设中的一条活跃记忆，参数为检索结果中的 `memoryId`。删除实际执行归档，保留记忆正文、来源消息与向量，并清除该预设已有的召回快照。
-
-返回 `memoryId`、`deleted` 与 `warnings`。目标已归档、不存在或属于其他预设时，`deleted` 为 `false`，不产生变更；主库已归档但索引同步失败时，返回成功并附警告，后台自动对账。
 
 ## 日志
 
