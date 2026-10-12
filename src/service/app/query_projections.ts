@@ -20,7 +20,7 @@ export async function loadMemorySourceMessages(
         memoryId
     ])
     const entry = entries[0]
-    if (entry == null) {
+    if (entry == null || entry.status !== 'active') {
         return null
     }
 

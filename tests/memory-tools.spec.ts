@@ -143,12 +143,12 @@ it('renders source messages as the original transcript of one memory', async () 
             '[2026-07-03 15:00] Alice说：下周再一起去'
         ].join('\n')
     )
-    assert.equal(
-        await new LivingMemoryGetMessagesTool(createContext(service)).invoke(
+    await assert.rejects(
+        new LivingMemoryGetMessagesTool(createContext(service)).invoke(
             { memoryId: 'missing' },
             config
         ),
-        '记忆 missing 不存在于当前预设。'
+        /不存在 ID 为 missing 的记忆，请重新查明记忆 ID 后再调用。/
     )
 })
 

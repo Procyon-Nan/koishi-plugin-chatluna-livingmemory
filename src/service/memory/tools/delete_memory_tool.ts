@@ -33,25 +33,27 @@ export class LivingMemoryDeleteMemoryTool extends StructuredTool {
         }
 
         const warnings: string[] = []
-        let deleted: boolean
         try {
             const result = await this.archives.archiveActiveMemories(
                 resolution.presetId,
                 [input.memoryId]
             )
-            deleted = result.archived > 0
+            if (result.archived === 0) {
+                throw new Error(
+                    `不存在 ID 为 ${input.memoryId} 的记忆，请重新查明记忆 ID 后再调用。`
+                )
+            }
         } catch (error) {
             if (!(error instanceof LivingMemoryFactsCommittedError)) {
                 throw error
             }
-            deleted = true
             warnings.push(
                 '记忆已归档，但向量索引同步失败，已调度后台自动对账：' +
                     error.message
             )
         }
         return JSON.stringify(
-            { memoryId: input.memoryId, deleted, warnings },
+            { memoryId: input.memoryId, deleted: true, warnings },
             null,
             2
         )

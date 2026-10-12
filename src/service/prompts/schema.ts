@@ -19,7 +19,7 @@ export const generatedMemorySchema = z
             .enum(memoryEntryTypes)
             .describe(
                 [
-                    `必须取以下之一（${memoryEntryTypes.join('|')}）：`,
+                    `记忆类型。必须取以下之一（${memoryEntryTypes.join('|')}）：`,
                     '- identity：用户或是你自己的稳定身份信息，如身份、角色、长期属性。',
                     '- preference：用户或是你自己的长期偏好、习惯、喜恶。',
                     '- fact：已确认的客观事实，如事件、需求、状态，通常关联具体昵称与时间。',
@@ -59,7 +59,8 @@ export const generatedMemorySchema = z
             )
     })
     .describe(
-        '在记忆中描述某个用户时，必须使用当前输入材料中的具体用户昵称。避免用“用户”、“对方”等泛化词汇或用户 ID 替代，也不要把多个不同用户混成同一个人。'
+        '在记忆中描述某个用户时，必须使用当前输入材料中的具体用户昵称。避免用“用户”、“对方”等泛化词汇或用户 ID 替代，也不要把多个不同用户混成同一个人。' +
+            '相对时间（如"今天"、"明天"、"上周"）必须结合对话上下文转换为具体日期；短期状态、身体状态、临时计划等可能在之后变化的内容，必须在 content 中写明具体日期。'
     )
 
 export const extractionResultSchema = z.object({

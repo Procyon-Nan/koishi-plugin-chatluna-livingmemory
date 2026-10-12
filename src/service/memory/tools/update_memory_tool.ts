@@ -58,7 +58,7 @@ export class LivingMemoryUpdateMemoryTool extends StructuredTool {
             )
             if (record === null) {
                 throw new Error(
-                    '当前预设中不存在该活跃记忆，请重新检索后再更新。'
+                    `不存在 ID 为 ${memoryId} 的记忆，请重新查明记忆 ID 后再调用。`
                 )
             }
         } catch (error) {

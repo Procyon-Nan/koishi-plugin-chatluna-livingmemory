@@ -46,8 +46,10 @@ export class LivingMemoryGetMessagesTool extends StructuredTool {
             input.memoryId
         )
 
-        if (memory == null) {
-            return `记忆 ${input.memoryId} 不存在于当前预设。`
+        if (memory === null) {
+            throw new Error(
+                `不存在 ID 为 ${input.memoryId} 的记忆，请重新查明记忆 ID 后再调用。`
+            )
         }
         return renderMemorySourceMessagesForModel(memory)
     }
