@@ -76,6 +76,6 @@ export const memoryDeleteTool = {
             .string()
             .trim()
             .min(1)
-            .describe('要删除（归档）的活跃记忆 ID，来自记忆检索结果。')
+            .describe('要删除的记忆 ID')
     })
 }
