@@ -1,19 +1,16 @@
-import { h } from 'koishi'
 import { toNonEmptyString } from '../../shared/utils'
 import {
     collectVisibleAtTargetIds,
     elementsToLogText,
-    type LogTextElement
+    toMessageElements,
+    type LogTextMessage
 } from './element_text'
 import type { ConversationLogEntryInput } from './types'
 
 /** getMessageList 返回的适配消息（@satorijs/protocol Message 的本地最小镜像）。 */
-export interface BackfillHistoryMessage {
+export interface BackfillHistoryMessage extends LogTextMessage {
     id?: string
     messageId?: string
-    content?: string
-    elements?: LogTextElement[]
-    user?: { id?: string; name?: string }
     timestamp?: number | string | Date
     createdAt?: number | string | Date
 }
@@ -57,16 +54,6 @@ const normalizeTimestamp = (value: number | string | Date | undefined) => {
         return Number.isFinite(parsed) ? parsed : null
     }
     return null
-}
-
-const toMessageElements = (message: BackfillHistoryMessage) => {
-    if (message.elements != null) {
-        return message.elements
-    }
-    const content = toNonEmptyString(message.content)?.trim()
-    // Satori 契约允许仅 content 的消息（adapter-satori 的 getMessageList
-    // 就不解析 elements）；经 h.parse 走同一占位转换，不当作纯文本。
-    return content == null ? [] : h.parse(content)
 }
 
 /**

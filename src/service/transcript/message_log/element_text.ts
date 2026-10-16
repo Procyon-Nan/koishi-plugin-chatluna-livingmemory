@@ -1,3 +1,4 @@
+import { h } from 'koishi'
 import { toNonEmptyString } from '../../shared/utils'
 
 /**
@@ -10,6 +11,34 @@ export interface LogTextElement {
     children?: ReadonlyArray<LogTextElement>
 }
 
+export interface LogTextMessage {
+    content?: string
+    elements?: ReadonlyArray<LogTextElement>
+    user?: { id?: string; name?: string }
+    quote?: LogTextMessage
+}
+
+/** 适配器会将引用从正文中分离；采集与回填在此还原为同一元素结构。 */
+export const toMessageElements = (
+    message: LogTextMessage
+): ReadonlyArray<LogTextElement> => {
+    const elements = message.elements ?? h.parse(message.content ?? '')
+    if (message.quote == null) {
+        return elements
+    }
+    const quote = message.quote
+    return [
+        {
+            type: 'quote',
+            children: [
+                { type: 'user', attrs: { ...quote.user } },
+                ...toMessageElements(quote)
+            ]
+        },
+        ...elements.filter((element) => element.type !== 'quote')
+    ]
+}
+
 /**
  * at 目标的用户昵称解析。与说话人标签同一口径（bot.getUser().name），
  * 使「@昵称」能与聊天记录中的说话人昵称互相指认；返回 null 时退回 @id。
@@ -19,6 +48,7 @@ export type AtLabelResolver = (userId: string) => string | null
 
 /** 文字格式容器：递归提取子元素正文，展示格式不吞文字。 */
 const TEXT_CONTAINER_TYPES: ReadonlySet<string> = new Set([
+    'template',
     'p',
     'b',
     'strong',
@@ -145,9 +175,15 @@ const appendElementText = (
                 parts.push(`@${resolveAtLabel?.(targetId) ?? targetId}`)
                 break
             }
-            case 'face': {
+            case 'face':
+            case 'emoji': {
                 const name = attrText(attrs, 'name')
                 parts.push(name == null ? '[表情]' : `[表情:${name}]`)
+                break
+            }
+            case 'sharp': {
+                const name = attrText(attrs, 'name') ?? attrText(attrs, 'id')
+                parts.push(name == null ? '[频道]' : `#${name}`)
                 break
             }
             case 'img':
@@ -210,9 +246,24 @@ const appendElementText = (
                 parts.push(name == null ? '[表情包]' : `[表情包:${name}]`)
                 break
             }
-            case 'quote':
-                parts.push('[引用回复]')
+            case 'quote': {
+                const children = element.children ?? []
+                const user = children.find((child) => child.type === 'user')
+                const author =
+                    attrText(user?.attrs, 'name') ?? attrText(user?.attrs, 'id')
+                // Resource 元数据不属于引用正文，尤其不能把群名片当作作者昵称。
+                const body = elementsToLogText(
+                    children.filter(
+                        (child) =>
+                            !['user', 'member', 'channel'].includes(child.type)
+                    ),
+                    resolveAtLabel
+                )
+                parts.push(
+                    `[引用回复${author == null ? '' : ` ${author}`}${body.length === 0 ? '' : `：${body}`}]\n`
+                )
                 break
+            }
             case 'message':
                 parts.push(
                     isForwardAttr(attrs) ? renderForward(attrs) : '[非文本消息]'
@@ -255,7 +306,10 @@ export const collectVisibleAtTargetIds = (
         if (element.type === 'br') {
             continue
         }
-        if (TEXT_CONTAINER_TYPES.has(element.type)) {
+        if (
+            TEXT_CONTAINER_TYPES.has(element.type) ||
+            element.type === 'quote'
+        ) {
             collectVisibleAtTargetIds(element.children ?? [], ids)
             continue
         }

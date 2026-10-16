@@ -1,6 +1,7 @@
 import { Context, type Session } from 'koishi'
 import {
     elementsToLogText,
+    toMessageElements,
     type AtLabelResolver
 } from '../service/transcript/message_log/element_text'
 import type { ConversationLogEntryInput } from '../service/transcript/message_log/types'
@@ -20,7 +21,14 @@ export const buildSessionLogEntry = (
     ) {
         return null
     }
-    const content = elementsToLogText(session.elements, resolveAtLabel)
+    const content = elementsToLogText(
+        toMessageElements({
+            elements: session.elements,
+            content: session.content,
+            quote: session.quote
+        }),
+        resolveAtLabel
+    )
     if (content.length === 0) {
         return null
     }
