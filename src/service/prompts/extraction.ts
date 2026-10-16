@@ -8,7 +8,7 @@ import {
 export interface ExtractionPromptInput {
     /** 已格式化的聊天记录。 */
     chatHistory: string
-    /** 角色名标签（用于「XX说：」前缀），无上下文时为占位符。 */
+    /** 角色名标签（用于「XX：」前缀），无上下文时为占位符。 */
     assistantLabel: string
     /** preset 人设上下文，会作为 system 层角色依据提供给模型。 */
     presetPrompt: string
