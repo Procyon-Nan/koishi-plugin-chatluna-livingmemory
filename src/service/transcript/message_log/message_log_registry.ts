@@ -13,6 +13,11 @@ import type {
 const LOG_CAPACITY = 500
 const BACKFILL_WARMUP_COUNT = 200
 
+type RecallMessageIdentity = Pick<
+    ConversationLogEntryInput,
+    'messageId' | 'userId' | 'content' | 'timestamp'
+>
+
 interface ConversationLogEntry {
     binding: ConversationLogBinding
     bot: ConversationBackfillBot
@@ -46,12 +51,7 @@ export const toBackfillChannelId = (binding: ConversationLogBinding) => {
  */
 const matchesCurrentMessage = (
     candidate: ConversationLogMessage,
-    current: {
-        messageId?: string
-        userId: string
-        content: string
-        timestamp?: number
-    }
+    current: RecallMessageIdentity
 ) => {
     const currentMessageId = current.messageId
     if (
@@ -179,29 +179,44 @@ export class MessageLogRegistry {
     async loadRecallHistory(
         conversationId: string,
         count: number,
-        current: {
-            messageId?: string
-            userId: string
-            content: string
-            timestamp?: number
-        } | null
+        current: RecallMessageIdentity | null
     ): Promise<ConversationLogMessage[]> {
+        return (await this.loadRecallContext(conversationId, count, current))
+            .history
+    }
+
+    /** 当前消息与历史从同一次日志读取中取得，定位失败时不以末条消息冒充。 */
+    async loadRecallContext(
+        conversationId: string,
+        count: number,
+        current: RecallMessageIdentity | string | null
+    ): Promise<{
+        current: ConversationLogMessage | null
+        history: ConversationLogMessage[]
+    }> {
         await this.warmup(conversationId)
-        const entry = this.conversations.get(conversationId)
-        if (entry == null) {
-            return []
-        }
-        // capacity + 1 恒覆盖日志在窗全量，定位不因窗口截断漏掉当前消息
-        const entries = entry.log.lastN(LOG_CAPACITY + 1)
-        if (current == null) {
-            return entries.slice(-count)
-        }
-        for (let index = entries.length - 1; index >= 0; index--) {
-            if (matchesCurrentMessage(entries[index], current)) {
-                return entries.slice(Math.max(0, index - count), index)
+        // 先取完整日志定位边界，再截取历史窗口。
+        const entries = this.lastN(conversationId, LOG_CAPACITY)
+        for (
+            let index = entries.length - 1;
+            current != null && index >= 0;
+            index--
+        ) {
+            if (
+                typeof current === 'string'
+                    ? entries[index].messageId === current
+                    : matchesCurrentMessage(entries[index], current)
+            ) {
+                return {
+                    current: entries[index],
+                    history: entries.slice(Math.max(0, index - count), index)
+                }
             }
         }
-        return entries.slice(-count)
+        return {
+            current: null,
+            history: entries.slice(Math.max(0, entries.length - count))
+        }
     }
 
     /** 清条目并更新纪元；绑定保留，监听与游标读取继续。 */

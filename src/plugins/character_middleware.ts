@@ -1,10 +1,9 @@
 import { Context, type Session } from 'koishi'
 import type { LivingMemoryConfig } from '../contracts/workflows'
 import {
-    type CharacterTranscriptSourceMessage,
+    type CharacterTranscriptSourceMessage as CharacterMessage,
     isCharacterBotMessage,
-    isSameCharacterMessage,
-    toCharacterTranscriptMessageResult
+    isSameCharacterMessage
 } from '../service/transcript/character_transcript_adapter'
 import { toLogTranscriptMessages } from '../service/transcript/message_log/converter'
 import type { ConversationLogEntryInput } from '../service/transcript/message_log/types'
@@ -15,44 +14,27 @@ import {
 } from '../service/transcript/user_speaker'
 import { buildMemoryTranscriptOrigin } from '../service/transcript/origin_context'
 import {
-    type CharacterPresetPromptSource,
     scopeKey,
     toCharacterMemoryConversationId,
     toCharacterMemoryPresetId
 } from '../service/memory/helpers'
 import { toNonEmptyString } from '../service/shared/utils'
-
-type CharacterMessage = CharacterTranscriptSourceMessage
+import { buildSessionLogEntry } from './message_collector'
 
 type PromptSections = {
     snapshot: string
     userProfiles: string
 }
 
-interface CharacterBeforeChatEventPayload {
+interface CharacterChatEventPayload {
     session: Session
     sessionKey: string
-    conversationId?: string
     presetName: string
-    preset: CharacterPresetPromptSource
-    messages: readonly CharacterMessage[]
     focusMessage?: CharacterMessage
-    triggerReason?: string
 }
 
-interface CharacterAfterChatEventPayload {
-    session: Session
-    sessionKey: string
-    conversationId?: string
-    presetName: string
-    preset: CharacterPresetPromptSource
+interface CharacterAfterChatEventPayload extends CharacterChatEventPayload {
     messages: readonly CharacterMessage[]
-    focusMessage?: CharacterMessage
-    triggerReason?: string
-    persistedHumanMessage?: unknown
-    lastResponseMessage?: unknown
-    completionMessages?: unknown[]
-    status?: string | null
 }
 
 interface CharacterClearChatHistoryEventPayload {
@@ -64,9 +46,7 @@ interface CharacterClearChatHistoryEventPayload {
 interface CharacterEventRegistrar {
     on(
         name: 'chatluna_character/before-chat',
-        listener: (
-            payload: CharacterBeforeChatEventPayload
-        ) => void | Promise<void>
+        listener: (payload: CharacterChatEventPayload) => void | Promise<void>
     ): () => boolean
     on(
         name: 'chatluna_character/after-chat',
@@ -92,12 +72,7 @@ const isSession = (value: unknown): value is Session => {
 
 const createCharacterScope = (
     ctx: Context,
-    payload: {
-        session: Session
-        sessionKey: string
-        presetName: string
-        focusMessage?: CharacterMessage
-    }
+    payload: CharacterChatEventPayload
 ) => {
     const speakerId =
         toNonEmptyString(payload.focusMessage?.id) ??
@@ -177,32 +152,6 @@ const registerConversationLog = (
         },
         session.bot
     )
-}
-
-/**
- * 触发消息条目：先于读取显式补写，消除与平台监听的执行顺序耦合（去重保证单条）。
- * focus 作者是重读消息列表的末条，与事件 session 用户不保证同一人，昵称必须
- * 用按 focus 用户 ID 解析出的 speakerLabel，不得从 session 推断。
- */
-const buildCharacterUserEntry = (
-    speakerLabel: string,
-    message: CharacterMessage
-): ConversationLogEntryInput | null => {
-    const content = message.content.trim()
-    const userId = toNonEmptyString(message.id)
-    if (content.length === 0 || userId == null) {
-        return null
-    }
-
-    return {
-        messageId: toNonEmptyString(message.messageId) ?? undefined,
-        userId,
-        name: speakerLabel,
-        content,
-        timestamp: message.timestamp ?? Date.now(),
-        role: 'user',
-        origin: 'live'
-    }
 }
 
 /**
@@ -335,7 +284,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
 
     events.on(
         'chatluna_character/before-chat',
-        async (payload: CharacterBeforeChatEventPayload) => {
+        async (payload: CharacterChatEventPayload) => {
             const scope = createCharacterScope(ctx, payload)
             registerConversationLog(ctx, payload.session, scope.conversationId)
 
@@ -351,25 +300,36 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 return
             }
 
-            const currentTranscript = await toCharacterTranscriptMessageResult(
-                scope,
-                payload.session,
-                payload.focusMessage,
-                speakerCache
+            // 首次注册时补写事件 session 的原始平台消息；focus 仅用于定位，
+            // 不保证与 session 是同一条消息，不能把 session 正文挂到 focus ID 上。
+            const sessionEntry = buildSessionLogEntry(payload.session)
+            if (sessionEntry != null) {
+                livingMemory.messageLog.appendLive(
+                    [scope.conversationId],
+                    sessionEntry
+                )
+            }
+            const focusId = toNonEmptyString(payload.focusMessage.messageId)
+            const context = await livingMemory.messageLog.loadRecallContext(
+                scope.conversationId,
+                config.recallHistoryMessages,
+                focusId ?? null
             )
-            if (currentTranscript.message == null) {
+            const [currentMessage] = await toLogTranscriptMessages(
+                scope,
+                payload.session.platform,
+                context.current == null ? [] : [context.current]
+            )
+            if (currentMessage == null) {
                 logger.diagnostic('character.before.skipped', {
                     conversationId: scope.conversationId,
                     presetId: scope.presetId,
-                    reason: currentTranscript.reason
+                    reason: 'current-message-unavailable'
                 })
                 return
             }
             await ctx.chatluna_living_memory
-                .recordPresetSpeaker(
-                    scope,
-                    currentTranscript.message.speakerLabel
-                )
+                .recordPresetSpeaker(scope, currentMessage.speakerLabel)
                 .catch((error) => {
                     logger.warn(
                         'character.speaker.record.failed',
@@ -382,37 +342,19 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                     )
                 })
 
-            const focusEntry = buildCharacterUserEntry(
-                currentTranscript.message.speakerLabel,
-                payload.focusMessage
-            )
-            if (focusEntry != null) {
-                livingMemory.messageLog.appendLive(
-                    [scope.conversationId],
-                    focusEntry
-                )
-            }
-
             const history = await toLogTranscriptMessages(
                 scope,
                 payload.session.platform,
-                await livingMemory.messageLog.loadRecallHistory(
-                    scope.conversationId,
-                    config.recallHistoryMessages,
-                    focusEntry
-                )
+                context.history
             )
             profileSpeakerKeysByScope.set(
                 scopeKey(scope),
-                collectUserProfileSpeakerKeys([
-                    ...history,
-                    currentTranscript.message
-                ])
+                collectUserProfileSpeakerKeys([...history, currentMessage])
             )
 
             await ctx.chatluna_living_memory.queueRecall(
                 scope,
-                currentTranscript.message,
+                currentMessage,
                 async () => history
             )
         }
@@ -453,23 +395,22 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 transcriptMessages: messages.length
             })
 
-            // 标签按 focus 用户 ID 解析（与 before-chat 共享缓存）；
-            // 解析失败不阻断提取，退空串。
-            const focusUserId = toNonEmptyString(payload.focusMessage?.id)
-            const focusLabel =
-                focusUserId == null
-                    ? ''
-                    : await resolveUserSpeaker(
-                          payload.session,
-                          focusUserId,
-                          speakerCache
-                      )
-                          .then((speaker) => speaker.speakerLabel)
-                          .catch(() => '')
-
             await ctx.chatluna_living_memory.queueExtraction(scope, {
                 resolveTranscriptOrigin: async () => {
                     if (payload.session.isDirect) {
+                        const focusUserId = toNonEmptyString(
+                            payload.focusMessage?.id
+                        )
+                        const focusLabel =
+                            focusUserId == null
+                                ? ''
+                                : await resolveUserSpeaker(
+                                      payload.session,
+                                      focusUserId,
+                                      speakerCache
+                                  )
+                                      .then((speaker) => speaker.speakerLabel)
+                                      .catch(() => '')
                         return buildMemoryTranscriptOrigin({
                             isDirect: true,
                             speakerLabel: focusLabel,

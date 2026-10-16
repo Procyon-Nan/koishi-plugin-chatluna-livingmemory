@@ -72,10 +72,6 @@ export const memoryDeleteTool = {
         '你应该在某条记忆与其他记忆内容重复、存在冲突或是过时时删除它；一般选择时间上更旧的记忆删除。'
     ].join('\n'),
     schema: z.object({
-        memoryId: z
-            .string()
-            .trim()
-            .min(1)
-            .describe('要删除的记忆 ID')
+        memoryId: z.string().trim().min(1).describe('要删除的记忆 ID')
     })
 }

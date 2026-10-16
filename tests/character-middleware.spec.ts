@@ -195,6 +195,15 @@ it('loads recall history from the conversation log excluding the current message
             userId: 'user-1',
             selfId: 'bot-self',
             username: '群名片A',
+            messageId: 'm-4',
+            elements: [
+                { type: 'at', attrs: { id: 'bot-self', name: '群名片' } },
+                { type: 'text', attrs: { content: ' 新的触发消息' } }
+            ],
+            event: {
+                timestamp: Date.now(),
+                user: { name: '用户昵称A' }
+            },
             bot: {
                 selfId: 'bot-self',
                 user: { name: 'bot' },
@@ -225,7 +234,8 @@ it('loads recall history from the conversation log excluding the current message
                 focusMessage: {
                     id: 'user-1',
                     name: '群名片A',
-                    content: '新的触发消息',
+                    content:
+                        "<at name='群名片'>bot-self</at> Character 的转写正文",
                     messageId: 'm-4',
                     timestamp: Date.now()
                 }
@@ -233,15 +243,14 @@ it('loads recall history from the conversation log excluding the current message
         )
 
         assert.equal(captured.scope, scope)
-        assert.equal(captured.currentContent, '新的触发消息')
+        assert.equal(captured.currentContent, '@bot-self 新的触发消息')
         // 历史来自日志（含旁听闲聊），当前消息被排除且只出现一次
         assert.deepEqual(captured.history, [
             '之前的问题',
             '之前的回答',
             '旁听闲聊'
         ])
-        // 触发消息条目的标签按 focus 用户经 getUser 解析，不采用
-        // Character 传入的群名片口径 name，也不读事件会话的 username
+        // 当前消息正文与标签均取平台采集，不采用 Character 的转写正文或群名片。
         const appended = await messageLog.loadRecallHistory(
             'group:guild-1',
             10,
