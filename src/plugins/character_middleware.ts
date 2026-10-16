@@ -196,7 +196,7 @@ const buildCharacterReplyEntries = (
         return [
             {
                 messageId: toNonEmptyString(message.messageId) ?? undefined,
-                userId: toNonEmptyString(message.id) ?? session.selfId,
+                userId: message.id,
                 name: toNonEmptyString(message.name) ?? session.selfId,
                 content,
                 timestamp: message.timestamp ?? Date.now(),

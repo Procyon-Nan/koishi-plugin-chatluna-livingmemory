@@ -5,8 +5,8 @@ export const renderLivingMemoryTranscriptLines = (
     message: LivingMemoryTranscriptMessage
 ) => {
     const time = formatLivingMemoryMessageTime(message.createdAt)
-    return message.contentLines.map(
-        (line) => `[${time}] ${message.speakerLabel}：${line}`
+    return message.contentLines.map((line, index) =>
+        index === 0 ? `[${time}] ${message.speakerLabel}：${line}` : line
     )
 }
 

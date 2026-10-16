@@ -5,7 +5,7 @@ export interface ConversationLogMessage {
     messageId?: string
     /** 平台用户 id（bot 为 bot selfId）。 */
     userId: string
-    /** 记录时点昵称/群名片。 */
+    /** 记录时点的用户昵称，缺失时为用户 ID。 */
     name: string
     /** 纯文本。 */
     content: string

@@ -35,7 +35,7 @@ export const toMessageElements = (
                 ...toMessageElements(quote)
             ]
         },
-        ...elements.filter((element) => element.type !== 'quote')
+        ...elements
     ]
 }
 
@@ -259,9 +259,8 @@ const appendElementText = (
                     ),
                     resolveAtLabel
                 )
-                parts.push(
-                    `[引用回复${author == null ? '' : ` ${author}`}${body.length === 0 ? '' : `：${body}`}]\n`
-                )
+                const content = [author, body].filter(Boolean).join('：')
+                parts.push(`[回复 "${content}"] `)
                 break
             }
             case 'message':
@@ -303,9 +302,6 @@ export const collectVisibleAtTargetIds = (
     ids: Set<string>
 ) => {
     for (const element of elements) {
-        if (element.type === 'br') {
-            continue
-        }
         if (
             TEXT_CONTAINER_TYPES.has(element.type) ||
             element.type === 'quote'

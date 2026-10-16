@@ -11,8 +11,6 @@ import { resolveUserSpeaker, type UserSpeakerCache } from './user_speaker'
 
 export const livingMemoryRawContentKey = 'living_memory_raw_content'
 
-const rawContentByMessage = new WeakMap<BaseMessage, string>()
-
 const toRecord = (value: unknown): Record<string, unknown> | null => {
     return value != null && typeof value === 'object' && !Array.isArray(value)
         ? (value as Record<string, unknown>)
@@ -20,71 +18,30 @@ const toRecord = (value: unknown): Record<string, unknown> | null => {
 }
 
 export const getChatLunaMessageCreatedAt = (message: BaseMessage) => {
-    const responseMetadata = toRecord(
-        (message as { response_metadata?: unknown }).response_metadata
-    )
-    const chatlunaMetadata = toRecord(responseMetadata?.chatluna)
+    const chatlunaMetadata = toRecord(message.response_metadata.chatluna)
     return toLivingMemoryDate(chatlunaMetadata?.createdAt)
 }
 
 export const getMessageTextParts = (message: BaseMessage) => {
-    const cachedRawContent = rawContentByMessage.get(message)
-    if (cachedRawContent != null) {
-        return {
-            parts: [cachedRawContent],
-            stripSpeakerPrefix: true
-        }
-    }
-
     const livingMemoryRawContent = toNonEmptyString(
-        message.additional_kwargs?.[livingMemoryRawContentKey]
+        message.additional_kwargs[livingMemoryRawContentKey]
     )
     if (livingMemoryRawContent != null) {
-        return {
-            parts: [livingMemoryRawContent],
-            stripSpeakerPrefix: true
-        }
+        return [livingMemoryRawContent]
     }
 
-    const rawContent = toNonEmptyString(message.additional_kwargs?.raw_content)
+    const rawContent = toNonEmptyString(message.additional_kwargs.raw_content)
     if (rawContent != null) {
-        return {
-            parts: [rawContent],
-            stripSpeakerPrefix: true
-        }
+        return [rawContent]
     }
 
     if (typeof message.content === 'string') {
-        return {
-            parts: [message.content],
-            stripSpeakerPrefix: true
-        }
+        return [message.content]
     }
 
-    if (!Array.isArray(message.content)) {
-        return {
-            parts: [],
-            stripSpeakerPrefix: false
-        }
-    }
-
-    return {
-        parts: message.content
-            .map((part) => {
-                if (
-                    part != null &&
-                    typeof part === 'object' &&
-                    (part as Record<string, unknown>).type === 'text' &&
-                    typeof (part as Record<string, unknown>).text === 'string'
-                ) {
-                    return (part as { text: string }).text
-                }
-
-                return null
-            })
-            .filter((part): part is string => part != null),
-        stripSpeakerPrefix: true
-    }
+    return message.content.flatMap((part) =>
+        part.type === 'text' && typeof part.text === 'string' ? [part.text] : []
+    )
 }
 
 export const setLivingMemoryRawContent = (
@@ -96,7 +53,6 @@ export const setLivingMemoryRawContent = (
         return
     }
 
-    rawContentByMessage.set(message, normalized)
     message.additional_kwargs = {
         ...message.additional_kwargs,
         [livingMemoryRawContentKey]: normalized
@@ -120,14 +76,14 @@ export const toChatLunaTranscriptMessageResult = async (
         }
     }
 
-    const resolved = getMessageTextParts(message)
+    const content = getMessageTextParts(message)
     const createdAt =
         getChatLunaMessageCreatedAt(message) ?? options.fallbackCreatedAt
     if (type === 'ai') {
         return createLivingMemoryTranscriptMessageResult({
             role: 'assistant',
             speakerLabel: resolveScopeAssistantLabel(scope),
-            content: resolved.parts,
+            content,
             createdAt,
             stripSpeakerPrefix: false
         })
@@ -147,8 +103,8 @@ export const toChatLunaTranscriptMessageResult = async (
         role: 'user',
         speakerKey: speaker.speakerKey,
         speakerLabel: speaker.speakerLabel,
-        content: resolved.parts,
+        content,
         createdAt,
-        stripSpeakerPrefix: resolved.stripSpeakerPrefix
+        stripSpeakerPrefix: true
     })
 }

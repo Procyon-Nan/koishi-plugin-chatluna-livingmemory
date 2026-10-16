@@ -1,8 +1,6 @@
 import type { LivingMemoryTranscriptMessage } from '../../contracts/memory'
 import { toNonEmptyString } from '../shared/utils'
 
-export type LivingMemoryMessageTimeValue = Date | number | string
-
 export interface LivingMemoryTranscriptInput {
     role: LivingMemoryTranscriptMessage['role']
     speakerKey?: string
@@ -102,9 +100,8 @@ const toContentLines = (
         .flatMap((part) => part.replace(/\r\n/g, '\n').split('\n'))
         .map((line) => {
             const trimmed = line.trim()
-            const parsed = parseLivingMemorySpeakerLine(trimmed)
-            return stripSpeakerPrefix && parsed != null
-                ? parsed.content
+            return stripSpeakerPrefix
+                ? (parseLivingMemorySpeakerLine(trimmed)?.content ?? trimmed)
                 : trimmed
         })
         .filter((line) => line.length > 0)

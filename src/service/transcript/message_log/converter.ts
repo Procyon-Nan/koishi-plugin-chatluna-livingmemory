@@ -36,7 +36,7 @@ export const toLogTranscriptMessages = async (
             speakerLabel: entry.name,
             content: entry.content,
             createdAt: entry.timestamp,
-            stripSpeakerPrefix: true
+            stripSpeakerPrefix: false
         })
     })
 

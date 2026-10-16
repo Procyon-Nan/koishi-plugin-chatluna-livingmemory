@@ -51,7 +51,7 @@ export const buildChatLunaSourceEntry = (
 ): ConversationLogEntryInput | null => {
     const sourceUserId =
         toNonEmptyString(sourceMessage.id) ?? toNonEmptyString(session.userId)
-    const content = getMessageTextParts(sourceMessage).parts.join('\n')
+    const content = getMessageTextParts(sourceMessage).join('\n')
     if (sourceUserId == null || content.trim().length === 0) {
         return null
     }
@@ -81,7 +81,7 @@ const buildChatLunaExchangeEntries = (
     responseMessage: AIMessage
 ): ConversationLogEntryInput[] => {
     const sourceEntry = buildChatLunaSourceEntry(session, sourceMessage)
-    const responseText = getMessageTextParts(responseMessage).parts.join('\n')
+    const responseText = getMessageTextParts(responseMessage).join('\n')
     const botName = toNonEmptyString(session.bot?.user?.name) ?? session.selfId
 
     return [

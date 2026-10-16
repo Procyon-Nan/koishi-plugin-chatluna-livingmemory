@@ -107,7 +107,7 @@ export class MessageLogRegistry {
         }
         conversations.add(conversationId)
 
-        this.startBackfill(conversationId, entry)
+        this.startBackfill(entry)
     }
 
     /**
@@ -120,7 +120,7 @@ export class MessageLogRegistry {
             return
         }
         if (entry.warmupPromise == null) {
-            this.startBackfill(conversationId, entry)
+            this.startBackfill(entry)
         }
         await entry.warmupPromise?.catch(() => {})
     }
@@ -249,7 +249,7 @@ export class MessageLogRegistry {
         entry.log.append(items)
     }
 
-    private startBackfill(conversationId: string, entry: ConversationLogEntry) {
+    private startBackfill(entry: ConversationLogEntry) {
         const bot = entry.bot
         entry.backfilling = true
         entry.warmupPromise = (async () => {
@@ -268,10 +268,8 @@ export class MessageLogRegistry {
             },
             () => {
                 // 失败不保留结果：下次 warmup 重新尝试，缓冲照常冲刷。
-                if (entry.warmupPromise != null) {
-                    entry.warmupPromise = null
-                    entry.backfilling = false
-                }
+                entry.warmupPromise = null
+                entry.backfilling = false
                 this.flushPending(entry)
             }
         )

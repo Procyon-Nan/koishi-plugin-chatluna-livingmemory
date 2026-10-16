@@ -17,9 +17,7 @@ export const serializeLivingMemorySourceMessage = (
         transcriptLines,
         content:
             message.role === 'user'
-                ? message.contentLines
-                      .map((line) => `${message.speakerLabel}：${line}`)
-                      .join('\n')
+                ? `${message.speakerLabel}：${message.contentLines.join('\n')}`
                 : message.contentLines.join('\n')
     }
 }

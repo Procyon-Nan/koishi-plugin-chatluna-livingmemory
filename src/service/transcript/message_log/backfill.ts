@@ -11,8 +11,8 @@ import type { ConversationLogEntryInput } from './types'
 export interface BackfillHistoryMessage extends LogTextMessage {
     id?: string
     messageId?: string
-    timestamp?: number | string | Date
-    createdAt?: number | string | Date
+    timestamp?: number
+    createdAt?: number
 }
 
 export interface ConversationBackfillBot {
@@ -42,20 +42,6 @@ export interface ConversationBackfillOptions {
 
 type AtLabelLookup = (userId: string) => Promise<string | null>
 
-const normalizeTimestamp = (value: number | string | Date | undefined) => {
-    if (typeof value === 'number' && Number.isFinite(value)) {
-        return value < 1_000_000_000_000 ? value * 1000 : value
-    }
-    if (value instanceof Date) {
-        return Number.isFinite(value.getTime()) ? value.getTime() : null
-    }
-    if (typeof value === 'string') {
-        const parsed = Date.parse(value)
-        return Number.isFinite(parsed) ? parsed : null
-    }
-    return null
-}
-
 /**
  * 先解析本条消息渲染可见 at 目标的昵称，再同步渲染——渲染本体不承担
  * 异步；无 getUser 能力时直接渲染（at 退 @id）。
@@ -65,9 +51,6 @@ const toTextContent = async (
     lookupAtLabel: AtLabelLookup | null
 ) => {
     const elements = toMessageElements(message)
-    if (elements.length === 0) {
-        return ''
-    }
     if (lookupAtLabel == null) {
         return elementsToLogText(elements)
     }
@@ -86,17 +69,12 @@ const toTextContent = async (
     return elementsToLogText(elements, (id) => labels.get(id) ?? null)
 }
 
-/** 说话人标签只取用户昵称（user.name）；群名片（nick/member）不进模型可见视图。 */
-const toDisplayName = (message: BackfillHistoryMessage, userId: string) => {
-    return toNonEmptyString(message.user?.name) ?? userId
-}
-
 /**
  * 经适配器同形方法 getMessageList 拉取平台历史（分页契约镜像 Character
  * pullBot：批内时间正序，续读游标 next ?? prev ?? 批首 id——BidiList 契约
  * next 为续读方向游标，Milky 实测填 next，OneBot 实测仅返回 data）。
- * 无平台时间戳的消息直接丢弃——回填没有可靠到达时钟，宁缺勿滥，防纪元
- * 穿透。平台调用失败直接抛出，由注册表保持未预热、下次 warmup 重试；
+ * 缺少平台时间戳或作者 ID 的消息直接丢弃，不补造时间与身份。平台调用
+ * 失败直接抛出，由注册表保持未预热、下次 warmup 重试；
  * 成功重拉经去重幂等。
  */
 export const pullConversationBackfill = async (
@@ -142,24 +120,26 @@ export const pullConversationBackfill = async (
 
         const entries: ConversationLogEntryInput[] = []
         for (const message of batch) {
-            const timestamp = normalizeTimestamp(
-                message.timestamp ?? message.createdAt
-            )
-            if (timestamp == null) {
+            const timestamp = message.timestamp ?? message.createdAt
+            const userId = toNonEmptyString(message.user?.id)
+            if (
+                timestamp == null ||
+                !Number.isFinite(timestamp) ||
+                userId == null
+            ) {
                 continue
             }
             const content = await toTextContent(message, lookupAtLabel)
             if (content.length === 0) {
                 continue
             }
-            const userId = toNonEmptyString(message.user?.id) ?? '0'
             entries.push({
                 messageId:
                     toNonEmptyString(message.messageId) ??
                     toNonEmptyString(message.id) ??
                     undefined,
                 userId,
-                name: toDisplayName(message, userId),
+                name: toNonEmptyString(message.user?.name) ?? userId,
                 content,
                 timestamp,
                 role: userId === bot.selfId ? 'assistant' : 'user',

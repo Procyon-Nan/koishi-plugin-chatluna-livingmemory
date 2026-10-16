@@ -24,7 +24,6 @@ export const buildSessionLogEntry = (
     const content = elementsToLogText(
         toMessageElements({
             elements: session.elements,
-            content: session.content,
             quote: session.quote
         }),
         resolveAtLabel

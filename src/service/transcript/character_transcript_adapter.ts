@@ -3,8 +3,8 @@ import { toNonEmptyString } from '../shared/utils'
 
 export interface CharacterTranscriptSourceMessage {
     content: string
-    name?: string
-    id?: string
+    name: string
+    id: string
     messageId?: string
     timestamp?: number
 }
@@ -13,18 +13,7 @@ export const isCharacterBotMessage = (
     session: Session,
     message: CharacterTranscriptSourceMessage
 ) => {
-    const messageId = toNonEmptyString(message.id)
-    const botIds = [session.bot?.selfId, session.selfId]
-        .map((id) => toNonEmptyString(id))
-        .filter((id): id is string => id != null)
-
-    if (messageId != null && botIds.length > 0) {
-        return botIds.includes(messageId)
-    }
-
-    const messageName = toNonEmptyString(message.name)
-    const botName = toNonEmptyString(session.bot?.user?.name)
-    return messageName != null && botName != null && messageName === botName
+    return message.id === session.selfId
 }
 
 export const isSameCharacterMessage = (
