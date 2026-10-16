@@ -64,7 +64,8 @@ export const generatedMemorySchema = z
     )
 
 export const extractionResultSchema = z.object({
-    memories: z.array(generatedMemorySchema)
+    memories: z.array(generatedMemorySchema),
+    reason: requiredText('提取这些记忆或没有值得记录的内容的原因。')
 })
 export const dreamResultToolName = 'living_memory_dream_result'
 

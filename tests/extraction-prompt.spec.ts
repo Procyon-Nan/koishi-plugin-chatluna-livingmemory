@@ -74,7 +74,10 @@ const extractModelOutput = async (input: ToolCall['args']) => {
 
 it('sends persona context as system and escaped transcript as human input', async () => {
     const model = createToolCallingModel([
-        createToolCallMessage(extractionResultToolName, { memories: [] })
+        createToolCallMessage(extractionResultToolName, {
+            memories: [],
+            reason: '本批聊天只包含格式测试。'
+        })
     ])
     const ctx = {
         chatluna: {
@@ -124,6 +127,7 @@ it('sends persona context as system and escaped transcript as human input', asyn
 
 it('accepts a stringified memories array through bounded normalization', async () => {
     const trace = await extractModelOutput({
+        reason: '考试计划值得记录。',
         memories: JSON.stringify([completeMemory])
     })
 
@@ -149,7 +153,10 @@ it('rejects the whole extraction output when a required field is missing', async
         const incomplete = { ...completeMemory } as Record<string, unknown>
         delete incomplete[field]
 
-        const trace = await extractModelOutput({ memories: [incomplete] })
+        const trace = await extractModelOutput({
+            memories: [incomplete],
+            reason: '考试计划值得记录。'
+        })
 
         assert.deepEqual(trace.extracted, [])
         assert.match(trace.parseError ?? '', new RegExp(field, 'u'))
@@ -177,6 +184,7 @@ it('rejects the whole extraction output when a field violates the contract', asy
 
     for (const invalid of invalidItems) {
         const trace = await extractModelOutput({
+            reason: '考试计划值得记录。',
             memories: [completeMemory, invalid]
         })
 

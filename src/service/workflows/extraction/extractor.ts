@@ -26,7 +26,7 @@ export interface LivingMemoryExtractionTrace {
     output: string | null
     skippedReason: LivingMemoryExtractionSkipReason | null
     // 结果工具调用或参数无法通过 Schema 校验时的原因。为 null 表示成功，
-    // 包括模型通过工具合法提交空 memories 数组。
+    // 包括模型通过工具提交空 memories 数组并说明原因。
     parseError: string | null
 }
 
@@ -79,7 +79,7 @@ export class LivingMemoryExtractor {
             prompt,
             toolName: extractionResultToolName,
             toolDescription:
-                '提交本次记录的长期记忆。没有可记录的记忆时提交空 memories 数组。',
+                '提交本次记录的长期记忆及理由。没有可记录的记忆时提交空 memories 数组，并说明原因。',
             schema: extractionResultSchema,
             validateResult: ({ memories }) => {
                 for (const memory of memories) {
@@ -103,6 +103,12 @@ export class LivingMemoryExtractor {
                           stage: 'memory-extraction'
                       }
         })
+        if (result.value != null) {
+            logger?.diagnostic('extraction.result', {
+                extracted: result.value.memories.length,
+                reason: result.value.reason
+            })
+        }
         const extracted =
             result.value?.memories.map((item): AttributedMemoryItem => {
                 return {

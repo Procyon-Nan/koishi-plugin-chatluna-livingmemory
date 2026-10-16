@@ -74,6 +74,7 @@ it('applies shared field rules to extracted memories', async () => {
     const extractionKeywords = ['  alpha  ', 'alpha', 'keyword-0']
     const model = createToolCallingModel([
         createToolCallMessage(extractionResultToolName, {
+            reason: '聊天中包含值得长期记录的事实。',
             memories: [
                 {
                     type: 'fact',

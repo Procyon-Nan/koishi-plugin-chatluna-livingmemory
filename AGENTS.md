@@ -90,6 +90,7 @@ chatluna-livingmemory/
    - `enableExtractionWhitelist` 只限制自动提取，按原始平台 id 匹配（群聊为 `scope.guildId`，私聊为 `scope.userId`）。
      未命中的会话不初始化游标，消息日志、召回、注入与主动创建工具不受影响。
    - 模型输出经结构化结果工具校验后才能写入，格式错误走统一纠错流程，不得另写解析或兜底。
+   - 提取结果必须填写 `reason` 说明原因，包含空 `memories` 数组的结果；无可记录内容时不新增记忆并正常推进本批游标。
 
 6. Dream 与用户画像
    - Dream 只处理活跃记忆，归档记忆不参与聚类、邻居查询、整理或画像生成。
