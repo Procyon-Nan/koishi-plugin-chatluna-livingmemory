@@ -1,0 +1,83 @@
+.clear-preset-body {
+    display: grid;
+    gap: 24px;
+}
+
+.clear-warning {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    border-radius: 10px;
+    background: var(--lm-danger-light);
+    color: var(--lm-danger);
+}
+
+.clear-warning strong {
+    font-size: 14px;
+}
+
+.clear-target,
+.clear-confirmation {
+    display: grid;
+    gap: 12px;
+    min-width: 0;
+}
+
+.clear-label {
+    color: var(--lm-text-secondary);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.clear-preset-name {
+    font-size: 20px;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+
+.clear-scope {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.clear-scope span {
+    padding: 4px 9px;
+    border: 1px solid var(--lm-border);
+    border-radius: 6px;
+    color: var(--lm-text-secondary);
+    font-size: 12px;
+}
+
+.clear-phrase {
+    margin: 0;
+    padding: 14px 16px;
+    border-radius: 8px;
+    background: var(--lm-bg-secondary);
+    border: 1px solid var(--lm-border);
+    font-size: 14px;
+    line-height: 1.8;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    user-select: text;
+}
+
+.clear-confirmation :deep(.el-textarea__inner) {
+    padding: 12px 14px;
+    line-height: 1.8;
+}
+
+.clear-hint {
+    margin: 0;
+    color: var(--lm-success);
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+:global(.lm-dialog.clear-preset-dialog .el-dialog__footer) {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    background-color: var(--lm-bg-primary) !important;
+}

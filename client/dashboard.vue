@@ -316,6 +316,12 @@
         :is-dark="isDark"
         @saved="onMemorySaved"
     />
+    <clear-preset-dialog
+        v-model="clearPresetDialogVisible"
+        :preset-id="clearPresetTarget"
+        :is-dark="isDark"
+        @cleared="refreshAll(true)"
+    />
 </template>
 
 <script setup lang="ts">
@@ -325,6 +331,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
 import * as api from './api'
 import JobsTab from './components/jobs-tab.vue'
+import ClearPresetDialog from './components/clear-preset-dialog.vue'
 import MemoriesTab from './components/memories-tab.vue'
 import MemoryEditorDialog from './components/memory-editor-dialog.vue'
 import ProfilesTab from './components/profiles-tab.vue'
@@ -358,6 +365,8 @@ const loading = ref(false)
 const dreamPending = ref(false)
 const actionPending = ref(false)
 const memoryDialogVisible = ref(false)
+const clearPresetDialogVisible = ref(false)
+const clearPresetTarget = ref('')
 const editingMemory = ref<MemoryEntryRecord | null>(null)
 const importFileInput = ref<HTMLInputElement | null>(null)
 
@@ -674,18 +683,10 @@ const doRestartVectorIndex = () =>
         refresh: fetchConfigStatus
     })
 
-const doClearPresetData = () =>
-    confirmAndRun({
-        confirmMessage: `该操作会清空预设 ${presetId.value} 的全部记忆、用户画像、人设卡片、快照和任务记录，且不可恢复。是否继续？`,
-        confirmTitle: '危险操作',
-        confirmButtonText: '确认清空',
-        failurePrefix: '清空失败：',
-        action: async () => {
-            await api.clearPresetData(presetId.value)
-            return '该预设的数据已清空'
-        },
-        refresh: () => refreshAll(true)
-    })
+const doClearPresetData = () => {
+    clearPresetTarget.value = presetId.value
+    clearPresetDialogVisible.value = true
+}
 
 const formatExportFilename = (presetId: string) => {
     const now = new Date()
