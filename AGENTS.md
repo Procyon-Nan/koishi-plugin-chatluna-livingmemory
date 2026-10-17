@@ -162,6 +162,10 @@ chatluna-livingmemory/
 1. TypeScript ESM 风格以 `.oxfmtrc.json` 与 `.oxlintrc.json` 为准。
 2. 注释只解释不直观的约束或原因，使用中文，不添加复述代码的注释。
 3. `lib/` 与 `dist/` 是生成产物，除非任务明确要求，不得手工编辑。
+4. 前端 Vue 组件保留模板和逻辑，样式统一放在 `client/styles/`，通过 `<style src="...">` 引用，不在 Vue 中内嵌 CSS。
+   - 组件专用样式使用 `scoped`；公共列表样式复用 `tab-content.css`。
+   - `theme.css` 维护明暗主题变量，`element-plus.css` 维护公共控件与弹窗样式，`dashboard.css` 只维护主页面布局，均由 `dashboard.vue` 按此顺序以 `scoped` 引入。
+   - Teleport 弹窗、下拉浮层使用受 `lm-*` 类名约束的 `:global()` 规则；`scrollbars.css` 保留非 scoped 引用，以覆盖页面子组件的滚动条。
 
 ## 验证要求
 

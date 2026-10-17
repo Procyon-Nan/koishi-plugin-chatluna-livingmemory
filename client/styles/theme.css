@@ -1,0 +1,154 @@
+/* 页面与 Teleport 弹窗分别定义主题变量，避免依赖 DOM 继承。 */
+.living-memory-dashboard.lm-theme-light {
+    --lm-bg-primary: #ffffff;
+    --lm-bg-secondary: #f8f9fa;
+    --lm-bg-hover: #f1f3f5;
+    --lm-border: #e9ecef;
+    --lm-border-hover: #dee2e6;
+    --lm-text-primary: #212529;
+    --lm-text-secondary: #495057;
+    --lm-text-tertiary: #868e96;
+    --lm-primary: #2563eb;
+    --lm-primary-hover: #1d4ed8;
+    --lm-primary-light: #eff6ff;
+    --lm-success: #10b981;
+    --lm-success-light: #ecfdf5;
+    --lm-warning: #f59e0b;
+    --lm-warning-light: #fefbeb;
+    --lm-danger: #ef4444;
+    --lm-danger-light: #fef2f2;
+    --lm-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.02);
+    --lm-font-sans:
+        -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+        Arial, sans-serif;
+    --lm-font-mono:
+        ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+    /* Element Plus Overrides mapping */
+    --el-color-primary: var(--lm-primary) !important;
+    --el-color-success: var(--lm-success) !important;
+    --el-color-warning: var(--lm-warning) !important;
+    --el-color-danger: var(--lm-danger) !important;
+    --el-text-color-primary: var(--lm-text-primary) !important;
+    --el-text-color-regular: var(--lm-text-secondary) !important;
+    --el-text-color-secondary: var(--lm-text-tertiary) !important;
+    --el-border-color: var(--lm-border) !important;
+    --el-border-color-light: var(--lm-border) !important;
+    --el-border-color-lighter: var(--lm-border) !important;
+    --el-fill-color-blank: var(--lm-bg-primary) !important;
+    --el-bg-color: var(--lm-bg-primary) !important;
+    --el-bg-color-overlay: var(--lm-bg-primary) !important;
+}
+
+.living-memory-dashboard.lm-theme-dark {
+    --lm-bg-primary: #18181b;
+    --lm-bg-secondary: #09090b;
+    --lm-bg-hover: #27272a;
+    --lm-border: #27272a;
+    --lm-border-hover: #3f3f46;
+    --lm-text-primary: #f4f4f5;
+    --lm-text-secondary: #a1a1aa;
+    --lm-text-tertiary: #71717a;
+    --lm-primary: #3b82f6;
+    --lm-primary-hover: #60a5fa;
+    --lm-primary-light: rgba(59, 130, 246, 0.1);
+    --lm-success: #10b981;
+    --lm-success-light: rgba(16, 185, 129, 0.1);
+    --lm-warning: #f59e0b;
+    --lm-warning-light: rgba(245, 158, 11, 0.1);
+    --lm-danger: #ef4444;
+    --lm-danger-light: rgba(239, 68, 68, 0.1);
+    --lm-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+    --lm-font-sans:
+        -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+        Arial, sans-serif;
+    --lm-font-mono:
+        ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+    /* Element Plus Overrides mapping */
+    --el-color-primary: var(--lm-primary) !important;
+    --el-color-success: var(--lm-success) !important;
+    --el-color-warning: var(--lm-warning) !important;
+    --el-color-danger: var(--lm-danger) !important;
+    --el-text-color-primary: var(--lm-text-primary) !important;
+    --el-text-color-regular: var(--lm-text-secondary) !important;
+    --el-text-color-secondary: var(--lm-text-tertiary) !important;
+    --el-border-color: var(--lm-border) !important;
+    --el-border-color-light: var(--lm-border) !important;
+    --el-border-color-lighter: var(--lm-border) !important;
+    --el-fill-color-blank: var(--lm-bg-primary) !important;
+    --el-bg-color: var(--lm-bg-primary) !important;
+    --el-bg-color-overlay: var(--lm-bg-primary) !important;
+}
+
+:global(.lm-dialog.lm-theme-light) {
+    --lm-bg-primary: #ffffff;
+    --lm-bg-secondary: #f8f9fa;
+    --lm-bg-hover: #f1f3f5;
+    --lm-border: #e9ecef;
+    --lm-border-hover: #dee2e6;
+    --lm-text-primary: #212529;
+    --lm-text-secondary: #495057;
+    --lm-text-tertiary: #868e96;
+    --lm-primary: #2563eb;
+    --lm-primary-hover: #1d4ed8;
+    --lm-primary-light: #eff6ff;
+    --lm-success: #10b981;
+    --lm-success-light: #ecfdf5;
+    --lm-warning: #f59e0b;
+    --lm-warning-light: #fefbeb;
+    --lm-danger: #ef4444;
+    --lm-danger-light: #fef2f2;
+    --lm-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.02);
+    --lm-font-sans:
+        -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+        Arial, sans-serif;
+    --lm-font-mono:
+        ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+    --el-color-primary: var(--lm-primary) !important;
+    --el-text-color-primary: var(--lm-text-primary) !important;
+    --el-text-color-regular: var(--lm-text-secondary) !important;
+    --el-border-color: var(--lm-border) !important;
+    --el-border-color-light: var(--lm-border) !important;
+    --el-border-color-lighter: var(--lm-border) !important;
+    --el-fill-color-blank: var(--lm-bg-primary) !important;
+    --el-bg-color: var(--lm-bg-primary) !important;
+    --el-bg-color-overlay: var(--lm-bg-primary) !important;
+}
+
+:global(.lm-dialog.lm-theme-dark) {
+    --lm-bg-primary: #18181b;
+    --lm-bg-secondary: #09090b;
+    --lm-bg-hover: #27272a;
+    --lm-border: #27272a;
+    --lm-border-hover: #3f3f46;
+    --lm-text-primary: #f4f4f5;
+    --lm-text-secondary: #a1a1aa;
+    --lm-text-tertiary: #71717a;
+    --lm-primary: #3b82f6;
+    --lm-primary-hover: #60a5fa;
+    --lm-primary-light: rgba(59, 130, 246, 0.1);
+    --lm-success: #10b981;
+    --lm-success-light: rgba(16, 185, 129, 0.1);
+    --lm-warning: #f59e0b;
+    --lm-warning-light: rgba(245, 158, 11, 0.1);
+    --lm-danger: #ef4444;
+    --lm-danger-light: rgba(239, 68, 68, 0.1);
+    --lm-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+    --lm-font-sans:
+        -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+        Arial, sans-serif;
+    --lm-font-mono:
+        ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+    --el-color-primary: var(--lm-primary) !important;
+    --el-text-color-primary: var(--lm-text-primary) !important;
+    --el-text-color-regular: var(--lm-text-secondary) !important;
+    --el-border-color: var(--lm-border) !important;
+    --el-border-color-light: var(--lm-border) !important;
+    --el-border-color-lighter: var(--lm-border) !important;
+    --el-fill-color-blank: var(--lm-bg-primary) !important;
+    --el-bg-color: var(--lm-bg-primary) !important;
+    --el-bg-color-overlay: var(--lm-bg-primary) !important;
+}
