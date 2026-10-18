@@ -7,12 +7,14 @@ import {
     memoryGetMessagesTool,
     memoryCreateTool,
     memoryUpdateTool,
+    memoryMergeTool,
     memoryDeleteTool
 } from '../service/prompts/memory_tools'
 import { LivingMemorySearchTool } from '../service/memory/tools/embedding_search_tool'
 import { LivingMemoryGetMessagesTool } from '../service/memory/tools/get_messages_tool'
 import { LivingMemoryCreateMemoryTool } from '../service/memory/tools/create_memory_tool'
 import { LivingMemoryUpdateMemoryTool } from '../service/memory/tools/update_memory_tool'
+import { LivingMemoryMergeMemoriesTool } from '../service/memory/tools/merge_memories_tool'
 import { LivingMemoryDeleteMemoryTool } from '../service/memory/tools/delete_memory_tool'
 
 export function apply(ctx: Context, config: LivingMemoryConfig) {
@@ -78,6 +80,14 @@ export function apply(ctx: Context, config: LivingMemoryConfig) {
                 ['update', 'write'],
                 () =>
                     new LivingMemoryUpdateMemoryTool(ctx.chatluna_living_memory)
+            ),
+            register(
+                memoryMergeTool,
+                ['merge', 'write'],
+                () =>
+                    new LivingMemoryMergeMemoriesTool(
+                        ctx.chatluna_living_memory
+                    )
             ),
             register(
                 memoryDeleteTool,

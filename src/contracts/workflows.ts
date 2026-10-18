@@ -201,6 +201,15 @@ export interface LivingMemoryUpdateProvider {
     ): Promise<MemoryEntryRecord | null>
 }
 
+export interface LivingMemoryMergeProvider {
+    listPresetSpeakers(presetId: string): Promise<PresetSpeakerRecord[]>
+    mergeActiveMemories(
+        presetId: string,
+        sourceMemoryIds: string[],
+        memory: AttributedMemoryItem
+    ): Promise<{ memory: MemoryEntryRecord; warnings: string[] }>
+}
+
 export interface LivingMemoryArchiveProvider {
     archiveActiveMemories(
         presetId: string,

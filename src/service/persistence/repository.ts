@@ -322,6 +322,14 @@ export class LivingMemoryRepository
         return this.entries.applyDreamMerge(input)
     }
 
+    mergeMemories(
+        presetId: string,
+        sourceMemoryIds: string[],
+        memory: AttributedMemoryItem
+    ) {
+        return this.entries.mergeMemories(presetId, sourceMemoryIds, memory)
+    }
+
     deleteMemory(id: string) {
         return this.entries.deleteMemory(id)
     }

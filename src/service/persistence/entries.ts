@@ -767,6 +767,78 @@ export class LivingMemoryEntryRepository
         return archived
     }
 
+    async mergeMemories(
+        presetId: string,
+        sourceMemoryIds: string[],
+        memory: AttributedMemoryItem
+    ) {
+        const sourceIds = new Set(sourceMemoryIds)
+        if (sourceIds.size < 2 || sourceIds.size !== sourceMemoryIds.length) {
+            throw new Error('合并来源至少需要两条记忆，ID 不得重复。')
+        }
+        return this.transact(async (database) => {
+            const entries = (
+                await database.get(
+                    'living_memory_entry',
+                    {
+                        presetId,
+                        id: { $in: sourceMemoryIds },
+                        status: 'active'
+                    },
+                    memoryEntryFields
+                )
+            ).map(normalizeEntryRecord)
+            const entryById = new Map(entries.map((entry) => [entry.id, entry]))
+            const sources = sourceMemoryIds.map((id) => {
+                const entry = entryById.get(id)
+                if (entry === undefined) {
+                    throw new Error(
+                        `不存在 ID 为 ${id} 的记忆，请重新查明记忆 ID 后再调用。`
+                    )
+                }
+                return entry
+            })
+            const sameConversation = sources.every(
+                (source) =>
+                    source.sourceConversationId ===
+                    sources[0].sourceConversationId
+            )
+            const sameLabel = sources.every(
+                (source) => source.sourceLabel === sources[0].sourceLabel
+            )
+            const now = new Date()
+            const record = this.buildMemoryEntry(
+                {
+                    presetId,
+                    conversationId: sameConversation
+                        ? (sources[0].sourceConversationId ?? '')
+                        : ''
+                },
+                memory,
+                mergeMemorySourceOrigins(sources),
+                sameConversation && sameLabel ? sources[0].sourceLabel : null,
+                now,
+                memory.speakerKeys
+            )
+            await database.create('living_memory_entry', record)
+            await database.set(
+                'living_memory_entry',
+                { presetId, id: { $in: sourceMemoryIds } },
+                { status: 'archived', updatedAt: now }
+            )
+            const archivedSources = sources.map((source) => ({
+                ...source,
+                status: 'archived' as const,
+                updatedAt: now
+            }))
+            await this.replaceActiveMemorySpeakers(database, [
+                record,
+                ...archivedSources
+            ])
+            return { memory: record, archivedSources }
+        })
+    }
+
     async applyDreamMerge(input: DreamMergeInput) {
         const sourceIds = input.sources.map((source) => source.id)
         const uniqueSourceIds = new Set(sourceIds)

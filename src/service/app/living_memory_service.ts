@@ -42,6 +42,7 @@ import type {
     UserProfileListQuery
 } from '../../contracts/rpc'
 import type {
+    AttributedMemoryItem,
     DreamTriggerResult,
     LivingMemoryConfig,
     MemoryConfigWarning,
@@ -645,6 +646,18 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             presetId,
             memoryId,
             patch
+        )
+    }
+
+    async mergeActiveMemories(
+        presetId: string,
+        sourceMemoryIds: string[],
+        memory: AttributedMemoryItem
+    ) {
+        return await this.mutations.mergeActiveMemories(
+            presetId,
+            sourceMemoryIds,
+            memory
         )
     }
 

@@ -50,6 +50,7 @@ type MemoryFactRepository = Pick<
     | 'setMemoryConsolidation'
     | 'archiveActiveEntries'
     | 'applyDreamMerge'
+    | 'mergeMemories'
     | 'deleteMemory'
     | 'deleteEntries'
     | 'deleteSnapshotsByPreset'
@@ -375,6 +376,61 @@ export class LivingMemoryMutationService
                 deletes: []
             })
             return result
+        })
+    }
+
+    async mergeActiveMemories(
+        presetId: string,
+        sourceMemoryIds: string[],
+        memory: AttributedMemoryItem
+    ) {
+        const sourceIds = new Set(sourceMemoryIds)
+        if (sourceIds.size < 2 || sourceIds.size !== sourceMemoryIds.length) {
+            throw new Error('合并来源至少需要两条记忆，ID 不得重复。')
+        }
+        return this.runPresetMutation(presetId, async () => {
+            const entries = await this.repository.getEntriesByPresetAndIds(
+                presetId,
+                sourceMemoryIds
+            )
+            const entryById = new Map(entries.map((entry) => [entry.id, entry]))
+            for (const id of sourceMemoryIds) {
+                const entry = entryById.get(id)
+                if (entry === undefined || entry.status !== 'active') {
+                    throw new Error(
+                        `不存在 ID 为 ${id} 的记忆，请重新查明记忆 ID 后再调用。`
+                    )
+                }
+            }
+            await this.registerCallerSpeakerKeys(presetId, memory.speakerKeys)
+            const result = await this.repository.mergeMemories(
+                presetId,
+                sourceMemoryIds,
+                memory
+            )
+            const warnings: string[] = []
+            try {
+                await this.applyCommittedMutation({
+                    presetId,
+                    upserts: [
+                        this.upsert(result.memory, 'replace'),
+                        ...result.archivedSources.map((source) =>
+                            this.upsert(source, 'preserve')
+                        )
+                    ],
+                    deletes: []
+                })
+            } catch (error) {
+                if (!(error instanceof LivingMemoryFactsCommittedError)) {
+                    throw error
+                }
+                // 新 ID 已落库，索引失败时仍返回它，避免模型重试或丢失合并结果。
+                warnings.push(
+                    '记忆已合并，但向量索引同步失败，已调度后台自动对账：' +
+                        error.message
+                )
+            }
+            return { memory: result.memory, warnings }
         })
     }
 

@@ -65,6 +65,22 @@ export const memoryUpdateTool = {
     })
 }
 
+export const memoryMergeTool = {
+    name: 'living_memory_merge_memories',
+    description: [
+        '长期记忆合并工具，当你需要将多条记忆合并成一条时使用此工具；使用此工具前，必须先使用 living_memory_search 工具得到相关记忆的 ID。',
+        '你应该在多条记忆描述同一事件、关系、概念或偏好，且内容重复或互相补充时合并它们。',
+        '你应该提交合并后的完整新记忆字段，不要遗漏或省略任一字段。'
+    ].join('\n'),
+    schema: z.object({
+        sourceMemoryIds: z
+            .array(z.string().trim().min(1))
+            .min(2)
+            .describe('要被合并的记忆 ID'),
+        memory: generatedMemorySchema
+    })
+}
+
 export const memoryDeleteTool = {
     name: 'living_memory_delete_memory',
     description: [

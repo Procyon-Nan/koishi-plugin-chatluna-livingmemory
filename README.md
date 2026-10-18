@@ -104,7 +104,7 @@ input: |
 
 ## 记忆工具
 
-`enableMemoryTools` 统一控制以下五个工具是否供 ChatLuna 主 agent 使用，默认关闭。工具默认不向子 agent 提供；ChatLuna 的工具权限配置可以覆盖这一默认设置。此开关只控制对话工具注册，不影响后台召回内部的检索工具。
+`enableMemoryTools` 统一控制以下六个工具是否供 ChatLuna 主 agent 使用，默认关闭。工具默认不向子 agent 提供；ChatLuna 的工具权限配置可以覆盖这一默认设置。此开关只控制对话工具注册，不影响后台召回内部的检索工具。
 
 升级后请使用新开关重新开启工具；原 `enableMemoryCreationTool` 已移除，检索与来源工具也不再始终注册。`memoryCreateToolMaxMemories` 仍控制单次创建记忆的数量。
 
@@ -136,6 +136,12 @@ input: |
 更新当前预设中的一条活跃记忆。参数为 `memoryId` 和 `memory`：ID 从检索结果取得，`memory` 完整填写与创建工具相同的七个字段，覆盖原内容与关联用户。`speakerLabels` 为空数组表示清空关联，未知昵称会被拒绝。
 
 更新保留来源消息和来源会话，不恢复归档记忆，也不改变 Dream 固化状态。已有召回快照沿用原机制，在后续召回时刷新。
+
+### `living_memory_merge_memories`
+
+将当前预设中的两条及以上活跃记忆合成为一条新记忆。参数为 `sourceMemoryIds` 和完整的 `memory`，无需指定目标记忆。来源 ID 从检索结果取得，不得重复；`memory` 完整填写与创建工具相同的七个字段，关联用户以本次提交为准。
+
+新记忆使用新的 ID 和创建时间，初始为未固化状态；事件发生时间仍应保留在正文中。创建新记忆与归档全部来源记忆在同一事务中完成，新记忆汇集全部来源消息。所有来源属于同一会话时保留该会话，否则新记忆不再限定来源会话。
 
 ### `living_memory_delete_memory`
 
