@@ -91,3 +91,17 @@ export const memoryDeleteTool = {
         memoryId: z.string().trim().min(1).describe('要删除的记忆 ID')
     })
 }
+
+export const memoryCheckedTool = {
+    name: 'living_memory_checked_memory',
+    description: [
+        '长期记忆检查工具，当你确认记忆无需更新、合并或归档时使用此工具。'
+    ].join('\n'),
+    schema: z.object({
+        memoryIds: z
+            .array(z.string().trim().min(1))
+            .min(1)
+            .describe('已检查且无需变更的记忆 ID, 允许批量输入'),
+        reason: z.string().trim().min(1).describe('记忆无需变更的理由')
+    })
+}
