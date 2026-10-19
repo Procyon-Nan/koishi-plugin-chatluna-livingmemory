@@ -1,6 +1,6 @@
 import type { DreamCluster } from '../workflows/dream/types'
 import type { PresetSpeakerRecord } from '../../contracts/memory'
-import { formatMemoryEntryForPrompt } from './memory_entries'
+import { dreamMemoryFields, renderMemoriesForModel } from './memory_entries'
 import {
     escapeXmlText,
     formatXmlBlock,
@@ -15,20 +15,10 @@ export const buildDreamBatchPrompt = (
         '<dream_input>',
         ...formatXmlBlock(
             'memory_entries',
-            cluster.entries
-                .map((entry) => {
-                    const speakerLabels = entry.speakerKeys.map(
-                        (key) =>
-                            speakers.find(
-                                (speaker) => speaker.speakerKey === key
-                            )!.speakerLabel
-                    )
-                    return (
-                        `${formatMemoryEntryForPrompt(entry)}\n` +
-                        `speakerLabels=${JSON.stringify(speakerLabels)}`
-                    )
-                })
-                .join('\n\n---\n\n')
+            renderMemoriesForModel(cluster.entries, {
+                fields: dreamMemoryFields,
+                speakers
+            })
         ),
         '</dream_input>'
     ].join('\n')

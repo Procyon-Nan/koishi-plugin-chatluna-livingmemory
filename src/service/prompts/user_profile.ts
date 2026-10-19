@@ -1,6 +1,6 @@
 import type { UserProfileRecord } from '../../contracts/memory'
 import type { DreamMemoryEntryRecord } from '../../contracts/workflows'
-import { renderMemoriesForModel } from './memory_entries'
+import { contextMemoryFields, renderMemoriesForModel } from './memory_entries'
 import {
     escapeXmlText,
     formatXmlBlock,
@@ -72,7 +72,9 @@ export const buildUserProfilePrompt = (
         memoryCountNotice,
         ...formatXmlBlock(
             'memory_entries',
-            renderMemoriesForModel(input.group.entries, { includeId: false })
+            renderMemoriesForModel(input.group.entries, {
+                fields: contextMemoryFields
+            })
         ),
         '</user_profile_input>'
     ].join('\n')

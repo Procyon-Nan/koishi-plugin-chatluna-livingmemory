@@ -3,7 +3,11 @@ import type { ToolRunnableConfig } from '@langchain/core/tools'
 import type { z } from 'zod'
 import type { LivingMemorySearchResult } from '../../../contracts/memory'
 import type { LivingMemorySearchProvider } from '../../../contracts/workflows'
-import { renderMemoriesForModel } from '../../prompts/memory_entries'
+import {
+    contextMemoryFields,
+    renderMemoriesForModel,
+    searchMemoryFields
+} from '../../prompts/memory_entries'
 import { memorySearchTool } from '../../prompts/memory_tools'
 import {
     describeLivingMemoryToolScopeFailure,
@@ -79,7 +83,9 @@ export class LivingMemorySearchTool extends StructuredTool {
         }
 
         return renderMemoriesForModel(results, {
-            includeId: this.includeMemoryIds
+            fields: this.includeMemoryIds
+                ? searchMemoryFields
+                : contextMemoryFields
         })
     }
 }

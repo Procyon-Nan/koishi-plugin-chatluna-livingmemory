@@ -396,21 +396,24 @@ it('renders search observations with memory ids and reports empty results', asyn
         agentContext: { kind: 'main', source: 'chatluna' }
     })
 
-    assert.equal(
-        await new LivingMemorySearchTool(provider, true).invoke(
-            { searchTexts: ['我们一起聊过的事情'] },
-            config
-        ),
-        [
-            'id=memory-1',
-            'type=fact',
-            'updatedAt=2026-07-02T00:00:00.000Z',
-            'sentiment=愉快',
-            'source=来源于「摸鱼群」（群聊 ID：10001）的群聊',
-            'content:',
-            '我们在上周一起去看了展览。'
-        ].join('\n')
-    )
+    const expected = [
+        'id=memory-1',
+        'type=fact',
+        'updatedAt=2026-07-02T00:00:00.000Z',
+        'sentiment=愉快',
+        'source=来源于「摸鱼群」（群聊 ID：10001）的群聊',
+        'content:',
+        '我们在上周一起去看了展览。'
+    ].join('\n')
+    for (const includeIds of [true, false]) {
+        assert.equal(
+            await new LivingMemorySearchTool(provider, includeIds).invoke(
+                { searchTexts: ['我们一起聊过的事情'] },
+                config
+            ),
+            includeIds ? expected : expected.replace('id=memory-1\n', '')
+        )
+    }
     assert.equal(
         await searchTool.invoke({ searchTexts: ['没有记录的事情'] }, config),
         '没有找到相关记忆。'

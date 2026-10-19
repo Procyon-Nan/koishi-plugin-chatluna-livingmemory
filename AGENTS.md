@@ -109,8 +109,8 @@ chatluna-livingmemory/
 7. 模型工具、提示词与结构化输出
    - 共用工具实现统一放在 `src/service/memory/tools/`，生产调用经该目录的 `createMemoryTool` 创建；主对话、Recall、Dream 各自选择暴露的工具并提供调用上下文，不复制工具实现，不共享任务状态。检查工具接收检查处理函数，范围校验、固化和覆盖登记由调用工作流负责，完成后才返回成功。
    - `src/service/prompts/` 是提示词与 Zod schema 的唯一来源；字段说明放在结果工具参数描述中，不在提示词正文重复。
-   - 送入模型的记忆视图统一经 `renderMemoriesForModel` 渲染。
-     只有模型需要引用记忆时才渲染 ID：主对话的 `living_memory_search` 渲染，Agentic Recall 与用户画像不渲染。
+   - 送入模型的记忆视图统一经 `renderMemoriesForModel` 渲染，字段格式和各场景的有序字段清单集中在 `memory_entries.ts`；调用方不得另行拼接记忆字段或 speaker 标签。可空元数据为 null 时省略整行，不填造默认值。
+     只有模型需要引用记忆时才渲染 ID：Dream 批次及主对话、Dream 的 `living_memory_search` 渲染，Agentic Recall 与用户画像不渲染。
    - 动态文本经 `prompt_format.ts` 转义并组合为 System/Human 消息，不得在工作流中复制 XML 拼接或转义。
    - 结构化结果工具是单次调用内部工具，其 schema、提示词规则、校验、纠错次数与工作流失败处理必须一致。
    - 提取、Dream 与用户画像的角色人设统一取预设人设卡片（`preset_persona.ts`），不注入预设原文；recall 不使用人设。

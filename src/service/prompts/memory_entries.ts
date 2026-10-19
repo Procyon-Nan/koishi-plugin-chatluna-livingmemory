@@ -1,57 +1,109 @@
 import type {
     LivingMemoryGetMessagesMemory,
-    MemoryEntryType
+    MemoryEntryRecord,
+    PresetSpeakerRecord
 } from '../../contracts/memory'
-import type { DreamMemoryEntryRecord } from '../../contracts/workflows'
 
-export const formatMemoryEntryForPrompt = (entry: DreamMemoryEntryRecord) => {
-    return [
-        `id=${entry.id}`,
-        `type=${entry.type}`,
-        `createdAt=${entry.createdAt.toISOString()}`,
-        `updatedAt=${entry.updatedAt.toISOString()}`,
-        `sentiment=${entry.sentiment ?? ''}`,
-        `importance=${entry.importance ?? ''}`,
-        `keywords=${entry.keywords.join('、')}`,
-        `summary=${entry.summary ?? ''}`,
-        'content:',
-        entry.content
-    ].join('\n')
+type ModelMemoryView = Pick<
+    MemoryEntryRecord,
+    | 'id'
+    | 'type'
+    | 'createdAt'
+    | 'updatedAt'
+    | 'sentiment'
+    | 'importance'
+    | 'keywords'
+    | 'summary'
+    | 'sourceLabel'
+    | 'content'
+>
+
+type MemoryModelField = keyof ModelMemoryView | 'speakerLabels'
+
+export const dreamMemoryFields = [
+    'id',
+    'type',
+    'createdAt',
+    'updatedAt',
+    'sentiment',
+    'importance',
+    'keywords',
+    'summary',
+    'content',
+    'speakerLabels'
+] as const satisfies readonly MemoryModelField[]
+
+export const contextMemoryFields = [
+    'type',
+    'updatedAt',
+    'sentiment',
+    'sourceLabel',
+    'content'
+] as const satisfies readonly MemoryModelField[]
+
+export const searchMemoryFields = ['id', ...contextMemoryFields] as const
+
+const formatMemoryField = (
+    entry: ModelMemoryView & Partial<Pick<MemoryEntryRecord, 'speakerKeys'>>,
+    field: MemoryModelField,
+    speakers?: ReadonlyMap<string, PresetSpeakerRecord>
+): string | null => {
+    switch (field) {
+        case 'createdAt':
+        case 'updatedAt':
+            return `${field}=${entry[field].toISOString()}`
+        case 'keywords':
+            return `keywords=${entry.keywords.join('、')}`
+        case 'content':
+            return `content:\n${entry.content}`
+        case 'speakerLabels':
+            return `speakerLabels=${JSON.stringify(
+                entry.speakerKeys!.map(
+                    (key) => speakers!.get(key)!.speakerLabel
+                )
+            )}`
+        default: {
+            const value = entry[field]
+            return value === null
+                ? null
+                : `${field === 'sourceLabel' ? 'source' : field}=${value}`
+        }
+    }
 }
 
-// 送入模型阅读的记忆字段集，由人物画像提示词与 living_memory_search 工具共用。
-export interface ModelMemoryView {
-    id: string
-    type: MemoryEntryType
-    content: string
-    sentiment: string | null
-    sourceLabel: string | null
-    updatedAt: Date
-}
-
-const modelMemoryViewSeparator = '\n\n---\n\n'
-
-export const renderMemoriesForModel = (
-    entries: ModelMemoryView[],
-    options: { includeId: boolean }
-) => {
+export function renderMemoriesForModel(
+    entries: readonly ModelMemoryView[],
+    options: { fields: readonly (keyof ModelMemoryView)[] }
+): string
+export function renderMemoriesForModel(
+    entries: readonly (ModelMemoryView &
+        Pick<MemoryEntryRecord, 'speakerKeys'>)[],
+    options: {
+        fields: readonly MemoryModelField[]
+        speakers: readonly PresetSpeakerRecord[]
+    }
+): string
+export function renderMemoriesForModel(
+    entries: readonly (ModelMemoryView &
+        Partial<Pick<MemoryEntryRecord, 'speakerKeys'>>)[],
+    options: {
+        fields: readonly MemoryModelField[]
+        speakers?: readonly PresetSpeakerRecord[]
+    }
+): string {
+    const speakers = options.fields.includes('speakerLabels')
+        ? new Map(
+              options.speakers!.map((speaker) => [speaker.speakerKey, speaker])
+          )
+        : undefined
     return entries
         .map((entry) =>
-            [
-                ...(options.includeId ? [`id=${entry.id}`] : []),
-                `type=${entry.type}`,
-                `updatedAt=${entry.updatedAt.toISOString()}`,
-                ...(entry.sentiment == null
-                    ? []
-                    : [`sentiment=${entry.sentiment}`]),
-                ...(entry.sourceLabel == null
-                    ? []
-                    : [`source=${entry.sourceLabel}`]),
-                'content:',
-                entry.content
-            ].join('\n')
+            options.fields
+                .map((field) => formatMemoryField(entry, field, speakers))
+                .filter((line) => line !== null)
+                .join('\n')
         )
-        .join(modelMemoryViewSeparator)
+        .join('\n\n---\n\n')
 }
 
 // transcriptLines 是提取工作流输入与 <chat_history> 注入共用的原始格式，
