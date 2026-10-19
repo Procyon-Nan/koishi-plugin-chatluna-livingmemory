@@ -2,7 +2,6 @@ import type { DreamMemoryEntryRecord } from '../../../contracts/workflows'
 
 export interface DreamCluster {
     id: string
-    reason: string
     entries: DreamMemoryEntryRecord[]
 }
 

@@ -43,12 +43,12 @@ const createSession = (
     searchResults: MemoryEntryRecord[] = []
 ) => {
     const state = createDreamSessionState(
-        batches.map((entries, index) => ({
-            id: `batch-${index}`,
-            reason: 'test batch',
-            entries
-        }))
+        batches.flatMap((entries) => entries.map((entry) => entry.id))
     )
+    state.clusters = batches.map((entries, index) => ({
+        id: `batch-${index}`,
+        entries
+    }))
     const tools = createDreamSessionTools({
         presetId,
         state,

@@ -49,12 +49,8 @@ export class DreamClusterer {
             const result = await this.clusterEntries(presetId, partition)
             firstPassNoise.push(...result.noise)
 
-            for (const [label, groupedEntries] of result.clusters) {
-                this.appendCluster(
-                    clusters,
-                    `hdbscan:primary:${index + 1}:${label}`,
-                    groupedEntries
-                )
+            for (const [, groupedEntries] of result.clusters) {
+                this.appendCluster(clusters, groupedEntries)
             }
 
             logger?.diagnostic('dream.clustering.batch.completed', {
@@ -95,7 +91,6 @@ export class DreamClusterer {
             chunks.forEach((entries, index) => {
                 result.push({
                     id: `${cluster.id}:chunk-${index + 1}`,
-                    reason: `${cluster.reason}:chunk-${index + 1}`,
                     entries
                 })
             })
@@ -116,7 +111,7 @@ export class DreamClusterer {
         })
         if (entries.length < 2) {
             if (entries.length === 1) {
-                this.appendCluster(clusters, 'hdbscan:final-noise', entries)
+                this.appendCluster(clusters, entries)
             }
             logger?.diagnostic('dream.clustering.round.completed', {
                 round: 'global-noise',
@@ -126,15 +121,11 @@ export class DreamClusterer {
         }
 
         const result = await this.clusterEntries(presetId, entries)
-        for (const [label, groupedEntries] of result.clusters) {
-            this.appendCluster(
-                clusters,
-                `hdbscan:noise:${label}`,
-                groupedEntries
-            )
+        for (const [, groupedEntries] of result.clusters) {
+            this.appendCluster(clusters, groupedEntries)
         }
         if (result.noise.length > 0) {
-            this.appendCluster(clusters, 'hdbscan:final-noise', result.noise)
+            this.appendCluster(clusters, result.noise)
         }
         logger?.diagnostic('dream.clustering.batch.completed', {
             round: 'global-noise',
@@ -203,12 +194,10 @@ export class DreamClusterer {
 
     private appendCluster(
         clusters: DreamCluster[],
-        reason: string,
         entries: DreamMemoryEntryRecord[]
     ) {
         clusters.push({
             id: `cluster-${clusters.length + 1}`,
-            reason,
             entries
         })
     }

@@ -264,18 +264,19 @@ it('runs one global HDBSCAN pass over all first-pass noise', async () => {
         vectors.calls.map((ids) => ids.length),
         [175, 176, 349]
     )
-    const reasons = clusters.map((cluster) => cluster.reason)
-    assert.deepEqual(reasons.slice(0, 3), [
-        'hdbscan:primary:1:0',
-        'hdbscan:primary:2:0',
-        'hdbscan:noise:4'
-    ])
+    const noise = partitions.flatMap((partition) => partition.slice(1))
     assert.deepEqual(
-        reasons.slice(3),
-        Array.from(
-            { length: 12 },
-            (_, index) => `hdbscan:final-noise:chunk-${index + 1}`
-        )
+        clusters.slice(0, 3).map((cluster) => cluster.entries),
+        [[partitions[0][0]], [partitions[1][0]], noise.slice(0, 3)]
+    )
+    assert.equal(clusters.length, 15)
+    assert.deepEqual(
+        new Set(
+            clusters
+                .slice(3)
+                .flatMap((cluster) => cluster.entries.map((entry) => entry.id))
+        ),
+        new Set(noise.slice(3).map((entry) => entry.id))
     )
     assert.ok(
         clusters.slice(3).every((cluster) => cluster.entries.length <= 30)
@@ -318,7 +319,6 @@ it('reads first-pass partitions and global noise in bounded batches', async () =
             .sort((left, right) => left - right),
         [...Array(19).fill(29), ...Array(5).fill(30)]
     )
-    assert.equal(clusters[0].reason, 'hdbscan:final-noise:chunk-1')
     const clusteredIds = clusters.flatMap((cluster) =>
         cluster.entries.map((entry) => entry.id)
     )
@@ -350,10 +350,13 @@ it('skips the global noise pass when the first pass has no noise', async () => {
     )
     assert.equal(clusters.length, 12)
     assert.ok(clusters.every((cluster) => cluster.entries.length <= 30))
-    assert.ok(
-        clusters.every((cluster) =>
-            cluster.reason.startsWith('hdbscan:primary:')
-        )
+    const clusteredIds = clusters.flatMap((cluster) =>
+        cluster.entries.map((entry) => entry.id)
+    )
+    assert.equal(clusteredIds.length, entries.length)
+    assert.deepEqual(
+        new Set(clusteredIds),
+        new Set(entries.map((entry) => entry.id))
     )
 })
 
@@ -370,10 +373,6 @@ it('splits an oversized cluster into units within the size cap', async () => {
     assert.deepEqual(
         clusters.map((cluster) => cluster.id),
         [1, 2, 3, 4].map((index) => `cluster-1:chunk-${index}`)
-    )
-    assert.deepEqual(
-        clusters.map((cluster) => cluster.reason),
-        [1, 2, 3, 4].map((index) => `hdbscan:primary:1:0:chunk-${index}`)
     )
     assert.deepEqual(
         clusters.map((cluster) => cluster.entries.length),

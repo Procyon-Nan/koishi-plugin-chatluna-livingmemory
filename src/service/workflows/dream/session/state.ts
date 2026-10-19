@@ -4,7 +4,7 @@ export interface DreamSessionState {
     clusters: readonly DreamCluster[]
     nextBatchIndex: number
     currentBatch: DreamCluster | undefined
-    targetMemoryIds: ReadonlySet<string>
+    readonly targetMemoryIds: ReadonlySet<string>
     availableMemoryIds: Set<string>
     processedMemoryIds: Set<string>
     stats: DreamOperationStats
@@ -12,17 +12,13 @@ export interface DreamSessionState {
 }
 
 export function createDreamSessionState(
-    clusters: readonly DreamCluster[]
+    targetMemoryIds: readonly string[]
 ): DreamSessionState {
     return {
-        clusters,
+        clusters: [],
         nextBatchIndex: 0,
         currentBatch: undefined,
-        targetMemoryIds: new Set(
-            clusters.flatMap((cluster) =>
-                cluster.entries.map((entry) => entry.id)
-            )
-        ),
+        targetMemoryIds: new Set(targetMemoryIds),
         availableMemoryIds: new Set(),
         processedMemoryIds: new Set(),
         stats: { kept: 0, merged: 0, updated: 0, archived: 0, skipped: 0 },

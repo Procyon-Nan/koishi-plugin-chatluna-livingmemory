@@ -64,8 +64,7 @@ export class LivingMemoryDreamService {
     ): Promise<DreamRunResult> {
         signal?.throwIfAborted()
         const entries = await this.repository.listDreamEntriesByPreset(presetId)
-        const state = createDreamSessionState([])
-        state.targetMemoryIds = new Set(entries.map((entry) => entry.id))
+        const state = createDreamSessionState(entries.map((entry) => entry.id))
         let error: string | undefined
         let profileDetail = ''
         try {

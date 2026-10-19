@@ -28,7 +28,6 @@ import type { DreamCluster } from '../src/service/workflows/dream/types'
 
 const cluster = (id: string): DreamCluster => ({
     id,
-    reason: 'test',
     entries: [
         {
             id,
@@ -81,7 +80,10 @@ const createModel = (
         maxTokens: 8192,
         maxTokenLimit: 50,
         maxRetries: 0,
-        overrideRequestParams: { configured: true },
+        overrideRequestParams: {
+            configured: true,
+            cache_control: { type: 'ephemeral' }
+        },
         requester: {
             async completion(params: ModelRequestParams) {
                 requests.push(params)
@@ -109,16 +111,14 @@ const createRun = (
     model: ChatLunaChatModel,
     batches: (string | string[])[] = ['a', 'b']
 ) => {
-    const state = createDreamSessionState(
-        batches.map((batch, index) =>
-            typeof batch === 'string'
-                ? cluster(batch)
-                : {
-                      id: `batch-${index}`,
-                      reason: 'test',
-                      entries: batch.flatMap((id) => cluster(id).entries)
-                  }
-        )
+    const state = createDreamSessionState(batches.flatMap((batch) => batch))
+    state.clusters = batches.map((batch, index) =>
+        typeof batch === 'string'
+            ? cluster(batch)
+            : {
+                  id: `batch-${index}`,
+                  entries: batch.flatMap((id) => cluster(id).entries)
+              }
     )
     const checked = createMemoryTool.checked(async ({ memoryIds }) => {
         recordDreamOperation(state, memoryIds, 'kept')
@@ -183,12 +183,7 @@ it('runs the real host agent with stable request prefixes, paired tools and invo
         return response
     })
     const run = createRun(model)
-    await runDreamSession({
-        ...run,
-        callOptions: {
-            overrideRequestParams: { cache_control: { type: 'ephemeral' } }
-        }
-    })
+    await runDreamSession(run)
     assert.equal(requests.length, 2)
     assert.deepEqual(getDreamCoverage(run.state), {
         targetCount: 2,
@@ -213,6 +208,7 @@ it('runs the real host agent with stable request prefixes, paired tools and invo
     assert.equal(original.usage_metadata?.input_tokens, 90_000)
     for (const request of requests) {
         assert.equal(request.id, 'dream-test')
+        assert.equal(request.maxTokens, 8192)
         assert.equal(request.tools?.length, 2)
         assert.deepEqual(request.overrideRequestParams, {
             configured: true,
@@ -221,7 +217,8 @@ it('runs the real host agent with stable request prefixes, paired tools and invo
     }
     assert.equal(model.invocationParams().maxTokenLimit, 50)
     assert.deepEqual(model.invocationParams().overrideRequestParams, {
-        configured: true
+        configured: true,
+        cache_control: { type: 'ephemeral' }
     })
     assert.ok(
         run.logs.some(

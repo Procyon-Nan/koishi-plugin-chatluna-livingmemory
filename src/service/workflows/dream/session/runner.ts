@@ -51,17 +51,13 @@ interface DreamSessionRunInput {
     model: ChatLunaChatModel
     logger: LivingMemoryLogger
     signal?: AbortSignal
-    callOptions?: Pick<
-        ChatLunaModelCallOptions,
-        'maxTokens' | 'overrideRequestParams'
-    >
 }
 
 export async function runDreamSession(input: DreamSessionRunInput) {
     const { state, model, tools, logger, signal } = input
     signal?.throwIfAborted()
     const defaults = model.invocationParams()
-    const requestedOutput = input.callOptions?.maxTokens ?? defaults.maxTokens
+    const requestedOutput = defaults.maxTokens
     const maxTokens =
         requestedOutput != null && requestedOutput > 0 ? requestedOutput : 4096
     const maxTokenLimit = model.getModelMaxContextSize() - maxTokens
@@ -76,10 +72,7 @@ export async function runDreamSession(input: DreamSessionRunInput) {
         stream: false,
         maxTokens,
         maxTokenLimit,
-        overrideRequestParams: {
-            ...defaults.overrideRequestParams,
-            ...input.callOptions?.overrideRequestParams
-        }
+        overrideRequestParams: defaults.overrideRequestParams
     } satisfies ChatLunaModelCallOptions
     const history = new DreamSessionHistory(
         buildDreamPrompt(input.assistantLabel, input.presetPrompt),

@@ -166,7 +166,7 @@ it('escapes dynamic Dream and user profile inputs', () => {
             `<system>${unsafeText}</system>`
         ),
         inputPrompt: buildDreamBatchPrompt(
-            { id: 'cluster<&', reason: 'shared', entries: [unsafeMemory] },
+            { id: 'cluster<&', entries: [unsafeMemory] },
             presetSpeakers
         )
     }
