@@ -66,17 +66,46 @@ Claude 的本地 HTTP 服务在 `message_start` 返回输入量及缓存读取/�
 
 - 本地现有数据上的完整 Dream、自动换批、真实工具调用和落库、用户画像、Gemini 缓存读取已经得到实际结果。
 - OpenAI-compatible、Gemini、Claude 的请求兼容性通过本地 HTTP 服务验证；真实 OpenAI-compatible/Claude 供应商的缓存命中仍未验收。
-- 原基线的压缩路径通过真实 tokenizer 与协议请求验证；修正后的供应商用量阈值通过会话回归验证。自然运行未达到阈值，真实摘要质量和压缩后的缓存命中未验收。
+- 原基线的压缩路径通过真实 tokenizer 与协议请求验证；修正后的供应商用量阈值通过会话回归和下文构造长历史的真实模型验证。自然运行未达到阈值，构造场景不能代替自然运行；压缩后的主会话缓存读取量未返回，不能确认命中。
 - 不再用宿主估算触发压缩。判定依赖 adapter 最终暴露的 `input_tokens`，无法提前保证下一次请求不超过 200k，也不保证各协议字段都包含缓存输入；缺失上报时不触发。
 - 用量修正仅涉及 LivingMemory 会话历史、响应回调及相应测试和文档，没有修改 ChatLuna。本次 `yarn lint`、`yarn atsc -p tsconfig.json --noEmit`、`yarn test`（45 个文件、367 个用例，含 11 个会话用例）及 diff 检查通过；审查未发现待修复的重要问题。此前完整 Dream 的真实运行结果不代表本次修正后的重新运行。
+
+## 当前提交的补充验收
+
+实现基线：`19ed5fb`。重新通过 Gemini、OpenAI-compatible（缓存键开启/关闭）、Claude 的本地 HTTP 协议检查；各场景仍处理 31 条记忆、调用 3 次，六个工具及跨批次历史前缀保持稳定，Gemini/Claude 签名元数据保留。Claude 输入与缓存用量丢失的宿主限制仍存在。
+
+OpenAI-compatible 的本地 HTTP 响应上报 `prompt_tokens=220000`，经真实 adapter 到达 `recordUsage()` 后触发压缩。压缩请求使用独立缓存键，当前 30 条完整记忆及 3 条交互保持不变；摘要响应也上报 220000，但随后再次准备历史没有重复压缩。这里的上报和摘要均来自本地模拟服务，只证明当前提交的协议与状态衔接。
+
+### 真实长历史压缩
+
+继续使用配置中的 Gemini 模型及 SQLite 隔离副本，不执行记忆修改。为达到阈值，将本地 105 条记忆的完整快照重复 7 次作为早期历史，并明确标注重复快照不代表新事实；当前批次另取 30 条记忆，保持完整字段。该构造只用于长历史验收，不表示自然 Dream 产生了这些重复内容。
+
+首次请求实际返回 `input_tokens=215609`，触发代码中的固定 200k 阈值。第一版验收脚本在摘要后没有追加进度消息，导致后续请求以 assistant 消息结尾，被供应商返回 `Requests ending with a model turn are not supported`；同时观察到连接超时和 ECONNRESET。已停止该验收进程，修正脚本以匹配生产循环的追加进度行为，没有修改生产代码。
+
+修正后逐字核对构造输入的序列化结果与首次请求一致，复用已保存的真实响应及其原始用量，重新生成摘要并连续发送两轮压缩后的请求，没有重发长历史探针，也没有伪造或修改供应商用量。
+
+| 请求 | 供应商输入 tokens | 缓存读取 tokens |
+| --- | ---: | ---: |
+| 长历史探针（首次真实响应） | 215,609 | 未返回 |
+| 重新生成摘要 | 216,277 | 214,227 |
+| 压缩后的第一轮 | 14,056 | 未返回 |
+| 压缩后的第二轮 | 14,559 | 未返回 |
+
+- 实际摘要约 3,191 字符（含包裹标签），39 个引用 ID 均来自早期输入；保留了指定待关注 ID、“尚未执行实际修改、合并或归档”及重复快照不算新事实的约束。已检查这些关键性质，不声称逐句完成全部摘要事实审核。
+- 当前 30 条记忆的渲染文本、当前进度、assistant 正文、推理签名与响应元数据逐项比对保持一致；请求投影按既有设计省略 usage 和空的流式工具片段字段。该真实场景没有工具调用，工具往返保留由上文协议验收覆盖。
+- 压缩后两轮请求成功，只有一次压缩；第二轮输入的已有历史前缀与第一轮完全一致。压缩前的旧用量与摘要请求的 216,277 均未导致重复压缩。
+- 摘要请求的缓存读取发生于重复摘要输入，不代表压缩后主会话命中。主会话两轮都没有返回缓存明细，记为未知，不推断为 0，也不继续增加请求来追求命中结果。
+- 最终验收脚本断言通过、进程退出码 0；保留宿主卸载日志对象缺失的已知限制。本轮生产源码未变更，只更新验收记录、方案进度及 CHANGELOG 提交号；文档 diff 检查通过。
 
 ## 本地证据
 
 临时脚本、日志和数据副本均位于被 Git 忽略的 `tmp/`，没有提交凭据或记忆正文：
 
 - `tmp/dream-live-acceptance.cjs`：隔离原库与索引，使用配置中的模型执行真实请求与 Dream。
+- `tmp/dream-compression-live.cjs`、`tmp/dream-compression-live-final.log`、`tmp/dream-compression-live-xlUMhw/`：真实供应商用量触发、重新生成摘要及后续两轮请求，保存请求、响应、报告与检查结果；首次真实探针响应保存在 `tmp/dream-compression-live-iSajol/before-compression.json`。
 - `tmp/dream-live-direct.log`：直接生成探针。
 - `tmp/dream-live-complete.log`：本次完整 Dream 日志。
-- `tmp/dream-protocol-acceptance.cjs`、`tmp/dream-protocol-output.log`：三个协议的四种配置及压缩检查；成功退出。
+- `tmp/dream-protocol-acceptance.cjs`、`tmp/dream-protocol-output.log`：原实现基线上的三个协议、四种配置及压缩检查。
+- `tmp/dream-protocol-provider-usage.cjs`、`tmp/dream-protocol-provider-usage.log`：`19ed5fb` 上的协议复验和供应商用量压缩衔接；断言通过，进程退出码 0。
 
 临时 Koishi Context 的销毁阶段出现宿主 adapter 卸载日志对象缺失的错误。未因此修改 ChatLuna，也不能把 Context 的退出结果当作完整宿主进程生命周期验收。
