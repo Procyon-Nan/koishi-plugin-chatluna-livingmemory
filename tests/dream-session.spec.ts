@@ -167,10 +167,10 @@ it('runs the real host agent with stable request prefixes, paired tools and invo
               })
     )
     const usage = {
-        input_tokens: 900_000,
+        input_tokens: 90_000,
         output_tokens: 20,
-        total_tokens: 900_020,
-        input_token_details: { cache_read: 800_000 }
+        total_tokens: 90_020,
+        input_token_details: { cache_read: 80_000 }
     }
     const invoke = model.invoke.bind(model)
     vi.spyOn(model, 'invoke').mockImplementation(async (...args) => {
@@ -210,7 +210,7 @@ it('runs the real host agent with stable request prefixes, paired tools and invo
     assert.equal(retained.usage_metadata, undefined)
     assert.deepEqual(retained.additional_kwargs, original.additional_kwargs)
     assert.deepEqual(retained.response_metadata, original.response_metadata)
-    assert.equal(original.usage_metadata?.input_tokens, 900_000)
+    assert.equal(original.usage_metadata?.input_tokens, 90_000)
     for (const request of requests) {
         assert.equal(request.id, 'dream-test')
         assert.equal(request.tools?.length, 2)
@@ -226,8 +226,8 @@ it('runs the real host agent with stable request prefixes, paired tools and invo
     assert.ok(
         run.logs.some(
             (line) =>
-                line.includes('cache_read=800000') ||
-                line.includes('"cache_read":800000')
+                line.includes('cache_read=80000') ||
+                line.includes('"cache_read":80000')
         )
     )
 })
@@ -342,6 +342,16 @@ it('compresses only older batches and retains complete current input and tool ex
     const { model, requests } = createModel(
         () => new AIMessage('早期结论与相关 ID')
     )
+    const invoke = model.invoke.bind(model)
+    vi.spyOn(model, 'invoke').mockImplementation(async (...args) => {
+        const response = await invoke(...args)
+        response.usage_metadata = {
+            input_tokens: 300_000,
+            output_tokens: 10,
+            total_tokens: 300_010
+        }
+        return response
+    })
     const captured = logger()
     const history = new DreamSessionHistory(
         '固定系统',
@@ -354,8 +364,7 @@ it('compresses only older batches and retains complete current input and tool ex
         },
         captured.logger
     )
-    await history.initialize([])
-    history.startBatch('早期记忆 ' + '旧'.repeat(310_000))
+    history.startBatch('早期记忆')
     history.append(new AIMessage('早期完成'))
     const current = buildDreamBatchPrompt(cluster('current'), [])
     history.startBatch(current)
@@ -364,9 +373,9 @@ it('compresses only older batches and retains complete current input and tool ex
         tool_calls: [check(['current'], 'current-call')],
         additional_kwargs: { signature: 'signed' },
         usage_metadata: {
-            input_tokens: 950_000,
+            input_tokens: 200_000,
             output_tokens: 10,
-            total_tokens: 950_010
+            total_tokens: 200_010
         }
     })
     const result = new ToolMessage({
@@ -374,13 +383,12 @@ it('compresses only older batches and retains complete current input and tool ex
         tool_call_id: 'current-call'
     })
     history.append(response, result)
-    const messages = await history.prepare()
+    history.recordUsage(response)
+    const messages = await history.prepare([])
     assert.equal(requests.length, 1)
     assert.equal(requests[0].id, 'history:compression')
     assert.deepEqual(requests[0].tools, [])
-    assert.ok(
-        String(requests[0].input[1].content).includes('旧'.repeat(310_000))
-    )
+    assert.ok(String(requests[0].input[1].content).includes('早期记忆'))
     assert.ok(!String(requests[0].input[1].content).includes('current-call'))
     assert.equal(messages[0].content, '固定系统')
     assert.match(String(messages[1].content), /早期结论/)
@@ -389,9 +397,50 @@ it('compresses only older batches and retains complete current input and tool ex
     assert.deepEqual(messages[3].additional_kwargs, response.additional_kwargs)
     assert.equal(messages[4], result)
     history.append(new HumanMessage('继续当前批次'))
-    assert.equal((await history.prepare()).length, 6)
+    assert.equal((await history.prepare([])).length, 6)
     assert.equal(requests.length, 1)
-    assert.equal(response.usage_metadata?.input_tokens, 950_000)
+    assert.equal(response.usage_metadata?.input_tokens, 200_000)
+})
+
+it('uses only reported input for the threshold, without adding cache reads or local estimates', async () => {
+    const { model, requests } = createModel(() => new AIMessage('摘要'))
+    const history = new DreamSessionHistory(
+        'system',
+        model,
+        { id: 'history', maxTokenLimit: 990_000 },
+        logger().logger
+    )
+    history.startBatch('旧'.repeat(310_000))
+    history.startBatch('当前完整字段')
+    assert.equal((await history.prepare([])).length, 3)
+    history.recordUsage(
+        new AIMessage({
+            content: '',
+            usage_metadata: {
+                input_tokens: 199_999,
+                output_tokens: 10,
+                total_tokens: 200_009,
+                input_token_details: { cache_read: 190_000 }
+            }
+        })
+    )
+    assert.equal((await history.prepare([])).length, 3)
+    assert.equal(requests.length, 0)
+    history.recordUsage(
+        new AIMessage({
+            content: '',
+            usage_metadata: {
+                input_tokens: 200_000,
+                output_tokens: 10,
+                total_tokens: 200_010
+            }
+        })
+    )
+    assert.match(
+        String((await history.prepare([]))[1].content),
+        /dream_history_summary/
+    )
+    assert.equal(requests.length, 1)
 })
 
 it('leaves old history intact after a failed compression', async () => {
@@ -406,21 +455,52 @@ it('leaves old history intact after a failed compression', async () => {
         { id: 'history', maxTokenLimit: 990_000 },
         logger().logger
     )
-    await history.initialize([])
-    history.startBatch('旧'.repeat(310_000))
+    history.startBatch('早期记忆')
     history.startBatch('当前完整字段')
-    await assert.rejects(history.prepare(), /summary failed/)
+    history.recordUsage(
+        new AIMessage({
+            content: '',
+            usage_metadata: {
+                input_tokens: 200_000,
+                output_tokens: 10,
+                total_tokens: 200_010
+            }
+        })
+    )
+    history.recordUsage(new AIMessage('没有用量'))
+    history.recordUsage(
+        new AIMessage({
+            content: '',
+            usage_metadata: {
+                input_tokens: Number.NaN,
+                output_tokens: 10,
+                total_tokens: Number.NaN
+            }
+        })
+    )
+    await assert.rejects(history.prepare([]), /summary failed/)
     fail = false
-    const messages = await history.prepare()
+    const messages = await history.prepare([])
     assert.equal(requests[0].input[1].content, requests[1].input[1].content)
     assert.equal(messages[2].content, '当前完整字段')
 })
 
-it('rejects invalid counters and models unable to support the fixed threshold before calling them', async () => {
+it('rejects oversized input instead of letting the host drop current batch messages', async () => {
     const { model, requests } = createModel(() => new AIMessage('unused'))
-    const invalidCount = vi.spyOn(model, 'getNumTokens').mockResolvedValue(0)
-    await assert.rejects(runDreamSession(createRun(model)), /计数无效/)
-    invalidCount.mockRestore()
+    const history = new DreamSessionHistory(
+        'system',
+        model,
+        { id: 'history', maxTokenLimit: 100 },
+        logger().logger
+    )
+    history.startBatch('当前完整字段'.repeat(1000))
+    history.append(new HumanMessage('继续'))
+    await assert.rejects(history.prepare([]), /输入超过模型可用预算/)
+    assert.equal(requests.length, 0)
+})
+
+it('rejects models unable to support the fixed threshold before calling them', async () => {
+    const { model, requests } = createModel(() => new AIMessage('unused'))
     vi.spyOn(model, 'getModelMaxContextSize').mockReturnValue(200_000)
     await assert.rejects(
         runDreamSession(createRun(model)),
@@ -446,31 +526,37 @@ it('keeps unparseable calls as correction data without replaying broken protocol
             ]
         }
     })
-    const { model, requests } = createModel(
-        () =>
-            new AIMessage({
-                content: '',
-                tool_calls: [check(['a'], 'correct')]
-            })
+    const { model, requests } = createModel((params, index) =>
+        params.id?.endsWith(':compression')
+            ? new AIMessage('早期结论')
+            : new AIMessage({
+                  content: '',
+                  tool_calls: [check([index === 1 ? 'a' : 'b'], 'correct')]
+              })
     )
     const invoke = model.invoke.bind(model)
-    let first = true
+    let calls = 0
     vi.spyOn(model, 'invoke').mockImplementation(async (...args) => {
-        if (first) {
-            first = false
+        if (++calls === 2) {
+            broken.usage_metadata = {
+                input_tokens: 200_000,
+                output_tokens: 10,
+                total_tokens: 200_010
+            }
             return broken
         }
         return invoke(...args)
     })
-    const run = createRun(model, ['a'])
+    const run = createRun(model)
     await runDreamSession(run)
-    assert.equal(getDreamCoverage(run.state).processedCount, 1)
-    const repaired = requests[0].input
+    assert.equal(getDreamCoverage(run.state).processedCount, 2)
+    assert.equal(requests[1].id, 'dream-test:compression')
+    const repaired = requests[2].input
     assert.deepEqual(
         repaired.map((message) => message.getType()),
-        ['system', 'human', 'human']
+        ['system', 'human', 'human', 'human']
     )
-    assert.match(String(repaired[2].content), /broken-call/)
-    assert.match(String(repaired[2].content), /signed/)
-    assert.match(String(repaired[2].content), /解析失败/)
+    assert.match(String(repaired[3].content), /broken-call/)
+    assert.match(String(repaired[3].content), /signed/)
+    assert.match(String(repaired[3].content), /解析失败/)
 })

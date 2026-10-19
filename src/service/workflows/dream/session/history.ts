@@ -21,8 +21,7 @@ export const dreamCompressionThreshold = 200_000
 export class DreamSessionHistory {
     private messages: BaseMessage[]
     private batchStart = 1
-    private readonly tokenCounts = new WeakMap<BaseMessage, number>()
-    private fixedTokens = 0
+    private inputTokens: number | undefined
     private compressions = 0
 
     constructor(
@@ -37,20 +36,14 @@ export class DreamSessionHistory {
         this.messages = [new SystemMessage(systemPrompt)]
     }
 
-    async initialize(tools: StructuredTool[]) {
-        const probe = await this.model.getNumTokens('Hello world. 记忆整理。')
-        if (!Number.isFinite(probe) || probe <= 0) {
-            throw new Error('Dream token 计数无效，无法判断 200k 压缩阈值。')
+    recordUsage(message: BaseMessage) {
+        const tokens = isAIMessage(message)
+            ? message.usage_metadata?.input_tokens
+            : undefined
+        // 缺失或无效用量不覆盖最近一次有效上报，也不回退到本地估算。
+        if (tokens !== undefined && Number.isFinite(tokens) && tokens > 0) {
+            this.inputTokens = tokens
         }
-        // 只用固定系统消息取得宿主的工具定义开销，不引入历史 usage 基线。
-        const [, tokens] = await this.model.cropMessages(
-            this.messages,
-            tools,
-            1,
-            this.callOptions.maxTokenLimit
-        )
-        this.fixedTokens =
-            tokens - (await this.model.countMessageTokens(this.messages[0]))
     }
 
     startBatch(input: string) {
@@ -62,35 +55,20 @@ export class DreamSessionHistory {
         this.messages.push(...messages)
     }
 
-    private async count(
-        messages: BaseMessage[],
-        fixedTokens = this.fixedTokens
-    ) {
-        let total = fixedTokens
-        for (const message of messages) {
-            let count = this.tokenCounts.get(message)
-            if (count === undefined) {
-                count = await this.model.countMessageTokens(message)
-                this.tokenCounts.set(message, count)
-            }
-            total += count
-        }
-        return total
-    }
-
-    async prepare(signal?: AbortSignal) {
+    async prepare(tools: StructuredTool[], signal?: AbortSignal) {
         signal?.throwIfAborted()
-        let tokens = await this.count(this.messages)
-        if (tokens >= dreamCompressionThreshold) {
-            tokens = await this.compress(tokens, signal)
-        }
-        if (tokens > this.callOptions.maxTokenLimit) {
-            throw new Error(`Dream 输入超过模型可用预算：${tokens} tokens。`)
+        if (
+            this.inputTokens !== undefined &&
+            this.inputTokens >= dreamCompressionThreshold
+        ) {
+            await this.compress(this.inputTokens, signal)
         }
         signal?.throwIfAborted()
-        this.logger.diagnostic('dream.context', { inputTokensEstimate: tokens })
-        return this.messages.map((message) =>
-            // usage 只用于日志；否则宿主裁剪会引用压缩前的输入量，或混用缓存口径。
+        this.logger.diagnostic('dream.context', {
+            lastReportedInputTokens: this.inputTokens
+        })
+        const messages = this.messages.map((message) =>
+            // usage 由本会话单独记录；否则宿主裁剪会引用压缩前的输入量，或混用缓存口径。
             // 原始历史不变，供应商签名、推理内容和工具调用元数据仍随请求保留。
             isAIMessage(message)
                 ? new AIMessage({
@@ -104,6 +82,18 @@ export class DreamSessionHistory {
                   })
                 : message
         )
+        // 仅检查宿主容量，防止静默裁剪当前批次；不参与 200k 压缩判断。
+        const [, tokens] = await this.model.cropMessages(
+            messages,
+            tools,
+            messages.length,
+            this.callOptions.maxTokenLimit
+        )
+        if (tokens > this.callOptions.maxTokenLimit) {
+            throw new Error(`Dream 输入超过模型可用预算：${tokens} tokens。`)
+        }
+        signal?.throwIfAborted()
+        return messages
     }
 
     private async compress(tokensBefore: number, signal?: AbortSignal) {
@@ -121,7 +111,7 @@ export class DreamSessionHistory {
         this.logger.diagnostic('dream.compression.started', {
             stage: 'dream-compression',
             attempt,
-            inputTokensEstimate: tokensBefore
+            inputTokens: tokensBefore
         })
         const prompt = buildDreamCompressionPrompt(transcript)
         const messages = [
@@ -166,20 +156,14 @@ export class DreamSessionHistory {
             ),
             ...this.messages.slice(this.batchStart)
         ]
-        const tokensAfter = await this.count(candidate)
-        if (tokensAfter >= dreamCompressionThreshold) {
-            throw new Error(
-                'Dream 压缩后仍达到 200k，保留原历史并终止本次整理。'
-            )
-        }
         this.messages = candidate
         this.batchStart = 2
+        // 摘要请求的 usage 和保留下来的旧响应均不代表新上下文大小。
+        this.inputTokens = undefined
         this.logger.diagnostic('dream.compression.completed', {
             stage: 'dream-compression',
             attempt,
-            tokensBefore,
-            tokensAfter
+            inputTokens: tokensBefore
         })
-        return tokensAfter
     }
 }

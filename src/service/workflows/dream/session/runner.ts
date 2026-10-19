@@ -87,7 +87,6 @@ export async function runDreamSession(input: DreamSessionRunInput) {
         callOptions,
         logger
     )
-    await history.initialize(tools)
     let modelCalls = 0
     let response: BaseMessage | undefined
     const agent = createOpenAIAgent({
@@ -99,6 +98,7 @@ export async function runDreamSession(input: DreamSessionRunInput) {
             promptLogging: 'first',
             onResponse: (message) => {
                 response = message
+                history.recordUsage(message)
             }
         }),
         tools,
@@ -123,7 +123,7 @@ export async function runDreamSession(input: DreamSessionRunInput) {
         )
         let ineffectiveRounds = 0
         for (let round = 1; round <= maxBatchRounds; round++) {
-            const messages = await history.prepare(signal)
+            const messages = await history.prepare(tools, signal)
             modelCalls++
             response = undefined
             let effective = false
