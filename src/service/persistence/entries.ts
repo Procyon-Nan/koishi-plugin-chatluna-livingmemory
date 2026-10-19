@@ -633,12 +633,16 @@ export class LivingMemoryEntryRepository
         }
     }
 
-    async updateMemory(id: string, patch: MemoryUpdatePatch) {
+    async updateMemory(
+        id: string,
+        patch: MemoryUpdatePatch,
+        isConsolidated?: boolean
+    ) {
         const current = await this.getEntryById(id)
         if (current == null) {
             return null
         }
-        return this.writeMemoryUpdate(current, patch)
+        return this.writeMemoryUpdate(current, patch, isConsolidated)
     }
 
     async updateMemoryForDream(
@@ -770,7 +774,8 @@ export class LivingMemoryEntryRepository
     async mergeMemories(
         presetId: string,
         sourceMemoryIds: string[],
-        memory: AttributedMemoryItem
+        memory: AttributedMemoryItem,
+        isConsolidated = false
     ) {
         const sourceIds = new Set(sourceMemoryIds)
         if (sourceIds.size < 2 || sourceIds.size !== sourceMemoryIds.length) {
@@ -820,6 +825,7 @@ export class LivingMemoryEntryRepository
                 now,
                 memory.speakerKeys
             )
+            record.isConsolidated = isConsolidated
             await database.create('living_memory_entry', record)
             await database.set(
                 'living_memory_entry',

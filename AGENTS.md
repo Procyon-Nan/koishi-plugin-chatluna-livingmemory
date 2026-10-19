@@ -29,7 +29,8 @@ chatluna-livingmemory/
 │   │   ├── workflows/           # extraction、recall、dream 与任务状态
 │   │   │   └── dream/
 │   │   │       ├── full.ts      # 全量 Dream 编排，index.ts 保留对外导出
-│   │   │       └── incremental/ # 增量 Dream 流程
+│   │   │       ├── incremental/ # 增量 Dream 流程
+│   │   │       └── session/     # 全量会话状态与工具结果衔接，尚未切换入口
 │   │   └── user_profile.ts      # 用户画像分组、生成与渲染
 │   ├── index.ts                 # 插件入口、配置 schema 与可选集成装配
 │   ├── query.ts                 # 对外查询辅助接口
@@ -97,7 +98,8 @@ chatluna-livingmemory/
    - 提取结果必须填写 `reason` 说明原因，包含空 `memories` 数组的结果；无可记录内容时不新增记忆并正常推进本批游标。
 
 6. Dream 与用户画像
-   - 全量会话化按 `docs/dream-session-plan.md` 分批实施；当前布局已分离全量与增量入口，工具归入公共目录，运行行为仍沿用旧流程。全量切换后再将共用的旧单元处理器和执行器归入增量目录，不提前改变下述执行规则。
+   - 全量会话化按 `docs/dream-session-plan.md` 分批实施；当前已分离入口并实现会话状态与工具结果衔接，尚未切换生产入口，运行行为仍沿用旧流程。全量切换后再将共用的旧单元处理器和执行器归入增量目录，不提前改变下述执行规则。
+   - 新会话的目标、可访问范围和处理集合由 `dream/session/state.ts` 持有，覆盖集合不作为修改锁。工具通过公共工厂创建，Dream 在注入的依赖中校验范围并消费类型化写入结果。更新与合并的固化随事实一同提交；checked 在预设队列内验证整组 ID 活跃后固化；索引同步失败不撤销已提交操作的覆盖记录。
    - Dream 只处理活跃记忆，归档记忆不参与聚类、邻居查询、整理或画像生成。
    - 预设活跃记忆少于 30 条时两种触发都不启动：手动触发返回 `insufficient-memories`，自动触发只记跳过日志。
    - `archive` 归档活跃记忆；`merge` 必须经 `applyDreamMerge()` 原子完成，不得拆成多个独立写操作。

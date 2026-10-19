@@ -4,7 +4,7 @@ import { memoryCheckedTool } from '../../prompts/memory_tools'
 
 type MemoryCheckHandler = (
     input: z.infer<typeof memoryCheckedTool.schema>
-) => Promise<void>
+) => Promise<{ warnings: string[] }>
 
 export class LivingMemoryCheckedMemoryTool extends StructuredTool {
     name = memoryCheckedTool.name
@@ -17,10 +17,13 @@ export class LivingMemoryCheckedMemoryTool extends StructuredTool {
 
     async _call(input: z.infer<typeof memoryCheckedTool.schema>) {
         const memoryIds = [...new Set(input.memoryIds)]
-        await this.checkMemories({ memoryIds, reason: input.reason })
+        const { warnings } = await this.checkMemories({
+            memoryIds,
+            reason: input.reason
+        })
 
         return JSON.stringify(
-            { checkedMemoryIds: memoryIds, reason: input.reason },
+            { checkedMemoryIds: memoryIds, reason: input.reason, warnings },
             null,
             2
         )

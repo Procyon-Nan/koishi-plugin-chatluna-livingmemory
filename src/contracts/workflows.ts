@@ -2,6 +2,7 @@ import type {
     AgenticMemorySnapshotItem,
     LivingMemorySearchInput,
     LivingMemorySearchResult,
+    LivingMemoryGetMessagesMemory,
     MemoryEntryRecord,
     MemoryEntryType,
     MemoryJobKind,
@@ -181,6 +182,13 @@ export interface LivingMemorySearchProvider {
         input: LivingMemorySearchInput,
         conversationId?: string
     ): Promise<LivingMemorySearchResult[]>
+}
+
+export interface LivingMemorySourceProvider {
+    getMemorySourceMessages(
+        presetId: string,
+        memoryId: string
+    ): Promise<LivingMemoryGetMessagesMemory | null>
 }
 
 export interface LivingMemoryCreationProvider {

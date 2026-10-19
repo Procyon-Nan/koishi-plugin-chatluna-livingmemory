@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import type {
     LivingMemoryPresetExport,
+    MemoryEntryRecord,
     MemoryJobRecord
 } from '../src/contracts/memory'
 import type {
@@ -21,9 +22,68 @@ import {
     LivingMemoryVectorIndexError
 } from '../src/service/vector_index/errors'
 import { withLivingMemoryRepository } from './persistence-test-utils'
+import type { LivingMemoryRepository } from '../src/service/persistence/repository'
+import { loadMemorySourceMessages } from '../src/service/app/query_projections'
+import { createDreamSessionTools } from '../src/service/workflows/dream/session/tools'
+import {
+    createDreamSessionState,
+    getDreamCoverage,
+    nextDreamBatch,
+    pendingDreamMemoryIds,
+    skipDreamBatch
+} from '../src/service/workflows/dream/session/state'
 
 const presetId = 'preset-indexed-mutations'
 const scope = { presetId, conversationId: 'conversation-1' }
+
+const createSession = (
+    repository: LivingMemoryRepository,
+    mutations: LivingMemoryMutationService,
+    batches: MemoryEntryRecord[][],
+    searchResults: MemoryEntryRecord[] = []
+) => {
+    const state = createDreamSessionState(
+        batches.map((entries, index) => ({
+            id: `batch-${index}`,
+            reason: 'test batch',
+            entries
+        }))
+    )
+    const tools = createDreamSessionTools({
+        presetId,
+        state,
+        mutations,
+        speakers: repository,
+        sources: {
+            getMemorySourceMessages: (preset, id) =>
+                loadMemorySourceMessages(repository, preset, id)
+        },
+        search: {
+            async searchMemories(preset, input, conversationId) {
+                assert.equal(preset, presetId)
+                assert.equal(input.memoryStatus, 'active')
+                assert.equal(conversationId, undefined)
+                return searchResults
+            }
+        }
+    })
+    const invoke = (name: string, input: Record<string, unknown>) => {
+        const tool = tools.find((tool) => tool.name === `living_memory_${name}`)
+        assert.ok(tool)
+        return tool.invoke(input, { configurable: { preset: presetId } })
+    }
+    return { state, tools, invoke }
+}
+
+const sessionMemory = {
+    type: 'fact',
+    content: '整理后的记忆',
+    summary: '整理后的摘要',
+    keywords: ['整理'],
+    sentiment: 'neutral',
+    importance: 0.5,
+    speakerLabels: []
+}
 
 const createLoggerStub = () => {
     const warns: string[] = []
@@ -93,6 +153,231 @@ class MemoryIndexSinkStub implements MemoryIndexMutationSink {
         return job
     }
 }
+
+it('tracks Dream coverage across batches and reuses merged memories', async () => {
+    await withLivingMemoryRepository(async (_ctx, repository) => {
+        const sink = new MemoryIndexSinkStub()
+        const mutations = new LivingMemoryMutationService(
+            repository,
+            sink,
+            createLoggerStub().logger
+        )
+        const entries: MemoryEntryRecord[] = []
+        for (let index = 0; index < 6; index++) {
+            entries.push(
+                await repository.createMemory(scope, {
+                    type: 'fact',
+                    content: `memory-${index}`
+                })
+            )
+        }
+        const [a, b, c, d, e, outside] = entries
+        const { state, tools, invoke } = createSession(
+            repository,
+            mutations,
+            [
+                [a, b, c],
+                [d, e]
+            ],
+            [d, outside]
+        )
+        assert.equal(tools.length, 6)
+        assert.equal(
+            tools.some((tool) => tool.name === 'living_memory_create_memory'),
+            false
+        )
+        nextDreamBatch(state)
+        await invoke('search', { searchTexts: ['关联记忆'] })
+        assert.equal(state.availableMemoryIds.has(outside.id), true)
+        assert.equal(getDreamCoverage(state).processedCount, 0)
+        const merged = JSON.parse(
+            await invoke('merge_memories', {
+                sourceMemoryIds: [a.id, b.id],
+                memory: sessionMemory
+            })
+        )
+        assert.equal(
+            (await repository.getEntryById(merged.memoryId))?.isConsolidated,
+            true
+        )
+        assert.deepEqual(pendingDreamMemoryIds(state), [c.id])
+        await invoke('checked_memory', {
+            memoryIds: [d.id],
+            reason: '内容完整'
+        })
+        skipDreamBatch(state, 'round-limit')
+        assert.deepEqual(
+            nextDreamBatch(state)?.entries.map((entry) => entry.id),
+            [e.id]
+        )
+        await invoke('checked_memory', {
+            memoryIds: [c.id],
+            reason: '复查后无需修改'
+        })
+        await invoke('update_memory', {
+            memoryId: merged.memoryId,
+            memory: sessionMemory
+        })
+        await invoke('delete_memory', { memoryId: e.id })
+        assert.equal(nextDreamBatch(state), undefined)
+        assert.deepEqual(getDreamCoverage(state), {
+            targetCount: 5,
+            processedCount: 5,
+            unprocessedMemoryIds: []
+        })
+        assert.deepEqual(state.skippedBatches[0].memoryIds, [c.id])
+        assert.equal(state.stats.merged, 1)
+        assert.equal(state.stats.archived, 3)
+        assert.equal(
+            (await repository.getEntryById(outside.id))?.isConsolidated,
+            false
+        )
+        assert.ok(
+            sink.mutations.every((batch) =>
+                batch.upserts
+                    .filter((item) => item.document.status === 'active')
+                    .every((item) => item.document.isConsolidated)
+            )
+        )
+    })
+})
+
+it('retains successful Dream coverage when only index synchronization fails', async () => {
+    await withLivingMemoryRepository(async (_ctx, repository) => {
+        const sink = new MemoryIndexSinkStub()
+        sink.applyError = new Error('injected index failure')
+        const mutations = new LivingMemoryMutationService(
+            repository,
+            sink,
+            createLoggerStub().logger
+        )
+        const entries: MemoryEntryRecord[] = []
+        for (let index = 0; index < 5; index++) {
+            entries.push(
+                await repository.createMemory(scope, {
+                    type: 'fact',
+                    content: `memory-${index}`
+                })
+            )
+        }
+        const [updated, a, b, checked, archived] = entries
+        const { state, invoke } = createSession(repository, mutations, [
+            entries
+        ])
+        nextDreamBatch(state)
+        const outputs = [
+            JSON.parse(
+                await invoke('update_memory', {
+                    memoryId: updated.id,
+                    memory: sessionMemory
+                })
+            ),
+            JSON.parse(
+                await invoke('merge_memories', {
+                    sourceMemoryIds: [a.id, b.id],
+                    memory: sessionMemory
+                })
+            ),
+            JSON.parse(
+                await invoke('checked_memory', {
+                    memoryIds: [checked.id],
+                    reason: '内容完整'
+                })
+            ),
+            JSON.parse(await invoke('delete_memory', { memoryId: archived.id }))
+        ]
+        assert.ok(outputs.every((output) => output.warnings.length === 1))
+        assert.equal(getDreamCoverage(state).processedCount, 5)
+        const stored = await repository.listEntriesByPreset(presetId)
+        assert.equal(stored.length, 6)
+        assert.equal(
+            stored.filter((entry) => entry.status === 'archived').length,
+            3
+        )
+        assert.ok(
+            stored
+                .filter((entry) => entry.status === 'active')
+                .every((entry) => entry.isConsolidated)
+        )
+        assert.equal(state.availableMemoryIds.has(outputs[1].memoryId), true)
+        await flushBackgroundTasks()
+        assert.equal(sink.reconciledPresets.length, 4)
+    })
+})
+
+it('rejects unavailable or stale Dream targets before recording successful coverage', async () => {
+    await withLivingMemoryRepository(async (_ctx, repository) => {
+        const sink = new MemoryIndexSinkStub()
+        const mutations = new LivingMemoryMutationService(
+            repository,
+            sink,
+            createLoggerStub().logger
+        )
+        const active = await repository.createMemory(scope, {
+            type: 'fact',
+            content: 'active'
+        })
+        const stale = await repository.createMemory(scope, {
+            type: 'fact',
+            content: 'stale'
+        })
+        const { state, invoke } = createSession(repository, mutations, [
+            [active, stale]
+        ])
+        nextDreamBatch(state)
+        await repository.archiveActiveEntries(presetId, [stale.id])
+        await assert.rejects(
+            invoke('checked_memory', {
+                memoryIds: [active.id, stale.id],
+                reason: '内容完整'
+            })
+        )
+        assert.equal(
+            (await repository.getEntryById(active.id))?.isConsolidated,
+            false
+        )
+        await assert.rejects(
+            invoke('merge_memories', {
+                sourceMemoryIds: [active.id, stale.id],
+                memory: sessionMemory
+            })
+        )
+        await assert.rejects(
+            invoke('update_memory', {
+                memoryId: stale.id,
+                memory: sessionMemory
+            })
+        )
+        await assert.rejects(invoke('delete_memory', { memoryId: stale.id }))
+        await assert.rejects(
+            invoke('get_messages', { memoryId: 'not-provided' })
+        )
+        await assert.rejects(
+            invoke('checked_memory', {
+                memoryIds: [active.id, 'not-provided'],
+                reason: '内容完整'
+            })
+        )
+        assert.equal((await repository.listEntriesByPreset(presetId)).length, 2)
+        assert.equal(getDreamCoverage(state).processedCount, 0)
+        assert.equal(
+            (await repository.getEntryById(active.id))?.status,
+            'active'
+        )
+        assert.deepEqual(sink.mutations, [])
+        await invoke('checked_memory', {
+            memoryIds: [active.id, active.id],
+            reason: '内容完整'
+        })
+        await invoke('update_memory', {
+            memoryId: active.id,
+            memory: sessionMemory
+        })
+        assert.equal(getDreamCoverage(state).processedCount, 1)
+        assert.equal(state.stats.kept, 1)
+        assert.equal(state.stats.updated, 1)
+    })
+})
 
 it('writes create, update, and delete facts through to the vector index', async () => {
     await withLivingMemoryRepository(async (_ctx, repository) => {

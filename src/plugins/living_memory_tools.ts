@@ -54,7 +54,7 @@ export function apply(ctx: Context, config: LivingMemoryConfig) {
                 )
             ),
             register(memoryGetMessagesTool, ['source', 'messages'], () =>
-                createMemoryTool.getMessages(ctx)
+                createMemoryTool.getMessages(ctx.chatluna_living_memory)
             ),
             register(memoryCreateTool, ['create', 'write'], () =>
                 createMemoryTool.create(

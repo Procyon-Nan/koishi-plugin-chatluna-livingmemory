@@ -290,8 +290,12 @@ export class LivingMemoryRepository
         return this.entries.createMemory(scope, input, speakerKeys)
     }
 
-    updateMemory(id: string, patch: MemoryUpdatePatch) {
-        return this.entries.updateMemory(id, patch)
+    updateMemory(
+        id: string,
+        patch: MemoryUpdatePatch,
+        isConsolidated?: boolean
+    ) {
+        return this.entries.updateMemory(id, patch, isConsolidated)
     }
 
     updateMemoryForDream(
@@ -325,9 +329,15 @@ export class LivingMemoryRepository
     mergeMemories(
         presetId: string,
         sourceMemoryIds: string[],
-        memory: AttributedMemoryItem
+        memory: AttributedMemoryItem,
+        isConsolidated = false
     ) {
-        return this.entries.mergeMemories(presetId, sourceMemoryIds, memory)
+        return this.entries.mergeMemories(
+            presetId,
+            sourceMemoryIds,
+            memory,
+            isConsolidated
+        )
     }
 
     deleteMemory(id: string) {

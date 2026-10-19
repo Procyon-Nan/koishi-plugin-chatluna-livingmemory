@@ -297,6 +297,15 @@ src/service/memory/tools/
 
 检查工具在第 1 批移除直接写入处理集合的耦合，等待注入的检查处理函数完成后才返回。第 2 批由 Dream 为它提供处理函数：先验证全部 ID 的可访问范围，再完成必要的固化，最后登记成功；任一步失败不返回检查成功。其他操作同样通过类型明确的内部结果衔接，不解析面向模型的自然语言来判定成功。事实写入和固化尽量复用同一个既有写入入口，避免产生“事实已成功但固化失败后再次执行合并”的路径。
 
+第 2 批的具体接口衔接：
+
+- `createDreamSessionState()` 保存固定目标集合、批次位置、可访问与已处理集合、操作统计和跳过记录；`nextDreamBatch()` 过滤已覆盖条目，`getDreamCoverage()` 始终按原始目标计算遗漏，不把新增合并结果或检索到的额外记忆算入目标数。
+- `createDreamSessionTools()` 经公共工厂选择六个工具，通过注入的查询和变更依赖绑定固定预设。检索登记可访问 ID；来源查询及写入只接受已提供 ID；成功写入登记覆盖。未定义第二套工具类或执行 JSON 解析。
+- 应用层 `updateActiveMemory()` 与 `mergeActiveMemories()` 增加可选固化参数，逐层传至现有仓库事务；Dream 传入 `true`，主对话不传，原默认行为保持。更新和合并不再需要后置的独立固化调用。
+- `setMemoryConsolidation()` 增加 `requireAllActive` 调用选项；checked 启用它，在预设队列内读取整组 ID，若任何 ID 不存在、跨预设或已归档则在写入前失败。原增量调用仍沿用过滤活跃项的行为。
+- 更新与归档遇到既有 `LivingMemoryFactsCommittedError` 时登记成功，再交给公共工具生成警告；合并继续使用带新 ID 和警告的结果。checked 的处理函数返回警告数组，工具保留 ID、理由和警告，不将索引失败误报为事实失败。
+- 来源消息工具改为依赖 `LivingMemorySourceProvider`，主对话注入应用服务，Dream 注入固定预设的来源查询。无需伪造 Koishi Context，也不增加工作流专属的来源消息工具。
+
 ### 9.3 其他受影响文件
 
 | 文件或位置 | 工作与边界 |
@@ -343,8 +352,9 @@ src/service/memory/tools/
 
 ### 9.6 批次记录
 
-- 第 1 批：统一装配修订已完成并审查，待用户提交。全量与增量入口已迁移；checked 归入公共工具目录并改为注入处理函数；主对话与 Recall 共用 `createMemoryTool`，保持原工具暴露面和调用参数。修订后 `yarn lint`、`yarn test`（46 个文件、372 个用例）、`yarn atsc -p tsconfig.json --noEmit`、`yarn build:server` 和 diff 检查通过。另通过定向调用验证 checked 等待处理完成、ID 去重、理由传递和失败传播。构建仍报告未修改的 `worker_artifacts.ts` 的 CJS `import.meta` 警告。未发起真实模型或 Dream 验收。
-- 第 2 至第 5 批：未开始。
+- 第 1 批：用户已提交 `0076f0c`。全量与增量入口已迁移；checked 归入公共工具目录并改为注入处理函数；主对话与 Recall 共用 `createMemoryTool`，保持原工具暴露面和调用参数。修订后 `yarn lint`、`yarn test`（46 个文件、372 个用例）、`yarn atsc -p tsconfig.json --noEmit`、`yarn build:server` 和 diff 检查通过。另通过定向调用验证 checked 等待处理完成、ID 去重、理由传递和失败传播。构建仍报告未修改的 `worker_artifacts.ts` 的 CJS `import.meta` 警告。未发起真实模型或 Dream 验收。
+- 第 2 批：已完成会话状态、工具结果衔接及固化支持，严格审查未发现待修复问题，待用户提交。`yarn lint`、`yarn test`（46 个文件、375 个用例）、`yarn atsc -p tsconfig.json --noEmit`、`yarn build:server` 和 diff 检查通过。新增 SQLite 集成用例覆盖跨批次处理、合并结果再次使用、失效 ID 拒绝及索引失败后保留已提交成果。构建仍报告未修改的 `worker_artifacts.ts` 的 CJS `import.meta` 警告。生产全量入口尚未切换，未发起真实模型或 Dream 验收。
+- 第 3 至第 5 批：未开始。
 
 ## 10. 验收标准
 

@@ -3,12 +3,12 @@ import {
     ToolInputParsingException,
     type ToolRunnableConfig
 } from '@langchain/core/tools'
-import type { Context } from 'koishi'
 import { createMemoryTool } from '../src/service/memory/tools'
 import { LivingMemoryGetMessagesTool } from '../src/service/memory/tools/get_messages_tool'
 import { memorySearchTool } from '../src/service/prompts/memory_tools'
 import { LivingMemorySearchTool } from '../src/service/memory/tools/embedding_search_tool'
 import type { LivingMemorySearchInput } from '../src/contracts/memory'
+import type { LivingMemorySourceProvider } from '../src/contracts/workflows'
 import type { LivingMemoryEmbeddingSearchEngine } from '../src/service/workflows/recall/embedding_search_engine'
 import { resolveMainRunConversationId } from '../src/service/memory/helpers'
 import {
@@ -17,13 +17,6 @@ import {
     resolveToolMemoryScopeConfigurable,
     type LivingMemoryToolConfigurable
 } from '../src/service/memory/tools/tool_runtime'
-
-const createContext = (livingMemory?: unknown) =>
-    ({
-        logger: () => ({ info: () => {}, warn: () => {} }),
-        get: (name: string) =>
-            name === 'chatluna_living_memory' ? livingMemory : undefined
-    }) as unknown as Context
 
 const mockEngine = {
     searchMemories: async () => []
@@ -91,7 +84,7 @@ it('always searches active memories with the shared tool schema', async () => {
 })
 
 it('renders source messages as the original transcript of one memory', async () => {
-    const service = {
+    const service: LivingMemorySourceProvider = {
         getMemorySourceMessages: async (_presetId: string, memoryId: string) =>
             memoryId === 'memory-1'
                 ? {
@@ -130,7 +123,7 @@ it('renders source messages as the original transcript of one memory', async () 
     })
 
     assert.equal(
-        await new LivingMemoryGetMessagesTool(createContext(service)).invoke(
+        await new LivingMemoryGetMessagesTool(service).invoke(
             { memoryId: 'memory-1' },
             config
         ),
@@ -145,7 +138,7 @@ it('renders source messages as the original transcript of one memory', async () 
         ].join('\n')
     )
     await assert.rejects(
-        new LivingMemoryGetMessagesTool(createContext(service)).invoke(
+        new LivingMemoryGetMessagesTool(service).invoke(
             { memoryId: 'missing' },
             config
         ),

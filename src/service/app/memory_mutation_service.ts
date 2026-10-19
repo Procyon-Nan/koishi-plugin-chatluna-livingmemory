@@ -203,7 +203,8 @@ export class LivingMemoryMutationService
     async updateActiveMemory(
         presetId: string,
         id: string,
-        patch: Omit<MemoryUpdatePatch, 'status'>
+        patch: Omit<MemoryUpdatePatch, 'status'>,
+        isConsolidated?: boolean
     ): Promise<MemoryEntryRecord | null> {
         return this.runPresetMutation(presetId, async () => {
             const current = await this.repository.getEntryById(id)
@@ -214,7 +215,11 @@ export class LivingMemoryMutationService
             ) {
                 return null
             }
-            const result = await this.persistMemoryUpdate(current, patch)
+            const result = await this.persistMemoryUpdate(
+                current,
+                patch,
+                isConsolidated
+            )
             return result?.record ?? null
         })
     }
@@ -222,13 +227,18 @@ export class LivingMemoryMutationService
     // 调用方已持有预设队列并重读目标，此处只复用写入步骤，不再次入队。
     private async persistMemoryUpdate(
         current: MemoryEntryRecord,
-        patch: MemoryUpdatePatch
+        patch: MemoryUpdatePatch,
+        isConsolidated?: boolean
     ) {
         await this.registerCallerSpeakerKeys(
             current.presetId,
             patch.speakerKeys
         )
-        const result = await this.repository.updateMemory(current.id, patch)
+        const result = await this.repository.updateMemory(
+            current.id,
+            patch,
+            isConsolidated
+        )
         if (result === null) {
             return null
         }
@@ -296,7 +306,8 @@ export class LivingMemoryMutationService
     async setMemoryConsolidation(
         presetId: string,
         ids: string[],
-        isConsolidated: boolean
+        isConsolidated: boolean,
+        options: { requireAllActive?: boolean } = {}
     ) {
         return this.runPresetMutation(presetId, async () => {
             const activeIds = (
@@ -304,6 +315,15 @@ export class LivingMemoryMutationService
             )
                 .filter((entry) => entry.status === 'active')
                 .map((entry) => entry.id)
+            if (options.requireAllActive) {
+                const active = new Set(activeIds)
+                const missingIds = ids.filter((id) => !active.has(id))
+                if (missingIds.length > 0) {
+                    throw new Error(
+                        `无法确认以下记忆的检查状态：${missingIds.join('、')}。请核对记忆 ID 后重试。`
+                    )
+                }
+            }
             const records = await this.repository.setMemoryConsolidation(
                 presetId,
                 activeIds,
@@ -382,7 +402,8 @@ export class LivingMemoryMutationService
     async mergeActiveMemories(
         presetId: string,
         sourceMemoryIds: string[],
-        memory: AttributedMemoryItem
+        memory: AttributedMemoryItem,
+        isConsolidated = false
     ) {
         const sourceIds = new Set(sourceMemoryIds)
         if (sourceIds.size < 2 || sourceIds.size !== sourceMemoryIds.length) {
@@ -406,7 +427,8 @@ export class LivingMemoryMutationService
             const result = await this.repository.mergeMemories(
                 presetId,
                 sourceMemoryIds,
-                memory
+                memory,
+                isConsolidated
             )
             const warnings: string[] = []
             try {

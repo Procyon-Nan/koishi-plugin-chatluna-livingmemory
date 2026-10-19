@@ -1,6 +1,6 @@
 import { StructuredTool } from '@langchain/core/tools'
 import type { ToolRunnableConfig } from '@langchain/core/tools'
-import type { Context } from 'koishi'
+import type { LivingMemorySourceProvider } from '../../../contracts/workflows'
 import type { z } from 'zod'
 import { renderMemorySourceMessagesForModel } from '../../prompts/memory_entries'
 import { memoryGetMessagesTool } from '../../prompts/memory_tools'
@@ -20,7 +20,7 @@ export class LivingMemoryGetMessagesTool extends StructuredTool {
 
     schema = memoryGetMessagesTool.schema
 
-    constructor(private readonly ctx: Context) {
+    constructor(private readonly sources: LivingMemorySourceProvider) {
         super({ verboseParsingErrors: true })
     }
 
@@ -37,11 +37,7 @@ export class LivingMemoryGetMessagesTool extends StructuredTool {
             )
         }
 
-        const livingMemory = this.ctx.get('chatluna_living_memory')
-        if (!livingMemory) {
-            throw new Error('Living Memory service not available')
-        }
-        const memory = await livingMemory.getMemorySourceMessages(
+        const memory = await this.sources.getMemorySourceMessages(
             presetIdResolution.presetId,
             input.memoryId
         )
