@@ -33,7 +33,8 @@ import type { AgenticRecallPromptMessages } from '../../prompts'
 import type { LivingMemoryLogger } from '../../logging/logger'
 import { createLoggedModel } from '../../logging/model_calls'
 import { memorySearchTool } from '../../prompts/memory_tools'
-import { LivingMemorySearchTool } from '../../memory/tools/embedding_search_tool'
+import { createMemoryTool } from '../../memory/tools'
+import type { LivingMemorySearchTool } from '../../memory/tools/embedding_search_tool'
 import { resolveScopeAssistantLabel } from '../../memory/helpers'
 import type { LivingMemoryEmbeddingSearchEngine } from './embedding_search_engine'
 
@@ -254,7 +255,7 @@ export class LivingMemoryAgenticRecallExecutor {
         }
         const recordedSearchCalls: RecordedAgenticSearchCall[] = []
         const searchTool = new RecordingLivingMemorySearchTool(
-            new LivingMemorySearchTool(
+            createMemoryTool.search(
                 this.embeddingSearchEngine,
                 false,
                 this.config.enableConversationIsolation

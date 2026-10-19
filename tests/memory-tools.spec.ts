@@ -4,6 +4,7 @@ import {
     type ToolRunnableConfig
 } from '@langchain/core/tools'
 import type { Context } from 'koishi'
+import { createMemoryTool } from '../src/service/memory/tools'
 import { LivingMemoryGetMessagesTool } from '../src/service/memory/tools/get_messages_tool'
 import { memorySearchTool } from '../src/service/prompts/memory_tools'
 import { LivingMemorySearchTool } from '../src/service/memory/tools/embedding_search_tool'
@@ -28,7 +29,7 @@ const mockEngine = {
     searchMemories: async () => []
 } as unknown as LivingMemoryEmbeddingSearchEngine
 
-const searchTool = new LivingMemorySearchTool(mockEngine, true)
+const searchTool = createMemoryTool.search(mockEngine, true)
 
 const createRecordingSearchProvider = () => {
     const presetIds: string[] = []
@@ -66,7 +67,7 @@ it('always searches active memories with the shared tool schema', async () => {
         }
     } as unknown as LivingMemoryEmbeddingSearchEngine
 
-    const mainTool = new LivingMemorySearchTool(provider, true)
+    const mainTool = createMemoryTool.search(provider, true)
     assert.equal(mainTool.schema, memorySearchTool.schema)
     assert.equal(searchTool.schema, memorySearchTool.schema)
     assert.deepEqual(Object.keys(mainTool.schema.shape), [

@@ -3,20 +3,20 @@ import type { ChatLunaChatModel } from 'koishi-plugin-chatluna/llm-core/platform
 import type {
     MemoryEntryRecord,
     PresetPersonaResolver
-} from '../../../contracts/memory'
-import type { IncrementalDreamNeighborSearch } from '../../../contracts/vector_index'
+} from '../../../../contracts/memory'
+import type { IncrementalDreamNeighborSearch } from '../../../../contracts/vector_index'
 import type {
     DreamMemoryRepository,
     DreamSpeakerCoverage,
     LivingMemoryConfig
-} from '../../../contracts/workflows'
-import { resolveAssistantLabel } from '../../memory/helpers'
-import { isModelConfigured, summarizeError } from '../../shared/utils'
-import { addStats, createEmptyStats } from './stats'
-import type { DreamOperationStats, DreamRunResult } from './types'
-import { type DreamUnitInput, DreamUnitProcessor } from './unit_processor'
-import type { LivingMemoryLogger } from '../../logging/logger'
-import type { LivingMemoryUserProfileService } from '../../user_profile'
+} from '../../../../contracts/workflows'
+import { resolveAssistantLabel } from '../../../memory/helpers'
+import { isModelConfigured, summarizeError } from '../../../shared/utils'
+import { addStats, createEmptyStats } from '../stats'
+import type { DreamOperationStats, DreamRunResult } from '../types'
+import { type DreamUnitInput, DreamUnitProcessor } from '../unit_processor'
+import type { LivingMemoryLogger } from '../../../logging/logger'
+import type { LivingMemoryUserProfileService } from '../../../user_profile'
 
 type IncrementalDreamConfig = Pick<LivingMemoryConfig, 'mainModel'>
 

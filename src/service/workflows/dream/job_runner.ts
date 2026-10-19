@@ -3,7 +3,7 @@ import type { LivingMemoryLogger } from '../../logging/logger'
 import { summarizeError } from '../../shared/utils'
 import type { LivingMemoryJobTracker } from '../job_tracker'
 import type { LivingMemoryIncrementalDreamService } from './incremental'
-import type { LivingMemoryDreamService } from './index'
+import type { LivingMemoryDreamService } from './full'
 import type { DreamRunResult } from './types'
 
 type DreamService = Pick<LivingMemoryDreamService, 'run'>

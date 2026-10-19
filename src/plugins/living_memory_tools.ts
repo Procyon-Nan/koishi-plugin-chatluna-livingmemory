@@ -10,12 +10,7 @@ import {
     memoryMergeTool,
     memoryDeleteTool
 } from '../service/prompts/memory_tools'
-import { LivingMemorySearchTool } from '../service/memory/tools/embedding_search_tool'
-import { LivingMemoryGetMessagesTool } from '../service/memory/tools/get_messages_tool'
-import { LivingMemoryCreateMemoryTool } from '../service/memory/tools/create_memory_tool'
-import { LivingMemoryUpdateMemoryTool } from '../service/memory/tools/update_memory_tool'
-import { LivingMemoryMergeMemoriesTool } from '../service/memory/tools/merge_memories_tool'
-import { LivingMemoryDeleteMemoryTool } from '../service/memory/tools/delete_memory_tool'
+import { createMemoryTool } from '../service/memory/tools'
 
 export function apply(ctx: Context, config: LivingMemoryConfig) {
     if (!config.enableMemoryTools) {
@@ -51,49 +46,30 @@ export function apply(ctx: Context, config: LivingMemoryConfig) {
             })
 
         const disposers = [
-            register(
-                memorySearchTool,
-                ['search'],
-                () =>
-                    new LivingMemorySearchTool(
-                        ctx.chatluna_living_memory,
-                        true,
-                        config.enableConversationIsolation
-                    )
+            register(memorySearchTool, ['search'], () =>
+                createMemoryTool.search(
+                    ctx.chatluna_living_memory,
+                    true,
+                    config.enableConversationIsolation
+                )
             ),
-            register(
-                memoryGetMessagesTool,
-                ['source', 'messages'],
-                () => new LivingMemoryGetMessagesTool(ctx)
+            register(memoryGetMessagesTool, ['source', 'messages'], () =>
+                createMemoryTool.getMessages(ctx)
             ),
-            register(
-                memoryCreateTool,
-                ['create', 'write'],
-                () =>
-                    new LivingMemoryCreateMemoryTool(
-                        ctx.chatluna_living_memory,
-                        config.memoryCreateToolMaxMemories
-                    )
+            register(memoryCreateTool, ['create', 'write'], () =>
+                createMemoryTool.create(
+                    ctx.chatluna_living_memory,
+                    config.memoryCreateToolMaxMemories
+                )
             ),
-            register(
-                memoryUpdateTool,
-                ['update', 'write'],
-                () =>
-                    new LivingMemoryUpdateMemoryTool(ctx.chatluna_living_memory)
+            register(memoryUpdateTool, ['update', 'write'], () =>
+                createMemoryTool.update(ctx.chatluna_living_memory)
             ),
-            register(
-                memoryMergeTool,
-                ['merge', 'write'],
-                () =>
-                    new LivingMemoryMergeMemoriesTool(
-                        ctx.chatluna_living_memory
-                    )
+            register(memoryMergeTool, ['merge', 'write'], () =>
+                createMemoryTool.merge(ctx.chatluna_living_memory)
             ),
-            register(
-                memoryDeleteTool,
-                ['delete', 'write'],
-                () =>
-                    new LivingMemoryDeleteMemoryTool(ctx.chatluna_living_memory)
+            register(memoryDeleteTool, ['delete', 'write'], () =>
+                createMemoryTool.delete(ctx.chatluna_living_memory)
             )
         ]
 

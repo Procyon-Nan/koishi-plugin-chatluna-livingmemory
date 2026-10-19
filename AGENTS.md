@@ -19,6 +19,7 @@ chatluna-livingmemory/
 │   │   ├── app/                 # 应用门面、作用域、配置状态与变更编排
 │   │   ├── logging/             # 诊断事件与模型调用日志
 │   │   ├── memory/              # 记忆字段、来源、speaker、快照和工具实现
+│   │   │   └── tools/           # 共用工具实现与统一创建入口
 │   │   ├── persistence/         # Koishi 表定义、分表仓库与持久化门面
 │   │   ├── prompts/             # 工作流提示词、结构化输出 schema 与 XML 格式
 │   │   ├── shared/              # 预设队列及少量共享工具
@@ -26,6 +27,9 @@ chatluna-livingmemory/
 │   │   │   └── message_log/     # 会话消息日志、注册表、回填与统一转换
 │   │   ├── vector_index/        # PGlite/pgvector 索引服务、重建与 Worker
 │   │   ├── workflows/           # extraction、recall、dream 与任务状态
+│   │   │   └── dream/
+│   │   │       ├── full.ts      # 全量 Dream 编排，index.ts 保留对外导出
+│   │   │       └── incremental/ # 增量 Dream 流程
 │   │   └── user_profile.ts      # 用户画像分组、生成与渲染
 │   ├── index.ts                 # 插件入口、配置 schema 与可选集成装配
 │   ├── query.ts                 # 对外查询辅助接口
@@ -93,6 +97,7 @@ chatluna-livingmemory/
    - 提取结果必须填写 `reason` 说明原因，包含空 `memories` 数组的结果；无可记录内容时不新增记忆并正常推进本批游标。
 
 6. Dream 与用户画像
+   - 全量会话化按 `docs/dream-session-plan.md` 分批实施；当前布局已分离全量与增量入口，工具归入公共目录，运行行为仍沿用旧流程。全量切换后再将共用的旧单元处理器和执行器归入增量目录，不提前改变下述执行规则。
    - Dream 只处理活跃记忆，归档记忆不参与聚类、邻居查询、整理或画像生成。
    - 预设活跃记忆少于 30 条时两种触发都不启动：手动触发返回 `insufficient-memories`，自动触发只记跳过日志。
    - `archive` 归档活跃记忆；`merge` 必须经 `applyDreamMerge()` 原子完成，不得拆成多个独立写操作。
@@ -105,6 +110,7 @@ chatluna-livingmemory/
      WebUI 手工编辑的画像仍可被后续 Dream 覆盖。
 
 7. 模型工具、提示词与结构化输出
+   - 共用工具实现统一放在 `src/service/memory/tools/`，生产调用经该目录的 `createMemoryTool` 创建；主对话、Recall、Dream 各自选择暴露的工具并提供调用上下文，不复制工具实现，不共享任务状态。检查工具接收检查处理函数，范围校验、固化和覆盖登记由调用工作流负责，完成后才返回成功。
    - `src/service/prompts/` 是提示词与 Zod schema 的唯一来源；字段说明放在结果工具参数描述中，不在提示词正文重复。
    - 送入模型的记忆视图统一经 `renderMemoriesForModel` 渲染。
      只有模型需要引用记忆时才渲染 ID：主对话的 `living_memory_search` 渲染，Agentic Recall 与用户画像不渲染。

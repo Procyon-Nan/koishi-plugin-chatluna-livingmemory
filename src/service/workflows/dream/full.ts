@@ -1,0 +1,206 @@
+import { Context } from 'koishi'
+import type { ChatLunaChatModel } from 'koishi-plugin-chatluna/llm-core/platform/model'
+import type { ManualDreamVectorReader } from '../../../contracts/vector_index'
+import type {
+    DreamMemoryEntryRecord,
+    DreamMemoryRepository,
+    DreamSpeakerCoverage,
+    LivingMemoryConfig
+} from '../../../contracts/workflows'
+import type {
+    PresetPersonaResolver,
+    PresetSpeakerRecord
+} from '../../../contracts/memory'
+import { isModelConfigured, summarizeError } from '../../shared/utils'
+import { resolveAssistantLabel } from '../../memory/helpers'
+import { DreamClusterer } from './clustering'
+import type { DreamWorkerRunner } from './worker/protocol'
+import type { LivingMemoryUserProfileService } from '../../user_profile'
+import { addStats, createEmptyStats, formatDreamDetail } from './stats'
+import type { DreamRunResult } from './types'
+import { DreamUnitProcessor } from './unit_processor'
+import type { LivingMemoryLogger } from '../../logging/logger'
+
+type LivingMemoryDreamConfig = Pick<LivingMemoryConfig, 'mainModel'>
+
+export interface DreamRepository {
+    listDreamEntriesByPreset(
+        presetId: string
+    ): Promise<DreamMemoryEntryRecord[]>
+    listActiveMemorySpeakerKeys(presetId: string): Promise<string[]>
+}
+
+export class LivingMemoryDreamService {
+    private readonly clusterer: DreamClusterer
+    private readonly unitProcessor: DreamUnitProcessor
+
+    constructor(
+        private readonly ctx: Context,
+        private readonly config: LivingMemoryDreamConfig,
+        private readonly repository: DreamRepository,
+        mutations: DreamMemoryRepository,
+        private readonly speakerCoverage: DreamSpeakerCoverage,
+        vectors: ManualDreamVectorReader,
+        worker: DreamWorkerRunner,
+        private readonly logger: LivingMemoryLogger,
+        private readonly userProfiles: LivingMemoryUserProfileService,
+        private readonly presetPersona: PresetPersonaResolver
+    ) {
+        this.clusterer = new DreamClusterer(vectors, worker)
+        this.unitProcessor = new DreamUnitProcessor(mutations)
+    }
+
+    async run(
+        presetId: string,
+        logger?: LivingMemoryLogger
+    ): Promise<DreamRunResult> {
+        const runLogger =
+            logger ??
+            this.logger.with({
+                workflow: 'dream',
+                presetId
+            })
+        const entries = await this.repository.listDreamEntriesByPreset(presetId)
+        if (!isModelConfigured(this.config.mainModel)) {
+            return this.createSkipResult(entries.length, 'model-not-configured')
+        }
+
+        const model = await this.ctx.chatluna.createChatModel(
+            this.config.mainModel
+        )
+        if (model.value === undefined) {
+            return this.createSkipResult(entries.length, 'model-unavailable')
+        }
+
+        const chatModel = model.value
+        const assistantLabel = resolveAssistantLabel(presetId)
+        const presetPrompt = await this.presetPersona.resolve(presetId)
+        const speakers =
+            await this.speakerCoverage.ensurePresetSpeakersCoverage(presetId)
+        const result = await this.processEntries(
+            presetId,
+            assistantLabel,
+            presetPrompt,
+            entries,
+            speakers,
+            chatModel,
+            runLogger
+        )
+        const profileDetail = await this.regenerateUserProfilesAfterDream(
+            presetId,
+            chatModel,
+            runLogger
+        )
+        const detail = [result.detail, profileDetail].join('\n')
+
+        return { ...result, detail }
+    }
+
+    /**
+     * 整理阶段成功后重算画像。候选用户取全部活跃用户，而非本次受影响的用户，
+     * 因此整理阶段抛错时不必在此补算：下一次手动 Dream 依然覆盖全部用户，
+     * 画像陈旧性判据只会重算输入变过的那些。自动增量流程按累积的受影响用户
+     * 集合触发，该集合随本次运行结束即丢失，所以那侧必须在抛错前补算。
+     */
+    private async regenerateUserProfilesAfterDream(
+        presetId: string,
+        model: ChatLunaChatModel,
+        logger?: LivingMemoryLogger
+    ) {
+        try {
+            // 画像阶段不会执行时无需查询候选用户；此时 regenerate 在读取
+            // speakerKeys 之前即返回 disabled，由它统一给出跳过说明。
+            const speakerKeys = this.userProfiles.enabled
+                ? await this.repository.listActiveMemorySpeakerKeys(presetId)
+                : []
+            const result = await this.userProfiles.regenerate(
+                presetId,
+                speakerKeys,
+                model,
+                logger
+            )
+            return result.detail
+        } catch (error) {
+            const errorSummary = summarizeError(error)
+            const errorMessage =
+                error instanceof Error ? error.message : errorSummary
+            const detail = `user profiles failed: ${errorMessage}`
+            logger?.diagnostic('dream.user-profile.failed', {
+                error: errorSummary
+            })
+            return detail
+        }
+    }
+
+    private async processEntries(
+        presetId: string,
+        assistantLabel: string,
+        presetPrompt: string,
+        entries: DreamMemoryEntryRecord[],
+        speakers: PresetSpeakerRecord[],
+        model: ChatLunaChatModel,
+        logger?: LivingMemoryLogger
+    ): Promise<DreamRunResult> {
+        logger?.diagnostic('dream.processing.started', {
+            entries: entries.length
+        })
+        const clusters = await this.clusterer.buildClusters(
+            presetId,
+            entries,
+            logger
+        )
+
+        const stats = createEmptyStats()
+        const touchedMemoryIds = new Set<string>()
+
+        for (const cluster of clusters) {
+            const result = await this.unitProcessor.process({
+                assistantLabel,
+                presetPrompt,
+                presetId,
+                cluster,
+                speakers,
+                model,
+                touchedMemoryIds,
+                consolidationMode: 'manual',
+                logger
+            })
+            addStats(stats, result)
+            if (result.success === false) {
+                if (result.skipped === 0) {
+                    stats.skipped++
+                }
+                const reason = result.error.split(':', 1)[0]
+                logger?.diagnostic('dream.cluster.skipped', {
+                    clusterId: cluster.id,
+                    reason,
+                    error: result.error
+                })
+            }
+        }
+
+        return {
+            entryCount: entries.length,
+            clusterCount: clusters.length,
+            ...stats,
+            detail: formatDreamDetail(entries.length, clusters.length, stats)
+        }
+    }
+
+    private createSkipResult(
+        entryCount: number,
+        skippedReason: 'model-not-configured' | 'model-unavailable'
+    ): DreamRunResult {
+        return {
+            entryCount,
+            clusterCount: 0,
+            kept: 0,
+            merged: 0,
+            updated: 0,
+            archived: 0,
+            skipped: 0,
+            skippedReason,
+            detail: `dream skipped: ${skippedReason}`
+        }
+    }
+}

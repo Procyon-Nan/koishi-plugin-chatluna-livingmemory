@@ -1,0 +1,30 @@
+import { LivingMemoryCheckedMemoryTool } from './checked_memory_tool'
+import { LivingMemoryCreateMemoryTool } from './create_memory_tool'
+import { LivingMemoryDeleteMemoryTool } from './delete_memory_tool'
+import { LivingMemorySearchTool } from './embedding_search_tool'
+import { LivingMemoryGetMessagesTool } from './get_messages_tool'
+import { LivingMemoryMergeMemoriesTool } from './merge_memories_tool'
+import { LivingMemoryUpdateMemoryTool } from './update_memory_tool'
+
+export const createMemoryTool = {
+    search: (...args: ConstructorParameters<typeof LivingMemorySearchTool>) =>
+        new LivingMemorySearchTool(...args),
+    getMessages: (
+        ...args: ConstructorParameters<typeof LivingMemoryGetMessagesTool>
+    ) => new LivingMemoryGetMessagesTool(...args),
+    create: (
+        ...args: ConstructorParameters<typeof LivingMemoryCreateMemoryTool>
+    ) => new LivingMemoryCreateMemoryTool(...args),
+    update: (
+        ...args: ConstructorParameters<typeof LivingMemoryUpdateMemoryTool>
+    ) => new LivingMemoryUpdateMemoryTool(...args),
+    merge: (
+        ...args: ConstructorParameters<typeof LivingMemoryMergeMemoriesTool>
+    ) => new LivingMemoryMergeMemoriesTool(...args),
+    delete: (
+        ...args: ConstructorParameters<typeof LivingMemoryDeleteMemoryTool>
+    ) => new LivingMemoryDeleteMemoryTool(...args),
+    checked: (
+        ...args: ConstructorParameters<typeof LivingMemoryCheckedMemoryTool>
+    ) => new LivingMemoryCheckedMemoryTool(...args)
+}
