@@ -207,7 +207,6 @@ export class LivingMemoryExtractionCoordinator {
         private readonly formatter: ExtractionFormatter,
         private readonly extractor: ExtractionModel,
         private readonly presetPersona: PresetPersonaResolver,
-        private readonly queueAutoDream: (presetId: string) => void,
         private readonly logger: LivingMemoryLogger
     ) {}
 
@@ -538,9 +537,6 @@ export class LivingMemoryExtractionCoordinator {
         logger.diagnostic('extraction.completed', {
             extracted: extracted.length
         })
-        if (extracted.length > 0) {
-            this.queueAutoDream(scope.presetId)
-        }
     }
 
     private async recordFailedExtraction(

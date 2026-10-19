@@ -11,6 +11,7 @@ const createService = (options: {
     vectorStop: () => Promise<void>
     dreamStart: () => Promise<void>
     dreamStop: () => Promise<void>
+    stopDreamTasks?: () => Promise<void>
 }) => {
     const service = Object.create(
         ChatLunaLivingMemoryService.prototype
@@ -43,6 +44,9 @@ const createService = (options: {
                 beginStop: () => {}
             }
         },
+        dreamCoordinator: {
+            value: { stop: options.stopDreamTasks ?? (async () => {}) }
+        },
         dreamWorker: {
             value: { start: options.dreamStart, stop: options.dreamStop }
         }
@@ -53,6 +57,9 @@ const createService = (options: {
 it('starts and stops the Dream worker in service lifecycle order', async () => {
     const events: string[] = []
     const service = createService({
+        stopDreamTasks: async () => {
+            events.push('dream-tasks-stop')
+        },
         vectorStart: async () => {
             events.push('vector-start')
         },
@@ -73,6 +80,7 @@ it('starts and stops the Dream worker in service lifecycle order', async () => {
     assert.deepEqual(events, [
         'vector-start',
         'dream-start',
+        'dream-tasks-stop',
         'dream-stop',
         'vector-stop'
     ])

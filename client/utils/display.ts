@@ -32,6 +32,7 @@ const jobStatusLabels: Record<string, string> = {
     pending: '排队中',
     running: '运行中',
     completed: '已完成',
+    partial: '部分完成',
     failed: '已失败'
 }
 
@@ -42,6 +43,7 @@ const jobStatusTagTypes: Record<
     pending: 'info',
     running: 'warning',
     completed: 'success',
+    partial: 'warning',
     failed: 'danger'
 }
 

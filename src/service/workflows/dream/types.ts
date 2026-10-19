@@ -1,5 +1,4 @@
 import type { DreamMemoryEntryRecord } from '../../../contracts/workflows'
-import type { DreamOperation as SchemaDreamOperation } from '../../prompts/schema'
 
 export interface DreamCluster {
     id: string
@@ -15,25 +14,13 @@ export interface DreamOperationStats {
     skipped: number
 }
 
-export type DreamConsolidationMode =
-    | 'manual'
-    | 'incremental-batch'
-    | 'incremental-seed'
-
-export interface DreamExecutionResult extends DreamOperationStats {
-    consolidatedMemoryIds: Set<string>
-    mutatedMemoryIds: Set<string>
-}
-
 export interface DreamRunResult extends DreamOperationStats {
     entryCount: number
     clusterCount: number
-    skippedReason?: string
+    status: 'completed' | 'partial' | 'failed'
+    processedCount: number
+    unprocessedMemoryIds: string[]
+    skippedBatches: { batchId: string; memoryIds: string[]; reason: string }[]
+    error?: string
     detail: string
 }
-
-export type DreamOperation = SchemaDreamOperation
-
-export type DreamUnitResult =
-    | (DreamExecutionResult & { success: true })
-    | (DreamExecutionResult & { success: false; error: string })

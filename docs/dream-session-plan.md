@@ -4,6 +4,8 @@
 
 状态：用户已批准会话化与配套结构重构，按批实施，每批审查后由用户手动提交，再继续下一批。第 8 节为上下文缓存的源码核查与实现约束，不代表已验证真实供应商缓存命中。
 
+本次改造直接替换并移除旧 Dream 实现，不保留旧执行协议、兼容入口或降级路径。不得以兼容旧增量为理由保留旧代码，也不得为新旧并存提取共享抽象。第 3、4 批合并交付，新入口接入与旧实现删除同时完成。
+
 本文件记录本次讨论的最终决定。早期 `tmp/` 下的 Dream 草案和上下文交接文件仅作背景；与本文冲突的部分以本文为准。
 
 ## 1. 目标与范围
@@ -15,9 +17,9 @@
 - 沿用 `DreamClusterer.buildClusters()` 的分区、HDBSCAN、噪声整理和超大簇切分；每批最多 30 条。
 - 沿用现有系统提示词的角色、人设、事实约束和整理原则，只调整执行协议。
 - 以本地现有数据验证，不围绕假设的一万条记忆另设架构。
-- 增量 Dream 暂不改造行为，留待之后重做。本次只整理其文件归属；依赖的 `DreamUnitProcessor`、`DreamExecutor`、旧结构化结果 schema 和 `applyDreamMerge()` 暂时保留。
+- 增量 Dream 留待之后重新设计，本次移除旧增量执行链及其自动触发装配，不保留旧实现作为兼容路径，也不将自动增量触发改为自动全量执行。旧 `DreamUnitProcessor`、`DreamExecutor`、操作数组 schema 和 `applyDreamMerge()` 随生产切换一并删除。
 - 暂不拆分 `src/service/persistence/entries.ts`。
-- 原有触发门槛、预设隔离、Dream 任务串行和用户画像开关继续有效。
+- 活跃记忆至少 30 条的触发门槛、预设隔离、Dream 任务串行和用户画像开关继续有效。
 - 不新增断点续跑、持久化会话历史、主题树或新的聚类算法。
 
 已提交的基础工具：
@@ -27,7 +29,7 @@
 
 ## 2. 执行器与状态所有权
 
-LivingMemory 自行管理会话循环，复用 ChatLuna 的 `createOpenAIAgent` 执行每轮模型决策，复用 `compressChunk()` 生成历史摘要。不使用 `AgentRunner` 的完整循环，也不访问或改写其内部状态。
+LivingMemory 自行管理会话循环，复用 ChatLuna 公开导出的 `createOpenAIAgent` 执行每轮模型决策，使用公开模型接口发起独立的历史摘要调用。第三批实际接入时确认 `compressChunk()` 未通过 ChatLuna 包导出，无法供插件正常导入；因此调整为同样的摘要调用方式，不访问包内私有路径，也不修改 ChatLuna。不使用 `AgentRunner` 的完整循环，也不访问或改写其内部状态。
 
 一次任务持有以下状态，任务结束后释放：
 
@@ -64,7 +66,7 @@ LivingMemory 自行管理会话循环，复用 ChatLuna 的 `createOpenAIAgent` 
 - 失败或未处理记忆保留原有固化状态，不批量重置旧状态。
 - 批次失败不回滚其中已经成功的操作和固化。
 - 同轮多个工具按模型返回顺序串行执行，整轮结束后再判断批次完成情况。
-- 保留原始模型消息、工具调用 ID 和供应商相关元数据；一轮 assistant 工具调用消息只记录一次，并配齐相应工具结果。
+- 保留可解析的原始模型消息、工具调用 ID 和供应商相关元数据；一轮 assistant 工具调用消息只记录一次，并配齐相应工具结果。解析器拒绝的响应作为转义后的纠错数据追加，不重放损坏的调用消息，也不伪造工具执行结果。
 - 检索结果加入可访问范围，但检索本身不计为已处理。
 
 应用写入继续经过预设队列和仓库事务。新增的固化衔接必须区分“事实写入失败”和“事实已提交但索引未同步”，避免重复执行已经提交的合并。
@@ -124,13 +126,14 @@ LivingMemory 自行管理会话循环，复用 ChatLuna 的 `createOpenAIAgent` 
 - 固定阈值为当前请求上下文的 200,000 tokens，不是任务累计消费量。
 - 每次模型决策前检查，计入系统提示词、工具定义、会话消息和本轮新增内容。
 - 复用宿主 token 计数能力，但须验证计数有效；供应商用量可辅助校准，不依赖每个响应都返回用量。
-- 压缩后不能继续使用压缩前的 `input_tokens` 作为当前历史大小基线。
+- 压缩后不能继续使用压缩前的 `input_tokens` 作为当前历史大小基线。实现按宿主 `countMessageTokens()` 计数并按不可变消息缓存结果，工具开销通过只含系统消息的 `cropMessages()` 取得；不采用供应商 usage 校准，避免不同缓存口径混用。
 - 系统提示词原样保留。当前批次的完整输入以及本批全部模型、工具交互原样保留。
 - 只将当前批次起点之前的历史与已有摘要交给摘要生成；摘要记录整理结论、重要关联、约束、失败情况和待关注事项。
 - 不套用宿主 Agent 压缩中工具参数 300 字符、结果 500 字符的截断方式。
 - 摘要成功后再替换旧历史，随后重新计数。压缩失败不删除原历史，也不静默发送已无法容纳的请求。
 - 单批自身达到 200k 按当前 30 条记忆的场景暂不设计特殊机制，在本地验收时观察。
-- 核对实际模型能容纳 200k 输入及输出预算；不能通过静默降低阈值掩盖模型不适用。
+- 核对实际模型能容纳 200k 输入及输出预算；不能通过静默降低阈值掩盖模型不适用。按宿主声明的上下文容量扣除输出预算，不足 200k 时调用前失败；输出优先沿用明确配置的正数，未限定输出时在本任务调用级设为 4096。实际端点容量仍需真实环境验收。
+- 使用调用级 `maxTokenLimit` 避免宿主原有的低输入上限提前裁剪；请求投影仅去掉 assistant 的 `usage_metadata`，防止宿主使用压缩前基线。原始历史保留完整用量，内容、调用 ID、推理块、供应商签名及其他协议元数据继续保留。
 
 ## 7. 提示词与完整记忆视图
 
@@ -144,7 +147,7 @@ LivingMemory 自行管理会话循环，复用 ChatLuna 的 `createOpenAIAgent` 
 
 `src/service/prompts/memory_entries.ts` 继续承担字段渲染。现有搜索视图比 Dream 视图精简，不能直接用它替代完整批次输入。压缩前后均保留 ID、类型、正文、摘要、关键词、情绪、重要性、创建/更新时间及 speaker 标签等原有 Dream 信息。
 
-为了兼容未改造的增量流程，保留旧 Dream 提示词入口和结构化 schema，为全量增加会话式入口；共享稳定提示词片段，不将新工具协议注入旧增量流程。
+最终只保留会话式 Dream 提示词。删除旧操作数组协议、target 合并规则及其 schema；人设直接写在唯一的系统提示词构建函数内，不再为新旧流程共用而提取 `buildDreamIdentity()`。完整批次和独立压缩请求按实际发送时机构建；只使用一次的压缩文案直接放入对应函数，一行 XML 包裹复用 `prompt_format.ts`，不再新增专用包装函数。
 
 ## 8. 上下文缓存
 
@@ -227,8 +230,7 @@ Assistant / Tool：当前批次全部交互
 
 ```text
 src/service/workflows/dream/
-├── index.ts                     # 全量服务及其公开类型的导出
-├── coordinator.ts               # 触发门槛、预设互斥、创建并启动任务
+├── coordinator.ts               # 触发门槛、预设互斥、任务启动、取消与排空
 ├── job_runner.ts                # 任务生命周期、终态与结果落库
 ├── full.ts                      # 全量准备、聚类、会话执行与画像衔接
 ├── session/
@@ -236,21 +238,15 @@ src/service/workflows/dream/
 │   ├── state.ts                 # 目标、可访问与已处理集合、批次和覆盖结果
 │   ├── history.ts               # 追加式消息、token 预算、批次起点与压缩
 │   └── tools.ts                 # Dream 的可访问范围、固化与成功结果衔接
-├── incremental/
-│   ├── index.ts                 # 现有增量流程，不改行为
-│   ├── unit_processor.ts        # 增量单元的旧结构化输出、覆盖校验
-│   ├── executor.ts              # 增量的旧操作数组执行器
-│   └── types.ts                 # 旧执行协议的专属类型
 ├── clustering.ts                # 保留现有分批入口
 ├── partitioning.ts
 ├── partitioning/                # 原有分区实现，不移动
 ├── hdbscan/                     # 原有聚类算法，不移动
 ├── worker/                      # 原有 Worker，不移动
-├── stats.ts                     # 共用操作统计与结果描述
 └── types.ts                     # 确实共用的簇、统计与任务结果类型
 ```
 
-文件随对应功能落地，不提前建立空目录、空模块或占位 Service。聚类、分区和 Worker 算法保持原样。
+删除仅有转发的 `dream/index.ts`，调用方直接导入 `full.ts`；原 `stats.ts` 只剩单点初始化，直接移入会话状态。文件随对应功能落地，不提前建立空目录、空模块或占位 Service。聚类、分区和 Worker 算法保持原样。
 
 所有共用工具集中在原公共目录，按用途选择暴露面：
 
@@ -281,17 +277,17 @@ src/service/memory/tools/
 
 | 现有位置 | 目标位置或改动 | 时机 |
 | --- | --- | --- |
-| `dream/index.ts` 中的 `LivingMemoryDreamService` 和 `DreamRepository` | 移入 `dream/full.ts`，根 `index.ts` 保留原导入入口的导出 | 第 1 批 |
-| `dream/incremental.ts` | 移入 `dream/incremental/index.ts`，修正相对导入；外部 `dream/incremental` 路径继续有效 | 第 1 批 |
+| `dream/index.ts` 中的 `LivingMemoryDreamService` 和 `DreamRepository` | 第 1 批移入 `dream/full.ts`；第 3、4 批删除仅有转发的根 `index.ts`，调用方直接导入 `full.ts` | 第 1、3、4 批 |
+| `dream/incremental.ts` | 第 1 批移入 `dream/incremental/index.ts`；第 3、4 批随旧执行链整体删除 | 第 1、3、4 批 |
 | `dream/checked_memory_tool.ts` | 移入公共 `memory/tools/checked_memory_tool.ts`，检查处理改为注入函数；第 2 批绑定 Dream 范围校验、固化与成功登记 | 第 1、2 批 |
 | 主对话与 Recall 分散的工具构造 | 经 `memory/tools/index.ts` 的 `createMemoryTool` 创建，各调用方选择暴露面并传入依赖；Dream 后续复用 | 第 1、2 批 |
-| `dream/unit_processor.ts`、`dream/executor.ts` | 全量切换后移入 `dream/incremental/`；删除失去调用方的 manual 专属分支 | 第 4 批 |
-| `dream/types.ts` 中的 `DreamOperation`、`DreamConsolidationMode`、`DreamExecutionResult`、`DreamUnitResult` | 全量切换后移入 `dream/incremental/types.ts`，共享簇和统计类型留在原处 | 第 4 批 |
-| `src/service/prompts/dream.ts` | 保留旧提示词入口，增加会话提示词入口，复用稳定文本片段 | 第 3 批 |
+| `dream/unit_processor.ts`、`dream/executor.ts` | 生产切换时删除，并移除旧 `dream/incremental/` 执行链 | 第 4 批 |
+| `dream/types.ts` 中的 `DreamOperation`、`DreamConsolidationMode`、`DreamExecutionResult`、`DreamUnitResult` | 删除旧协议专属类型，仅保留新流程实际使用的簇、统计和结果类型 | 第 4 批 |
+| `src/service/prompts/dream.ts` | 替换为唯一的会话提示词，删除旧入口和仅为兼容提取的公共片段 | 第 3 批 |
 | `src/service/prompts/memory_entries.ts`、`prompt_format.ts` | 继续集中负责完整字段渲染和动态文本组合；仅在新输入确有需要时增加函数 | 第 3 批 |
-| `src/service/prompts/memory_tools.ts`、`schema.ts`、`index.ts` | 工具 schema 留在原层，保留增量 schema，按需导出会话提示词 | 第 2、3 批 |
+| `src/service/prompts/memory_tools.ts`、`schema.ts`、`index.ts` | 保留公共记忆工具 schema，删除旧 Dream 操作数组 schema 与导出 | 第 2、3 批 |
 
-第 1 至第 3 批期间，全量与增量仍共用根目录的旧单元处理器，不让全量依赖 `incremental/` 的私有执行器。第 4 批切换全量后一次性完成旧执行器归属迁移，不增加临时兼容转发文件。
+本次将新入口接入与旧执行链删除一并完成，不再安排将旧执行器迁入增量目录的步骤，也不建立兼容转发文件。
 
 会话状态由 `state.ts` 中的任务状态持有，优先采用普通对象和函数。`runner.ts` 决定执行顺序，`history.ts` 独占消息历史与压缩边界，`tools.ts` 将实际执行结果登记到任务状态。不要在工具、runner、job runner 中各保存一份覆盖集合。
 
@@ -302,9 +298,18 @@ src/service/memory/tools/
 - `createDreamSessionState()` 保存固定目标集合、批次位置、可访问与已处理集合、操作统计和跳过记录；`nextDreamBatch()` 过滤已覆盖条目，`getDreamCoverage()` 始终按原始目标计算遗漏，不把新增合并结果或检索到的额外记忆算入目标数。
 - `createDreamSessionTools()` 经公共工厂选择六个工具，通过注入的查询和变更依赖绑定固定预设。检索登记可访问 ID；来源查询及写入只接受已提供 ID；成功写入登记覆盖。未定义第二套工具类或执行 JSON 解析。
 - 应用层 `updateActiveMemory()` 与 `mergeActiveMemories()` 增加可选固化参数，逐层传至现有仓库事务；Dream 传入 `true`，主对话不传，原默认行为保持。更新和合并不再需要后置的独立固化调用。
-- `setMemoryConsolidation()` 增加 `requireAllActive` 调用选项；checked 启用它，在预设队列内读取整组 ID，若任何 ID 不存在、跨预设或已归档则在写入前失败。原增量调用仍沿用过滤活跃项的行为。
+- `setMemoryConsolidation()` 在预设队列内读取整组 ID，若任何 ID 不存在、跨预设或已归档则在写入前失败。删除增量调用后移除 `requireAllActive` 选项，直接执行整组活跃校验。
 - 更新与归档遇到既有 `LivingMemoryFactsCommittedError` 时登记成功，再交给公共工具生成警告；合并继续使用带新 ID 和警告的结果。checked 的处理函数返回警告数组，工具保留 ID、理由和警告，不将索引失败误报为事实失败。
 - 来源消息工具改为依赖 `LivingMemorySourceProvider`，主对话注入应用服务，Dream 注入固定预设的来源查询。无需伪造 Koishi Context，也不增加工作流专属的来源消息工具。
+
+第 3 批的具体接口衔接：
+
+- `runDreamSession()` 接收既有会话状态、固定工具、模型、人设、speaker 列表、任务 ID 和取消信号；生产装配与第 4 批合并交付。复用宿主 Agent 每次只做一轮决策，工具按返回顺序串行执行，整轮完成后判断覆盖。
+- `DreamSessionHistory` 独占消息和批次起点，`startBatch()` 追加完整批次，`prepare()` 计数并在达到 200k 时压缩更早批次；摘要成功且新输入低于阈值后才替换。计数失效、压缩失败或当前批次自身超限直接终止，保留已有事实成果。
+- 提示词只服务于新会话协议；完整系统规则保持连续可读，批次渲染复用现有字段格式，动态数据经既有格式化函数转义。取消为新旧提示词共用而建立的身份片段和旧协议保留要求。
+- 任务 ID 经公开调用参数 `id` 传至 requester，压缩使用独立的 `:compression` 后缀；覆盖参数合并模型既有配置与显式调用参数，不按名称猜协议，也不向所有 adapter 广播 Claude 参数。
+- `createLoggedModel()` 增加原始响应回调，用于保留 parser 处理前的消息；模型响应日志记录供应商原始计数及缓存明细，不计算跨协议命中率。日志用 `inputDetails`/`outputDetails` 命名明细，避免通用凭据脱敏误隐藏 token 明细。
+- 取消信号在模型调用前后及工具之间检查；明确的向量索引基础设施错误终止整个会话，普通请求或工具失败按既定轮次规则处理。
 
 ### 9.3 其他受影响文件
 
@@ -313,11 +318,12 @@ src/service/memory/tools/
 | `src/service/memory/tools/index.ts`、`checked_memory_tool.ts` 及现有工具 | 集中创建入口和共用工具实现；确有需要时最小调整类型化结果衔接，不复制整套工具实现 |
 | `src/plugins/living_memory_tools.ts`、`src/service/workflows/recall/agentic_recall.ts` | 共用工具创建入口，保留各自暴露面、配置、注册生命周期和搜索轨迹消费 |
 | `src/service/app/memory_mutation_service.ts` | 在既有预设队列、事实写入和索引同步中支持 Dream 固化；主对话调用保持原语义 |
-| `src/contracts/workflows.ts`、`src/service/persistence/repository.ts`、`entries.ts` | 仅补足必要的固化参数或仓库接口；事务仍由原串行入口开启；不拆分 `entries.ts`，不增加表 |
-| `src/service/app/living_memory_service.ts` | 装配新全量执行依赖，保留增量及其他工作流依赖 |
+| `src/contracts/workflows.ts`、`src/service/persistence/repository.ts`、`entries.ts` | 沿用已实现的固化接口，删除旧专用更新、合并事务及增量查询；事务仍由原串行入口开启，不拆分 `entries.ts`，不增加表 |
+| `src/service/app/living_memory_service.ts` | 装配新全量执行依赖，删除旧增量装配与自动触发，保留其他工作流 |
 | `src/contracts/memory.ts`、`src/service/workflows/job_tracker.ts`、`dream/job_runner.ts` | 加入 `partial`，根据结构化执行结果落库，保留中断前成果 |
 | `client/types.ts`、`client/utils/display.ts`、必要的 `client/components/jobs-tab.vue` | 展示“部分完成”和成功处理统计、遗漏原因；样式若需变动仍放独立 CSS |
 | `src/contracts/rpc.ts`、集成声明、`src/plugins/webui.ts`、`client/api.ts` | 核对现有任务列表的类型透传，仅修改实际受影响的声明，不另设 RPC |
+| `src/service/user_profile.ts`、`workflows/structured_output.ts` | 传递 Dream 取消信号，停止后续画像请求、纠错重试和写入；保持画像失败处理 |
 | `src/service/logging/model_calls.ts` | 复用日志通道记录供应商已返回的缓存用量及压缩阶段，不新建审计系统 |
 | `tests/` 中已有 Dream、工具、持久化、任务展示用例 | 迁移相关导入，按实际行为变化调整有效用例，不为纯搬文件新增测试 |
 | `AGENTS.md`、`CHANGELOG.md`、本方案 | 同步实际目录与新旧流程规则，记录每批结果；变更日志继续按版本提交约定维护 |
@@ -334,8 +340,8 @@ src/service/memory/tools/
 | --- | --- | --- |
 | 1：入口布局与实施方案 | 本方案落盘；全量移入 `full.ts`、增量入口移入 `incremental/`；checked 归入公共工具目录并改为处理函数注入；主对话和 Recall 统一工具创建入口；同步规范和变更记录 | 原有运行路径及导入入口仍有效，工具暴露面不变，任务状态与公共工具分离 |
 | 2：会话状态与工具执行 | `session/state.ts`、`tools.ts`、checked 成功衔接；必要的现有写入接口与固化支持 | 类型化结果能正确记录覆盖；失败不误记成功；新模块尚不替换生产全量入口 |
-| 3：会话循环与上下文 | `session/runner.ts`、`history.ts`、会话提示词、200k 压缩、公开调用参数及已有用量日志 | 换批、限次、完整当前批次保留和消息配对成立；不启用半成品生产路径 |
-| 4：全量切换与旧代码归位 | `full.ts` 接入会话执行器；`partial` 契约、任务落库、前端展示；旧执行器及专属类型迁入增量目录 | 全量切换、状态展示与依赖迁移在同一批完成；增量行为保持；没有失去调用方的旧全量逻辑 |
+| 3（与第 4 批合并）：会话循环与上下文 | `session/runner.ts`、`history.ts`、会话提示词、200k 压缩、公开调用参数及已有用量日志 | 换批、限次、完整当前批次保留和消息配对成立；不启用半成品生产路径 |
+| 4（与第 3 批合并）：全量切换与旧实现删除 | `full.ts` 接入会话执行器；`partial` 契约、任务落库、前端展示；删除旧增量执行链、旧执行器、旧提示词/schema、专属类型及合并事务 | 新入口接入与旧实现删除同时完成；不存在旧协议、兼容入口或回退执行路径 |
 | 5：真实环境验收与必要修正 | 使用本地现有数据核对完整 Dream、压缩、模型请求与跨协议缓存；仅修正实际发现的问题 | 明确区分已验证端点、尚未验证端点与静态保证；需要修正时再次审查后由用户提交，没有改动则只交付验收结果 |
 
 每批均运行适用的项目必需检查；纯路径迁移复用现有测试，不增加搬文件专用测试。真实模型与供应商缓存验收放到全量完成后，不在布局批次执行。
@@ -348,13 +354,15 @@ src/service/memory/tools/
 - 状态只有一份；派生的待处理集合和覆盖数量按需计算，不另设需要同步的缓存和计数器。
 - 不为每个文件创建类；只有共同状态或生命周期确有需要时才使用类。接口只服务于真实调用边界。
 - 严格审查针对当前批次的实际依赖、正确性和可维护性，不把审查要求转化为产品内的额外审计机制。
-- 先完成新旧流程分离，再删除确认已无调用方的逻辑。旧增量依赖的 `applyDreamMerge()` 留待增量重做时清理。
+- 旧实现直接移除：`applyDreamMerge()`、旧 Dream 更新接口、专属契约及其仓库实现随调用方一起清理；旧测试按新行为替换，不以保留测试为理由保留旧代码。
+- 函数或类型拆分必须服务于当前实际职责或真实复用。禁止为新旧兼容、未来扩展或仅仅统一外观添加抽象；一次性文案就地书写，一行转发优先使用既有函数。
 
 ### 9.6 批次记录
 
 - 第 1 批：用户已提交 `0076f0c`。全量与增量入口已迁移；checked 归入公共工具目录并改为注入处理函数；主对话与 Recall 共用 `createMemoryTool`，保持原工具暴露面和调用参数。修订后 `yarn lint`、`yarn test`（46 个文件、372 个用例）、`yarn atsc -p tsconfig.json --noEmit`、`yarn build:server` 和 diff 检查通过。另通过定向调用验证 checked 等待处理完成、ID 去重、理由传递和失败传播。构建仍报告未修改的 `worker_artifacts.ts` 的 CJS `import.meta` 警告。未发起真实模型或 Dream 验收。
-- 第 2 批：已完成会话状态、工具结果衔接及固化支持，严格审查未发现待修复问题，待用户提交。`yarn lint`、`yarn test`（46 个文件、375 个用例）、`yarn atsc -p tsconfig.json --noEmit`、`yarn build:server` 和 diff 检查通过。新增 SQLite 集成用例覆盖跨批次处理、合并结果再次使用、失效 ID 拒绝及索引失败后保留已提交成果。构建仍报告未修改的 `worker_artifacts.ts` 的 CJS `import.meta` 警告。生产全量入口尚未切换，未发起真实模型或 Dream 验收。
-- 第 3 至第 5 批：未开始。
+- 第 2 批：用户已提交 `8810ef9`。已完成会话状态、工具结果衔接及固化支持，严格审查未发现待修复问题。`yarn lint`、`yarn test`（46 个文件、375 个用例）、`yarn atsc -p tsconfig.json --noEmit`、`yarn build:server` 和 diff 检查通过。新增 SQLite 集成用例覆盖跨批次处理、合并结果再次使用、失效 ID 拒绝及索引失败后保留已提交成果。构建仍报告未修改的 `worker_artifacts.ts` 的 CJS `import.meta` 警告。生产全量入口尚未切换，未发起真实模型或 Dream 验收。
+- 第 3、4 批：本次合并交付，待用户提交。会话循环、200k 压缩与生产全量入口已接通；按实际覆盖落库 completed/partial/failed，详情保留成功处理数量、跳过原因及最终遗漏。删除旧全量/增量执行器、自动触发及其配置、操作数组 schema、专用更新与合并事务；删除无实际复用的身份片段、摘要包装、统计模块及根入口转发。checked 固化直接验证整组活跃 ID，无需旧增量兼容选项。公共工具描述允许使用已提供的 ID。Dream 停止先取消并排空任务，再关闭 Worker 和索引；画像阶段接收取消信号。审查覆盖生产装配、范围与成功登记、覆盖和状态落库、历史压缩、消息配对、预设队列、生命周期及前端状态透传，未发现待修复的重要问题。`yarn lint`、`yarn atsc -p tsconfig.json --noEmit`、`yarn test`（45 个文件、365 个用例）、`yarn build`（服务端、Worker 与客户端）和 diff 检查通过。构建仍有既有 CJS `import.meta` 与 Vite CJS API 弃用提示；测试中的数据库隔离警告来自损坏恢复用例。
+- 第 5 批：未开始。真实模型、实际记忆整理结果与供应商缓存命中仍需独立验收；本次只使用测试 requester 和内存 SQLite，没有对运行中的记忆执行 Dream。
 
 ## 10. 验收标准
 
@@ -367,7 +375,7 @@ src/service/memory/tools/
 7. 压缩保留当前完整批次和全部交互，压缩后计数不沿用失效的旧 usage 基线。
 8. 普通轮次和跨批次均保持稳定请求前缀；覆盖 OpenAI-compatible、Gemini、Claude 三类请求协议，核对调用 ID、按需缓存参数与元数据传递。在实际供应商返回字段时观察缓存命中，区分计数口径，不把结构检查当作真实命中证明。
 9. 保留完整工具调用消息及元数据，校验同轮多工具时的消息配对。
-10. 增量 Dream、主对话工具、预设隔离、speaker 关系、索引同步和用户画像既有行为不被误改。
+10. 旧 Dream 全量与增量执行链、旧操作数组协议及旧合并事务均已删除；主对话工具、预设隔离、speaker 关系、索引同步和用户画像的必要行为保持正确。
 
 实现后的检查：`yarn lint`、`yarn test`、`yarn atsc -p tsconfig.json --noEmit`、`yarn build:client`、`git diff --check`；若触及服务端构建、Worker 或包边界，再执行相应构建。
 

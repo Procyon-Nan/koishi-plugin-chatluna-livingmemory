@@ -16,10 +16,6 @@ import type {
 } from '../../contracts/vector_index'
 import type {
     AttributedMemoryItem,
-    DreamMemoryRepository,
-    DreamMergeInput,
-    DreamMemoryMutation,
-    DreamSpeakerCoverage,
     ExtractionMemoryWriter,
     ExtractionPayload
 } from '../../contracts/workflows'
@@ -46,10 +42,8 @@ type MemoryFactRepository = Pick<
     | 'listArchivedEntriesBefore'
     | 'createMemory'
     | 'updateMemory'
-    | 'updateMemoryForDream'
     | 'setMemoryConsolidation'
     | 'archiveActiveEntries'
-    | 'applyDreamMerge'
     | 'mergeMemories'
     | 'deleteMemory'
     | 'deleteEntries'
@@ -63,12 +57,7 @@ export const MEMORY_DELETE_BATCH_SIZE = 500
 const ARCHIVED_MEMORY_GRACE_PERIOD = 7 * Time.day
 const ARCHIVED_MEMORY_DECAY_PERIOD = 180 * Time.day
 
-export class LivingMemoryMutationService
-    implements
-        ExtractionMemoryWriter,
-        DreamMemoryRepository,
-        DreamSpeakerCoverage
-{
+export class LivingMemoryMutationService implements ExtractionMemoryWriter {
     private readonly queue = new SerialTaskQueue()
 
     constructor(
@@ -277,37 +266,10 @@ export class LivingMemoryMutationService
         )
     }
 
-    async updateMemoryForDream(
-        presetId: string,
-        id: string,
-        patch: DreamMemoryMutation | { status: 'archived' },
-        isConsolidated?: boolean
-    ) {
-        return this.runPresetMutation(presetId, async () => {
-            const result = await this.repository.updateMemoryForDream(
-                id,
-                patch,
-                isConsolidated
-            )
-            await this.applyCommittedMutation({
-                presetId: result.record.presetId,
-                upserts: [
-                    this.upsert(
-                        result.record,
-                        this.vectorAction(result.contentChanged)
-                    )
-                ],
-                deletes: []
-            })
-            return result
-        })
-    }
-
     async setMemoryConsolidation(
         presetId: string,
         ids: string[],
-        isConsolidated: boolean,
-        options: { requireAllActive?: boolean } = {}
+        isConsolidated: boolean
     ) {
         return this.runPresetMutation(presetId, async () => {
             const activeIds = (
@@ -315,14 +277,12 @@ export class LivingMemoryMutationService
             )
                 .filter((entry) => entry.status === 'active')
                 .map((entry) => entry.id)
-            if (options.requireAllActive) {
-                const active = new Set(activeIds)
-                const missingIds = ids.filter((id) => !active.has(id))
-                if (missingIds.length > 0) {
-                    throw new Error(
-                        `无法确认以下记忆的检查状态：${missingIds.join('、')}。请核对记忆 ID 后重试。`
-                    )
-                }
+            const active = new Set(activeIds)
+            const missingIds = ids.filter((id) => !active.has(id))
+            if (missingIds.length > 0) {
+                throw new Error(
+                    `无法确认以下记忆的检查状态：${missingIds.join('、')}。请核对记忆 ID 后重试。`
+                )
             }
             const records = await this.repository.setMemoryConsolidation(
                 presetId,
@@ -375,27 +335,6 @@ export class LivingMemoryMutationService
                 }
             )
             return { archived }
-        })
-    }
-
-    async applyDreamMerge(input: DreamMergeInput) {
-        return this.runPresetMutation(input.presetId, async () => {
-            const result = await this.repository.applyDreamMerge(input)
-            const upserts = [
-                this.upsert(
-                    result.target,
-                    this.vectorAction(result.targetContentChanged)
-                ),
-                ...result.archivedSources.map((source: MemoryEntryRecord) =>
-                    this.upsert(source, 'preserve')
-                )
-            ]
-            await this.applyCommittedMutation({
-                presetId: result.target.presetId,
-                upserts,
-                deletes: []
-            })
-            return result
         })
     }
 

@@ -4,7 +4,7 @@ import {
     isToolMessage,
     type OpenAIToolCall
 } from '@langchain/core/messages'
-import type { RunnableConfig } from '@langchain/core/runnables'
+import { type RunnableConfig, RunnableLambda } from '@langchain/core/runnables'
 import type { ChatLunaModelCallOptions } from 'koishi-plugin-chatluna/llm-core/platform/model'
 import { z } from 'zod'
 import { invokeStructuredOutput } from '../src/service/workflows/structured_output'
@@ -229,4 +229,33 @@ it('returns a parse error after three invalid structured responses', async () =>
     assert.equal(resolved.value, null)
     assert.match(resolved.parseError ?? '', /without calling submit_result/u)
     assert.equal(harness.invocations.length, 3)
+})
+
+it('propagates cancellation during a response without entering correction retries', async () => {
+    const controller = new AbortController()
+    let calls = 0
+    const model = {
+        withConfig: () =>
+            RunnableLambda.from(
+                async (_input: unknown, config?: RunnableConfig) => {
+                    assert.ok(config?.signal)
+                    calls++
+                    controller.abort(new Error('disposed'))
+                    return new AIMessage('invalid result')
+                }
+            )
+    } as unknown as Parameters<typeof invokeStructuredOutput>[0]['model']
+    await assert.rejects(
+        invokeStructuredOutput({
+            model,
+            signal: controller.signal,
+            prompt,
+            toolName,
+            toolDescription: '结果',
+            schema,
+            context
+        }),
+        /disposed|abort/i
+    )
+    assert.equal(calls, 1)
 })

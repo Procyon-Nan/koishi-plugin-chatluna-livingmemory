@@ -67,48 +67,6 @@ export const extractionResultSchema = z.object({
     memories: z.array(generatedMemorySchema),
     reason: requiredText('提取这些记忆或没有值得记录的内容的原因。')
 })
-export const dreamResultToolName = 'living_memory_dream_result'
-
-export const dreamResultSchema = z.object({
-    operations: z.array(
-        z.discriminatedUnion('action', [
-            z.object({
-                action: z.literal('keep'),
-                memoryIds: z
-                    .array(requiredText('来自当前 memory_entries 的记忆 id'))
-                    .min(1),
-                reason: requiredText('执行该操作的简短原因')
-            }),
-            z.object({
-                action: z.literal('update'),
-                memoryId: requiredText('来自当前 memory_entries 的记忆 id'),
-                memory: generatedMemorySchema,
-                reason: requiredText('执行该操作的简短原因')
-            }),
-            z.object({
-                action: z.literal('merge'),
-                targetMemoryId: requiredText(
-                    '来自当前 memory_entries 的记忆 id'
-                ),
-                sourceMemoryIds: z
-                    .array(requiredText('来自当前 memory_entries 的记忆 id'))
-                    .min(1),
-                memory: generatedMemorySchema,
-                reason: requiredText('执行该操作的简短原因')
-            }),
-            z.object({
-                action: z.literal('archive'),
-                memoryId: requiredText('来自当前 memory_entries 的记忆 id'),
-                reason: requiredText('执行该操作的简短原因')
-            })
-        ])
-    )
-})
-
-export type DreamOperation = z.output<
-    typeof dreamResultSchema
->['operations'][number]
-
 export const userProfileResultToolName = 'living_memory_user_profile_result'
 
 export const userProfileResultSchema = z.object({

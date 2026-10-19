@@ -2,10 +2,6 @@ import assert from 'node:assert/strict'
 import { computed } from '@vue/reactivity'
 import SQLiteDriver from '@koishijs/plugin-database-sqlite'
 import { Context } from 'koishi'
-import type {
-    MemoryEntryRecord,
-    MemoryMutationInput
-} from '../src/contracts/memory'
 import {
     DEFAULT_MEMORY_IMPORTANCE,
     MAX_MEMORY_KEYWORDS,
@@ -17,14 +13,7 @@ import {
 } from '../src/service/memory/entry_fields'
 import { LivingMemoryRepository } from '../src/service/persistence/repository'
 import { LivingMemoryExtractor } from '../src/service/workflows/extraction/extractor'
-import {
-    dreamResultSchema,
-    extractionResultToolName
-} from '../src/service/prompts/schema'
-import {
-    DreamExecutor,
-    type DreamExecutorRepository
-} from '../src/service/workflows/dream/executor'
+import { extractionResultToolName } from '../src/service/prompts/schema'
 import {
     createToolCallingModel,
     createToolCallMessage
@@ -113,85 +102,6 @@ it('applies shared field rules to extracted memories', async () => {
             speakerKeys: ['speaker-key']
         }
     ])
-})
-
-it('applies shared field rules to Dream mutations', async () => {
-    let capturedPatch: Partial<MemoryMutationInput> | undefined
-    const now = new Date()
-    const entry = {
-        id: 'memory-1',
-        presetId: 'preset-1',
-        speakerKeys: [],
-        type: 'fact' as const,
-        status: 'active' as const,
-        content: 'old content',
-        keywords: ['old'],
-        summary: 'old summary',
-        sentiment: 'old sentiment',
-        importance: 0.5,
-        sourceConversationId: 'conversation-1',
-        sourceLabel: null,
-        sourceOrigins: [],
-        isConsolidated: false,
-        createdAt: now,
-        updatedAt: now
-    } satisfies MemoryEntryRecord
-    const repository: DreamExecutorRepository = {
-        updateMemoryForDream: async (
-            _presetId,
-            _id,
-            patch,
-            _isConsolidated
-        ) => {
-            capturedPatch = patch
-            return { record: entry, contentChanged: false }
-        },
-        applyDreamMerge: async () => ({
-            target: entry,
-            archivedSources: [],
-            targetContentChanged: false
-        })
-    }
-    const executor = new DreamExecutor(repository)
-
-    const dreamKeywords = ['  alpha  ', 'alpha', 'keyword-0']
-    const operations = dreamResultSchema.parse({
-        operations: [
-            {
-                action: 'update',
-                memoryId: entry.id,
-                memory: {
-                    type: 'fact',
-                    content: '  dream content  ',
-                    summary: '  dream summary  ',
-                    sentiment: '  concerned  ',
-                    keywords: dreamKeywords,
-                    speakerLabels: [],
-                    importance: 0
-                },
-                reason: 'test update'
-            }
-        ]
-    }).operations
-    const stats = await executor.executeOperations(
-        entry.presetId,
-        { id: 'cluster-1', reason: 'test', entries: [entry] },
-        operations,
-        new Set(),
-        'manual',
-        []
-    )
-
-    assert.equal(stats.updated, 1)
-    assert.deepEqual(capturedPatch, {
-        type: 'fact',
-        content: 'dream content',
-        summary: 'dream summary',
-        sentiment: 'concerned',
-        keywords: normalizeMemoryKeywords(dreamKeywords),
-        speakerKeys: [],
-        importance: 0
-    })
 })
 
 it('applies shared field rules to manual persistence writes', async () => {

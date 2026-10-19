@@ -28,9 +28,8 @@ chatluna-livingmemory/
 │   │   ├── vector_index/        # PGlite/pgvector 索引服务、重建与 Worker
 │   │   ├── workflows/           # extraction、recall、dream 与任务状态
 │   │   │   └── dream/
-│   │   │       ├── full.ts      # 全量 Dream 编排，index.ts 保留对外导出
-│   │   │       ├── incremental/ # 增量 Dream 流程
-│   │   │       └── session/     # 全量会话状态与工具结果衔接，尚未切换入口
+│   │   │       ├── full.ts      # 全量准备、聚类、会话与画像衔接
+│   │   │       └── session/     # 会话循环、历史、处理状态与工具衔接
 │   │   └── user_profile.ts      # 用户画像分组、生成与渲染
 │   ├── index.ts                 # 插件入口、配置 schema 与可选集成装配
 │   ├── query.ts                 # 对外查询辅助接口
@@ -98,18 +97,14 @@ chatluna-livingmemory/
    - 提取结果必须填写 `reason` 说明原因，包含空 `memories` 数组的结果；无可记录内容时不新增记忆并正常推进本批游标。
 
 6. Dream 与用户画像
-   - 全量会话化按 `docs/dream-session-plan.md` 分批实施；当前已分离入口并实现会话状态与工具结果衔接，尚未切换生产入口，运行行为仍沿用旧流程。全量切换后再将共用的旧单元处理器和执行器归入增量目录，不提前改变下述执行规则。
-   - 新会话的目标、可访问范围和处理集合由 `dream/session/state.ts` 持有，覆盖集合不作为修改锁。工具通过公共工厂创建，Dream 在注入的依赖中校验范围并消费类型化写入结果。更新与合并的固化随事实一同提交；checked 在预设队列内验证整组 ID 活跃后固化；索引同步失败不撤销已提交操作的覆盖记录。
-   - Dream 只处理活跃记忆，归档记忆不参与聚类、邻居查询、整理或画像生成。
-   - 预设活跃记忆少于 30 条时两种触发都不启动：手动触发返回 `insufficient-memories`，自动触发只记跳过日志。
-   - `archive` 归档活跃记忆；`merge` 必须经 `applyDreamMerge()` 原子完成，不得拆成多个独立写操作。
-   - update 与 merge 完整覆盖 `speakerKeys` 和其余可变字段，不与旧关联用户取并集。
-   - 每个整理单元的模型结果必须用恰好一个操作覆盖单元内每条记忆（无需改动的用 `keep`），覆盖校验在落库前执行。
-     不达标走纠错重试，仍失败则该单元记为失败，不推进其记忆的固化。
-   - 同一任务内已处理过的记忆不得被再次操作；同一预设的 Dream 任务串行执行。
-   - 全量 Dream 的聚类交给 Dream Worker；增量 Dream 只处理待整理批次及其邻居，不得扩大为全库扫描。
-   - 用户画像只在 Dream 内生成（全量与增量均是），生成与注入受 `enableUserProfileInjection` 控制；speaker 发现与该开关无关。
-     WebUI 手工编辑的画像仍可被后续 Dream 覆盖。
+   - Dream 只有会话式全量实现，按 `docs/dream-session-plan.md` 运行；旧全量/增量执行链、操作数组协议、专用合并事务与自动触发已移除。增量流程留待重新设计，不保留兼容入口或回退路径，不为其添加共享层。
+   - 预设活跃记忆少于 30 条时不启动，返回 `insufficient-memories`；同一预设任务串行，停止服务时取消并等待 Dream 收尾后再关闭 Worker 和索引。
+   - Dream Worker 负责原有聚类，每批最多 30 条。固定目标覆盖启动时全部活跃记忆，包括已固化项；归档记忆不参与整理或画像生成，合并新记忆不扩大目标集合。
+   - `dream/session/state.ts` 是目标、可访问范围和处理集合的唯一所有者。工具成功才登记覆盖，覆盖集合不是修改锁；已经处理且仍活跃的记忆可再次更新、合并或归档。
+   - update 与 merge 完整覆盖可变字段和 `speakerKeys`，固化随事实提交。merge 复用公共 `mergeActiveMemories()` / `mergeMemories()`，原子创建新记忆并归档全部来源，不指定 target。checked 须说明无需改动的理由，在预设队列内验证整组 ID 活跃后固化。索引同步失败不撤销已提交操作的覆盖记录。
+   - 同轮工具串行执行完毕后判断本批覆盖，全部处理后自动换批；每批最多 60 轮，连续 3 轮无有效操作后跳过剩余项，成功检索也中断无效计数。完成为 `completed`，有成果但有遗漏为 `partial`，无成果或致命中断为 `failed`，保留处理统计、跳过原因和遗漏 ID。
+   - 普通历史只追加，当前输入达到 200k 时只压缩更早批次，保留当前批次完整字段及全部交互；不使用历史 usage 作计数基线。使用公开模型接口生成独立摘要，不修改 ChatLuna，不按模型名称猜测 adapter；沿用模型已有请求参数和任务 ID。
+   - 用户画像仅在 Dream 内生成，生成与注入受 `enableUserProfileInjection` 控制；speaker 发现与该开关无关。跳过批次仍执行后续画像阶段，致命中断不再开启画像阶段；画像失败保留已有错误处理，取消会停止后续生成和写入。WebUI 手工编辑的画像仍可被后续 Dream 覆盖。
 
 7. 模型工具、提示词与结构化输出
    - 共用工具实现统一放在 `src/service/memory/tools/`，生产调用经该目录的 `createMemoryTool` 创建；主对话、Recall、Dream 各自选择暴露的工具并提供调用上下文，不复制工具实现，不共享任务状态。检查工具接收检查处理函数，范围校验、固化和覆盖登记由调用工作流负责，完成后才返回成功。
@@ -126,7 +121,7 @@ chatluna-livingmemory/
      - 外部插件只有只读接口 `resolvePresetPersona` 与 `getPresetPersonaCard`，前者在无卡片时返回原文，不调模型、不落库。
    - 用户画像结果为 `update` 或 `keep`，均须填写理由；尚无画像时 `keep` 被拒绝并走纠错重试。
      `keep` 不改写正文，但记下本次输入，输入未变的后续 Dream 跳过该用户。
-   - `living_memory_get_messages` 按 `living_memory_search` 返回的 ID 查看来源消息；主动创建工具允许 speaker 关联为空。
+   - `living_memory_get_messages` 按会话已提供或检索返回的 ID 查看来源消息；主动创建工具允许 speaker 关联为空。
    - Agentic Recall 的工具参数持续出错达到上限时直接终止，不再额外发起 finalization 调用。
 
 8. 持久化、变更与缓存一致性

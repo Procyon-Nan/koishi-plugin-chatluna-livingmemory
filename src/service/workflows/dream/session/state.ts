@@ -1,4 +1,3 @@
-import { createEmptyStats } from '../stats'
 import type { DreamCluster, DreamOperationStats } from '../types'
 
 export interface DreamSessionState {
@@ -26,7 +25,7 @@ export function createDreamSessionState(
         ),
         availableMemoryIds: new Set(),
         processedMemoryIds: new Set(),
-        stats: createEmptyStats(),
+        stats: { kept: 0, merged: 0, updated: 0, archived: 0, skipped: 0 },
         skippedBatches: []
     }
 }

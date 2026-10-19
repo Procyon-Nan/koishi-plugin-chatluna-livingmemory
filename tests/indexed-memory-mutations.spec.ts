@@ -478,11 +478,10 @@ it('synchronizes a Dream merge as one vector index mutation', async () => {
             content: 'source'
         })
 
-        await mutations.applyDreamMerge({
+        const result = await mutations.mergeActiveMemories(
             presetId,
-            target,
-            sources: [source],
-            patch: {
+            [target.id, source.id],
+            {
                 speakerKeys: [],
                 type: 'fact',
                 content: 'merged content',
@@ -491,8 +490,8 @@ it('synchronizes a Dream merge as one vector index mutation', async () => {
                 sentiment: 'neutral',
                 importance: 0.8
             },
-            targetIsConsolidated: true
-        })
+            true
+        )
 
         assert.equal(sink.mutations.length, 1)
         assert.deepEqual(
@@ -502,7 +501,8 @@ it('synchronizes a Dream merge as one vector index mutation', async () => {
                 status: upsert.document.status
             })),
             [
-                { id: target.id, action: 'replace', status: 'active' },
+                { id: result.memory.id, action: 'replace', status: 'active' },
+                { id: target.id, action: 'preserve', status: 'archived' },
                 { id: source.id, action: 'preserve', status: 'archived' }
             ]
         )

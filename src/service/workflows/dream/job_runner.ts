@@ -2,131 +2,69 @@ import type { MemoryScope } from '../../../contracts/memory'
 import type { LivingMemoryLogger } from '../../logging/logger'
 import { summarizeError } from '../../shared/utils'
 import type { LivingMemoryJobTracker } from '../job_tracker'
-import type { LivingMemoryIncrementalDreamService } from './incremental'
 import type { LivingMemoryDreamService } from './full'
-import type { DreamRunResult } from './types'
-
-type DreamService = Pick<LivingMemoryDreamService, 'run'>
-type IncrementalDreamService = Pick<LivingMemoryIncrementalDreamService, 'run'>
-type DreamJobTracker = Pick<
-    LivingMemoryJobTracker,
-    'markRunning' | 'markCompleted' | 'markFailed'
->
-
-type DreamJobOutcome =
-    | { success: true; result: DreamRunResult }
-    | { success: false; result: DreamRunResult; error: string }
 
 export class LivingMemoryDreamJobRunner {
     constructor(
-        private readonly dream: DreamService,
-        private readonly incrementalDream: IncrementalDreamService,
-        private readonly jobTracker: DreamJobTracker,
+        private readonly dream: Pick<LivingMemoryDreamService, 'run'>,
+        private readonly jobTracker: Pick<
+            LivingMemoryJobTracker,
+            'markRunning' | 'markCompleted' | 'markFailed'
+        >,
         private readonly logger: LivingMemoryLogger
     ) {}
 
-    runManual(scope: MemoryScope, jobId: string) {
-        return this.run(scope, jobId, 'manual', async (logger) => ({
-            success: true,
-            result: await this.dream.run(scope.presetId, logger)
-        }))
-    }
-
-    runAutomatic(scope: MemoryScope, jobId: string, batchSize: number) {
-        return this.run(scope, jobId, 'automatic', async (logger) => {
-            const result = await this.incrementalDream.run(
-                scope.presetId,
-                batchSize,
-                logger
-            )
-            if (result.failed) {
-                return {
-                    success: false,
-                    result,
-                    error: 'automatic incremental dream failed'
-                }
-            }
-            return {
-                success: true,
-                result
-            }
-        })
-    }
-
-    private async run(
-        scope: MemoryScope,
-        jobId: string,
-        trigger: 'manual' | 'automatic',
-        workflow: (logger?: LivingMemoryLogger) => Promise<DreamJobOutcome>
-    ) {
-        const jobLogger = this.logger.with({
+    async runManual(scope: MemoryScope, jobId: string, signal?: AbortSignal) {
+        const logger = this.logger.with({
             workflow: 'dream',
             jobId,
-            presetId: scope.presetId,
-            trigger
+            presetId: scope.presetId
         })
-        let failureDetail: string | null = null
-        let workflowFailure: unknown
+        let detail: string | null = null
         try {
             await this.jobTracker.markRunning(jobId)
-            jobLogger.info('dream.started')
-
-            const outcome = await workflow(jobLogger)
-            const { result } = outcome
-            if (outcome.success === true) {
-                await this.jobTracker.markCompleted(jobId, result.detail)
-                this.logCompletion(jobLogger, result)
-                return
-            }
-
-            failureDetail = result.detail
-            workflowFailure = outcome.error
-            await this.jobTracker.markFailed(
+            logger.info('dream.started')
+            const result = await this.dream.run(
+                scope.presetId,
                 jobId,
-                outcome.error,
-                result.detail
+                logger,
+                signal
             )
-            jobLogger.warn('dream.failed', {
-                error: outcome.error,
-                detail: result.detail
-            })
-        } catch (error) {
-            if (failureDetail == null && trigger === 'automatic') {
-                failureDetail = `dream automatic incremental failed: ${summarizeError(error)}`
-            }
-
-            let jobStateUpdateError: string | undefined
-            try {
+            detail = result.detail
+            if (result.status === 'failed') {
                 await this.jobTracker.markFailed(
                     jobId,
-                    workflowFailure ?? error,
-                    failureDetail
+                    result.error ?? 'Dream 没有成功处理目标记忆。',
+                    detail
                 )
+            } else {
+                await this.jobTracker.markCompleted(
+                    jobId,
+                    detail,
+                    result.status
+                )
+            }
+            const level = result.status === 'failed' ? 'warn' : 'info'
+            logger[level](`dream.${result.status}`, {
+                entries: result.entryCount,
+                processed: result.processedCount,
+                clusters: result.clusterCount,
+                kept: result.kept,
+                merged: result.merged,
+                updated: result.updated,
+                archived: result.archived,
+                skipped: result.skipped,
+                error: result.error
+            })
+        } catch (error) {
+            let jobStateUpdateError: string | undefined
+            try {
+                await this.jobTracker.markFailed(jobId, error, detail)
             } catch (updateError) {
                 jobStateUpdateError = summarizeError(updateError)
             }
-            jobLogger.warn(
-                'dream.failed',
-                {
-                    detail: failureDetail,
-                    jobStateUpdateError,
-                    workflowError: workflowFailure
-                },
-                error
-            )
+            logger.warn('dream.failed', { detail, jobStateUpdateError }, error)
             throw error
         }
-    }
-
-    private logCompletion(logger: LivingMemoryLogger, result: DreamRunResult) {
-        logger.info('dream.completed', {
-            entries: result.entryCount,
-            clusters: result.clusterCount,
-            kept: result.kept,
-            merged: result.merged,
-            updated: result.updated,
-            archived: result.archived,
-            skipped: result.skipped
-        })
     }
 }

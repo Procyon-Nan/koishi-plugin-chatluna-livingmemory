@@ -10,8 +10,6 @@ const createConfig = (
     enableUserProfileInjection: false,
     mainModel: 'test-model',
     subModel: 'test/sub-model',
-    enableAutoDream: false,
-    autoDreamMemoryGrowthThreshold: 30,
     userProfileMinMemoryCount: 3,
     userProfileMemoryLimit: 20,
     recallIntervalMessages: 10,

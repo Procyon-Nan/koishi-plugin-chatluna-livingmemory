@@ -52,7 +52,6 @@ interface CoordinatorHarnessOptions {
     backfillBot?: ConversationBackfillBot
     extractWithTrace?: () => Promise<LivingMemoryExtractionTrace>
     createFailedJob?: ExtractionJobRepository['createFailedJob']
-    queueAutoDream?: (presetId: string) => void
     appendExtractedMemories?: ExtractionMemoryWriter['appendExtractedMemories']
 }
 
@@ -180,7 +179,6 @@ const createHarness = (
         formatter,
         extractor,
         { resolve: async () => '你是测试助手。' },
-        options.queueAutoDream ?? (() => {}),
         captured.logger
     )
     return {
@@ -632,15 +630,13 @@ describe('LivingMemoryExtractionCoordinator', () => {
         expect(harness.getExtractorInputs()[0]).toContain('q3')
     })
 
-    it('writes extracted memories and queues auto dream', async () => {
-        const dreamPresetIds: string[] = []
+    it('writes extracted memories without creating jobs', async () => {
         const trace = createExtractionTrace({
             extracted: [createExtractedMemory()]
         })
         const harness = createHarness({
             window: 2,
-            extractWithTrace: () => Promise.resolve(trace),
-            queueAutoDream: (presetId) => dreamPresetIds.push(presetId)
+            extractWithTrace: () => Promise.resolve(trace)
         })
         await queueExtraction(harness)
         harness.messageLog.appendReply(scope.conversationId, [
@@ -651,7 +647,6 @@ describe('LivingMemoryExtractionCoordinator', () => {
 
         await waitFor(() => harness.appended.length === 1, 'memory written')
         expect(harness.appended[0].extracted).toHaveLength(1)
-        expect(dreamPresetIds).toEqual([scope.presetId])
         expect(harness.jobStore.jobs).toHaveLength(0)
     })
 

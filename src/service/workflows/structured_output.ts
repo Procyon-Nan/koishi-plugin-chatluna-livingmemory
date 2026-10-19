@@ -47,6 +47,7 @@ export type StructuredOutputResult<T> =
 
 interface StructuredOutputOptions<Schema extends z.AnyZodObject> {
     model: ChatLunaChatModel
+    signal?: AbortSignal
     prompt: PromptMessages
     toolName: string
     toolDescription: string
@@ -327,6 +328,7 @@ export async function invokeStructuredOutput<Schema extends z.AnyZodObject>(
     }
 
     for (let attempt = 1; attempt <= structuredOutputMaxModelCalls; attempt++) {
+        options.signal?.throwIfAborted()
         activeAttempt = attempt
         activeModelCallId = undefined
         let decision: StructuredOutputDecision | null = null
@@ -340,6 +342,7 @@ export async function invokeStructuredOutput<Schema extends z.AnyZodObject>(
                     scratchpadEntries
                 } as StructuredOutputAgentInput,
                 {
+                    signal: options.signal,
                     configurable: {
                         model: options.model,
                         preset: options.context.presetId,
@@ -347,6 +350,7 @@ export async function invokeStructuredOutput<Schema extends z.AnyZodObject>(
                     }
                 }
             )
+            options.signal?.throwIfAborted()
             outputs.push(`[attempt ${attempt}]\n${formatDecision(decision)}`)
 
             const validated = validateDecision(
@@ -372,6 +376,7 @@ export async function invokeStructuredOutput<Schema extends z.AnyZodObject>(
             lastError = validated.error
             logParseFailure(attempt, lastError)
         } catch (error) {
+            options.signal?.throwIfAborted()
             if (isStructuredOutputModelInvocationError(error)) {
                 throw error
             }

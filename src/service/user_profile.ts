@@ -106,8 +106,10 @@ export class LivingMemoryUserProfileService {
         presetId: string,
         speakerKeys: string[],
         model: ChatLunaChatModel,
-        logger?: LivingMemoryLogger
+        logger?: LivingMemoryLogger,
+        signal?: AbortSignal
     ): Promise<UserProfileGenerationResult> {
+        signal?.throwIfAborted()
         const runLogger = logger ?? this.logger
         if (!this.enabled) {
             return {
@@ -196,6 +198,7 @@ export class LivingMemoryUserProfileService {
         }
 
         const assistantLabel = resolveAssistantLabel(presetId)
+        signal?.throwIfAborted()
         const presetPrompt = await this.presetPersona.resolve(presetId)
         const matchedEntryCount = profileGroups.reduce(
             (sum, group) => sum + group.matchedEntryCount,
@@ -210,6 +213,7 @@ export class LivingMemoryUserProfileService {
         let failed = 0
 
         for (const group of pendingGroups) {
+            signal?.throwIfAborted()
             const outcome = await this.generateProfileForGroup(
                 presetId,
                 group,
@@ -217,7 +221,8 @@ export class LivingMemoryUserProfileService {
                 assistantLabel,
                 presetPrompt,
                 logger,
-                runLogger
+                runLogger,
+                signal
             )
             if (outcome === 'generated') {
                 generated++
@@ -341,7 +346,8 @@ export class LivingMemoryUserProfileService {
         assistantLabel: string,
         presetPrompt: string,
         logger: LivingMemoryLogger | undefined,
-        runLogger: LivingMemoryLogger
+        runLogger: LivingMemoryLogger,
+        signal?: AbortSignal
     ): Promise<'generated' | 'kept' | 'failed'> {
         let structuredResult
         try {
@@ -352,6 +358,7 @@ export class LivingMemoryUserProfileService {
             })
             structuredResult = await invokeStructuredOutput({
                 model,
+                signal,
                 prompt,
                 toolName: userProfileResultToolName,
                 toolDescription:
@@ -389,6 +396,7 @@ export class LivingMemoryUserProfileService {
                           }
             })
         } catch (error) {
+            signal?.throwIfAborted()
             this.logProfileSkipped(runLogger, {
                 presetId,
                 speaker: group.speakerLabel,
@@ -408,6 +416,7 @@ export class LivingMemoryUserProfileService {
             return 'failed'
         }
 
+        signal?.throwIfAborted()
         const decision = structuredResult.value.decision
         const sourceMemoryIds = group.entries.map((entry) => entry.id)
         if (decision.action === 'keep') {

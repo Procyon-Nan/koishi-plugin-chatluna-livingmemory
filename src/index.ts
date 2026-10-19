@@ -103,19 +103,6 @@ export const Config: Schema<Config> = Schema.intersect([
             .default(10)
     }).description('工具配置'),
     Schema.object({
-        enableAutoDream: Schema.boolean()
-            .description('自动执行增量 Dream。')
-            .default(false),
-        autoDreamMemoryGrowthThreshold: Schema.number()
-            .min(10)
-            .max(200)
-            .step(1)
-            .description(
-                '未整理的记忆达到该条数时触发自动增量 Dream，每次最多整理该条数的记忆。'
-            )
-            .default(30)
-    }).description('Dream 流程配置'),
-    Schema.object({
         enableUserProfileInjection: Schema.boolean()
             .description('开启用户画像注入。')
             .default(false),

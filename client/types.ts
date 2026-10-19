@@ -171,8 +171,6 @@ export type MemoryConfigWarningCode =
     | 'recall-model-missing'
     | 'embedding-model-missing'
     | 'extract-model-missing'
-    | 'auto-dream-model-missing'
-    | 'auto-dream-embedding-model-missing'
 
 export interface MemoryConfigWarning {
     code: MemoryConfigWarningCode

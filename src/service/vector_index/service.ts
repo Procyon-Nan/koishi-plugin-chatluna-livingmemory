@@ -2,8 +2,6 @@ import { readdir, unlink } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import type { Context } from 'koishi'
 import type {
-    IncrementalDreamNeighborInput,
-    IncrementalDreamNeighborSearch,
     ManualDreamVectorReader,
     MemoryHybridSearchHit,
     MemoryHybridSearchInput,
@@ -62,8 +60,7 @@ export class LivingMemoryVectorIndexService
     implements
         ManualDreamVectorReader,
         MemoryIndexMutationSink,
-        MemoryVectorSearch,
-        IncrementalDreamNeighborSearch
+        MemoryVectorSearch
 {
     private readonly operationGate = new VectorIndexOperationGate()
     private readonly presetMutationQueue = new VectorIndexPresetMutationQueue(
@@ -300,33 +297,6 @@ export class LivingMemoryVectorIndexService
                 })
                 .slice(0, input.maxCandidates)
         })
-    }
-
-    async findConsolidatedNeighbors(
-        input: IncrementalDreamNeighborInput
-    ): Promise<string[]> {
-        return this.operationGate.run(() =>
-            this.runPresetMutation(input.presetId, async () => {
-                this.assertPresetReady(input.presetId)
-                const [seed] = await this.readRequiredVectors(input.presetId, [
-                    input.seedMemoryId
-                ])
-                const excludedMemoryIds = new Set(input.excludedMemoryIds)
-                excludedMemoryIds.add(input.seedMemoryId)
-                const hits = await this.requireWorker().queryKnn({
-                    presetId: input.presetId,
-                    types: null,
-                    isConsolidated: true,
-                    memoryStatus: 'active',
-                    limit: input.limit + excludedMemoryIds.size,
-                    vector: seed.vector
-                })
-                return hits
-                    .filter((hit) => !excludedMemoryIds.has(hit.memoryId))
-                    .slice(0, input.limit)
-                    .map((hit) => hit.memoryId)
-            })
-        )
     }
 
     private runPresetMutation<T>(presetId: string, task: () => Promise<T>) {

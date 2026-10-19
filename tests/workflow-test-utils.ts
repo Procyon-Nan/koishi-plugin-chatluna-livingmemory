@@ -198,6 +198,10 @@ export const waitFor = async (
 }
 
 export const createDreamRunResult = (): DreamRunResult => ({
+    status: 'completed',
+    processedCount: 0,
+    unprocessedMemoryIds: [],
+    skippedBatches: [],
     entryCount: 0,
     clusterCount: 0,
     kept: 0,

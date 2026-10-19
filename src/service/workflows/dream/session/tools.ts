@@ -122,8 +122,7 @@ export function createDreamSessionTools({
                 await mutations.setMemoryConsolidation(
                     presetId,
                     memoryIds,
-                    true,
-                    { requireAllActive: true }
+                    true
                 )
             } catch (error) {
                 if (!(error instanceof LivingMemoryFactsCommittedError)) {

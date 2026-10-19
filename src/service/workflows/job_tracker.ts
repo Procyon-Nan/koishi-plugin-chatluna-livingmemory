@@ -14,9 +14,13 @@ export class LivingMemoryJobTracker {
         })
     }
 
-    async markCompleted(id: string, detail: string) {
+    async markCompleted(
+        id: string,
+        detail: string,
+        status: 'completed' | 'partial' = 'completed'
+    ) {
         await this.repository.updateJob(id, {
-            status: 'completed',
+            status,
             finishedAt: new Date(),
             updatedAt: new Date(),
             detail

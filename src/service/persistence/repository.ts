@@ -24,8 +24,6 @@ import type {
 import type {
     AttributedMemoryItem,
     DreamMemoryEntryRecord,
-    DreamMergeInput,
-    DreamMemoryMutation,
     JobRepository,
     RecallRepository,
     SnapshotRepository,
@@ -242,17 +240,6 @@ export class LivingMemoryRepository
         return this.entries.countActiveEntries(presetId)
     }
 
-    countPendingEntries(presetId: string): Promise<number> {
-        return this.entries.countPendingEntries(presetId)
-    }
-
-    listPendingEntries(
-        presetId: string,
-        limit: number
-    ): Promise<MemoryEntryRecord[]> {
-        return this.entries.listPendingEntries(presetId, limit)
-    }
-
     getEntryById(id: string): Promise<MemoryEntryRecord | undefined> {
         return this.entries.getEntryById(id)
     }
@@ -298,14 +285,6 @@ export class LivingMemoryRepository
         return this.entries.updateMemory(id, patch, isConsolidated)
     }
 
-    updateMemoryForDream(
-        id: string,
-        patch: DreamMemoryMutation | { status: 'archived' },
-        isConsolidated?: boolean
-    ) {
-        return this.entries.updateMemoryForDream(id, patch, isConsolidated)
-    }
-
     setMemoryConsolidation(
         presetId: string,
         ids: string[],
@@ -320,10 +299,6 @@ export class LivingMemoryRepository
 
     archiveActiveEntries(presetId: string, ids: string[]) {
         return this.entries.archiveActiveEntries(presetId, ids)
-    }
-
-    applyDreamMerge(input: DreamMergeInput) {
-        return this.entries.applyDreamMerge(input)
     }
 
     mergeMemories(

@@ -1,9 +1,6 @@
 import assert from 'node:assert/strict'
 import type { MemoryEntryStatus } from '../src/contracts/memory'
-import type {
-    AttributedMemoryItem,
-    DreamMemoryMutation
-} from '../src/contracts/workflows'
+import type { AttributedMemoryItem } from '../src/contracts/workflows'
 import { LivingMemoryRepository } from '../src/service/persistence/repository'
 import {
     createTestContext,
@@ -15,7 +12,7 @@ const scope = {
     presetId: 'preset-1'
 }
 
-const createMergePatch = (): DreamMemoryMutation => ({
+const createMergePatch = (): AttributedMemoryItem => ({
     speakerKeys: ['replacement-speaker'],
     type: 'fact',
     content: 'merged content',
@@ -57,7 +54,7 @@ const createMemory = (
         [`${label}-speaker`]
     )
 
-it('atomically updates an active Dream merge and archives its sources', async () => {
+it('atomically creates a consolidated memory and archives all merge sources', async () => {
     await withRepository(async (ctx, repository) => {
         const target = await createMemory(repository, 'target', 'active')
         const source1 = await createMemory(repository, 'source-1', 'active')
@@ -79,27 +76,27 @@ it('atomically updates an active Dream merge and archives its sources', async ()
             { sourceOrigins }
         )
 
-        await repository.applyDreamMerge({
-            presetId: scope.presetId,
-            target,
-            sources: [source1, source2],
-            patch: createMergePatch(),
-            targetIsConsolidated: false
-        })
+        const merged = await repository.mergeMemories(
+            scope.presetId,
+            [target.id, source1.id, source2.id],
+            createMergePatch(),
+            true
+        )
 
         const entries = await repository.getEntriesByPresetAndIds(
             scope.presetId,
-            [target.id, source1.id, source2.id]
+            [merged.memory.id, target.id, source1.id, source2.id]
         )
         const entryById = new Map(entries.map((entry) => [entry.id, entry]))
-        const storedTarget = entryById.get(target.id)
+        const storedTarget = entryById.get(merged.memory.id)
 
         assert.equal(storedTarget?.content, 'merged content')
         assert.deepEqual(storedTarget?.speakerKeys, ['replacement-speaker'])
         assert.deepEqual(storedTarget?.sourceOrigins, sourceOrigins)
         assert.equal(entryById.get(source1.id)?.status, 'archived')
         assert.equal(entryById.get(source2.id)?.status, 'archived')
-        assert.equal(storedTarget?.isConsolidated, false)
+        assert.equal(storedTarget?.isConsolidated, true)
+        assert.equal(entryById.get(target.id)?.status, 'archived')
         assert.equal(entryById.get(source1.id)?.isConsolidated, false)
         assert.equal(entryById.get(source2.id)?.isConsolidated, false)
         assert.deepEqual(
@@ -112,7 +109,7 @@ it('atomically updates an active Dream merge and archives its sources', async ()
             [
                 {
                     speakerKey: 'replacement-speaker',
-                    memoryId: target.id
+                    memoryId: merged.memory.id
                 }
             ]
         )
@@ -306,43 +303,6 @@ it('drops legacy pending Dream query indexes', async () => {
     })
 })
 
-it('counts pending memories and selects the earliest stable batch', async () => {
-    await withRepository(async (ctx, repository) => {
-        const entries = await Promise.all([
-            createMemory(repository, 'memory-a', 'active'),
-            createMemory(repository, 'memory-b', 'active'),
-            createMemory(repository, 'memory-c', 'archived'),
-            createMemory(repository, 'memory-d', 'active')
-        ])
-        const firstTime = new Date('2026-08-01T00:00:00.000Z')
-        const secondTime = new Date('2026-08-02T00:00:00.000Z')
-        await ctx.database.set(
-            'living_memory_entry',
-            { id: { $in: [entries[0].id, entries[1].id] } },
-            { createdAt: firstTime }
-        )
-        await ctx.database.set(
-            'living_memory_entry',
-            { id: { $in: [entries[2].id, entries[3].id] } },
-            { createdAt: secondTime }
-        )
-        await repository.setMemoryConsolidation(
-            scope.presetId,
-            [entries[3].id],
-            true
-        )
-
-        assert.equal(await repository.countPendingEntries(scope.presetId), 2)
-        const selected = await repository.listPendingEntries(scope.presetId, 2)
-        assert.deepEqual(
-            selected.map((entry) => entry.id),
-            [entries[0].id, entries[1].id].sort((left, right) =>
-                left.localeCompare(right)
-            )
-        )
-    })
-})
-
 it('reads Dream entries without legacy vectors or source payloads', async () => {
     await withRepository(async (_ctx, repository) => {
         const entry = await createMemory(repository, 'memory-a', 'active')
@@ -369,54 +329,16 @@ it('rejects a Dream merge when a source no longer exists', async () => {
         const before = await repository.getEntryById(target.id)
 
         await assert.rejects(
-            repository.applyDreamMerge({
-                presetId: scope.presetId,
-                target,
-                sources: [
-                    {
-                        id: 'missing-source',
-                        updatedAt: new Date()
-                    }
-                ],
-                patch: createMergePatch(),
-                targetIsConsolidated: true
-            }),
-            /target or source memories changed/u
+            repository.mergeMemories(
+                scope.presetId,
+                [target.id, 'missing-source'],
+                createMergePatch(),
+                true
+            ),
+            /missing-source/u
         )
 
         const after = await repository.getEntryById(target.id)
         assert.deepEqual(after, before)
-    })
-})
-
-it('rejects a Dream merge when a source changed after clustering', async () => {
-    await withRepository(async (ctx, repository) => {
-        const target = await createMemory(repository, 'target', 'active')
-        const source = await createMemory(repository, 'source', 'active')
-        await ctx.database.set(
-            'living_memory_entry',
-            { id: source.id },
-            {
-                content: 'concurrently updated source',
-                updatedAt: new Date(+source.updatedAt + 1000)
-            }
-        )
-
-        await assert.rejects(
-            repository.applyDreamMerge({
-                presetId: scope.presetId,
-                target,
-                sources: [source],
-                patch: createMergePatch(),
-                targetIsConsolidated: true
-            }),
-            /target or source memories changed/u
-        )
-
-        const storedTarget = await repository.getEntryById(target.id)
-        const storedSource = await repository.getEntryById(source.id)
-        assert.equal(storedTarget?.content, 'target content')
-        assert.equal(storedSource?.content, 'concurrently updated source')
-        assert.equal(storedSource?.status, 'active')
     })
 })

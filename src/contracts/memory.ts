@@ -13,6 +13,7 @@ export const memoryJobStatuses = [
     'pending',
     'running',
     'completed',
+    'partial',
     'failed'
 ] as const
 

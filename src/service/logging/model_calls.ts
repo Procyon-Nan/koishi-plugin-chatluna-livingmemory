@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { BaseLanguageModelInput } from '@langchain/core/language_models/base'
-import type { BaseMessage } from '@langchain/core/messages'
+import { isAIMessage, type BaseMessage } from '@langchain/core/messages'
 import { type RunnableConfig, RunnableLambda } from '@langchain/core/runnables'
 import type { ChatLunaChatModel } from 'koishi-plugin-chatluna/llm-core/platform/model'
 import { stringifyModelContent, summarizeError } from '../shared/utils'
@@ -16,6 +16,7 @@ export interface LivingMemoryModelCallContext {
     attempt: number | (() => number)
     fields?: LivingMemoryLogFields | (() => LivingMemoryLogFields)
     onCallId?: (modelCallId: string) => void
+    onResponse?: (response: BaseMessage) => void
     promptLogging?: 'all' | 'first' | 'none'
     logResponseText?: boolean
 }
@@ -180,8 +181,26 @@ const invokeLoggedRunnable = async (
     }
     try {
         const response = await runnable.invoke(input, runConfig)
-        logger.diagnostic('model.response', {}, () =>
-            toResponseBlocks(response, context.logResponseText ?? true)
+        context.onResponse?.(response)
+        const usage = isAIMessage(response)
+            ? response.usage_metadata
+            : undefined
+        logger.diagnostic(
+            'model.response',
+            {
+                usage:
+                    usage === undefined
+                        ? undefined
+                        : {
+                              input: usage.input_tokens,
+                              output: usage.output_tokens,
+                              total: usage.total_tokens,
+                              // 使用日志字段名，避免 token_details 被凭据脱敏规则整组隐藏。
+                              inputDetails: usage.input_token_details,
+                              outputDetails: usage.output_token_details
+                          }
+            },
+            () => toResponseBlocks(response, context.logResponseText ?? true)
         )
         return response
     } catch (error) {

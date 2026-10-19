@@ -1,8 +1,7 @@
 import type { HumanMessage } from '@langchain/core/messages'
 import { Context, Service, Time } from 'koishi'
-import { LivingMemoryDreamService } from '../workflows/dream'
+import { LivingMemoryDreamService } from '../workflows/dream/full'
 import { LivingMemoryDreamWorkerClient } from '../workflows/dream/worker/client'
-import { LivingMemoryIncrementalDreamService } from '../workflows/dream/incremental'
 import { LivingMemoryDreamJobRunner } from '../workflows/dream/job_runner'
 import { LivingMemoryExtractor } from '../workflows/extraction/extractor'
 import { LivingMemoryMessageFormatter } from '../transcript/message_formatter'
@@ -186,32 +185,20 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             config,
             this.repository,
             this.mutations,
-            this.mutations,
             this.vectorIndex,
             this.dreamWorker,
-            this.memoryLogger,
-            this.userProfiles,
-            this.presetPersona
-        )
-        const incrementalDream = new LivingMemoryIncrementalDreamService(
-            this.ctx,
-            config,
-            this.repository,
-            this.mutations,
-            this.mutations,
-            this.vectorIndex,
+            this.searchEngine,
+            this,
             this.userProfiles,
             this.presetPersona
         )
         const jobTracker = new LivingMemoryJobTracker(this.repository)
         const dreamJobRunner = new LivingMemoryDreamJobRunner(
             dream,
-            incrementalDream,
             jobTracker,
             this.memoryLogger
         )
         return new LivingMemoryDreamCoordinator(
-            config,
             dreamJobRunner,
             this.repository,
             this.memoryLogger
@@ -231,7 +218,6 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             formatter,
             extractor,
             this.presetPersona,
-            (presetId) => this.queueAutoDreamIfThresholdReached(presetId),
             this.memoryLogger
         )
     }
@@ -347,6 +333,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     }
 
     protected async stop() {
+        await this.dreamCoordinator.stop()
         await this.archivedMemoryCleanup
         this.vectorIndex.beginStop()
         try {
@@ -365,23 +352,6 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             this.config,
             this.vectorIndex.getStatus()
         )
-    }
-
-    private queueAutoDreamIfThresholdReached(presetId: string) {
-        this.dreamCoordinator
-            .queueAutoIfThresholdReached(presetId)
-            .catch((error) => {
-                this.memoryLogger.warn(
-                    'dream.queue.failed',
-                    {
-                        workflow: 'dream',
-                        operation: 'queue-automatic',
-                        presetId,
-                        trigger: 'memory-threshold'
-                    },
-                    error
-                )
-            })
     }
 
     resolvePresetId(message: HumanMessage, fallbackPresetId?: string) {
@@ -629,7 +599,6 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             input,
             speakerKeys
         )
-        this.queueAutoDreamIfThresholdReached(scope.presetId)
         return memory
     }
 

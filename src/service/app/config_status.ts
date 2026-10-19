@@ -37,23 +37,6 @@ export const validateLivingMemoryConfig = (
         })
     }
 
-    if (config.enableAutoDream && !isModelConfigured(config.mainModel)) {
-        warnings.push({
-            code: 'auto-dream-model-missing',
-            field: 'mainModel',
-            message:
-                '自动 Dream 已启用，但未配置 mainModel；自动 Dream 任务将失败。'
-        })
-    }
-    if (config.enableAutoDream && !isModelConfigured(config.embeddingModel)) {
-        warnings.push({
-            code: 'auto-dream-embedding-model-missing',
-            field: 'embeddingModel',
-            message:
-                '自动 Dream 已启用，但未配置 embeddingModel；自动 Dream 任务将失败。'
-        })
-    }
-
     return warnings
 }
 

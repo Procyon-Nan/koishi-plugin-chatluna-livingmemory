@@ -41,71 +41,10 @@ export interface DreamMemoryEntryRecord {
     updatedAt: Date
 }
 
-export interface DreamMemoryMutation {
-    speakerKeys: string[]
-    type: MemoryEntryType
-    content: string
-    keywords: string[]
-    summary: string
-    sentiment: string
-    importance: number
-}
-
-export interface DreamMergeMemoryVersion {
-    id: string
-    updatedAt: Date
-}
-
-export interface DreamMergeInput {
-    presetId: string
-    target: DreamMergeMemoryVersion
-    sources: DreamMergeMemoryVersion[]
-    patch: DreamMemoryMutation
-    targetIsConsolidated: boolean
-}
-
-export interface MemoryUpdateResult {
-    record: MemoryEntryRecord
-    contentChanged: boolean
-}
-
-export interface DreamMergeResult {
-    target: MemoryEntryRecord
-    archivedSources: MemoryEntryRecord[]
-    targetContentChanged: boolean
-}
-
-export interface DreamMergeRepository {
-    applyDreamMerge(input: DreamMergeInput): Promise<DreamMergeResult>
-}
-
-export interface DreamMemoryRepository extends DreamMergeRepository {
-    updateMemoryForDream(
-        presetId: string,
-        id: string,
-        patch: DreamMemoryMutation | { status: 'archived' },
-        isConsolidated?: boolean
-    ): Promise<MemoryUpdateResult>
-    setMemoryConsolidation(
-        presetId: string,
-        ids: string[],
-        isConsolidated: boolean
-    ): Promise<MemoryEntryRecord[]>
-}
-
-/** 按消费方命名：Dream 渲染提示前的说话人注册表补齐，实现在应用变更服务。 */
-export interface DreamSpeakerCoverage {
-    ensurePresetSpeakersCoverage(
-        presetId: string
-    ): Promise<PresetSpeakerRecord[]>
-}
-
 export type MemoryConfigWarningCode =
     | 'recall-model-missing'
     | 'embedding-model-missing'
     | 'extract-model-missing'
-    | 'auto-dream-model-missing'
-    | 'auto-dream-embedding-model-missing'
 
 export interface MemoryConfigWarning {
     code: MemoryConfigWarningCode
@@ -150,8 +89,6 @@ export interface LivingMemoryConfig {
     enableUserProfileInjection: boolean
     mainModel: string
     subModel: string
-    enableAutoDream: boolean
-    autoDreamMemoryGrowthThreshold: number
     userProfileMinMemoryCount: number
     userProfileMemoryLimit: number
     recallIntervalMessages: number

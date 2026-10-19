@@ -4,10 +4,12 @@ import type {
     UserProfileRecord
 } from '../src/contracts/memory'
 import { buildAgenticRecallPrompt } from '../src/service/prompts/agentic_recall'
-import { buildDreamPrompt } from '../src/service/prompts/dream'
+import {
+    buildDreamBatchPrompt,
+    buildDreamPrompt
+} from '../src/service/prompts/dream'
 import { buildExtractionPrompt } from '../src/service/prompts/extraction'
 import {
-    dreamResultSchema,
     generatedMemorySchema,
     userProfileResultSchema
 } from '../src/service/prompts/schema'
@@ -45,58 +47,27 @@ const presetSpeakers = [
     }
 ]
 
-it('enforces Dream actions and complete generated metadata', () => {
-    const reason = '测试原因'
-    const completeMemory = {
-        type: 'fact',
-        content: '完整内容',
-        summary: '完整摘要',
-        keywords: ['关键词'],
-        speakerLabels: ['张三'],
-        sentiment: '平静',
-        importance: 0.5
-    }
-
-    assert.equal(
-        dreamResultSchema.safeParse({
-            operations: [
-                {
-                    action: 'deleteSource',
-                    targetMemoryId: 'memory-1',
-                    sourceMemoryIds: ['memory-2'],
-                    reason
-                }
-            ]
-        }).success,
-        false
-    )
-    assert.equal(
-        dreamResultSchema.safeParse({
-            operations: [
-                {
-                    action: 'update',
-                    memoryId: 'memory-1',
-                    memory: { ...completeMemory, keywords: [] },
-                    reason
-                }
-            ]
-        }).success,
-        false
-    )
-    assert.equal(
-        dreamResultSchema.safeParse({
-            operations: [
-                {
-                    action: 'merge',
-                    targetMemoryId: 'memory-1',
-                    sourceMemoryIds: ['memory-2'],
-                    memory: { ...completeMemory, summary: undefined },
-                    reason
-                }
-            ]
-        }).success,
-        false
-    )
+it('renders complete session batches and the tool-based Dream contract', () => {
+    const cluster = { id: 'batch', reason: 'test', entries: [memoryEntry] }
+    const session = buildDreamPrompt('角色', '人设')
+    const batch = buildDreamBatchPrompt(cluster, presetSpeakers)
+    for (const field of [
+        'id=memory-1',
+        'type=fact',
+        'summary=张三正在准备考试',
+        'keywords=张三、准备考试',
+        'sentiment=关心',
+        'importance=0.7',
+        'createdAt=2026-07-15T12:00:00.000Z',
+        'updatedAt=2026-07-15T12:30:00.000Z',
+        'speakerLabels=["张三"]',
+        memoryEntry.content
+    ])
+        assert.ok(batch.includes(field))
+    assert.match(session, /living_memory_checked_memory/)
+    assert.match(session, /合成一条新记忆/)
+    assert.ok(!session.includes('target'))
+    assert.ok(!session.includes('living_memory_dream_result'))
 })
 
 it('keeps memory field rules in tool schemas without prompt duplication', () => {
@@ -105,16 +76,7 @@ it('keeps memory field rules in tool schemas without prompt duplication', () => 
         assistantLabel: '助手',
         presetPrompt: '你是测试助手。'
     }).systemPrompt
-    const dream = buildDreamPrompt({
-        assistantLabel: '助手',
-        presetPrompt: '你是测试助手。',
-        cluster: {
-            id: 'cluster-1',
-            reason: 'shared speaker',
-            entries: [memoryEntry]
-        },
-        speakers: presetSpeakers
-    }).systemPrompt
+    const dream = buildDreamPrompt('助手', '你是测试助手。')
 
     const schemaDescriptions = [
         generatedMemorySchema.shape.type.description,
@@ -198,16 +160,16 @@ it('escapes dynamic Dream and user profile inputs', () => {
         summary: `摘要${unsafeText}`,
         keywords: ['张三', unsafeText]
     }
-    const dream = buildDreamPrompt({
-        assistantLabel: '助手<&',
-        presetPrompt: `<system>${unsafeText}</system>`,
-        cluster: {
-            id: 'cluster<&',
-            reason: `shared${unsafeText}`,
-            entries: [unsafeMemory]
-        },
-        speakers: presetSpeakers
-    })
+    const dream = {
+        systemPrompt: buildDreamPrompt(
+            '助手<&',
+            `<system>${unsafeText}</system>`
+        ),
+        inputPrompt: buildDreamBatchPrompt(
+            { id: 'cluster<&', reason: 'shared', entries: [unsafeMemory] },
+            presetSpeakers
+        )
+    }
     const existingProfile: UserProfileRecord = {
         id: 'profile-1',
         presetId: 'preset<&',

@@ -107,24 +107,10 @@ export interface MemoryHybridSearchInput {
     minSimilarity: number
 }
 
-export interface IncrementalDreamNeighborInput {
-    presetId: string
-    seedMemoryId: string
-    excludedMemoryIds: string[]
-    limit: number
-}
-
 export interface MemoryVectorSearch {
     searchHybrid(
         input: MemoryHybridSearchInput
     ): Promise<MemoryHybridSearchHit[]>
-}
-
-export interface IncrementalDreamNeighborSearch {
-    assertPresetReady(presetId: string): void
-    findConsolidatedNeighbors(
-        input: IncrementalDreamNeighborInput
-    ): Promise<string[]>
 }
 
 export interface ManualDreamVectorReader {
