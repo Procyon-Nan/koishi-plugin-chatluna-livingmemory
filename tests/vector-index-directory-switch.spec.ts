@@ -37,7 +37,7 @@ it.skipIf(process.platform !== 'win32')(
             const worker = new LivingMemoryVectorIndexWorkerClient(workerPath)
 
             await worker.open(activePath, previousPath)
-            await worker.createRebuildFile(rebuildPath, {
+            await worker.openRebuildDatabase(rebuildPath, {
                 schemaVersion: 4,
                 embeddingModelId: 'model-a',
                 dimension: 3,
@@ -46,7 +46,7 @@ it.skipIf(process.platform !== 'win32')(
                 generation: 'windows-switch',
                 builtAt: Date.now()
             })
-            await worker.prepareRebuild(0)
+            await worker.validateAndCloseRebuildDatabase(0)
 
             const switcher = new VectorIndexDirectorySwitch()
             await switcher.activate(activePath, rebuildPath, previousPath)

@@ -16,7 +16,7 @@ import type {
 } from 'koishi-plugin-chatluna/llm-core/platform/api'
 import { LivingMemoryLogger } from '../src/service/logging/logger'
 import { createMemoryTool } from '../src/service/memory/tools'
-import { buildDreamBatchPrompt } from '../src/service/prompts/dream'
+import { buildDreamMemoryBatchPrompt } from '../src/service/prompts/dream'
 import { DreamSessionHistory } from '../src/service/workflows/dream/session/history'
 import { runDreamSession } from '../src/service/workflows/dream/session/runner'
 import {
@@ -363,7 +363,7 @@ it('compresses only older batches and retains complete current input and tool ex
     )
     history.startBatch('早期记忆')
     history.append(new AIMessage('早期完成'))
-    const current = buildDreamBatchPrompt(cluster('current'), [])
+    const current = buildDreamMemoryBatchPrompt(cluster('current'), [])
     history.startBatch(current)
     const response = new AIMessage({
         content: '',
@@ -381,7 +381,7 @@ it('compresses only older batches and retains complete current input and tool ex
     })
     history.append(response, result)
     history.recordUsage(response)
-    const messages = await history.prepare([])
+    const messages = await history.prepareDecisionMessages([])
     assert.equal(requests.length, 1)
     assert.equal(requests[0].id, 'history:compression')
     assert.deepEqual(requests[0].tools, [])
@@ -394,7 +394,7 @@ it('compresses only older batches and retains complete current input and tool ex
     assert.deepEqual(messages[3].additional_kwargs, response.additional_kwargs)
     assert.equal(messages[4], result)
     history.append(new HumanMessage('继续当前批次'))
-    assert.equal((await history.prepare([])).length, 6)
+    assert.equal((await history.prepareDecisionMessages([])).length, 6)
     assert.equal(requests.length, 1)
     assert.equal(response.usage_metadata?.input_tokens, 200_000)
 })
@@ -409,7 +409,7 @@ it('uses only reported input for the threshold, without adding cache reads or lo
     )
     history.startBatch('旧'.repeat(310_000))
     history.startBatch('当前完整字段')
-    assert.equal((await history.prepare([])).length, 3)
+    assert.equal((await history.prepareDecisionMessages([])).length, 3)
     history.recordUsage(
         new AIMessage({
             content: '',
@@ -421,7 +421,7 @@ it('uses only reported input for the threshold, without adding cache reads or lo
             }
         })
     )
-    assert.equal((await history.prepare([])).length, 3)
+    assert.equal((await history.prepareDecisionMessages([])).length, 3)
     assert.equal(requests.length, 0)
     history.recordUsage(
         new AIMessage({
@@ -434,7 +434,7 @@ it('uses only reported input for the threshold, without adding cache reads or lo
         })
     )
     assert.match(
-        String((await history.prepare([]))[1].content),
+        String((await history.prepareDecisionMessages([]))[1].content),
         /dream_history_summary/
     )
     assert.equal(requests.length, 1)
@@ -475,9 +475,9 @@ it('leaves old history intact after a failed compression', async () => {
             }
         })
     )
-    await assert.rejects(history.prepare([]), /summary failed/)
+    await assert.rejects(history.prepareDecisionMessages([]), /summary failed/)
     fail = false
-    const messages = await history.prepare([])
+    const messages = await history.prepareDecisionMessages([])
     assert.equal(requests[0].input[1].content, requests[1].input[1].content)
     assert.equal(messages[2].content, '当前完整字段')
 })
@@ -492,7 +492,10 @@ it('rejects oversized input instead of letting the host drop current batch messa
     )
     history.startBatch('当前完整字段'.repeat(1000))
     history.append(new HumanMessage('继续'))
-    await assert.rejects(history.prepare([]), /输入超过模型可用预算/)
+    await assert.rejects(
+        history.prepareDecisionMessages([]),
+        /输入超过模型可用预算/
+    )
     assert.equal(requests.length, 0)
 })
 

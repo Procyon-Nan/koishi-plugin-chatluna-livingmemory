@@ -13,7 +13,7 @@ import type {
 import { invokeLoggedModel } from '../../../logging/model_calls'
 import { stringifyModelContent } from '../../../shared/utils'
 import type { LivingMemoryLogger } from '../../../logging/logger'
-import { buildDreamCompressionPrompt } from '../../../prompts/dream'
+import { buildDreamHistorySummaryPrompts } from '../../../prompts/dream'
 import { formatXmlBlock } from '../../../prompts/prompt_format'
 
 export const dreamCompressionThreshold = 200_000
@@ -55,13 +55,16 @@ export class DreamSessionHistory {
         this.messages.push(...messages)
     }
 
-    async prepare(tools: StructuredTool[], signal?: AbortSignal) {
+    async prepareDecisionMessages(
+        tools: StructuredTool[],
+        signal?: AbortSignal
+    ) {
         signal?.throwIfAborted()
         if (
             this.inputTokens !== undefined &&
             this.inputTokens >= dreamCompressionThreshold
         ) {
-            await this.compress(this.inputTokens, signal)
+            await this.summarizeEarlierBatches(this.inputTokens, signal)
         }
         signal?.throwIfAborted()
         this.logger.diagnostic('dream.context', {
@@ -96,7 +99,10 @@ export class DreamSessionHistory {
         return messages
     }
 
-    private async compress(tokensBefore: number, signal?: AbortSignal) {
+    private async summarizeEarlierBatches(
+        tokensBefore: number,
+        signal?: AbortSignal
+    ) {
         if (this.batchStart <= 1) {
             throw new Error(
                 '当前 Dream 批次已达到 200k，且没有可压缩的更早批次。'
@@ -113,7 +119,7 @@ export class DreamSessionHistory {
             attempt,
             inputTokens: tokensBefore
         })
-        const prompt = buildDreamCompressionPrompt(transcript)
+        const prompt = buildDreamHistorySummaryPrompts(transcript)
         const messages = [
             new SystemMessage(prompt.systemPrompt),
             new HumanMessage(prompt.inputPrompt)

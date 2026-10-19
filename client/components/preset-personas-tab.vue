@@ -77,7 +77,7 @@
                                 type="danger"
                                 plain
                                 :loading="resettingPresetId === item.presetId"
-                                @click="resetCard(item)"
+                                @click="regenerateCard(item)"
                             >
                                 重新生成
                             </el-button>
@@ -162,7 +162,7 @@ const onSaved = async () => {
     await refresh()
 }
 
-const resetCard = async (item: PresetPersonaCardInfo) => {
+const regenerateCard = async (item: PresetPersonaCardInfo) => {
     try {
         await ElMessageBox.confirm(
             `重新生成将丢弃 ${item.presetId} 的当前卡片（含手工编辑内容），` +

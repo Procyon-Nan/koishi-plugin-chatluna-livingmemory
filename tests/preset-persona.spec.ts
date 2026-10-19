@@ -132,7 +132,7 @@ const prunedCard = [presetLines[0], presetLines[1], presetLines[4]].join('\n')
 it('keeps original text and only deletes selected lines', async () => {
     const harness = createHarness([deleteLines([3, 4])])
 
-    const card = await harness.service.resolve('preset-1')
+    const card = await harness.service.resolveOrGenerateCardText('preset-1')
 
     assert.equal(card, prunedCard)
     assert.equal(harness.model.invocations.length, 1)
@@ -151,7 +151,7 @@ it('keeps CRLF line endings byte for byte in a pruned card', async () => {
     const harness = createHarness([deleteLines([3, 4])])
     harness.presetTexts.set('preset-1', presetLines.join('\r\n'))
 
-    const card = await harness.service.resolve('preset-1')
+    const card = await harness.service.resolveOrGenerateCardText('preset-1')
 
     assert.equal(
         card,
@@ -169,7 +169,7 @@ it('reads only the unrendered system messages as the preset text', async () => {
         ]
     })
 
-    const card = await harness.service.resolve('preset-1')
+    const card = await harness.service.resolveOrGenerateCardText('preset-1')
 
     // 占位符原样保留，非 system 消息不进入卡片原文
     assert.equal(card, `${systemText}\n\n保持角色。`)
@@ -178,7 +178,7 @@ it('reads only the unrendered system messages as the preset text', async () => {
 it('returns the preset text unchanged when nothing needs deletion', async () => {
     const harness = createHarness([deleteLines([])])
 
-    const card = await harness.service.resolve('preset-1')
+    const card = await harness.service.resolveOrGenerateCardText('preset-1')
 
     assert.equal(card, presetText)
     assert.equal(harness.model.invocations.length, 1)
@@ -189,7 +189,7 @@ it('returns the preset text unchanged when nothing needs deletion', async () => 
 it('falls back to the raw text when deletion exceeds the ratio guard', async () => {
     const harness = createHarness([deleteLines([1, 2, 3, 4, 5])])
 
-    const card = await harness.service.resolve('preset-1')
+    const card = await harness.service.resolveOrGenerateCardText('preset-1')
 
     assert.equal(card, presetText)
     assert.ok(
@@ -200,7 +200,7 @@ it('falls back to the raw text when deletion exceeds the ratio guard', async () 
     // 守卫回退是正常结果：照常落库，后续解析命中落库行不再调用模型
     assert.equal(harness.upserts.length, 1)
     assert.equal(harness.upserts[0].usedRawFallback, true)
-    const again = await harness.service.resolve('preset-1')
+    const again = await harness.service.resolveOrGenerateCardText('preset-1')
     assert.equal(again, presetText)
     assert.equal(harness.model.invocations.length, 1)
 })
@@ -208,7 +208,7 @@ it('falls back to the raw text when deletion exceeds the ratio guard', async () 
 it('retries with a correction when line numbers fall out of range', async () => {
     const harness = createHarness([deleteLines([99]), deleteLines([3, 4])])
 
-    const card = await harness.service.resolve('preset-1')
+    const card = await harness.service.resolveOrGenerateCardText('preset-1')
 
     assert.equal(harness.model.invocations.length, 2)
     assert.doesNotMatch(card, /draw_image/u)
@@ -228,14 +228,14 @@ it('falls back to the raw text when every response is invalid', async () => {
         new AIMessage('plain text three')
     ])
 
-    const card = await harness.service.resolve('preset-1')
+    const card = await harness.service.resolveOrGenerateCardText('preset-1')
 
     assert.equal(card, presetText)
     assert.equal(harness.model.invocations.length, 3)
     assert.equal(harness.upserts.length, 0)
     // 模型失败回退不落库：下次解析重新调用模型（第 4 次因响应耗尽抛错，
     // 同样走 invoke-failed 回退，仍不落库）
-    const retried = await harness.service.resolve('preset-1')
+    const retried = await harness.service.resolveOrGenerateCardText('preset-1')
     assert.equal(retried, presetText)
     assert.equal(harness.model.invocations.length, 4)
     assert.equal(harness.upserts.length, 0)
@@ -246,7 +246,7 @@ it('reuses a persisted card without a model call when the hash matches', async (
         stored: [storedCard({ card: 'cached card' })]
     })
 
-    const card = await harness.service.resolve('preset-1')
+    const card = await harness.service.resolveOrGenerateCardText('preset-1')
 
     assert.equal(card, 'cached card')
     assert.equal(harness.model.invocations.length, 0)
@@ -259,7 +259,7 @@ it('regenerates a generated card when the preset text changes', async () => {
     })
     harness.presetTexts.set('preset-1', `${presetText}\n你喜欢猫。`)
 
-    const card = await harness.service.resolve('preset-1')
+    const card = await harness.service.resolveOrGenerateCardText('preset-1')
 
     assert.equal(card, `${presetText}\n你喜欢猫。`)
     assert.equal(harness.model.invocations.length, 1)
@@ -275,7 +275,7 @@ it('keeps serving a manual card after the preset text changes', async () => {
     })
     harness.presetTexts.set('preset-1', `${presetText}\n你喜欢猫。`)
 
-    const card = await harness.service.resolve('preset-1')
+    const card = await harness.service.resolveOrGenerateCardText('preset-1')
 
     assert.equal(card, 'manual card')
     assert.equal(harness.model.invocations.length, 0)
@@ -284,11 +284,14 @@ it('keeps serving a manual card after the preset text changes', async () => {
 
 it('serves a saved manual card on the next resolve', async () => {
     const harness = createHarness([deleteLines([3, 4])])
-    await harness.service.resolve('preset-1')
+    await harness.service.resolveOrGenerateCardText('preset-1')
 
     await harness.service.saveManualCard('preset-1', 'manual card')
 
-    assert.equal(await harness.service.resolve('preset-1'), 'manual card')
+    assert.equal(
+        await harness.service.resolveOrGenerateCardText('preset-1'),
+        'manual card'
+    )
     assert.equal(harness.model.invocations.length, 1)
 })
 
@@ -297,7 +300,7 @@ it('keeps cards of presets with identical text apart', async () => {
         stored: [storedCard({ card: 'manual card', source: 'manual' })]
     })
 
-    const card = await harness.service.resolve('preset-2')
+    const card = await harness.service.resolveOrGenerateCardText('preset-2')
 
     assert.equal(card, prunedCard)
     assert.equal(harness.model.invocations.length, 1)
@@ -309,7 +312,7 @@ it('does not overwrite a manual card saved while a card is being generated', asy
     const gate = createModelGate()
     const harness = createHarness([deleteLines([3, 4])], { modelGate: gate })
 
-    const resolving = harness.service.resolve('preset-1')
+    const resolving = harness.service.resolveOrGenerateCardText('preset-1')
     await gate.reached
     await harness.service.saveManualCard('preset-1', 'manual card')
     gate.open()
@@ -333,7 +336,7 @@ it('does not write back a card generated across a preset clear', async () => {
     const gate = createModelGate()
     const harness = createHarness([deleteLines([3, 4])], { modelGate: gate })
 
-    const resolving = harness.service.resolve('preset-1')
+    const resolving = harness.service.resolveOrGenerateCardText('preset-1')
     await gate.reached
     await harness.service.clearCard('preset-1')
     gate.open()
@@ -448,7 +451,7 @@ it('regenerates a card on reset and replaces the manual row', async () => {
         ]
     })
 
-    await harness.service.resetCard('preset-1')
+    await harness.service.regenerateCard('preset-1')
 
     assert.equal(harness.model.invocations.length, 1)
     assert.equal(harness.rows.get('preset-1')?.source, 'generated')
@@ -467,7 +470,7 @@ it('keeps the stored card and reports an error when regeneration fails', async (
     })
 
     await assert.rejects(
-        () => harness.service.resetCard('preset-1'),
+        () => harness.service.regenerateCard('preset-1'),
         /persona card generation failed: invoke-failed/u
     )
     assert.equal(harness.rows.get('preset-1')?.source, 'manual')

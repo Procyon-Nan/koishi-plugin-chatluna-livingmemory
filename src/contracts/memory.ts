@@ -254,7 +254,7 @@ export interface PresetPersonaCardInfo {
  * `LivingMemoryPresetPersonaService` 实现。
  */
 export interface PresetPersonaResolver {
-    resolve(presetId: string): Promise<string>
+    resolveOrGenerateCardText(presetId: string): Promise<string>
 }
 
 export interface MemoryMutationInput {

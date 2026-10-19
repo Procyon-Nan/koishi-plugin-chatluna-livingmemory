@@ -286,7 +286,7 @@ export class LivingMemoryVectorIndexDatabase {
         return markVectorIndexPresetState(this.requireDatabase(), status)
     }
 
-    async createRebuildFile(
+    async openRebuildDatabase(
         databaseDirectory: string,
         manifest: MemoryVectorIndexManifest
     ): Promise<VectorIndexInspection> {
@@ -320,7 +320,7 @@ export class LivingMemoryVectorIndexDatabase {
         })
     }
 
-    async prepareRebuild(expectedCount: number) {
+    async validateAndCloseRebuildDatabase(expectedCount: number) {
         const database = this.requireRebuildDatabase()
         const indexedCount = await countVectorIndexMemories(database)
         if (indexedCount !== expectedCount) {

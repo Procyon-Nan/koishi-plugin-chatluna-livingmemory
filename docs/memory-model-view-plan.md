@@ -8,7 +8,7 @@
 
 本次解决三个问题：
 
-- Dream 的字段由 `formatMemoryEntryForPrompt()` 与 `buildDreamBatchPrompt()` 分别拼装，speaker 标签在外部补写。
+- Dream 的字段由 `formatMemoryEntryForPrompt()` 与 `buildDreamMemoryBatchPrompt()` 分别拼装，speaker 标签在外部补写。
 - Dream 与搜索、画像重复定义 ID、类型、日期、情绪和正文的输出格式。
 - 同一个可空字段存在两种显示规则：Dream 输出空赋值行，搜索和画像省略该行。
 

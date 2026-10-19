@@ -16,7 +16,7 @@ const renderNumberedLines = (lines: string[]) => {
  * 任务是把预设原文中与人格无关的纯操作性内容按行剔除：模型只在编号空间里
  * 选择要删除的行，保留部分由调用方按原字节拼接，因此不存在改写正文的风险。
  */
-export const buildPersonaCardPrompt = (
+export const buildPersonaCardPrompts = (
     input: PersonaCardPromptInput
 ): PromptMessages => {
     const systemPrompt = [

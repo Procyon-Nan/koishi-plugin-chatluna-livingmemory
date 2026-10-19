@@ -28,9 +28,9 @@ import { createDreamSessionTools } from '../src/service/workflows/dream/session/
 import {
     createDreamSessionState,
     getDreamCoverage,
-    nextDreamBatch,
+    advanceDreamBatch,
     pendingDreamMemoryIds,
-    skipDreamBatch
+    recordSkippedDreamBatch
 } from '../src/service/workflows/dream/session/state'
 
 const presetId = 'preset-indexed-mutations'
@@ -186,7 +186,7 @@ it('tracks Dream coverage across batches and reuses merged memories', async () =
             tools.some((tool) => tool.name === 'living_memory_create_memory'),
             false
         )
-        nextDreamBatch(state)
+        advanceDreamBatch(state)
         await invoke('search', { searchTexts: ['关联记忆'] })
         assert.equal(state.availableMemoryIds.has(outside.id), true)
         assert.equal(getDreamCoverage(state).processedCount, 0)
@@ -205,9 +205,9 @@ it('tracks Dream coverage across batches and reuses merged memories', async () =
             memoryIds: [d.id],
             reason: '内容完整'
         })
-        skipDreamBatch(state, 'round-limit')
+        recordSkippedDreamBatch(state, 'round-limit')
         assert.deepEqual(
-            nextDreamBatch(state)?.entries.map((entry) => entry.id),
+            advanceDreamBatch(state)?.entries.map((entry) => entry.id),
             [e.id]
         )
         await invoke('checked_memory', {
@@ -219,7 +219,7 @@ it('tracks Dream coverage across batches and reuses merged memories', async () =
             memory: sessionMemory
         })
         await invoke('delete_memory', { memoryId: e.id })
-        assert.equal(nextDreamBatch(state), undefined)
+        assert.equal(advanceDreamBatch(state), undefined)
         assert.deepEqual(getDreamCoverage(state), {
             targetCount: 5,
             processedCount: 5,
@@ -264,7 +264,7 @@ it('retains successful Dream coverage when only index synchronization fails', as
         const { state, invoke } = createSession(repository, mutations, [
             entries
         ])
-        nextDreamBatch(state)
+        advanceDreamBatch(state)
         const outputs = [
             JSON.parse(
                 await invoke('update_memory', {
@@ -324,7 +324,7 @@ it('rejects unavailable or stale Dream targets before recording successful cover
         const { state, invoke } = createSession(repository, mutations, [
             [active, stale]
         ])
-        nextDreamBatch(state)
+        advanceDreamBatch(state)
         await repository.archiveActiveEntries(presetId, [stale.id])
         await assert.rejects(
             invoke('checked_memory', {

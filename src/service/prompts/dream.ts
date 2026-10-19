@@ -7,7 +7,7 @@ import {
     type PromptMessages
 } from './prompt_format'
 
-export const buildDreamBatchPrompt = (
+export const buildDreamMemoryBatchPrompt = (
     cluster: DreamCluster,
     speakers: PresetSpeakerRecord[]
 ) => {
@@ -24,7 +24,7 @@ export const buildDreamBatchPrompt = (
     ].join('\n')
 }
 
-export const buildDreamPrompt = (
+export const buildDreamSystemPrompt = (
     assistantLabel: string,
     presetPrompt: string
 ) =>
@@ -72,7 +72,7 @@ export const buildDreamPrompt = (
         '</session_contract>'
     ].join('\n')
 
-export const buildDreamProgressPrompt = (
+export const buildDreamTurnFeedbackPrompt = (
     pendingMemoryIds: string[],
     feedback: string
 ) =>
@@ -84,7 +84,7 @@ export const buildDreamProgressPrompt = (
         ].join('\n')
     ).join('\n')
 
-export const buildDreamCompressionPrompt = (
+export const buildDreamHistorySummaryPrompts = (
     transcript: string
 ): PromptMessages => ({
     systemPrompt:

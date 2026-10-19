@@ -19,17 +19,17 @@ import type { PresetSpeakerRecord } from '../../../../contracts/memory'
 import type { LivingMemoryLogger } from '../../../logging/logger'
 import { createLoggedModel } from '../../../logging/model_calls'
 import {
-    buildDreamBatchPrompt,
-    buildDreamProgressPrompt,
-    buildDreamPrompt
+    buildDreamMemoryBatchPrompt,
+    buildDreamTurnFeedbackPrompt,
+    buildDreamSystemPrompt
 } from '../../../prompts/dream'
 import { summarizeError } from '../../../shared/utils'
 import { LivingMemoryVectorIndexError } from '../../../vector_index/errors'
 import { DreamSessionHistory, dreamCompressionThreshold } from './history'
 import {
-    nextDreamBatch,
+    advanceDreamBatch,
     pendingDreamMemoryIds,
-    skipDreamBatch,
+    recordSkippedDreamBatch,
     type DreamSessionState
 } from './state'
 
@@ -75,7 +75,7 @@ export async function runDreamSession(input: DreamSessionRunInput) {
         overrideRequestParams: defaults.overrideRequestParams
     } satisfies ChatLunaModelCallOptions
     const history = new DreamSessionHistory(
-        buildDreamPrompt(input.assistantLabel, input.presetPrompt),
+        buildDreamSystemPrompt(input.assistantLabel, input.presetPrompt),
         model,
         callOptions,
         logger
@@ -105,18 +105,24 @@ export async function runDreamSession(input: DreamSessionRunInput) {
     const progress = (feedback: string) =>
         history.append(
             new HumanMessage(
-                buildDreamProgressPrompt(pendingDreamMemoryIds(state), feedback)
+                buildDreamTurnFeedbackPrompt(
+                    pendingDreamMemoryIds(state),
+                    feedback
+                )
             )
         )
 
-    while (nextDreamBatch(state) !== undefined) {
+    while (advanceDreamBatch(state) !== undefined) {
         signal?.throwIfAborted()
         history.startBatch(
-            buildDreamBatchPrompt(state.currentBatch!, input.speakers)
+            buildDreamMemoryBatchPrompt(state.currentBatch!, input.speakers)
         )
         let ineffectiveRounds = 0
         for (let round = 1; round <= maxBatchRounds; round++) {
-            const messages = await history.prepare(tools, signal)
+            const messages = await history.prepareDecisionMessages(
+                tools,
+                signal
+            )
             modelCalls++
             response = undefined
             let effective = false
@@ -191,7 +197,7 @@ export async function runDreamSession(input: DreamSessionRunInput) {
                     ineffectiveRounds >= maxIneffectiveRounds
                         ? '连续 3 轮无有效操作'
                         : '达到每批 60 轮上限'
-                skipDreamBatch(state, reason)
+                recordSkippedDreamBatch(state, reason)
                 progress(
                     `${feedback}\n${reason}，跳过本批剩余记忆并进入下一批。`
                 )

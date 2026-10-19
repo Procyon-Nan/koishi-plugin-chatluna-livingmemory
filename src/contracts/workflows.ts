@@ -107,7 +107,7 @@ export interface LivingMemoryConfig {
 }
 
 export interface RecallRepository {
-    getRecallEntriesByPresetAndIds(
+    getSearchEntriesByPresetAndIds(
         presetId: string,
         ids: string[]
     ): Promise<LivingMemorySearchResult[]>

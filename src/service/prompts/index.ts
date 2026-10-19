@@ -1,17 +1,17 @@
-export { buildExtractionPrompt } from './extraction'
+export { buildExtractionPrompts } from './extraction'
 export type {
     ExtractionPromptInput,
     ExtractionPromptMessages
 } from './extraction'
-export { buildAgenticRecallPrompt } from './agentic_recall'
+export { buildAgenticRecallPrompts } from './agentic_recall'
 export type {
     AgenticRecallPromptInput,
     AgenticRecallPromptMessages
 } from './agentic_recall'
-export { buildDreamPrompt } from './dream'
-export { buildUserProfilePrompt } from './user_profile'
+export { buildDreamSystemPrompt } from './dream'
+export { buildUserProfilePrompts } from './user_profile'
 export type { UserProfilePromptInput } from './user_profile'
-export { buildPersonaCardPrompt } from './persona_card'
+export { buildPersonaCardPrompts } from './persona_card'
 export type { PersonaCardPromptInput } from './persona_card'
 export {
     extractionResultSchema,

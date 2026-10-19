@@ -495,7 +495,7 @@ export class LivingMemoryEntryRepository
         return entries.map(normalizeEntryRecord)
     }
 
-    async getRecallEntriesByPresetAndIds(presetId: string, ids: string[]) {
+    async getSearchEntriesByPresetAndIds(presetId: string, ids: string[]) {
         if (ids.length === 0) {
             return []
         }

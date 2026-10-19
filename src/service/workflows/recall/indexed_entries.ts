@@ -6,7 +6,7 @@ export const loadIndexedMemoryEntries = async (
     presetId: string,
     memoryIds: string[]
 ): Promise<LivingMemorySearchResult[]> => {
-    const entries = await repository.getRecallEntriesByPresetAndIds(
+    const entries = await repository.getSearchEntriesByPresetAndIds(
         presetId,
         memoryIds
     )

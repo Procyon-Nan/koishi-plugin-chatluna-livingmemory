@@ -499,7 +499,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
 
     /** 丢弃手工卡片并按当前预设原文重新生成。 */
     async resetPresetPersonaCard(presetId: string) {
-        await this.presetPersona.resetCard(presetId)
+        await this.presetPersona.regenerateCard(presetId)
     }
 
     async listMemories(query: MemoryListQuery) {

@@ -12,7 +12,7 @@ import type {
 } from '../contracts/workflows'
 import { resolveAssistantLabel } from './memory/helpers'
 import {
-    buildUserProfilePrompt,
+    buildUserProfilePrompts,
     userProfileResultSchema,
     userProfileResultToolName
 } from './prompts'
@@ -199,7 +199,8 @@ export class LivingMemoryUserProfileService {
 
         const assistantLabel = resolveAssistantLabel(presetId)
         signal?.throwIfAborted()
-        const presetPrompt = await this.presetPersona.resolve(presetId)
+        const presetPrompt =
+            await this.presetPersona.resolveOrGenerateCardText(presetId)
         const matchedEntryCount = profileGroups.reduce(
             (sum, group) => sum + group.matchedEntryCount,
             0
@@ -351,7 +352,7 @@ export class LivingMemoryUserProfileService {
     ): Promise<'generated' | 'kept' | 'failed'> {
         let structuredResult
         try {
-            const prompt = buildUserProfilePrompt({
+            const prompt = buildUserProfilePrompts({
                 assistantLabel,
                 presetPrompt,
                 group

@@ -112,7 +112,7 @@ const createHarness = (
             } as never,
             () => true
         ),
-        { resolve: async () => '你是测试角色。' }
+        { resolveOrGenerateCardText: async () => '你是测试角色。' }
     )
 
     return {

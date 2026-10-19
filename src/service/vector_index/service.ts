@@ -550,7 +550,7 @@ export class LivingMemoryVectorIndexService
         transferCleanupOwnership: () => void
     ) {
         const currentWorker = this.requireWorker()
-        await currentWorker.prepareRebuild(input.expectedCount)
+        await currentWorker.validateAndCloseRebuildDatabase(input.expectedCount)
         transferCleanupOwnership()
 
         let activation: VectorIndexDirectoryActivation | null = null

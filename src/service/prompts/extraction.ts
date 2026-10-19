@@ -20,7 +20,7 @@ export type ExtractionPromptMessages = PromptMessages
  * 构建记忆抽取提示词。纯函数：所有动态值经入参传入，无副作用。
  * 结果工具参数契约引用自 ./schema，与运行时校验保持单一真相源。
  */
-export const buildExtractionPrompt = (
+export const buildExtractionPrompts = (
     params: ExtractionPromptInput
 ): ExtractionPromptMessages => {
     const { chatHistory, assistantLabel, presetPrompt } = params

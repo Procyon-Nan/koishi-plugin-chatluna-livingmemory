@@ -164,7 +164,7 @@ export interface VectorIndexWorkerCommandMap {
         input: VectorIndexPresetStateMark
         result: MemoryVectorIndexPresetStatus
     }
-    createRebuildFile: {
+    openRebuildDatabase: {
         input: {
             databaseDirectory: string
             manifest: MemoryVectorIndexManifest
@@ -178,7 +178,7 @@ export interface VectorIndexWorkerCommandMap {
         }
         result: { indexedCount: number }
     }
-    prepareRebuild: {
+    validateAndCloseRebuildDatabase: {
         input: { expectedCount: number }
         result: { indexedCount: number }
     }

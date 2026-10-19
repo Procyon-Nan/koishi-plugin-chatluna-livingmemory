@@ -94,8 +94,8 @@ const execute = async (
             case 'markPresetState':
                 result = await database.markPresetState(command)
                 break
-            case 'createRebuildFile':
-                result = await database.createRebuildFile(
+            case 'openRebuildDatabase':
+                result = await database.openRebuildDatabase(
                     command.databaseDirectory,
                     command.manifest
                 )
@@ -106,8 +106,10 @@ const execute = async (
                     command.upserts
                 )
                 break
-            case 'prepareRebuild':
-                result = await database.prepareRebuild(command.expectedCount)
+            case 'validateAndCloseRebuildDatabase':
+                result = await database.validateAndCloseRebuildDatabase(
+                    command.expectedCount
+                )
                 break
             case 'closeDatabase':
                 await database.closeDatabase()

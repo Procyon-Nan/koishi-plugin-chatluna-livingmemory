@@ -50,14 +50,14 @@ export type ExtractionJobRepository = Pick<JobRepository, 'createFailedJob'>
 const EXTRACTION_FAIL_STREAK_LIMIT = 3
 
 /** 吸收预算：窗口＋半窗。窗口是模糊预算而非硬上限，块内盈余不超过半窗。 */
-const absorbLimitOf = (window: number): number =>
+const calculateChunkMessageBudget = (window: number): number =>
     window + Math.floor(window / 2)
 
 /**
  * 段尾的交流长度：末条用户消息（触发消息）起至回复 run 结束。无用户
  * 消息的段（孤儿回复 run，触发消息未被记录）整段视为一个交流。
  */
-const exchangeLengthOf = (
+const countTrailingExchangeMessages = (
     segment: readonly ConversationLogMessage[]
 ): number => {
     let exchangeStart = segment.length - 1
@@ -82,14 +82,15 @@ const selectAnchoredUnits = (
     }
 
     const units: ConversationLogMessage[][] = []
-    let coreRemaining = exchangeLengthOf(segments[segments.length - 1]) + window
+    let coreRemaining =
+        countTrailingExchangeMessages(segments[segments.length - 1]) + window
 
     for (let index = segments.length - 1; index >= 0; index -= 1) {
         const segment = segments[index]
         const covered = Math.min(coreRemaining, segment.length)
         const keepLength = Math.min(
             segment.length,
-            Math.max(covered, exchangeLengthOf(segment))
+            Math.max(covered, countTrailingExchangeMessages(segment))
         )
         units.unshift(segment.slice(segment.length - keepLength))
         coreRemaining -= covered
@@ -104,11 +105,11 @@ const selectAnchoredUnits = (
  * 提取；超出预算的单位独立成块、不截断。锚定模式传入锚定筛选后的单元
  * （核心后缀＋核心外的交流），旁听模式传入切片后的子块。
  */
-const planAnchoredChunks = (
+const packChunksFromLatest = (
     units: readonly ConversationLogMessage[][],
     window: number
 ): ConversationLogMessage[][] => {
-    const absorbLimit = absorbLimitOf(window)
+    const absorbLimit = calculateChunkMessageBudget(window)
     const chunks: ConversationLogMessage[][] = []
     let consumed = units.length
 
@@ -134,7 +135,7 @@ const splitOverheardUnits = (
     segments: readonly ConversationLogMessage[][],
     window: number
 ): ConversationLogMessage[][] => {
-    const absorbLimit = absorbLimitOf(window)
+    const absorbLimit = calculateChunkMessageBudget(window)
     const units: ConversationLogMessage[][] = []
     for (const segment of segments) {
         if (segment.length <= absorbLimit) {
@@ -161,7 +162,7 @@ const splitOverheardUnits = (
 
 /**
  * 段锚定切块：以「连续 assistant 段的末条 assistant」闭合段——末尾无
- * assistant 收尾的尾巴留在积压等下次。两种模式共用 planAnchoredChunks
+ * assistant 收尾的尾巴留在积压等下次。两种模式共用 packChunksFromLatest
  * 从尾向旧模糊装包；锚定模式先经 selectAnchoredUnits 丢弃核心窗口之外
  * 的闲聊，旁听模式先经 splitOverheardUnits 把超预算段切成预算内子块。
  */
@@ -190,9 +191,12 @@ export const planExtractionChunks = (
     }
 
     if (!includeOverheard) {
-        return planAnchoredChunks(selectAnchoredUnits(segments, window), window)
+        return packChunksFromLatest(
+            selectAnchoredUnits(segments, window),
+            window
+        )
     }
-    return planAnchoredChunks(splitOverheardUnits(segments, window), window)
+    return packChunksFromLatest(splitOverheardUnits(segments, window), window)
 }
 
 export class LivingMemoryExtractionCoordinator {
@@ -486,7 +490,9 @@ export class LivingMemoryExtractionCoordinator {
             inputLength: input.length
         })
 
-        const presetPrompt = await this.presetPersona.resolve(scope.presetId)
+        const presetPrompt = await this.presetPersona.resolveOrGenerateCardText(
+            scope.presetId
+        )
         const trace = await this.extractor.extractWithTrace(
             input,
             {

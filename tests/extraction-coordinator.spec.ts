@@ -178,7 +178,7 @@ const createHarness = (
         repository,
         formatter,
         extractor,
-        { resolve: async () => '你是测试助手。' },
+        { resolveOrGenerateCardText: async () => '你是测试助手。' },
         captured.logger
     )
     return {

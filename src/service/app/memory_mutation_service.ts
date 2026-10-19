@@ -129,10 +129,10 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
             if (records.length === 0) {
                 return records
             }
-            await this.applyCommittedMutation({
+            await this.syncCommittedMutationToIndex({
                 presetId: scope.presetId,
                 upserts: records.map((record) =>
-                    this.upsert(record, 'replace')
+                    this.buildIndexUpsert(record, 'replace')
                 ),
                 deletes: []
             })
@@ -163,9 +163,9 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
                 input,
                 effectiveSpeakerKeys
             )
-            await this.applyCommittedMutation({
+            await this.syncCommittedMutationToIndex({
                 presetId: record.presetId,
-                upserts: [this.upsert(record, 'replace')],
+                upserts: [this.buildIndexUpsert(record, 'replace')],
                 deletes: []
             })
             return record
@@ -231,10 +231,10 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
         if (result === null) {
             return null
         }
-        await this.applyCommittedMutation({
+        await this.syncCommittedMutationToIndex({
             presetId: result.record.presetId,
             upserts: [
-                this.upsert(
+                this.buildIndexUpsert(
                     result.record,
                     this.vectorAction(result.contentChanged)
                 )
@@ -292,10 +292,10 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
             if (records.length === 0) {
                 return records
             }
-            await this.applyCommittedMutation({
+            await this.syncCommittedMutationToIndex({
                 presetId,
                 upserts: records.map((record) =>
-                    this.upsert(record, 'preserve')
+                    this.buildIndexUpsert(record, 'preserve')
                 ),
                 deletes: []
             })
@@ -324,10 +324,10 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
                         await this.repository.deleteSnapshotsByPreset(presetId)
                         snapshotsCleared = true
                     }
-                    await this.applyCommittedMutation({
+                    await this.syncCommittedMutationToIndex({
                         presetId,
                         upserts: records.map((record) =>
-                            this.upsert(record, 'preserve')
+                            this.buildIndexUpsert(record, 'preserve')
                         ),
                         deletes: []
                     })
@@ -371,12 +371,12 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
             )
             const warnings: string[] = []
             try {
-                await this.applyCommittedMutation({
+                await this.syncCommittedMutationToIndex({
                     presetId,
                     upserts: [
-                        this.upsert(result.memory, 'replace'),
+                        this.buildIndexUpsert(result.memory, 'replace'),
                         ...result.archivedSources.map((source) =>
-                            this.upsert(source, 'preserve')
+                            this.buildIndexUpsert(source, 'preserve')
                         )
                     ],
                     deletes: []
@@ -405,7 +405,7 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
             if (record === null) {
                 return null
             }
-            await this.applyCommittedMutation({
+            await this.syncCommittedMutationToIndex({
                 presetId: record.presetId,
                 upserts: [],
                 deletes: [{ id: record.id, presetId: record.presetId }]
@@ -435,7 +435,7 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
                     }
                     const validIds = records.map((record) => record.id)
                     await this.repository.deleteEntries(presetId, validIds)
-                    await this.applyCommittedMutation({
+                    await this.syncCommittedMutationToIndex({
                         presetId,
                         upserts: [],
                         deletes: validIds.map((id) => ({ id, presetId }))
@@ -470,7 +470,7 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
                 expiredIds,
                 async (batchIds) => {
                     await this.repository.deleteEntries(presetId, batchIds)
-                    await this.applyCommittedMutation({
+                    await this.syncCommittedMutationToIndex({
                         presetId,
                         upserts: [],
                         deletes: batchIds.map((id) => ({ id, presetId }))
@@ -514,7 +514,9 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
         })
     }
 
-    private async applyCommittedMutation(batch: MemoryIndexMutationBatch) {
+    private async syncCommittedMutationToIndex(
+        batch: MemoryIndexMutationBatch
+    ) {
         try {
             await this.vectorIndex.applyMutation(batch)
         } catch (error) {
@@ -570,17 +572,17 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
         })
     }
 
-    private upsert(
+    private buildIndexUpsert(
         record: MemoryEntryRecord,
         vectorAction: MemoryIndexUpsert['vectorAction']
     ): MemoryIndexUpsert {
         return {
-            document: this.document(record),
+            document: this.toIndexDocument(record),
             vectorAction
         }
     }
 
-    private document(record: MemoryEntryRecord): MemoryIndexDocument {
+    private toIndexDocument(record: MemoryEntryRecord): MemoryIndexDocument {
         return {
             id: record.id,
             presetId: record.presetId,

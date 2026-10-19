@@ -191,7 +191,9 @@ const buildFormalIndex = async (options: {
         shouldStop: () => false,
         onProgress: async () => {},
         finalize: async (transferCleanupOwnership) => {
-            await client.prepareRebuild(repository.sources.length)
+            await client.validateAndCloseRebuildDatabase(
+                repository.sources.length
+            )
             transferCleanupOwnership()
             const activeDirectory = resolve(directory, 'vector-index')
             const previousDirectory = resolve(
@@ -275,7 +277,7 @@ it('does not abort through the old worker after finalize takes cleanup ownership
         rebuildVectorIndex({
             repository: new TestRebuildRepository([]),
             worker: {
-                createRebuildFile: async () => ({
+                openRebuildDatabase: async () => ({
                     vectorExtensionVersion: '0.8.1',
                     manifest: null,
                     indexedCount: 0,
@@ -313,7 +315,7 @@ it('aborts through the worker when finalize fails before taking cleanup ownershi
         rebuildVectorIndex({
             repository: new TestRebuildRepository([]),
             worker: {
-                createRebuildFile: async () => ({
+                openRebuildDatabase: async () => ({
                     vectorExtensionVersion: '0.8.1',
                     manifest: null,
                     indexedCount: 0,

@@ -145,7 +145,7 @@ it('runs typed vector index worker mutations and filtered searches', async () =>
     assert.equal(initial.indexedCount, 0)
 
     const manifest = createManifest()
-    const created = await client.createRebuildFile(rebuildPath, manifest)
+    const created = await client.openRebuildDatabase(rebuildPath, manifest)
     assert.deepEqual(created.manifest, manifest)
 
     await client.appendRebuildBatch('preset-a', [
@@ -188,7 +188,7 @@ it('runs typed vector index worker mutations and filtered searches', async () =>
         lastError: null,
         updatedAt: Date.now()
     })
-    const prepared = await client.prepareRebuild(4)
+    const prepared = await client.validateAndCloseRebuildDatabase(4)
     assert.equal(prepared.indexedCount, 4)
     await rename(formalPath, previousPath)
     await rename(rebuildPath, formalPath)
@@ -362,11 +362,11 @@ it('rolls back a complete mutation batch when one upsert fails', async () => {
     const rebuildPath = resolve(temporaryDirectory, 'atomic-rebuild')
     const previousPath = resolve(temporaryDirectory, 'atomic-previous')
     await client.open(formalPath, previousPath)
-    await client.createRebuildFile(rebuildPath, createManifest())
+    await client.openRebuildDatabase(rebuildPath, createManifest())
     await client.appendRebuildBatch('preset-a', [
         replace(createDocument('stable-memory'), [1, 0, 0])
     ])
-    await client.prepareRebuild(1)
+    await client.validateAndCloseRebuildDatabase(1)
     await rename(formalPath, previousPath)
     await rename(rebuildPath, formalPath)
     await client.openCandidate(formalPath)
@@ -409,17 +409,17 @@ it('restores the formal index when a rebuild is aborted', async () => {
     )
     const previousPath = resolve(temporaryDirectory, 'abort-previous')
     await client.open(formalPath, previousPath)
-    await client.createRebuildFile(firstRebuildPath, createManifest())
+    await client.openRebuildDatabase(firstRebuildPath, createManifest())
     await client.appendRebuildBatch('preset-a', [
         replace(createDocument('retained-memory'), [1, 0, 0])
     ])
-    await client.prepareRebuild(1)
+    await client.validateAndCloseRebuildDatabase(1)
     await rename(formalPath, previousPath)
     await rename(firstRebuildPath, formalPath)
     await client.openCandidate(formalPath)
     await rm(previousPath, { recursive: true })
 
-    await client.createRebuildFile(secondRebuildPath, {
+    await client.openRebuildDatabase(secondRebuildPath, {
         ...createManifest(),
         generation: 'aborted-generation'
     })
@@ -435,11 +435,11 @@ it('recovers files left by an interrupted rebuild switch', async () => {
     const previousPath = resolve(temporaryDirectory, 'recovery-previous')
     const first = new LivingMemoryVectorIndexWorkerClient(workerPath)
     await first.open(formalPath, previousPath)
-    await first.createRebuildFile(rebuildPath, createManifest())
+    await first.openRebuildDatabase(rebuildPath, createManifest())
     await first.appendRebuildBatch('preset-a', [
         replace(createDocument('retained-memory'), [1, 0, 0])
     ])
-    await first.prepareRebuild(1)
+    await first.validateAndCloseRebuildDatabase(1)
     await first.dispose()
 
     await rename(rebuildPath, previousPath)
@@ -497,11 +497,11 @@ it('analyzes the rebuild database before switching it into place', async () => {
     })
 
     await database.open(formalPath, previousPath)
-    await database.createRebuildFile(rebuildPath, createManifest())
+    await database.openRebuildDatabase(rebuildPath, createManifest())
     await database.appendRebuildBatch('preset-a', [
         replace(createDocument('analyzed-before-switch'), [1, 0, 0])
     ])
-    const prepared = await database.prepareRebuild(1)
+    const prepared = await database.validateAndCloseRebuildDatabase(1)
     await rename(formalPath, previousPath)
     await rename(rebuildPath, formalPath)
     const inspection = await database.openCandidate(formalPath)

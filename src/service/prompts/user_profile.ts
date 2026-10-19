@@ -19,7 +19,7 @@ export interface UserProfilePromptInput {
     }
 }
 
-export const buildUserProfilePrompt = (
+export const buildUserProfilePrompts = (
     input: UserProfilePromptInput
 ): PromptMessages => {
     const escapedAssistantLabel = escapeXmlText(input.assistantLabel)

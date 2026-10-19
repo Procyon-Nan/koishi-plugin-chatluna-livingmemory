@@ -76,7 +76,8 @@ export class LivingMemoryDreamService {
                 await this.ctx.chatluna.createChatModel(this.config.mainModel)
             ).value
             if (model === undefined) throw new Error('Dream mainModel 不可用。')
-            const presetPrompt = await this.presetPersona.resolve(presetId)
+            const presetPrompt =
+                await this.presetPersona.resolveOrGenerateCardText(presetId)
             signal?.throwIfAborted()
             const speakers =
                 await this.mutations.ensurePresetSpeakersCoverage(presetId)

@@ -26,7 +26,7 @@ export function createDreamSessionState(
     }
 }
 
-export function nextDreamBatch(state: DreamSessionState) {
+export function advanceDreamBatch(state: DreamSessionState) {
     state.currentBatch = undefined
     while (state.nextBatchIndex < state.clusters.length) {
         const cluster = state.clusters[state.nextBatchIndex++]
@@ -79,7 +79,10 @@ export function recordDreamOperation(
     }
 }
 
-export function skipDreamBatch(state: DreamSessionState, reason: string) {
+export function recordSkippedDreamBatch(
+    state: DreamSessionState,
+    reason: string
+) {
     const memoryIds = pendingDreamMemoryIds(state)
     if (state.currentBatch !== undefined && memoryIds.length > 0) {
         state.skippedBatches.push({

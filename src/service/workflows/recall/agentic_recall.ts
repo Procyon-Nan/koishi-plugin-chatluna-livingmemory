@@ -28,7 +28,7 @@ import type {
 } from '../../../contracts/memory'
 import type { LivingMemoryConfig } from '../../../contracts/workflows'
 import { LivingMemoryMessageFormatter } from '../../transcript/message_formatter'
-import { buildAgenticRecallPrompt } from '../../prompts'
+import { buildAgenticRecallPrompts } from '../../prompts'
 import type { AgenticRecallPromptMessages } from '../../prompts'
 import type { LivingMemoryLogger } from '../../logging/logger'
 import { createLoggedModel } from '../../logging/model_calls'
@@ -334,7 +334,7 @@ export class LivingMemoryAgenticRecallExecutor {
         ]).input
         const chatHistory =
             this.formatter.toExtractionPayload(historyMessages).input
-        return buildAgenticRecallPrompt({
+        return buildAgenticRecallPrompts({
             assistantLabel,
             lastMessage,
             chatHistory

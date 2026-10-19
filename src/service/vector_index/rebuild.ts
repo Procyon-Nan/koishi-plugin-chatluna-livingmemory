@@ -31,7 +31,7 @@ export interface VectorIndexRebuildRepository {
 
 export type VectorIndexRebuildWorker = Pick<
     LivingMemoryVectorIndexWorkerClient,
-    'abortRebuild' | 'appendRebuildBatch' | 'createRebuildFile'
+    'abortRebuild' | 'appendRebuildBatch' | 'openRebuildDatabase'
 >
 
 export interface VectorIndexRebuildProgress {
@@ -86,7 +86,7 @@ export const rebuildVectorIndex = async (options: {
     let rebuildCreated = false
     let cleanupOwnedByFinalize = false
     try {
-        const created = await worker.createRebuildFile(
+        const created = await worker.openRebuildDatabase(
             rebuildDatabaseDirectory,
             manifest
         )

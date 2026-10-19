@@ -89,7 +89,7 @@ const runService = async (
             },
             logger
         )
-        const persona = { resolve: async () => '测试人设' }
+        const persona = { resolveOrGenerateCardText: async () => '测试人设' }
         const profiles = new LivingMemoryUserProfileService(
             {
                 enableUserProfileInjection: false,

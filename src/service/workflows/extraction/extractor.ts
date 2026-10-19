@@ -2,7 +2,7 @@ import { Context } from 'koishi'
 import type { AttributedMemoryItem } from '../../../contracts/workflows'
 import { isModelConfigured } from '../../shared/utils'
 import {
-    buildExtractionPrompt,
+    buildExtractionPrompts,
     extractionResultSchema,
     extractionResultToolName
 } from '../../prompts'
@@ -137,7 +137,7 @@ export class LivingMemoryExtractor {
     private buildPrompt(input: string, context: LivingMemoryExtractionContext) {
         const assistantLabel = resolveScopeAssistantLabel(context)
 
-        return buildExtractionPrompt({
+        return buildExtractionPrompts({
             chatHistory: input,
             assistantLabel,
             presetPrompt: context.presetPrompt

@@ -10,7 +10,7 @@ import type {
 import type { LivingMemoryConfig } from '../../contracts/workflows'
 import { summarizeError } from '../shared/utils'
 import {
-    buildPersonaCardPrompt,
+    buildPersonaCardPrompts,
     personaCardResultSchema,
     personaCardResultToolName
 } from '../prompts'
@@ -81,8 +81,8 @@ export class LivingMemoryPresetPersonaService implements PresetPersonaResolver {
      * 按预设 id 取卡片：手工卡片与原文哈希一致的自动卡片直接返回，否则生成
      * 并落库。同一预设的并发生成合并为一次。
      */
-    async resolve(presetId: string): Promise<string> {
-        const epoch = this.clearEpoch(presetId)
+    async resolveOrGenerateCardText(presetId: string): Promise<string> {
+        const epoch = this.getClearEpoch(presetId)
         const raw = await resolvePresetPrompt(this.ctx, presetId)
         const rawHash = hashPresetText(raw)
         const stored = await this.repository.getPresetPersona(presetId)
@@ -142,7 +142,7 @@ export class LivingMemoryPresetPersonaService implements PresetPersonaResolver {
     }
 
     /**
-     * 卡片是否已落后于当前预设原文。自动卡片由 `resolve` 按哈希懒更新、不存在
+     * 卡片是否已落后于当前预设原文。自动卡片由 `resolveOrGenerateCardText` 按哈希懒更新、不存在
      * 过期态，直接判定为新鲜；只有手工卡片需要重算原文比对——手改时刻意保留了
      * 当时的哈希，预设此后变动即表现为不一致。预设已不存在或不可用时无从比对，
      * 按新鲜处理，不让单张残留卡片拖垮整个列表。
@@ -191,8 +191,8 @@ export class LivingMemoryPresetPersonaService implements PresetPersonaResolver {
      * 丢弃当前卡片（含手工卡片）并按当前预设原文重新生成。生成成功后才替换
      * 落库行；模型侧失败时抛错，落库行保持原状。
      */
-    async resetCard(presetId: string): Promise<void> {
-        const epoch = this.clearEpoch(presetId)
+    async regenerateCard(presetId: string): Promise<void> {
+        const epoch = this.getClearEpoch(presetId)
         const raw = await resolvePresetPrompt(this.ctx, presetId)
         const outcome = await this.prune(raw)
         if (outcome.failure !== null) {
@@ -203,7 +203,7 @@ export class LivingMemoryPresetPersonaService implements PresetPersonaResolver {
 
         const rawHash = hashPresetText(raw)
         await this.writes.run(presetId, async () => {
-            if (this.clearEpoch(presetId) === epoch) {
+            if (this.getClearEpoch(presetId) === epoch) {
                 await this.persistGenerated(presetId, rawHash, outcome)
             }
         })
@@ -214,13 +214,13 @@ export class LivingMemoryPresetPersonaService implements PresetPersonaResolver {
      * 发起的生成落库时比对失败即放弃写入，不在清空后的预设上写回卡片。
      */
     async clearCard(presetId: string): Promise<void> {
-        this.clearEpochs.set(presetId, this.clearEpoch(presetId) + 1)
+        this.clearEpochs.set(presetId, this.getClearEpoch(presetId) + 1)
         await this.writes.run(presetId, () =>
             this.repository.deletePresetPersona(presetId)
         )
     }
 
-    private clearEpoch(presetId: string): number {
+    private getClearEpoch(presetId: string): number {
         return this.clearEpochs.get(presetId) ?? 0
     }
 
@@ -236,7 +236,7 @@ export class LivingMemoryPresetPersonaService implements PresetPersonaResolver {
         }
 
         return await this.writes.run(presetId, async () => {
-            if (this.clearEpoch(presetId) !== epoch) {
+            if (this.getClearEpoch(presetId) !== epoch) {
                 return outcome.card
             }
             const stored = await this.repository.getPresetPersona(presetId)
@@ -303,7 +303,7 @@ export class LivingMemoryPresetPersonaService implements PresetPersonaResolver {
         try {
             structuredResult = await invokeStructuredOutput({
                 model,
-                prompt: buildPersonaCardPrompt({ lines }),
+                prompt: buildPersonaCardPrompts({ lines }),
                 toolName: personaCardResultToolName,
                 toolDescription:
                     '提交应当从预设原文中删除的行号列表；' +

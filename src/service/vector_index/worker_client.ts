@@ -157,12 +157,12 @@ export class LivingMemoryVectorIndexWorkerClient {
         return this.request({ type: 'markPresetState', ...status })
     }
 
-    createRebuildFile(
+    openRebuildDatabase(
         databaseDirectory: string,
         manifest: MemoryVectorIndexManifest
     ) {
         return this.request({
-            type: 'createRebuildFile',
+            type: 'openRebuildDatabase',
             databaseDirectory,
             manifest
         })
@@ -176,8 +176,11 @@ export class LivingMemoryVectorIndexWorkerClient {
         })
     }
 
-    prepareRebuild(expectedCount: number) {
-        return this.request({ type: 'prepareRebuild', expectedCount })
+    validateAndCloseRebuildDatabase(expectedCount: number) {
+        return this.request({
+            type: 'validateAndCloseRebuildDatabase',
+            expectedCount
+        })
     }
 
     closeDatabase() {

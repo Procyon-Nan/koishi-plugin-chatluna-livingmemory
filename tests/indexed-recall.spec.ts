@@ -29,7 +29,7 @@ const createEntry = (id: string): MemoryEntryRecord => ({
 })
 
 const createRepository = (entries: MemoryEntryRecord[]) => ({
-    getRecallEntriesByPresetAndIds: async (presetId: string, ids: string[]) => {
+    getSearchEntriesByPresetAndIds: async (presetId: string, ids: string[]) => {
         assert.equal(presetId, 'preset-a')
         const idSet = new Set(ids)
         return entries.filter((entry) => idSet.has(entry.id)).reverse()
