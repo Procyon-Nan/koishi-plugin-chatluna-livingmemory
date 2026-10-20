@@ -5,178 +5,208 @@
 `chatluna-livingmemory`（npm 包名 `koishi-plugin-chatluna-livingmemory`）是 ChatLuna 生态下的 Koishi 长期记忆插件，位于 `koishi-dev` 工作区的 `external/chatluna-livingmemory`。
 本地运行环境由工作区根目录的 Koishi 实例提供。
 
-模型供应商适配、ChatLuna 核心会话管理、Character 预设存储与调度、Koishi 数据库驱动和 Console 框架本身都不属于本项目职责。
-
 ## 代码文件结构
 
 ```text
 chatluna-livingmemory/
 ├── src/
-│   ├── contracts/               # 记忆、工作流、向量索引与 RPC 公共契约
-│   ├── integrations/            # Koishi 服务、事件与 Console 类型合并
-│   ├── plugins/                 # 消息采集器、中间件、管理指令、模型工具与 Console 入口
-│   ├── service/
-│   │   ├── app/                 # 应用门面、作用域、配置状态与变更编排
-│   │   ├── logging/             # 诊断事件与模型调用日志
-│   │   ├── memory/              # 记忆字段、来源、speaker、快照和工具实现
-│   │   │   └── tools/           # 共用工具实现与统一创建入口
-│   │   ├── persistence/         # Koishi 表定义、分表仓库与持久化门面
-│   │   ├── prompts/             # 工作流提示词、结构化输出 schema 与 XML 格式
-│   │   ├── shared/              # 预设队列及少量共享工具
-│   │   ├── transcript/          # ChatLuna/Character 聊天记录适配与渲染
-│   │   │   └── message_log/     # 会话消息日志、注册表、回填与统一转换
-│   │   ├── vector_index/        # PGlite/pgvector 索引服务、重建与 Worker
-│   │   ├── workflows/           # extraction、recall、dream 与任务状态
-│   │   │   └── dream/
-│   │   │       ├── full.ts      # 全量准备、聚类、会话与画像衔接
-│   │   │       └── session/     # 会话循环、历史、处理状态与工具衔接
-│   │   └── user_profile.ts      # 用户画像分组、生成与渲染
-│   ├── index.ts                 # 插件入口、配置 schema 与可选集成装配
-│   ├── query.ts                 # 对外查询辅助接口
-│   ├── types.ts                 # 公共类型兼容导出
-│   └── worker_artifacts.ts      # Worker 构建产物定位
-├── client/                      # Console 页面、组件、composable 与契约镜像
-├── tests/                       # Vitest 工作流、持久化、集成与客户端测试
-├── docs/                        # WebUI 与模型配置用户文档及内部设计备忘
-└── scripts/                     # Worker 构建与向量索引基准脚本
+│   ├── index.ts                         # 插件入口、配置 schema 与集成装配
+│   ├── query.ts                         # 对外记忆查询接口
+│   ├── types.ts                         # 公共契约导出
+│   ├── worker_artifacts.ts              # Worker 构建产物定位
+│   ├── contracts/
+│   │   ├── memory.ts                    # 记忆、来源、快照、画像与任务数据
+│   │   ├── workflows.ts                 # 工作流配置、输入输出与服务接口
+│   │   ├── vector_index.ts              # 索引文档、查询、变更与状态接口
+│   │   └── rpc.ts                       # Console RPC 契约
+│   ├── integrations/
+│   │   └── koishi-augmentations.ts      # Koishi 服务、事件与 Console 类型合并
+│   ├── plugins/
+│   │   ├── message_collector.ts         # 消息采集入口
+│   │   ├── chat_middleware.ts           # ChatLuna 对话生命周期接入
+│   │   ├── character_middleware.ts      # Character 对话生命周期接入
+│   │   ├── commands.ts                  # 管理指令
+│   │   ├── living_memory_tools.ts       # 主对话记忆工具注册
+│   │   └── webui.ts                     # Console 页面与 RPC 注册
+│   └── service/
+│       ├── app/
+│       │   ├── living_memory_service.ts # 应用门面、服务装配与生命周期
+│       │   ├── memory_mutation_service.ts # 记忆变更、预设队列与索引同步
+│       │   ├── query_projections.ts     # 查询结果组装
+│       │   ├── prompt_hydration.ts      # 快照与画像注入
+│       │   ├── config_status.ts         # 配置校验与服务状态
+│       │   └── scope.ts                 # 预设与会话作用域
+│       ├── logging/
+│       │   ├── logger.ts                # 工作流日志与诊断事件
+│       │   └── model_calls.ts           # 模型请求、响应与用量记录
+│       ├── memory/
+│       │   ├── entry_fields.ts          # 记忆字段常量与归一化
+│       │   ├── speaker_identity.ts      # 用户身份键与昵称映射
+│       │   ├── preset_catalog.ts        # 预设目录
+│       │   ├── preset_persona.ts        # 人设卡片生成与读取
+│       │   ├── helpers.ts               # 角色名称与会话标识辅助函数
+│       │   ├── origins/
+│       │   │   └── source_origins.ts    # 来源关系构造、归一化与合并
+│       │   ├── snapshot/
+│       │   │   └── snapshot_text.ts     # 召回快照文本处理
+│       │   └── tools/
+│       │       ├── index.ts            # 共用工具创建入口
+│       │       ├── tool_runtime.ts     # 工具调用作用域解析
+│       │       ├── embedding_search_tool.ts # 记忆检索
+│       │       ├── get_messages_tool.ts # 来源消息查询
+│       │       ├── create_memory_tool.ts # 创建记忆
+│       │       ├── update_memory_tool.ts # 更新记忆
+│       │       ├── merge_memories_tool.ts # 合并记忆
+│       │       ├── split_memory_tool.ts # 拆分记忆
+│       │       ├── delete_memory_tool.ts # 归档记忆
+│       │       └── checked_memory_tool.ts # 确认记忆无需变动
+│       ├── persistence/
+│       │   ├── repository.ts            # 持久化门面与串行事务入口
+│       │   ├── tables.ts                # Koishi 数据表定义
+│       │   ├── types.ts                 # 数据库记录与事务类型
+│       │   ├── normalizers.ts           # 数据库记录转换与关联行构造
+│       │   ├── entries.ts               # 记忆条目读写、迁移与合并拆分事务
+│       │   ├── snapshots.ts             # 召回快照仓库
+│       │   ├── jobs.ts                  # 任务记录仓库
+│       │   ├── user_profiles.ts         # 用户画像与预设用户仓库
+│       │   ├── preset_personas.ts       # 人设卡片仓库
+│       │   └── speaker_reconciliation.ts # 预设用户身份核对
+│       ├── prompts/
+│       │   ├── index.ts                 # 提示词模块导出
+│       │   ├── schema.ts                # 模型结构化输出 schema
+│       │   ├── memory_tools.ts          # 记忆工具名称、描述与参数 schema
+│       │   ├── memory_entries.ts        # 模型记忆字段清单与统一渲染
+│       │   ├── prompt_format.ts         # XML 转义与消息组合
+│       │   ├── extraction.ts            # 记忆提取提示词
+│       │   ├── agentic_recall.ts         # Agentic Recall 提示词
+│       │   ├── dream.ts                 # Dream 系统、批次、反馈与摘要提示词
+│       │   ├── user_profile.ts          # 用户画像提示词
+│       │   └── persona_card.ts          # 人设卡片提示词
+│       ├── shared/
+│       │   ├── serial_task_queue.ts     # 按键串行任务队列
+│       │   └── utils.ts                 # 配置、文本与错误辅助函数
+│       ├── transcript/                  # 聊天记录适配、说话人解析与文本渲染
+│       │   ├── chatluna_transcript_adapter.ts # ChatLuna 历史适配
+│       │   ├── character_transcript_adapter.ts # Character 历史适配
+│       │   └── message_log/
+│       │       ├── message_log.ts       # 单会话消息日志
+│       │       ├── message_log_registry.ts # 日志注册与生命周期
+│       │       ├── backfill.ts          # 历史消息回填
+│       │       ├── converter.ts         # 日志到模型历史的转换
+│       │       ├── element_text.ts      # 消息元素文本化
+│       │       └── types.ts             # 消息日志契约
+│       ├── vector_index/                # 索引文档、嵌入、变更、维护与状态管理
+│       │   ├── service.ts               # 向量索引服务入口
+│       │   ├── reconcile.ts             # 主数据库与索引对账
+│       │   ├── rebuild.ts               # 索引重建
+│       │   ├── worker_client.ts         # Worker 请求与生命周期
+│       │   ├── worker_protocol.ts       # 主线程与 Worker 通信契约
+│       │   └── worker/
+│       │       ├── entry.ts             # Worker 线程入口
+│       │       ├── runtime.ts           # Worker 命令执行
+│       │       ├── database.ts          # PGlite 数据库启停
+│       │       ├── ownership_endpoint.ts # 索引目录所有权
+│       │       ├── schema.ts            # pgvector 表与索引定义
+│       │       ├── queries.ts           # 向量与关键词查询
+│       │       ├── mutations.ts         # 索引事务写入
+│       │       └── vector_values.ts     # 向量值转换
+│       ├── workflows/
+│       │   ├── job_tracker.ts           # 工作流任务状态更新
+│       │   ├── structured_output.ts     # 结构化模型调用、校验与纠错
+│       │   ├── extraction/
+│       │   │   ├── coordinator.ts       # 提取游标、分块与调度
+│       │   │   └── extractor.ts         # 模型提取与结果转换
+│       │   ├── recall/
+│       │   │   ├── coordinator.ts       # 召回间隔、调度与快照保存
+│       │   │   ├── agentic_recall.ts    # 召回模型工具循环
+│       │   │   ├── embedding_search_engine.ts # 混合检索与重排序
+│       │   │   └── indexed_entries.ts  # 索引命中与记忆条目组装
+│       │   └── dream/
+│       │       ├── coordinator.ts       # Dream 触发、排队与取消
+│       │       ├── job_runner.ts        # 任务记录与完成统计
+│       │       ├── full.ts              # 全量准备、聚类、会话与画像衔接
+│       │       ├── clustering.ts        # 聚类批次组装
+│       │       ├── partitioning.ts      # 记忆分区入口
+│       │       ├── types.ts             # 批次与运行结果类型
+│       │       ├── partitioning/        # 初始分区、相似度与分区优化
+│       │       ├── hdbscan/             # HDBSCAN 算法与标签整理
+│       │       ├── worker/              # Dream Worker 入口、客户端与协议
+│       │       └── session/
+│       │           ├── runner.ts        # 模型会话循环与工具执行
+│       │           ├── history.ts       # 会话历史与上下文压缩
+│       │           ├── state.ts         # 批次、处理集合与操作统计
+│       │           └── tools.ts         # Dream 工具装配与处理进度衔接
+│       └── user_profile.ts              # 用户画像分组、生成与渲染
+├── client/
+│   ├── index.ts                         # Console 页面与图标注册
+│   ├── dashboard.vue                    # 管理页面入口
+│   ├── api.ts                           # RPC 调用
+│   ├── types.ts                         # 浏览器端契约镜像
+│   ├── env.d.ts                         # 浏览器端环境类型
+│   ├── components/                      # 记忆、快照、画像、人设、任务与检索组件
+│   ├── composables/                     # 分页、选中状态与记忆列表逻辑
+│   ├── styles/                          # 页面、组件、主题与 Element Plus 样式
+│   ├── icons/                           # 页面图标
+│   └── utils/                           # 展示格式与索引状态辅助函数
+├── tests/                               # 工作流、工具、持久化、索引与客户端测试
+│   ├── vitest-global-setup.ts           # 测试全局初始化
+│   ├── persistence-test-utils.ts        # SQLite 测试上下文
+│   ├── workflow-test-utils.ts           # 工作流测试数据与桩
+│   ├── tool-calling-test-utils.ts       # 模型工具调用测试辅助
+│   └── worker-test-utils.ts             # Worker 测试辅助
+├── docs/                                # 用户指南、设计方案与验收记录
+└── scripts/
+    ├── build-workers.mjs                # 构建向量索引与 Dream Worker
+    ├── vector-index-benchmark.mjs       # 向量索引基准入口
+    ├── vector-index-benchmark-options.mjs # 基准参数
+    └── vector-index-benchmark-support.mjs # 基准数据与指标采集
 ```
 
-新增、删除、移动或重命名源码目录、测试目录或脚本目录时，必须在同一次变更中同步更新本节。
-目录内新增或重命名单个文件不需要更新。
+新增、删除、移动或重命名目录及本节列出的文件时，同步更新本节。
 
-## 设计约束
+## 架构规则
 
-1. 预设、会话与身份边界
-   - 长期记忆、用户画像和 Dream 任务按 `presetId` 隔离；召回快照按 `presetId + conversationId` 隔离。
-   - ChatLuna 预设 ID 保持原值；Character 预设统一经 `toCharacterMemoryPresetId()` 转换，不得在调用点自行拼接后缀。
-   - 用户身份是由平台与用户 ID 生成的 `speakerKey`；昵称只是模型可读标签，昵称变化不得产生新身份。
-   - 任何把新 `speakerKey` 写上记忆的通道（提取、WebUI 与公共接口的创建和更新、Dream、导入），都必须在预设级队列内补齐 `living_memory_preset_speaker` 的对应行，避免在已清空的预设上写回孤儿行。
-     reconcile 对当次对话者的身份注册不受此限。
-   - `speakerKeys` 允许为空，表示记忆只与角色自身有关；不得为满足字段形式强行关联当前对话中的用户。
+1. ChatLuna 与 Character 保持独立接入。
+2. 记忆写入经 `LivingMemoryMutationService` 编排。事务经 `LivingMemoryRepository` 串行入口开启，子仓库使用注入的 `transact`。
+3. 模型工具经 `createMemoryTool` 创建；调用方选择暴露范围、提供上下文并持有任务状态。
+4. 模型输入复用 `renderMemoriesForModel`、`toLogTranscriptMessages` 和 `prompt_format.ts`。字段规则定义在工具参数 schema，结构化输出复用统一校验与纠错入口。
+5. WebUI 通过公开 RPC 访问应用服务。
+6. RPC 变更同步服务端契约、类型合并、注册和客户端 API、类型、组件。
+7. 服务停止时先关闭任务入口，再排空任务并释放资源。可选服务通过 `ctx.inject()` 装配。
+8. 日志统一经 `LivingMemoryLogger` 输出。
 
-2. ChatLuna 与 Character 集成
-   - 两条集成路径的事件载荷、聊天记录适配器、预设标识和注入机制都不同，保持独立，不得合并成统一中间件。
-   - ChatLuna 在 `before-chat` 注入当前会话最近一次的快照与用户画像，在 `after-chat` 追加本次实际发出的回复并触发提取。
-   - Character 经专用生命周期事件维护上下文，由预设中的 `{living_memory}` 变量注入；不得套用 ChatLuna 的请求级注入方式。
-   - 清空会话历史时同步清除快照、召回锚点、提取游标与消息日志，并推进日志纪元，拒绝清空时点之前的回填消息。
+## 业务文档
 
-3. 聊天记录与 speaker 归属
-   - 会话消息日志（`src/service/transcript/message_log/`）是召回与提取共用的唯一历史来源。
-     消息角色（user/assistant）在写入时确定，读取方不得重新判定。
-   - 日志历史的模型可见转换统一经 `toLogTranscriptMessages`，不得在调用点自行拼装历史视图。
-   - 模型可见的说话人与 at 目标统一取用户昵称（`event.user.name` 或 `resolveUserSpeaker`），缺失时退回 userId。
-     `author.nick`、`member`、`session.username` 是群名片，不得采信。
-   - 非文本消息元素写入日志时替换为占位说明，元素标签的序列化形式不得进入模型可见历史。
-     占位提取是同步纯函数，采集与回填共用：渲染与入账不得让出事件循环，因为召回边界与提取分段依赖入账顺序。
-   - 模型只返回 `speakerLabels`，服务端按本次聊天记录的昵称映射转换为 `speakerKeys`；模型不得生成或猜测身份键。
-   - 来源消息与记忆正文分开保存；查询来源以持久化的来源关系为准，不从正文反推。
+| 修改范围 | 文档 |
+| --- | --- |
+| 身份、会话、消息日志、召回、提取、人设与画像 | [记忆与工作流](docs/memory-workflows.md) |
+| Dream 批次、工具进度、上下文压缩与任务状态 | [Dream 会话设计](docs/dream-session-plan.md) |
+| 向量索引、目录所有权、重建与就绪状态 | [向量索引](docs/vector-index.md) |
+| 模型记忆字段与渲染 | [记忆视图](docs/memory-model-view-plan.md) |
+| WebUI 操作 | [WebUI 指南](docs/WEBUI_GUIDE.md) |
+| Embedding 与 Reranker 配置 | [模型配置指南](docs/embedding-reranker-guide.md) |
 
-4. Recall 工作流
-   - Recall 异步执行：当前请求注入已有的快照，本轮新生成的快照只供后续轮次使用，不得阻塞当前模型请求。
-   - `recallIntervalMessages` 控制召回间隔，为 0 时关闭。
-     会话首次触发立即召回，之后按日志消息条数计算间隔，闲聊同样计入；召回锚点只存在内存中，重启后重新计数，召回失败时清除，下次触发立即重试。
-   - 召回上下文为当前触发消息之前的最近 `recallHistoryMessages` 条日志消息。
-   - 召回只有 Agentic Recall 一种实现：`subModel` 经召回内部的 `living_memory_search` 检索活跃记忆，快照只保存模型整理后的文本与搜索轨迹，不保存记忆引用。
-     不得恢复多策略分派，也不得在协调器内另写检索路径。
-   - Reranker 只在 `LivingMemoryEmbeddingSearchEngine` 中接入，召回、主对话工具与 WebUI 检索测试共用这一条路径；重排失败回退混合检索排序，不得阻断检索。
-   - 没有可靠结果（含 `<NO_MEMORY>`）时保留既有快照，不以空结果覆盖。
-   - 召回失败记录任务与诊断，但不得阻断对话。
-     `subModel` 未配置属于配置缺失而非召回失败：入队时跳过，只记诊断、不写任务。
-   - 用户关联信息可以说明记忆归属，但不得成为召回门槛。
-
-5. Extraction 工作流
-   - 提取按会话日志游标消费：积压达到 `extractionWindowMessages` 时打包提取，为 0 时关闭；同会话串行，跨会话并行。
-   - 一次交流（触发消息与其回复）是不可分割的单位，分块不得从中截断。
-     唯一例外是旁听模式（`extractionIncludeOverheard`）下超出预算的超长段。
-   - 冷启动时游标从当时的日志末尾开始，不重新提取回填的历史。
-   - 单块连续失败 3 次后记录 failed job 并跳过该块；未达 3 次则中断本次提取，下次重试。
-     不得重复处理已推进游标的消息，也不得在失败后丢弃未消费的消息。
-   - `enableExtractionWhitelist` 只限制自动提取，按原始平台 id 匹配（群聊为 `scope.guildId`，私聊为 `scope.userId`）。
-     未命中的会话不初始化游标，消息日志、召回、注入与主动创建工具不受影响。
-   - 模型输出经结构化结果工具校验后才能写入，格式错误走统一纠错流程，不得另写解析或兜底。
-   - 提取结果必须填写 `reason` 说明原因，包含空 `memories` 数组的结果；无可记录内容时不新增记忆并正常推进本批游标。
-
-6. Dream 与用户画像
-   - Dream 只有会话式全量实现，按 `docs/dream-session-plan.md` 运行；旧全量/增量执行链、操作数组协议、专用合并事务与自动触发已移除。增量流程留待重新设计，不保留兼容入口或回退路径，不为其添加共享层。
-   - 预设活跃记忆少于 30 条时不启动，返回 `insufficient-memories`；同一预设任务串行，停止服务时取消并等待 Dream 收尾后再关闭 Worker 和索引。
-   - Dream Worker 负责原有聚类，每批最多 30 条。固定目标覆盖启动时全部活跃记忆，包括已固化项；归档记忆不参与整理或画像生成，合并和拆分的新记忆不扩大目标集合。
-   - `dream/session/state.ts` 是目标、可访问范围和处理集合的唯一所有者。工具成功才登记覆盖，覆盖集合不是修改锁；已经处理且仍活跃的记忆可再次更新、合并、拆分或归档。
-   - update 与 merge 完整覆盖可变字段和 `speakerKeys`，固化随事实提交。merge 复用公共 `mergeActiveMemories()` / `mergeMemories()`，原子创建新记忆并归档全部来源，不指定 target。checked 须说明无需改动的理由，在预设队列内验证整组 ID 活跃后固化。索引同步失败不撤销已提交操作的覆盖记录。
-   - Dream 暴露检索、更新、合并、拆分、归档和 checked 六个公共工具。split 复用 `splitActiveMemory()` / `splitMemory()`，原子创建至少两条新记忆并归档原记忆；新记忆继承来源关系并直接固化。
-   - 同轮工具串行执行完毕后判断本批覆盖，全部处理后自动换批；每批最多 60 轮，连续 3 轮无有效操作后跳过剩余项，成功检索也中断无效计数。完成为 `completed`，有成果但有遗漏为 `partial`，无成果或致命中断为 `failed`，保留处理统计、跳过原因和遗漏 ID。
-   - 普通历史只追加，以决策响应中供应商返回的 `input_tokens` 为唯一 200k 压缩阈值依据，在下一轮请求前只压缩更早批次，保留当前批次完整字段及全部交互。缺失用量不回退到本地估算；压缩成功后清除旧用量，等待下一次决策响应，不采用摘要请求或保留历史的旧 usage。使用公开模型接口生成独立摘要，不修改 ChatLuna，不按模型名称猜测 adapter；沿用模型已有请求参数和任务 ID。
-   - 用户画像仅在 Dream 内生成，生成与注入受 `enableUserProfileInjection` 控制；speaker 发现与该开关无关。跳过批次仍执行后续画像阶段，致命中断不再开启画像阶段；画像失败保留已有错误处理，取消会停止后续生成和写入。WebUI 手工编辑的画像仍可被后续 Dream 覆盖。
-
-7. 模型工具、提示词与结构化输出
-   - 共用工具实现统一放在 `src/service/memory/tools/`，生产调用经该目录的 `createMemoryTool` 创建；主对话、Recall、Dream 各自选择暴露的工具并提供调用上下文，不复制工具实现，不共享任务状态。检查工具接收检查处理函数，范围校验、固化和覆盖登记由调用工作流负责，完成后才返回成功。
-   - `src/service/prompts/` 是提示词与 Zod schema 的唯一来源；字段说明放在结果工具参数描述中，不在提示词正文重复。
-   - 送入模型的记忆视图统一经 `renderMemoriesForModel` 渲染，字段格式和各场景的有序字段清单集中在 `memory_entries.ts`；调用方不得另行拼接记忆字段或 speaker 标签。可空元数据为 null 时省略整行，不填造默认值。
-     只有模型需要引用记忆时才渲染 ID：Dream 批次及主对话、Dream 的 `living_memory_search` 渲染，Agentic Recall 与用户画像不渲染。
-   - 动态文本经 `prompt_format.ts` 转义并组合为 System/Human 消息，不得在工作流中复制 XML 拼接或转义。
-   - 结构化结果工具是单次调用内部工具，其 schema、提示词规则、校验、纠错次数与工作流失败处理必须一致。
-   - 提取、Dream 与用户画像的角色人设统一取预设人设卡片（`preset_persona.ts`），不注入预设原文；recall 不使用人设。
-     - 卡片原文取预设 system 部分的未渲染模板，模型只选择要删除的行，保留部分与原文逐字节一致，不重写正文。
-     - 落库行是卡片的唯一状态，卡片服务是唯一写入方，不设内存缓存；工作流经 `resolveOrGenerateCardText(presetId)` 取卡片，按原文哈希懒更新。
-     - 写入在按预设串行的队列内重读后落库，不覆盖期间保存的手工卡片，清空预设数据后不写回。
-     - 手工卡片（`source='manual'`）不随预设变动自动覆盖；清空预设数据时一并删除。
-     - 外部插件只有只读接口 `resolvePresetPersona` 与 `getPresetPersonaCard`，前者在无卡片时返回原文，不调模型、不落库。
-   - 用户画像结果为 `update` 或 `keep`，均须填写理由；尚无画像时 `keep` 被拒绝并走纠错重试。
-     `keep` 不改写正文，但记下本次输入，输入未变的后续 Dream 跳过该用户。
-   - `living_memory_get_messages` 按会话已提供或检索返回的 ID 查看来源消息；主动创建工具允许 speaker 关联为空。
-   - Agentic Recall 的工具参数持续出错达到上限时直接终止，不再额外发起 finalization 调用。
-
-8. 持久化、变更与缓存一致性
-   - `src/service/persistence/` 负责表定义与表级仓库，`LivingMemoryRepository` 是上层门面；工作流不得直接操作数据库表。
-   - 多语句写入的中间状态对并发读者非法时必须使用事务；不满足该条件的多语句写入须在代码中写明依据。
-   - 事务只能经 `LivingMemoryRepository` 的串行入口开启，子模块通过构造注入的 `transact` 取得句柄，不得直接调用 `ctx.database.transact` 或 `withTransaction`：单连接数据库无法并发开启事务。
-   - `living_memory_entry.speakerKeys` 是用户关联事实，`living_memory_entry_speaker` 只索引活跃记忆。
-     `status` 或 `speakerKeys` 变更必须与关联行重写在同一事务内；不得增加独立计数字段或为归档记忆保留关联行。
-   - schema 变更须同步公共契约、表定义、normalizer、仓库、迁移兼容与受影响的 RPC/客户端类型。
-   - embedding 只由正文生成：正文变化时必须重新生成，其余字段变化（含状态）保留向量。
-     任何字段变化都须同步索引文档，关键词索引随之重写。
-   - 快照注入每次直接读取持久化的最新快照，不设内存缓存：快照由召回直接落库、也会被迁移与清理路径直接删除，缓存失效无法集中保证。
-   - 管理指令的 text/user 删除只匹配活跃记忆并执行归档，profile 删除只删目标画像；所有删除保留 60 秒确认。
-
-9. 向量索引与 Worker 生命周期
-   - PGlite/pgvector 是派生索引，Koishi 主数据库是记忆事实来源，索引必须能据此 reconcile 或 rebuild。
-   - PGlite 连接与目录所有权由同一个 Worker 持有：先取得所有权再打开数据库，先关闭数据库再释放所有权；重建切换目录期间不得出现无所有权窗口。
-   - 所有权只保证同机进程互斥，不支持多进程共享运行中的索引目录。
-     端点为 Windows 命名管道或 Linux 抽象 Unix Socket，标识取规范化目录的稳定哈希；不得重新引入锁文件、PID、mtime、心跳或 `fs-native-extensions`。
-   - 服务停止时先停止接收新操作，再排空在途操作并等待 Worker 退出，关闭失败才终止；新 HMR generation 必须等旧 generation 的 Worker 结束后再启动。
-   - 模型的 `living_memory_search` 工具统一只查活跃记忆，不暴露状态参数；主对话、召回内部检索与 Dream 邻居查询均固定只查活跃。归档记忆供人工查看，底层索引保留按 `memoryStatus` 查询的能力。
-     归档向量照常维护，重新激活时直接复用。
-   - 预设状态账本（`lm_index_preset_state`）只落盘终态 `ready`/`dirty`，`building`、`unavailable` 等瞬态只存在于主进程，不得持久化。
-     账本行存在当且仅当该预设存在于 DB 条目或索引文档中，孤儿行由全量对账清除。
-   - 就绪门禁按预设独立判定：只有索引级条件（manifest 未建立、全局维护窗口、Worker 故障）拦截全部读取，单个预设未就绪不得阻断其他预设。
-
-10. WebUI 与 RPC
-    - Console RPC 变更须同步 `src/contracts/rpc.ts`、Koishi declaration merging、`src/plugins/webui.ts`、`client/api.ts`、`client/types.ts` 与受影响的组件。
-    - 浏览器侧不得导入仅服务端可运行的模块，共享数据形状使用浏览器安全的契约镜像。
-    - 分页、选中状态与弹窗编辑复用现有 composable 与组件，不在页面中复制资源加载与变更逻辑。
-    - WebUI 的所有数据操作一律调用公开 RPC，不绕过应用服务直接访问数据库或索引。
-
-11. Koishi 生命周期与后台任务
-    - 必需服务为 `chatluna` 与 `database`；`console` 与 `chatluna_character` 只在各自的 `ctx.inject()` 片段中装配。
-    - 后台工作流保持非阻塞，保留既有的任务记录与错误日志。
-    - 定时器、事件监听、Worker 与缓存必须绑定插件生命周期；dispose 后不得接受新的数据库、索引或模型任务。
-    - 日志统一经 `LivingMemoryLogger` 或 Koishi logger 输出。
+修改业务行为时，同步对应文档。
 
 ## 工程原则
 
-1. TypeScript ESM 风格以 `.oxfmtrc.json` 与 `.oxlintrc.json` 为准。
-2. 注释只解释不直观的约束或原因，使用中文，不添加复述代码的注释。
-3. `lib/` 与 `dist/` 是生成产物，除非任务明确要求，不得手工编辑。
-4. 前端 Vue 组件保留模板和逻辑，样式统一放在 `client/styles/`，通过 `<style src="...">` 引用，不在 Vue 中内嵌 CSS。
-   - 组件专用样式使用 `scoped`；公共列表样式复用 `tab-content.css`。
-   - `theme.css` 维护明暗主题变量，`element-plus.css` 维护公共控件与弹窗样式，`dashboard.css` 只维护主页面布局，均由 `dashboard.vue` 按此顺序以 `scoped` 引入。
-   - Teleport 弹窗、下拉浮层使用受 `lm-*` 类名约束的 `:global()` 规则；`scrollbars.css` 保留非 scoped 引用，以覆盖页面子组件的滚动条。
+1. 注释使用中文，仅记录不直观的约束与原因。
+2. Vue 组件保留模板和逻辑，CSS 放在 `client/styles/`，通过 `<style src="...">` 引用。
+3. 组件样式使用 `scoped`；Teleport 样式使用受 `lm-*` 类名约束的 `:global()`；`scrollbars.css` 使用非 scoped 引用。公共列表复用 `tab-content.css`。
+4. 摒弃一切防御性代码和防御性设计，所有文本描述禁止使用否定表达、与功能无关的多余解释
 
 ## 验证要求
 
-1. 仅文档变更：运行 `git diff --check`。
-2. 服务端源码变更：运行 `yarn lint`（oxlint 加 `oxfmt --check`）、`yarn test` 与 `git diff --check`。
-3. 契约、持久化或 RPC 变更：另运行 `yarn atsc -p tsconfig.json --noEmit`。
-4. 客户端或 Console 变更：另运行 `yarn build:client`。
-5. 服务端构建、Worker 或包边界变更：运行 `yarn build:server`；同时涉及客户端时运行完整 `yarn build`。
+所有测试、lint、类型检查、构建和 diff 检查统一在提交版本更新前集中执行；开发过程和普通功能提交阶段不自动运行。
 
-在 WSL 环境下无法执行完整测试，需要 Windows 环境执行。
+验证范围按自上次版本更新以来的累计变更确定：
+
+| 累计变更范围 | 验证命令 |
+| --- | --- |
+| 所有版本更新 | `git diff --check` |
+| 服务端源码 | `yarn lint`、`yarn test` |
+| 契约、持久化或 RPC | `yarn atsc -p tsconfig.json --noEmit` |
+| 客户端或 Console | `yarn build:client` |
+| 服务端构建、Worker 或包边界 | `yarn build:server`；同时涉及客户端时运行 `yarn build` |
+
+在 WSL 环境下无法执行完整测试时，告知用户并让用户在 Windows 环境执行。

@@ -1,0 +1,72 @@
+# 记忆与工作流
+
+## 预设、会话与用户身份
+
+- 长期记忆、用户画像和 Dream 任务按 `presetId` 隔离；召回快照按 `presetId + conversationId` 隔离。
+- ChatLuna 使用原始预设 ID；Character 通过 `toCharacterMemoryPresetId()` 生成预设 ID。
+- `speakerKey` 由平台与用户 ID 生成。昵称变化时，沿用原键，更新预设用户记录及已有画像的 `speakerLabel`，新旧昵称去重保存到 `speakerAliases`。
+- 为记忆新增用户关联时，在同一预设级队列内补齐 `living_memory_preset_speaker`，再写入记忆。
+- 当前对话者通过 `reconcilePresetSpeaker()` 登记身份、昵称和别名；该操作使用仓库事务。
+- 模型提交 `speakerLabels`，服务端按输入材料中的昵称映射解析为 `speakerKeys`。
+
+## 对话接入与消息日志
+
+- ChatLuna 在 `before-chat` 注入当前会话最近一次快照和用户画像；在 `after-chat` 追加实际回复并触发提取。
+- Character 经专用生命周期事件维护上下文，通过预设中的 `{living_memory}` 变量注入。
+- 会话清空时同步清除快照、召回锚点、提取游标和消息日志，并推进日志纪元。回填只接受当前纪元的消息。
+- 消息角色在入账时确定。采集与回填共用同步的消息元素文本化过程，非文本元素转为占位文本；文本化与入账连续执行。
+- 说话人与 at 目标使用用户昵称，取 `event.user.name` 或 `resolveUserSpeaker`，缺失时使用 userId。群名片字段为 `author.nick`、`member`、`session.username`。
+- 来源消息通过持久化来源关系查询，独立于记忆正文。
+
+## Recall
+
+入口：`src/service/workflows/recall/coordinator.ts`。
+
+- Recall 异步运行，当前对话注入已有快照，新生成快照供后续对话使用。
+- `recallIntervalMessages` 为 0 时关闭。会话首次触发立即召回，此后按日志消息数计算间隔，闲聊计入。锚点保存在内存中，重启或召回失败后重新计数，下次触发立即召回。
+- 输入历史为当前触发消息之前最近 `recallHistoryMessages` 条日志。
+- `subModel` 通过内部 `living_memory_search` 检索活跃记忆，快照保存模型整理后的文本与搜索轨迹。
+- 重排序失败时使用混合检索排序。用户关联信息用于说明归属。
+- 无可靠结果（包括 `<NO_MEMORY>`）时保留已有快照。
+- 召回失败记录任务和诊断；`subModel` 未配置时跳过入队，只记录配置诊断。
+- 工具参数错误达到上限时终止召回。
+
+## Extraction
+
+入口：`src/service/workflows/extraction/coordinator.ts`。
+
+- 按会话日志游标消费，同会话串行，跨会话并行。积压达到 `extractionWindowMessages` 时打包提取，为 0 时关闭。
+- 分块以完整交流（触发消息及其回复）为单位；旁听模式下超出预算的超长段可以拆分。
+- 冷启动游标从当时日志末尾开始。
+- 单块失败后中断本次提取并保留游标；连续失败 3 次后记录失败任务，跳过该块。
+- `enableExtractionWhitelist` 按原始平台 ID 匹配，群聊使用 `scope.guildId`，私聊使用 `scope.userId`；未命中时跳过游标初始化和自动提取。
+- 模型结果通过结构化校验后写入。结果必须包含 `reason`；`memories` 为空时正常推进游标。
+
+## 人设卡片
+
+入口：`src/service/memory/preset_persona.ts`。
+
+- 提取、Dream 和用户画像使用预设人设卡片；Recall 使用独立提示词。
+- 卡片取预设 system 部分的未渲染模板，模型选择删除行，保留部分与原文逐字节一致。
+- 卡片服务拥有唯一写入权，工作流通过 `resolveOrGenerateCardText()` 读取，按原文哈希懒更新。持久化记录是卡片状态来源。
+- 生成后在预设级队列内重读再写入，保留期间保存的手工卡片；预设已清空时丢弃生成结果。
+- `source='manual'` 的卡片由手工维护，清空预设时一并删除。
+- 对外提供 `resolvePresetPersona` 与 `getPresetPersonaCard` 只读接口；前者在卡片缺失时返回预设原文。
+
+## 用户画像
+
+入口：`src/service/user_profile.ts`。
+
+- 用户画像在 Dream 内生成，生成与注入受 `enableUserProfileInjection` 控制；用户身份登记独立运行。
+- 结果为 `update` 或 `keep`，均需填写理由。首次生成必须返回 `update`。
+- `keep` 保留正文并记录本次输入；输入未变时，下次 Dream 跳过该用户。
+- Dream 跳过批次后继续画像阶段；致命中断或取消后停止后续生成和写入。画像失败保留已有画像。
+- WebUI 手工编辑的画像参与后续 Dream 更新。
+
+## 记忆写入与查询
+
+- `living_memory_entry.speakerKeys` 保存用户关联，`living_memory_entry_speaker` 索引活跃记忆。状态或关联用户变化时，在同一事务内重写关联行。
+- 更新、合并和拆分按提交内容完整填写可变字段与关联用户；各工具的 Dream 处理规则见 [Dream 会话设计](dream-session-plan.md)。
+- 快照注入直接读取持久化的最新快照。
+- `living_memory_get_messages` 使用会话已提供或检索返回的记忆 ID。
+- 管理指令的 text/user 删除匹配活跃记忆并归档，profile 删除目标画像；删除操作使用 60 秒确认窗口。
