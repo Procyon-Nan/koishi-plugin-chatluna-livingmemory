@@ -5,7 +5,6 @@ import type {
     DreamMemoryEntryRecord,
     LivingMemoryConfig,
     LivingMemorySearchProvider,
-    LivingMemorySourceProvider,
     LivingMemoryUpdateProvider
 } from '../../../contracts/workflows'
 import type { PresetPersonaResolver } from '../../../contracts/memory'
@@ -43,13 +42,13 @@ export class LivingMemoryDreamService {
             | 'ensurePresetSpeakersCoverage'
             | 'updateActiveMemory'
             | 'mergeActiveMemories'
+            | 'splitActiveMemory'
             | 'archiveActiveMemories'
             | 'setMemoryConsolidation'
         >,
         vectors: ManualDreamVectorReader,
         worker: DreamWorkerRunner,
         private readonly search: LivingMemorySearchProvider,
-        private readonly sources: LivingMemorySourceProvider,
         private readonly userProfiles: LivingMemoryUserProfileService,
         private readonly presetPersona: PresetPersonaResolver
     ) {
@@ -91,7 +90,6 @@ export class LivingMemoryDreamService {
                 presetId,
                 state,
                 search: this.search,
-                sources: this.sources,
                 speakers: this.repository,
                 mutations: this.mutations
             })
@@ -127,7 +125,7 @@ export class LivingMemoryDreamService {
                   : 'completed'
         const detail = [
             `dream: ${status}, processed ${coverage.processedCount}/${coverage.targetCount}, batches ${state.clusters.length}`,
-            `checked ${state.stats.kept}, merged ${state.stats.merged}, updated ${state.stats.updated}, archived ${state.stats.archived}`,
+            `checked ${state.stats.kept}, merged ${state.stats.merged}, split ${state.stats.split}, updated ${state.stats.updated}, archived ${state.stats.archived}`,
             ...state.skippedBatches.map(
                 (batch) =>
                     `skipped ${batch.batchId}: ${batch.reason}; memoryIds=${batch.memoryIds.join(', ')}`

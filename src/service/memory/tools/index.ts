@@ -4,6 +4,7 @@ import { LivingMemoryDeleteMemoryTool } from './delete_memory_tool'
 import { LivingMemorySearchTool } from './embedding_search_tool'
 import { LivingMemoryGetMessagesTool } from './get_messages_tool'
 import { LivingMemoryMergeMemoriesTool } from './merge_memories_tool'
+import { LivingMemorySplitMemoryTool } from './split_memory_tool'
 import { LivingMemoryUpdateMemoryTool } from './update_memory_tool'
 
 export const createMemoryTool = {
@@ -21,6 +22,9 @@ export const createMemoryTool = {
     merge: (
         ...args: ConstructorParameters<typeof LivingMemoryMergeMemoriesTool>
     ) => new LivingMemoryMergeMemoriesTool(...args),
+    split: (
+        ...args: ConstructorParameters<typeof LivingMemorySplitMemoryTool>
+    ) => new LivingMemorySplitMemoryTool(...args),
     delete: (
         ...args: ConstructorParameters<typeof LivingMemoryDeleteMemoryTool>
     ) => new LivingMemoryDeleteMemoryTool(...args),

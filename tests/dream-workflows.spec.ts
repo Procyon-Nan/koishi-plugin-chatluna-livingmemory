@@ -125,7 +125,6 @@ const runService = async (
                     )
                 }
             },
-            { getMemorySourceMessages: async () => null },
             profiles,
             persona
         )

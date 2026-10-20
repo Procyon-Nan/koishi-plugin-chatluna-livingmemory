@@ -8,6 +8,7 @@ import {
     memoryCreateTool,
     memoryUpdateTool,
     memoryMergeTool,
+    memorySplitTool,
     memoryDeleteTool
 } from '../service/prompts/memory_tools'
 import { createMemoryTool } from '../service/memory/tools'
@@ -67,6 +68,9 @@ export function apply(ctx: Context, config: LivingMemoryConfig) {
             ),
             register(memoryMergeTool, ['merge', 'write'], () =>
                 createMemoryTool.merge(ctx.chatluna_living_memory)
+            ),
+            register(memorySplitTool, ['split', 'write'], () =>
+                createMemoryTool.split(ctx.chatluna_living_memory)
             ),
             register(memoryDeleteTool, ['delete', 'write'], () =>
                 createMemoryTool.delete(ctx.chatluna_living_memory)

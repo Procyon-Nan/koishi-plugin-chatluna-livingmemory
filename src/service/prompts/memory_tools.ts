@@ -81,6 +81,22 @@ export const memoryMergeTool = {
     })
 }
 
+export const memorySplitTool = {
+    name: 'living_memory_split_memory',
+    description: [
+        '长期记忆拆分工具，当你需要将一条记忆拆分为多条记忆时使用此工具；使用已知的记忆 ID 或调用 living_memory_search 工具检索得到记忆 ID。',
+        '你应该在一条记忆包含了多个主题的事实内容时拆分它；拆分后的每条记忆主题唯一，且不丢失重要信息。',
+        '你应该提交拆分后的完整新记忆字段，不要遗漏或省略任一字段。'
+    ].join('\n'),
+    schema: z.object({
+        sourceMemoryId: z.string().trim().min(1).describe('要拆分的记忆 ID'),
+        memories: z
+            .array(generatedMemorySchema)
+            .min(2)
+            .describe('拆分后的新记忆')
+    })
+}
+
 export const memoryDeleteTool = {
     name: 'living_memory_delete_memory',
     description: [

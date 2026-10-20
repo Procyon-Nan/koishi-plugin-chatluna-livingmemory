@@ -21,7 +21,14 @@ export function createDreamSessionState(
         targetMemoryIds: new Set(targetMemoryIds),
         availableMemoryIds: new Set(),
         processedMemoryIds: new Set(),
-        stats: { kept: 0, merged: 0, updated: 0, archived: 0, skipped: 0 },
+        stats: {
+            kept: 0,
+            merged: 0,
+            split: 0,
+            updated: 0,
+            archived: 0,
+            skipped: 0
+        },
         skippedBatches: []
     }
 }
@@ -66,13 +73,13 @@ export function assertDreamMemoriesAvailable(
 export function recordDreamOperation(
     state: DreamSessionState,
     ids: readonly string[],
-    operation: 'kept' | 'updated' | 'merged' | 'archived'
+    operation: 'kept' | 'updated' | 'merged' | 'split' | 'archived'
 ) {
     for (const id of ids) {
         state.processedMemoryIds.add(id)
     }
-    if (operation === 'merged') {
-        state.stats.merged++
+    if (operation === 'merged' || operation === 'split') {
+        state.stats[operation]++
         state.stats.archived += ids.length
     } else {
         state.stats[operation] += ids.length

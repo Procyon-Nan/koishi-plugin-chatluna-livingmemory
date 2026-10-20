@@ -51,6 +51,7 @@ export class LivingMemoryDreamJobRunner {
                 clusters: result.clusterCount,
                 kept: result.kept,
                 merged: result.merged,
+                split: result.split,
                 updated: result.updated,
                 archived: result.archived,
                 skipped: result.skipped,

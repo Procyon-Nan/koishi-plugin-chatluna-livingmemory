@@ -188,7 +188,6 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             this.vectorIndex,
             this.dreamWorker,
             this.searchEngine,
-            this,
             this.userProfiles,
             this.presetPersona
         )
@@ -615,6 +614,18 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             presetId,
             memoryId,
             patch
+        )
+    }
+
+    async splitActiveMemory(
+        presetId: string,
+        sourceMemoryId: string,
+        memories: AttributedMemoryItem[]
+    ) {
+        return await this.mutations.splitActiveMemory(
+            presetId,
+            sourceMemoryId,
+            memories
         )
     }
 

@@ -708,6 +708,64 @@ export class LivingMemoryEntryRepository
         return archived
     }
 
+    async splitMemory(
+        presetId: string,
+        sourceMemoryId: string,
+        memories: AttributedMemoryItem[],
+        isConsolidated = false
+    ) {
+        if (memories.length < 2) {
+            throw new Error('拆分结果至少需要两条记忆。')
+        }
+        return this.transact(async (database) => {
+            const [row] = await database.get(
+                'living_memory_entry',
+                { presetId, id: sourceMemoryId, status: 'active' },
+                memoryEntryFields
+            )
+            if (row === undefined) {
+                throw new Error(
+                    `不存在 ID 为 ${sourceMemoryId} 的记忆，请重新查明记忆 ID 后再调用。`
+                )
+            }
+            const source = normalizeEntryRecord(row)
+            const now = new Date()
+            const records = memories.map((memory) => {
+                const record = this.buildMemoryEntry(
+                    {
+                        presetId,
+                        conversationId: source.sourceConversationId ?? ''
+                    },
+                    memory,
+                    source.sourceOrigins,
+                    source.sourceLabel,
+                    now,
+                    memory.speakerKeys
+                )
+                record.isConsolidated = isConsolidated
+                return record
+            })
+            for (const record of records) {
+                await database.create('living_memory_entry', record)
+            }
+            await database.set(
+                'living_memory_entry',
+                { presetId, id: sourceMemoryId },
+                { status: 'archived', updatedAt: now }
+            )
+            const archivedSource = {
+                ...source,
+                status: 'archived' as const,
+                updatedAt: now
+            }
+            await this.replaceActiveMemorySpeakers(database, [
+                ...records,
+                archivedSource
+            ])
+            return { memories: records, archivedSource }
+        })
+    }
+
     async mergeMemories(
         presetId: string,
         sourceMemoryIds: string[],

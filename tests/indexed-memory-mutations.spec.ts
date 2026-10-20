@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { vi } from 'vitest'
 import type {
     LivingMemoryPresetExport,
     MemoryEntryRecord,
@@ -23,7 +24,6 @@ import {
 } from '../src/service/vector_index/errors'
 import { withLivingMemoryRepository } from './persistence-test-utils'
 import type { LivingMemoryRepository } from '../src/service/persistence/repository'
-import { loadMemorySourceMessages } from '../src/service/app/query_projections'
 import { createDreamSessionTools } from '../src/service/workflows/dream/session/tools'
 import {
     createDreamSessionState,
@@ -54,10 +54,6 @@ const createSession = (
         state,
         mutations,
         speakers: repository,
-        sources: {
-            getMemorySourceMessages: (preset, id) =>
-                loadMemorySourceMessages(repository, preset, id)
-        },
         search: {
             async searchMemories(preset, input, conversationId) {
                 assert.equal(preset, presetId)
@@ -153,6 +149,179 @@ class MemoryIndexSinkStub implements MemoryIndexMutationSink {
         return job
     }
 }
+
+it.each([false, true])(
+    'splits Dream memories with provenance and consolidation (index failure: %s)',
+    async (indexFailure) => {
+        await withLivingMemoryRepository(async (ctx, repository) => {
+            const sink = new MemoryIndexSinkStub()
+            if (indexFailure)
+                sink.applyError = new Error('injected index failure')
+            const mutations = new LivingMemoryMutationService(
+                repository,
+                sink,
+                createLoggerStub().logger
+            )
+            await repository.registerMissingPresetSpeakers(presetId, [
+                { speakerKey: 'alice', speakerLabel: 'Alice' },
+                { speakerKey: 'bob', speakerLabel: 'Bob' }
+            ])
+            const [source] = await repository.appendMemories(
+                scope,
+                [
+                    {
+                        role: 'user',
+                        content: 'Alice喜欢茶，Bob喜欢咖啡。',
+                        transcriptLines: ['Alice喜欢茶，Bob喜欢咖啡。']
+                    }
+                ],
+                [
+                    {
+                        ...sessionMemory,
+                        type: 'fact',
+                        speakerKeys: ['alice', 'bob']
+                    }
+                ],
+                '来源会话'
+            )
+            const { state, tools, invoke } = createSession(
+                repository,
+                mutations,
+                [[source]]
+            )
+            assert.deepEqual(
+                tools.map((tool) => tool.name).sort(),
+                [
+                    'living_memory_search',
+                    'living_memory_update_memory',
+                    'living_memory_merge_memories',
+                    'living_memory_split_memory',
+                    'living_memory_delete_memory',
+                    'living_memory_checked_memory'
+                ].sort()
+            )
+            advanceDreamBatch(state)
+            const result = JSON.parse(
+                await invoke('split_memory', {
+                    sourceMemoryId: source.id,
+                    memories: [
+                        {
+                            ...sessionMemory,
+                            content: 'Alice喜欢茶。',
+                            keywords: ['茶'],
+                            speakerLabels: ['Alice']
+                        },
+                        {
+                            ...sessionMemory,
+                            content: 'Bob喜欢咖啡。',
+                            keywords: ['咖啡'],
+                            speakerLabels: ['Bob']
+                        }
+                    ]
+                })
+            )
+            assert.equal(result.memoryIds.length, 2)
+            assert.equal(result.archivedMemoryId, source.id)
+            assert.equal(result.warnings.length, indexFailure ? 1 : 0)
+            const children = await repository.getEntriesByPresetAndIds(
+                presetId,
+                result.memoryIds
+            )
+            for (const child of children) {
+                assert.equal(child.status, 'active')
+                assert.equal(child.isConsolidated, true)
+                assert.deepEqual(child.sourceOrigins, source.sourceOrigins)
+                assert.equal(child.sourceConversationId, scope.conversationId)
+                assert.equal(child.sourceLabel, source.sourceLabel)
+                assert.equal(state.availableMemoryIds.has(child.id), true)
+                assert.equal(state.targetMemoryIds.has(child.id), false)
+            }
+            assert.deepEqual(
+                children.map((entry) => entry.speakerKeys[0]).sort(),
+                ['alice', 'bob']
+            )
+            const links = await ctx.database.get(
+                'living_memory_entry_speaker',
+                { presetId }
+            )
+            assert.equal(links.length, 2)
+            assert.ok(
+                links.every((link) => result.memoryIds.includes(link.memoryId))
+            )
+            assert.equal(
+                (await repository.getEntryById(source.id))?.status,
+                'archived'
+            )
+            assert.equal(getDreamCoverage(state).processedCount, 1)
+            assert.deepEqual(pendingDreamMemoryIds(state), [])
+            assert.equal(state.stats.split, 1)
+            assert.equal(state.stats.archived, 1)
+            if (indexFailure) {
+                assert.equal(sink.reconciledPresets.length, 1)
+            } else {
+                assert.deepEqual(
+                    sink.mutations[0].upserts.map((item) => item.vectorAction),
+                    ['replace', 'replace', 'preserve']
+                )
+            }
+            await invoke('update_memory', {
+                memoryId: result.memoryIds[0],
+                memory: sessionMemory
+            })
+            assert.equal(getDreamCoverage(state).processedCount, 1)
+        })
+    }
+)
+
+it('rolls back split entries, source archival and speaker links together', async () => {
+    await withLivingMemoryRepository(async (ctx, repository) => {
+        const source = await repository.createMemory(
+            scope,
+            { type: 'fact', content: '两个主题' },
+            ['alice']
+        )
+        const beforeLinks = await ctx.database.get(
+            'living_memory_entry_speaker',
+            { presetId }
+        )
+        const transact = ctx.database.transact.bind(ctx.database)
+        const spy = vi
+            .spyOn(ctx.database, 'transact')
+            .mockImplementationOnce((callback) =>
+                transact(async (database) => {
+                    await callback(database)
+                    throw new Error('injected transaction failure')
+                })
+            )
+        try {
+            await assert.rejects(
+                repository.splitMemory(
+                    presetId,
+                    source.id,
+                    [
+                        {
+                            ...sessionMemory,
+                            type: 'fact',
+                            speakerKeys: ['alice']
+                        },
+                        { ...sessionMemory, type: 'fact', speakerKeys: [] }
+                    ],
+                    true
+                ),
+                /injected transaction failure/
+            )
+        } finally {
+            spy.mockRestore()
+        }
+        assert.deepEqual(await repository.listEntriesByPreset(presetId), [
+            source
+        ])
+        assert.deepEqual(
+            await ctx.database.get('living_memory_entry_speaker', { presetId }),
+            beforeLinks
+        )
+    })
+})
 
 it('tracks Dream coverage across batches and reuses merged memories', async () => {
     await withLivingMemoryRepository(async (_ctx, repository) => {
@@ -350,7 +519,10 @@ it('rejects unavailable or stale Dream targets before recording successful cover
         )
         await assert.rejects(invoke('delete_memory', { memoryId: stale.id }))
         await assert.rejects(
-            invoke('get_messages', { memoryId: 'not-provided' })
+            invoke('split_memory', {
+                sourceMemoryId: 'not-provided',
+                memories: [sessionMemory, sessionMemory]
+            })
         )
         await assert.rejects(
             invoke('checked_memory', {

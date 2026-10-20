@@ -1,7 +1,6 @@
 import type { StructuredTool } from '@langchain/core/tools'
 import type {
     LivingMemorySearchProvider,
-    LivingMemorySourceProvider,
     LivingMemoryUpdateProvider
 } from '../../../../contracts/workflows'
 import type { LivingMemoryMutationService } from '../../../app/memory_mutation_service'
@@ -17,12 +16,12 @@ interface DreamSessionToolDependencies {
     presetId: string
     state: DreamSessionState
     search: LivingMemorySearchProvider
-    sources: LivingMemorySourceProvider
     speakers: Pick<LivingMemoryUpdateProvider, 'listPresetSpeakers'>
     mutations: Pick<
         LivingMemoryMutationService,
         | 'updateActiveMemory'
         | 'mergeActiveMemories'
+        | 'splitActiveMemory'
         | 'archiveActiveMemories'
         | 'setMemoryConsolidation'
     >
@@ -32,7 +31,6 @@ export function createDreamSessionTools({
     presetId,
     state,
     search,
-    sources,
     speakers,
     mutations
 }: DreamSessionToolDependencies): StructuredTool[] {
@@ -51,10 +49,21 @@ export function createDreamSessionTools({
             },
             true
         ),
-        createMemoryTool.getMessages({
-            async getMemorySourceMessages(_presetId, memoryId) {
-                assertDreamMemoriesAvailable(state, [memoryId])
-                return sources.getMemorySourceMessages(presetId, memoryId)
+        createMemoryTool.split({
+            listPresetSpeakers,
+            async splitActiveMemory(_presetId, sourceMemoryId, memories) {
+                assertDreamMemoriesAvailable(state, [sourceMemoryId])
+                const result = await mutations.splitActiveMemory(
+                    presetId,
+                    sourceMemoryId,
+                    memories,
+                    true
+                )
+                recordDreamOperation(state, [sourceMemoryId], 'split')
+                for (const memory of result.memories) {
+                    state.availableMemoryIds.add(memory.id)
+                }
+                return result
             }
         }),
         createMemoryTool.update({

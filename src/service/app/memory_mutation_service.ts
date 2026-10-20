@@ -45,6 +45,7 @@ type MemoryFactRepository = Pick<
     | 'setMemoryConsolidation'
     | 'archiveActiveEntries'
     | 'mergeMemories'
+    | 'splitMemory'
     | 'deleteMemory'
     | 'deleteEntries'
     | 'deleteSnapshotsByPreset'
@@ -335,6 +336,60 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
                 }
             )
             return { archived }
+        })
+    }
+
+    async splitActiveMemory(
+        presetId: string,
+        sourceMemoryId: string,
+        memories: AttributedMemoryItem[],
+        isConsolidated = false
+    ) {
+        if (memories.length < 2) {
+            throw new Error('拆分结果至少需要两条记忆。')
+        }
+        return this.runPresetMutation(presetId, async () => {
+            const source = await this.repository.getEntryById(sourceMemoryId)
+            if (
+                source === undefined ||
+                source.presetId !== presetId ||
+                source.status !== 'active'
+            ) {
+                throw new Error(
+                    `不存在 ID 为 ${sourceMemoryId} 的记忆，请重新查明记忆 ID 后再调用。`
+                )
+            }
+            await this.registerCallerSpeakerKeys(
+                presetId,
+                memories.flatMap((memory) => memory.speakerKeys)
+            )
+            const result = await this.repository.splitMemory(
+                presetId,
+                sourceMemoryId,
+                memories,
+                isConsolidated
+            )
+            const warnings: string[] = []
+            try {
+                await this.syncCommittedMutationToIndex({
+                    presetId,
+                    upserts: [
+                        ...result.memories.map((memory) =>
+                            this.buildIndexUpsert(memory, 'replace')
+                        ),
+                        this.buildIndexUpsert(result.archivedSource, 'preserve')
+                    ],
+                    deletes: []
+                })
+            } catch (error) {
+                if (!(error instanceof LivingMemoryFactsCommittedError))
+                    throw error
+                warnings.push(
+                    '记忆已拆分，但向量索引同步失败，已调度后台自动对账：' +
+                        error.message
+                )
+            }
+            return { memories: result.memories, warnings }
         })
     }
 

@@ -301,6 +301,20 @@ export class LivingMemoryRepository
         return this.entries.archiveActiveEntries(presetId, ids)
     }
 
+    splitMemory(
+        presetId: string,
+        sourceMemoryId: string,
+        memories: AttributedMemoryItem[],
+        isConsolidated = false
+    ) {
+        return this.entries.splitMemory(
+            presetId,
+            sourceMemoryId,
+            memories,
+            isConsolidated
+        )
+    }
+
     mergeMemories(
         presetId: string,
         sourceMemoryIds: string[],

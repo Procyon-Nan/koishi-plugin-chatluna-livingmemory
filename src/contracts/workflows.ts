@@ -155,6 +155,15 @@ export interface LivingMemoryMergeProvider {
     ): Promise<{ memory: MemoryEntryRecord; warnings: string[] }>
 }
 
+export interface LivingMemorySplitProvider {
+    listPresetSpeakers(presetId: string): Promise<PresetSpeakerRecord[]>
+    splitActiveMemory(
+        presetId: string,
+        sourceMemoryId: string,
+        memories: AttributedMemoryItem[]
+    ): Promise<{ memories: MemoryEntryRecord[]; warnings: string[] }>
+}
+
 export interface LivingMemoryArchiveProvider {
     archiveActiveMemories(
         presetId: string,

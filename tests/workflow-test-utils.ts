@@ -206,6 +206,7 @@ export const createDreamRunResult = (): DreamRunResult => ({
     clusterCount: 0,
     kept: 0,
     merged: 0,
+    split: 0,
     updated: 0,
     archived: 0,
     skipped: 0,

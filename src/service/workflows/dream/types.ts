@@ -8,6 +8,7 @@ export interface DreamCluster {
 export interface DreamOperationStats {
     kept: number
     merged: number
+    split: number
     updated: number
     archived: number
     skipped: number
