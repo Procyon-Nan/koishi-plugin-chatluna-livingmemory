@@ -1,8 +1,5 @@
 import type { StructuredTool } from '@langchain/core/tools'
-import type {
-    LivingMemorySearchProvider,
-    LivingMemoryUpdateProvider
-} from '../../../../contracts/workflows'
+import type { LivingMemoryUpdateProvider } from '../../../../contracts/workflows'
 import type { LivingMemoryMutationService } from '../../../app/memory_mutation_service'
 import { createMemoryTool } from '../../../memory/tools'
 import { LivingMemoryFactsCommittedError } from '../../../vector_index/errors'
@@ -15,7 +12,6 @@ import {
 interface DreamSessionToolDependencies {
     presetId: string
     state: DreamSessionState
-    search: LivingMemorySearchProvider
     speakers: Pick<LivingMemoryUpdateProvider, 'listPresetSpeakers'>
     mutations: Pick<
         LivingMemoryMutationService,
@@ -30,25 +26,12 @@ interface DreamSessionToolDependencies {
 export function createDreamSessionTools({
     presetId,
     state,
-    search,
     speakers,
     mutations
 }: DreamSessionToolDependencies): StructuredTool[] {
     const listPresetSpeakers = () => speakers.listPresetSpeakers(presetId)
 
     return [
-        createMemoryTool.search(
-            {
-                async searchMemories(_presetId, input) {
-                    const results = await search.searchMemories(presetId, input)
-                    for (const result of results) {
-                        state.availableMemoryIds.add(result.id)
-                    }
-                    return results
-                }
-            },
-            true
-        ),
         createMemoryTool.split({
             listPresetSpeakers,
             async splitActiveMemory(_presetId, sourceMemoryId, memories) {

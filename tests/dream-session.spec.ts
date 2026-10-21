@@ -124,11 +124,14 @@ const createRun = (
         recordDreamOperation(state, memoryIds, 'kept')
         return { warnings: [] }
     })
-    const search = new DynamicStructuredTool({
-        name: 'search',
-        description: '检索',
-        schema: z.object({}),
-        func: async () => '检索成功'
+    const update = new DynamicStructuredTool({
+        name: 'living_memory_update_memory',
+        description: '更新记忆',
+        schema: z.object({ memoryId: z.string() }),
+        func: async ({ memoryId }) => {
+            recordDreamOperation(state, [memoryId], 'updated')
+            return '更新成功'
+        }
     })
     const captured = logger()
     return {
@@ -138,7 +141,7 @@ const createRun = (
         presetPrompt: '人设',
         speakers: [],
         state,
-        tools: [checked, search],
+        tools: [checked, update],
         model,
         logger: captured.logger,
         logs: captured.logs
@@ -149,7 +152,11 @@ it('runs the real host agent with stable request prefixes, paired tools and invo
     const original = new AIMessage({
         content: '',
         tool_calls: [
-            { id: 'search-1', name: 'search', args: {} },
+            {
+                id: 'update-1',
+                name: 'living_memory_update_memory',
+                args: { memoryId: 'a' }
+            },
             check(['a'], 'check-a')
         ],
         additional_kwargs: {
@@ -199,7 +206,7 @@ it('runs the real host agent with stable request prefixes, paired tools and invo
         requests[1].input
             .filter((m) => m.getType() === 'tool')
             .map((m) => (m as ToolMessage).tool_call_id),
-        ['search-1', 'check-a']
+        ['update-1', 'check-a']
     )
     const retained = requests[1].input[2] as AIMessage
     assert.equal(retained.usage_metadata, undefined)
@@ -245,7 +252,13 @@ it('keeps successful work, retries ineffective rounds and moves on after three c
         if (index === 4)
             return new AIMessage({
                 content: '',
-                tool_calls: [{ id: 'search', name: 'search', args: {} }]
+                tool_calls: [
+                    {
+                        id: 'update',
+                        name: 'living_memory_update_memory',
+                        args: { memoryId: 'a' }
+                    }
+                ]
             })
         if (index < 8) return new AIMessage('这一批结束了')
         return new AIMessage({
@@ -264,7 +277,7 @@ it('keeps successful work, retries ineffective rounds and moves on after three c
     )
 })
 
-it('limits successful searches without coverage to sixty rounds and preserves partial batch results', async () => {
+it('limits repeated updates of processed memories to sixty rounds and preserves partial batch results', async () => {
     const { model, requests } = createModel(
         (_params, index) =>
             new AIMessage({
@@ -275,9 +288,9 @@ it('limits successful searches without coverage to sixty rounds and preserves pa
                         : index <= 60
                           ? [
                                 {
-                                    id: `search-${index}`,
-                                    name: 'search',
-                                    args: {}
+                                    id: `update-${index}`,
+                                    name: 'living_memory_update_memory',
+                                    args: { memoryId: 'a' }
                                 }
                             ]
                           : [check(['c'], 'c')]

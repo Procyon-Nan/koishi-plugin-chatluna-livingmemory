@@ -17,7 +17,6 @@ import { LivingMemoryJobTracker } from '../src/service/workflows/job_tracker'
 import { LivingMemoryUserProfileService } from '../src/service/user_profile'
 import { LivingMemoryMutationService } from '../src/service/app/memory_mutation_service'
 import { partitionDreamEntries } from '../src/service/workflows/dream/partitioning'
-import { LivingMemoryVectorIndexError } from '../src/service/vector_index/errors'
 import { getJobStatusLabel, getJobStatusTagType } from '../client/utils/display'
 import { withLivingMemoryRepository } from './persistence-test-utils'
 import {
@@ -116,15 +115,6 @@ const runService = async (
                     partitionDreamEntries(items, { targetSize: size }),
                 runHdbscan: async ({ entryCount }) => new Int32Array(entryCount)
             },
-            {
-                searchMemories: async () => {
-                    throw new LivingMemoryVectorIndexError(
-                        'worker-unavailable',
-                        'unavailable',
-                        'worker lost'
-                    )
-                }
-            },
             profiles,
             persona
         )
@@ -203,24 +193,19 @@ it('keeps successful operations and proceeds past an ineffective batch as partia
 })
 
 it('retains completed operations and missing IDs when the session fatally fails', async () => {
-    const { result } = await runService((params, round) =>
-        round === 1
-            ? checked([currentIds(params)[0]])
-            : new AIMessage({
-                  content: '',
-                  tool_calls: [
-                      {
-                          name: 'living_memory_search',
-                          id: 'search',
-                          args: { searchTexts: ['我记得共同主题'] }
-                      }
-                  ]
-              })
+    const controller = new AbortController()
+    const { result } = await runService(
+        (params, round) => {
+            if (round === 1) return checked([currentIds(params)[0]])
+            controller.abort(new Error('session aborted'))
+            return new AIMessage('')
+        },
+        { signal: controller.signal }
     )
     assert.equal(result.status, 'failed')
     assert.equal(result.processedCount, 1)
     assert.equal(result.unprocessedMemoryIds.length, 30)
-    assert.match(result.detail, /worker lost/)
+    assert.match(result.detail, /session aborted/)
 })
 
 it('reports missing model configuration as failed with the entire target set', async () => {

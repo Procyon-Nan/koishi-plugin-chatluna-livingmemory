@@ -187,7 +187,6 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             this.mutations,
             this.vectorIndex,
             this.dreamWorker,
-            this.searchEngine,
             this.userProfiles,
             this.presetPersona
         )

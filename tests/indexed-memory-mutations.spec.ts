@@ -39,8 +39,7 @@ const scope = { presetId, conversationId: 'conversation-1' }
 const createSession = (
     repository: LivingMemoryRepository,
     mutations: LivingMemoryMutationService,
-    batches: MemoryEntryRecord[][],
-    searchResults: MemoryEntryRecord[] = []
+    batches: MemoryEntryRecord[][]
 ) => {
     const state = createDreamSessionState(
         batches.flatMap((entries) => entries.map((entry) => entry.id))
@@ -53,15 +52,7 @@ const createSession = (
         presetId,
         state,
         mutations,
-        speakers: repository,
-        search: {
-            async searchMemories(preset, input, conversationId) {
-                assert.equal(preset, presetId)
-                assert.equal(input.memoryStatus, 'active')
-                assert.equal(conversationId, undefined)
-                return searchResults
-            }
-        }
+        speakers: repository
     })
     const invoke = (name: string, input: Record<string, unknown>) => {
         const tool = tools.find((tool) => tool.name === `living_memory_${name}`)
@@ -192,7 +183,6 @@ it.each([false, true])(
             assert.deepEqual(
                 tools.map((tool) => tool.name).sort(),
                 [
-                    'living_memory_search',
                     'living_memory_update_memory',
                     'living_memory_merge_memories',
                     'living_memory_split_memory',
@@ -347,17 +337,15 @@ it('tracks Dream coverage across batches and reuses merged memories', async () =
             [
                 [a, b, c],
                 [d, e]
-            ],
-            [d, outside]
+            ]
         )
-        assert.equal(tools.length, 6)
+        assert.equal(tools.length, 5)
         assert.equal(
             tools.some((tool) => tool.name === 'living_memory_create_memory'),
             false
         )
         advanceDreamBatch(state)
-        await invoke('search', { searchTexts: ['关联记忆'] })
-        assert.equal(state.availableMemoryIds.has(outside.id), true)
+        assert.equal(state.availableMemoryIds.has(outside.id), false)
         assert.equal(getDreamCoverage(state).processedCount, 0)
         const merged = JSON.parse(
             await invoke('merge_memories', {
@@ -370,17 +358,13 @@ it('tracks Dream coverage across batches and reuses merged memories', async () =
             true
         )
         assert.deepEqual(pendingDreamMemoryIds(state), [c.id])
-        await invoke('checked_memory', {
-            memoryIds: [d.id],
-            reason: '内容完整'
-        })
         recordSkippedDreamBatch(state, 'round-limit')
         assert.deepEqual(
             advanceDreamBatch(state)?.entries.map((entry) => entry.id),
-            [e.id]
+            [d.id, e.id]
         )
         await invoke('checked_memory', {
-            memoryIds: [c.id],
+            memoryIds: [c.id, d.id],
             reason: '复查后无需修改'
         })
         await invoke('update_memory', {

@@ -4,7 +4,6 @@ import type { ManualDreamVectorReader } from '../../../contracts/vector_index'
 import type {
     DreamMemoryEntryRecord,
     LivingMemoryConfig,
-    LivingMemorySearchProvider,
     LivingMemoryUpdateProvider
 } from '../../../contracts/workflows'
 import type { PresetPersonaResolver } from '../../../contracts/memory'
@@ -48,7 +47,6 @@ export class LivingMemoryDreamService {
         >,
         vectors: ManualDreamVectorReader,
         worker: DreamWorkerRunner,
-        private readonly search: LivingMemorySearchProvider,
         private readonly userProfiles: LivingMemoryUserProfileService,
         private readonly presetPersona: PresetPersonaResolver
     ) {
@@ -89,7 +87,6 @@ export class LivingMemoryDreamService {
             const tools = createDreamSessionTools({
                 presetId,
                 state,
-                search: this.search,
                 speakers: this.repository,
                 mutations: this.mutations
             })

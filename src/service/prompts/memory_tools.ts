@@ -30,7 +30,7 @@ export const memorySearchTool = {
 export const memoryGetMessagesTool = {
     name: 'living_memory_get_messages',
     description: [
-        '长期记忆的原始消息获取工具，当你需要获取某条记忆的原始消息时使用此工具；使用已提供的记忆 ID；尚不清楚目标 ID 时，先使用 living_memory_search 检索。'
+        '长期记忆的原始消息获取工具，当你需要获取某条记忆的原始消息时使用此工具；使用已知的记忆 ID 或调用 living_memory_search 工具检索得到记忆 ID。'
     ].join('\n'),
     schema: z.object({
         memoryId: z.string().trim().min(1).describe('要获取原始消息的记忆 ID。')
@@ -55,7 +55,7 @@ export const memoryCreateTool = {
 export const memoryUpdateTool = {
     name: 'living_memory_update_memory',
     description: [
-        '长期记忆更新工具，当你需要更新某条记忆时使用此工具；使用已提供的记忆 ID；尚不清楚目标 ID 时，先使用 living_memory_search 检索。',
+        '长期记忆更新工具，当你需要更新某条记忆时使用此工具；使用当前上下文已提供的记忆 ID。',
         '你应该在某条记忆中描述的内容过时、需要补充或是与你所知道的信息存在冲突时更新它。',
         '你应该提交更新后的完整记忆字段，不要遗漏或省略任一字段。'
     ].join('\n'),
@@ -68,7 +68,7 @@ export const memoryUpdateTool = {
 export const memoryMergeTool = {
     name: 'living_memory_merge_memories',
     description: [
-        '长期记忆合并工具，当你需要将多条记忆合并成一条时使用此工具；使用已提供的记忆 ID；尚不清楚相关 ID 时，先使用 living_memory_search 检索。',
+        '长期记忆合并工具，当你需要将多条记忆合并成一条时使用此工具；使用当前上下文已提供的记忆 ID。',
         '你应该在多条记忆描述同一事件、关系、概念或偏好，且内容重复或互相补充时合并它们。',
         '你应该提交合并后的完整新记忆字段，不要遗漏或省略任一字段。'
     ].join('\n'),
@@ -84,7 +84,7 @@ export const memoryMergeTool = {
 export const memorySplitTool = {
     name: 'living_memory_split_memory',
     description: [
-        '长期记忆拆分工具，当你需要将一条记忆拆分为多条记忆时使用此工具；使用已知的记忆 ID 或调用 living_memory_search 工具检索得到记忆 ID。',
+        '长期记忆拆分工具，当你需要将一条记忆拆分为多条记忆时使用此工具；使用当前上下文已提供的记忆 ID。',
         '你应该在一条记忆包含了多个主题的事实内容时拆分它；拆分后的每条记忆主题唯一，且不丢失重要信息。',
         '你应该提交拆分后的完整新记忆字段，不要遗漏或省略任一字段。'
     ].join('\n'),
@@ -100,7 +100,7 @@ export const memorySplitTool = {
 export const memoryDeleteTool = {
     name: 'living_memory_delete_memory',
     description: [
-        '长期记忆删除工具，当你需要删除某条记忆时使用此工具；使用已提供的记忆 ID；尚不清楚目标 ID 时，先使用 living_memory_search 检索。',
+        '长期记忆删除工具，当你需要删除某条记忆时使用此工具；使用当前上下文已提供的记忆 ID。',
         '你应该在某条记忆与其他记忆内容重复、存在冲突或是过时时删除它；一般选择时间上更旧的记忆删除。'
     ].join('\n'),
     schema: z.object({

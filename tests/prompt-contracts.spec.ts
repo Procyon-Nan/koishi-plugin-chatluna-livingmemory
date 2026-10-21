@@ -71,8 +71,19 @@ it('renders complete session batches and the tool-based Dream contract', () => {
             '</dream_input>'
         ].join('\n')
     )
-    assert.match(session, /living_memory_checked_memory/)
-    assert.match(session, /合成一条新记忆/)
+    assert.match(session, /当前批次的每条记忆都应通过工具成功处理/)
+    assert.deepEqual(
+        [...session.matchAll(/^- (living_memory_\w+) 工具：/gm)].map(
+            (match) => match[1]
+        ),
+        [
+            'living_memory_update_memory',
+            'living_memory_merge_memories',
+            'living_memory_split_memory',
+            'living_memory_delete_memory',
+            'living_memory_checked_memory'
+        ]
+    )
     assert.ok(!session.includes('target'))
     assert.ok(!session.includes('living_memory_dream_result'))
 })
@@ -120,6 +131,7 @@ it('keeps memory field rules in tool schemas without prompt duplication', () => 
     const dream = buildDreamSystemPrompt('助手', '你是测试助手。')
 
     const schemaDescriptions = [
+        generatedMemorySchema.description,
         generatedMemorySchema.shape.type.description,
         generatedMemorySchema.shape.content.description,
         generatedMemorySchema.shape.summary.description,
