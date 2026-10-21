@@ -331,14 +331,10 @@ it('tracks Dream coverage across batches and reuses merged memories', async () =
             )
         }
         const [a, b, c, d, e, outside] = entries
-        const { state, tools, invoke } = createSession(
-            repository,
-            mutations,
-            [
-                [a, b, c],
-                [d, e]
-            ]
-        )
+        const { state, tools, invoke } = createSession(repository, mutations, [
+            [a, b, c],
+            [d, e]
+        ])
         assert.equal(tools.length, 5)
         assert.equal(
             tools.some((tool) => tool.name === 'living_memory_create_memory'),
