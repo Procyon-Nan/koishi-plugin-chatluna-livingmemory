@@ -26,8 +26,7 @@ export function createDreamSessionState(
             merged: 0,
             split: 0,
             updated: 0,
-            archived: 0,
-            skipped: 0
+            archived: 0
         },
         skippedBatches: []
     }
@@ -97,7 +96,6 @@ export function recordSkippedDreamBatch(
             memoryIds,
             reason
         })
-        state.stats.skipped++
     }
 }
 

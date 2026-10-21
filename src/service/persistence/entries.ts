@@ -600,14 +600,6 @@ export class LivingMemoryEntryRepository
         if (current == null) {
             return null
         }
-        return this.writeMemoryUpdate(current, patch, isConsolidated)
-    }
-
-    private async writeMemoryUpdate(
-        current: MemoryEntryRecord,
-        patch: Partial<MemoryMutationInput> & { speakerKeys?: string[] },
-        isConsolidated?: boolean
-    ) {
         const fields = this.buildMemoryUpdatePatch(current, patch)
         const speakersChanged =
             fields.status !== current.status ||
@@ -616,38 +608,20 @@ export class LivingMemoryEntryRepository
                 (speakerKey, index) => speakerKey !== current.speakerKeys[index]
             )
         return await this.transact(async (database) => {
-            const updatedAt = new Date()
-            const nextRecord = {
-                ...current,
+            const update = {
                 ...fields,
                 ...(isConsolidated === undefined ? {} : { isConsolidated }),
-                updatedAt
+                updatedAt: new Date()
             }
+            const record = { ...current, ...update }
             await database.set(
                 'living_memory_entry',
                 { id: current.id },
-                {
-                    ...fields,
-                    ...(isConsolidated === undefined ? {} : { isConsolidated }),
-                    updatedAt
-                }
+                update
             )
             if (speakersChanged) {
-                await this.replaceActiveMemorySpeakers(database, [nextRecord])
+                await this.replaceActiveMemorySpeakers(database, [record])
             }
-            const stored = (
-                await database.get(
-                    'living_memory_entry',
-                    { id: current.id },
-                    memoryEntryFields
-                )
-            )[0]
-            if (stored == null) {
-                throw new Error(
-                    `memory update failed: memory not found: ${current.id}`
-                )
-            }
-            const record = normalizeEntryRecord(stored)
             return {
                 record,
                 contentChanged: record.content !== current.content
@@ -655,25 +629,20 @@ export class LivingMemoryEntryRepository
         })
     }
 
-    /**
-     * 只改 `isConsolidated`，不涉及 `status` 与 `speakerKeys`，因此无需重写
-     * `living_memory_entry_speaker`；`set` 本身是单语句原子操作，回读仅用于向量
-     * 索引同步。这是记忆写路径中唯一不需要事务的分支。
-     */
+    /** 固化状态通过单条原子更新写入，索引同步复用应用层已读取的记忆。 */
     async setMemoryConsolidation(
         presetId: string,
         ids: string[],
         isConsolidated: boolean
     ) {
         if (ids.length === 0) {
-            return []
+            return
         }
         await this.ctx.database.set(
             'living_memory_entry',
             { presetId, id: { $in: ids } },
             { isConsolidated }
         )
-        return await this.getEntriesByPresetAndIds(presetId, ids)
     }
 
     async archiveActiveEntries(presetId: string, ids: string[]) {
@@ -745,9 +714,7 @@ export class LivingMemoryEntryRepository
                 record.isConsolidated = isConsolidated
                 return record
             })
-            for (const record of records) {
-                await database.create('living_memory_entry', record)
-            }
+            await database.upsert('living_memory_entry', records)
             await database.set(
                 'living_memory_entry',
                 { presetId, id: sourceMemoryId },

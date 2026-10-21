@@ -140,6 +140,7 @@ export class LivingMemoryDreamService {
             processedCount: coverage.processedCount,
             unprocessedMemoryIds: coverage.unprocessedMemoryIds,
             skippedBatches: state.skippedBatches,
+            skipped: state.skippedBatches.length,
             ...state.stats,
             error,
             detail

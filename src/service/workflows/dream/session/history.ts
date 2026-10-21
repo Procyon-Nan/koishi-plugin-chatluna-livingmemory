@@ -52,7 +52,22 @@ export class DreamSessionHistory {
     }
 
     append(...messages: BaseMessage[]) {
-        this.messages.push(...messages)
+        // usage 单独记录；入列时保留签名、推理内容与工具元数据，供后续各轮复用。
+        this.messages.push(
+            ...messages.map((message) =>
+                isAIMessage(message)
+                    ? new AIMessage({
+                          content: message.content,
+                          name: message.name,
+                          id: message.id,
+                          additional_kwargs: message.additional_kwargs,
+                          response_metadata: message.response_metadata,
+                          tool_calls: message.tool_calls,
+                          invalid_tool_calls: message.invalid_tool_calls
+                      })
+                    : message
+            )
+        )
     }
 
     async prepareDecisionMessages(
@@ -70,21 +85,7 @@ export class DreamSessionHistory {
         this.logger.diagnostic('dream.context', {
             lastReportedInputTokens: this.inputTokens
         })
-        const messages = this.messages.map((message) =>
-            // usage 由本会话单独记录；否则宿主裁剪会引用压缩前的输入量，或混用缓存口径。
-            // 原始历史不变，供应商签名、推理内容和工具调用元数据仍随请求保留。
-            isAIMessage(message)
-                ? new AIMessage({
-                      content: message.content,
-                      name: message.name,
-                      id: message.id,
-                      additional_kwargs: message.additional_kwargs,
-                      response_metadata: message.response_metadata,
-                      tool_calls: message.tool_calls,
-                      invalid_tool_calls: message.invalid_tool_calls
-                  })
-                : message
-        )
+        const messages = [...this.messages]
         // 仅检查宿主容量，防止静默裁剪当前批次；不参与 200k 压缩判断。
         const [, tokens] = await this.model.cropMessages(
             messages,
@@ -155,14 +156,13 @@ export class DreamSessionHistory {
         if (!summary) {
             throw new Error('Dream 历史压缩未返回有效摘要。')
         }
-        const candidate = [
+        this.messages = [
             this.messages[0],
             new HumanMessage(
                 formatXmlBlock('dream_history_summary', summary).join('\n')
             ),
             ...this.messages.slice(this.batchStart)
         ]
-        this.messages = candidate
         this.batchStart = 2
         // 摘要请求的 usage 和保留下来的旧响应均不代表新上下文大小。
         this.inputTokens = undefined

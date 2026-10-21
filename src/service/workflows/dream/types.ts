@@ -11,10 +11,10 @@ export interface DreamOperationStats {
     split: number
     updated: number
     archived: number
-    skipped: number
 }
 
 export interface DreamRunResult extends DreamOperationStats {
+    skipped: number
     entryCount: number
     clusterCount: number
     status: 'completed' | 'partial' | 'failed'

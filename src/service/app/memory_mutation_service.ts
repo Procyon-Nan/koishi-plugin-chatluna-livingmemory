@@ -9,7 +9,6 @@ import type {
     PresetSpeakerRecord
 } from '../../contracts/memory'
 import type {
-    MemoryIndexDocument,
     MemoryIndexMutationBatch,
     MemoryIndexMutationSink,
     MemoryIndexUpsert
@@ -237,7 +236,7 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
             upserts: [
                 this.buildIndexUpsert(
                     result.record,
-                    this.vectorAction(result.contentChanged)
+                    result.contentChanged ? 'replace' : 'preserve'
                 )
             ],
             deletes: []
@@ -273,26 +272,26 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
         isConsolidated: boolean
     ) {
         return this.runPresetMutation(presetId, async () => {
-            const activeIds = (
+            const records = (
                 await this.repository.getEntriesByPresetAndIds(presetId, ids)
             )
                 .filter((entry) => entry.status === 'active')
-                .map((entry) => entry.id)
-            const active = new Set(activeIds)
+                .map((entry) => ({ ...entry, isConsolidated }))
+            const active = new Set(records.map((entry) => entry.id))
             const missingIds = ids.filter((id) => !active.has(id))
             if (missingIds.length > 0) {
                 throw new Error(
                     `无法确认以下记忆的检查状态：${missingIds.join('、')}。请核对记忆 ID 后重试。`
                 )
             }
-            const records = await this.repository.setMemoryConsolidation(
-                presetId,
-                activeIds,
-                isConsolidated
-            )
             if (records.length === 0) {
                 return records
             }
+            await this.repository.setMemoryConsolidation(
+                presetId,
+                ids,
+                isConsolidated
+            )
             await this.syncCommittedMutationToIndex({
                 presetId,
                 upserts: records.map((record) =>
@@ -369,26 +368,12 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
                 memories,
                 isConsolidated
             )
-            const warnings: string[] = []
-            try {
-                await this.syncCommittedMutationToIndex({
-                    presetId,
-                    upserts: [
-                        ...result.memories.map((memory) =>
-                            this.buildIndexUpsert(memory, 'replace')
-                        ),
-                        this.buildIndexUpsert(result.archivedSource, 'preserve')
-                    ],
-                    deletes: []
-                })
-            } catch (error) {
-                if (!(error instanceof LivingMemoryFactsCommittedError))
-                    throw error
-                warnings.push(
-                    '记忆已拆分，但向量索引同步失败，已调度后台自动对账：' +
-                        error.message
-                )
-            }
+            const warnings = await this.syncReplacementMemoriesToIndex(
+                presetId,
+                result.memories,
+                [result.archivedSource],
+                '拆分'
+            )
             return { memories: result.memories, warnings }
         })
     }
@@ -424,30 +409,43 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
                 memory,
                 isConsolidated
             )
-            const warnings: string[] = []
-            try {
-                await this.syncCommittedMutationToIndex({
-                    presetId,
-                    upserts: [
-                        this.buildIndexUpsert(result.memory, 'replace'),
-                        ...result.archivedSources.map((source) =>
-                            this.buildIndexUpsert(source, 'preserve')
-                        )
-                    ],
-                    deletes: []
-                })
-            } catch (error) {
-                if (!(error instanceof LivingMemoryFactsCommittedError)) {
-                    throw error
-                }
-                // 新 ID 已落库，索引失败时仍返回它，避免模型重试或丢失合并结果。
-                warnings.push(
-                    '记忆已合并，但向量索引同步失败，已调度后台自动对账：' +
-                        error.message
-                )
-            }
+            const warnings = await this.syncReplacementMemoriesToIndex(
+                presetId,
+                [result.memory],
+                result.archivedSources,
+                '合并'
+            )
             return { memory: result.memory, warnings }
         })
+    }
+
+    private async syncReplacementMemoriesToIndex(
+        presetId: string,
+        created: MemoryEntryRecord[],
+        archived: MemoryEntryRecord[],
+        operation: '合并' | '拆分'
+    ): Promise<string[]> {
+        try {
+            await this.syncCommittedMutationToIndex({
+                presetId,
+                upserts: [
+                    ...created.map((record) =>
+                        this.buildIndexUpsert(record, 'replace')
+                    ),
+                    ...archived.map((record) =>
+                        this.buildIndexUpsert(record, 'preserve')
+                    )
+                ],
+                deletes: []
+            })
+            return []
+        } catch (error) {
+            if (!(error instanceof LivingMemoryFactsCommittedError)) throw error
+            // 已提交的新 ID 随警告返回，供调用方继续使用。
+            return [
+                `记忆已${operation}，但向量索引同步失败，已调度后台自动对账：${error.message}`
+            ]
+        }
     }
 
     async deleteMemory(id: string) {
@@ -632,32 +630,19 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
         vectorAction: MemoryIndexUpsert['vectorAction']
     ): MemoryIndexUpsert {
         return {
-            document: this.toIndexDocument(record),
+            document: {
+                id: record.id,
+                presetId: record.presetId,
+                sourceConversationId: record.sourceConversationId,
+                status: record.status,
+                type: record.type,
+                isConsolidated: record.isConsolidated,
+                content: record.content,
+                keywords: record.keywords,
+                updatedAt: record.updatedAt
+            },
             vectorAction
         }
-    }
-
-    private toIndexDocument(record: MemoryEntryRecord): MemoryIndexDocument {
-        return {
-            id: record.id,
-            presetId: record.presetId,
-            sourceConversationId: record.sourceConversationId,
-            status: record.status,
-            type: record.type,
-            isConsolidated: record.isConsolidated,
-            content: record.content,
-            keywords: record.keywords,
-            updatedAt: record.updatedAt
-        }
-    }
-
-    private vectorAction(
-        contentChanged: boolean
-    ): MemoryIndexUpsert['vectorAction'] {
-        if (contentChanged) {
-            return 'replace'
-        }
-        return 'preserve'
     }
 
     private factsCommittedError(presetId: string, error: unknown) {
