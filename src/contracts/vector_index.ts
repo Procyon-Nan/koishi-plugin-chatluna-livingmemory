@@ -113,7 +113,7 @@ export interface MemoryVectorSearch {
     ): Promise<MemoryHybridSearchHit[]>
 }
 
-export interface DreamVectorReadPage {
+export interface VectorSnapshot {
     embeddingModelId: string
     dimension: number
     generation: string
@@ -127,11 +127,11 @@ export interface DreamVectorReadPage {
 }
 
 export interface DreamVectorProvider {
-    readDreamVectors(
+    readVectorSnapshot(
         presetId: string,
         memoryIds: string[],
         signal?: AbortSignal
-    ): Promise<DreamVectorReadPage>
+    ): Promise<VectorSnapshot>
     queryDreamNeighbors(
         queries: DreamNeighborQuery[],
         signal?: AbortSignal

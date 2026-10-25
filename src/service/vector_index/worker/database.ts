@@ -8,7 +8,7 @@ import type {
     MemoryVectorIndexManifest,
     MemoryVectorIndexState
 } from '../../../contracts/vector_index'
-import { summarizeError } from '../../shared/utils'
+import { formatErrorDetails } from '../../shared/utils'
 import type {
     VectorIndexHybridQuery,
     VectorIndexInspection,
@@ -26,9 +26,8 @@ import {
 import {
     queryVectorIndexHybrid,
     queryVectorIndexKnn,
-    readDreamVectors,
-    readVectorIndexInventoryPage,
-    readVectorIndexVectors
+    readVectorSnapshot,
+    readVectorIndexInventoryPage
 } from './queries'
 import {
     analyzeVectorIndex,
@@ -283,16 +282,8 @@ export class LivingMemoryVectorIndexDatabase {
         )
     }
 
-    readVectors(presetId: string, memoryIds: string[]) {
-        return readVectorIndexVectors(
-            this.requireActiveDatabase(),
-            presetId,
-            memoryIds
-        )
-    }
-
-    readDreamVectors(presetId: string, memoryIds: string[]) {
-        return readDreamVectors(
+    readVectorSnapshot(presetId: string, memoryIds: string[]) {
+        return readVectorSnapshot(
             this.requireActiveDatabase(),
             presetId,
             memoryIds
@@ -440,7 +431,7 @@ export class LivingMemoryVectorIndexDatabase {
             throw new LivingMemoryVectorIndexError(
                 'extension-migration-failed',
                 'unavailable',
-                `pgvector 0.8.1 to 0.8.7 migration failed: database=${directory}, backup=${backupDirectory}: ${summarizeError(cause)}`,
+                `pgvector 0.8.1 to 0.8.7 migration failed: database=${directory}, backup=${backupDirectory}: ${formatErrorDetails(cause)}`,
                 { cause }
             )
         }
@@ -489,7 +480,7 @@ export class LivingMemoryVectorIndexDatabase {
             new Error(
                 `vector index database quarantined: operation=${operation} ` +
                     `source=${directory} quarantine=${quarantineDirectory}: ` +
-                    summarizeError(cause),
+                    formatErrorDetails(cause),
                 { cause }
             )
         )

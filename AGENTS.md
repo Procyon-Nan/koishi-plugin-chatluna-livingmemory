@@ -52,7 +52,7 @@ chatluna-livingmemory/
 │       │   └── tools/
 │       │       ├── index.ts            # 共用工具创建入口
 │       │       ├── tool_runtime.ts     # 工具调用作用域解析
-│       │       ├── embedding_search_tool.ts # 记忆检索
+│       │       ├── search_memory_tool.ts # 记忆检索
 │       │       ├── get_messages_tool.ts # 来源消息查询
 │       │       ├── create_memory_tool.ts # 创建记忆
 │       │       ├── update_memory_tool.ts # 更新记忆
@@ -120,12 +120,12 @@ chatluna-livingmemory/
 │       │   ├── recall/
 │       │   │   ├── coordinator.ts       # 召回间隔、调度与快照保存
 │       │   │   ├── agentic_recall.ts    # 召回模型工具循环
-│       │   │   ├── embedding_search_engine.ts # 混合检索与重排序
+│       │   │   ├── memory_search_engine.ts # 混合检索与重排序
 │       │   │   └── indexed_entries.ts  # 索引命中与记忆条目组装
 │       │   └── dream/
 │       │       ├── coordinator.ts       # Dream 触发、排队与取消
 │       │       ├── job_runner.ts        # 任务记录与完成统计
-│       │       ├── full.ts              # 全量准备、聚类、会话与画像衔接
+│       │       ├── service.ts           # 全量准备、聚类、会话与画像衔接
 │       │       ├── clustering.ts        # 向量快照、分组规划与批次组装
 │       │       ├── semantic/
 │       │       │   ├── types.ts         # 向量矩阵、候选、图与分组契约

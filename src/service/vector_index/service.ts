@@ -12,7 +12,7 @@ import type {
     MemoryVectorIndexStatus,
     MemoryVectorSearch
 } from '../../contracts/vector_index'
-import { summarizeError, toError } from '../shared/utils'
+import { formatErrorDetails, toError } from '../shared/utils'
 import { LivingMemoryVectorIndexError } from './errors'
 import { VectorIndexDirectorySwitch } from './directory_switch'
 import type { VectorIndexDirectoryActivation } from './directory_switch'
@@ -244,7 +244,7 @@ export class LivingMemoryVectorIndexService
         }
     }
 
-    async readDreamVectors(
+    async readVectorSnapshot(
         presetId: string,
         memoryIds: string[],
         signal?: AbortSignal
@@ -252,7 +252,7 @@ export class LivingMemoryVectorIndexService
         return this.operationGate.run(async () => {
             await this.awaitPresetReadBarrier(presetId)
             signal?.throwIfAborted()
-            return this.requireWorker().readDreamVectors(presetId, memoryIds)
+            return this.requireWorker().readVectorSnapshot(presetId, memoryIds)
         })
     }
 
@@ -594,8 +594,8 @@ export class LivingMemoryVectorIndexService
             } catch (recoveryError) {
                 throw new Error(
                     `vector index rebuild switch failed: ` +
-                        `${summarizeError(error)}; recovery failed: ` +
-                        summarizeError(recoveryError),
+                        `${formatErrorDetails(error)}; recovery failed: ` +
+                        formatErrorDetails(recoveryError),
                     { cause: error }
                 )
             }
@@ -614,8 +614,8 @@ export class LivingMemoryVectorIndexService
     ) {
         const message =
             `vector index rebuild switch failed: ` +
-            `${summarizeError(switchError)}; rollback failed: ` +
-            summarizeError(rollbackError)
+            `${formatErrorDetails(switchError)}; rollback failed: ` +
+            formatErrorDetails(rollbackError)
         try {
             await this.restoreActiveDatabase(
                 worker,
@@ -624,7 +624,7 @@ export class LivingMemoryVectorIndexService
             )
         } catch (recoveryError) {
             throw new Error(
-                `${message}; recovery failed: ${summarizeError(recoveryError)}`,
+                `${message}; recovery failed: ${formatErrorDetails(recoveryError)}`,
                 {
                     cause: switchError
                 }
@@ -749,7 +749,7 @@ export class LivingMemoryVectorIndexService
         } catch (error) {
             this.logger.diagnostic('vector-index.failure.inspection.failed', {
                 workflow: 'vector-index',
-                error: summarizeError(error)
+                error: formatErrorDetails(error)
             })
         }
     }

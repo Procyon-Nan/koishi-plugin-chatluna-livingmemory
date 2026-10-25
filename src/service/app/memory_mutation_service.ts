@@ -26,7 +26,7 @@ import {
     resolveScopeSpeakerKeys
 } from '../memory/speaker_identity'
 import { SerialTaskQueue } from '../shared/serial_task_queue'
-import { summarizeError } from '../shared/utils'
+import { formatErrorDetails } from '../shared/utils'
 import { LivingMemoryFactsCommittedError } from '../vector_index/errors'
 import type { LivingMemoryLogger } from '../logging/logger'
 
@@ -648,7 +648,7 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
     private factsCommittedError(presetId: string, error: unknown) {
         return new LivingMemoryFactsCommittedError(
             `memory facts committed but vector index synchronization failed: ` +
-                `preset=${presetId}: ${summarizeError(error)}`,
+                `preset=${presetId}: ${formatErrorDetails(error)}`,
             { cause: error }
         )
     }

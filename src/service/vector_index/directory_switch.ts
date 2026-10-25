@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
 import { rename, rm } from 'node:fs/promises'
 import { setTimeout as delay } from 'node:timers/promises'
-import { summarizeError } from '../shared/utils'
+import { formatErrorDetails } from '../shared/utils'
 
 const RENAME_RETRY_DELAYS = [50, 100, 200, 400, 800, 1_000]
 
@@ -77,8 +77,8 @@ export class VectorIndexDirectorySwitch {
                 } catch (rollbackError) {
                     throw new Error(
                         `vector index directory activation failed: ` +
-                            `${summarizeError(error)}; rollback failed: ` +
-                            summarizeError(rollbackError),
+                            `${formatErrorDetails(error)}; rollback failed: ` +
+                            formatErrorDetails(rollbackError),
                         { cause: error }
                     )
                 }
@@ -110,8 +110,8 @@ export class VectorIndexDirectorySwitch {
                     } catch (restoreCandidateError) {
                         throw new Error(
                             `vector index directory rollback failed: ` +
-                                `${summarizeError(error)}; candidate restore failed: ` +
-                                summarizeError(restoreCandidateError),
+                                `${formatErrorDetails(error)}; candidate restore failed: ` +
+                                formatErrorDetails(restoreCandidateError),
                             { cause: error }
                         )
                     }
@@ -129,7 +129,7 @@ export class VectorIndexDirectorySwitch {
             this.reportWarning(
                 new Error(
                     `vector index cleanup failed: operation=${operation} ` +
-                        `directory=${directory}: ${summarizeError(error)}`,
+                        `directory=${directory}: ${formatErrorDetails(error)}`,
                     { cause: error }
                 )
             )

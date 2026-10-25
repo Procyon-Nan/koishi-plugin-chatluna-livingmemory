@@ -4,8 +4,8 @@ import type {
     UserProfileRecord
 } from '../../contracts/memory'
 import {
-    normalizeUserProfileSpeakerAliasKey,
-    normalizeUserProfileSpeakerLabel
+    normalizeSpeakerAliasKey,
+    normalizeSpeakerLabel
 } from '../memory/speaker_identity'
 import {
     createPresetSpeakerId,
@@ -19,8 +19,8 @@ const uniqueAliases = (aliases: string[]) => {
     const result: string[] = []
     const seen = new Set<string>()
     for (const alias of aliases) {
-        const normalized = normalizeUserProfileSpeakerLabel(alias)
-        const key = normalizeUserProfileSpeakerAliasKey(normalized)
+        const normalized = normalizeSpeakerLabel(alias)
+        const key = normalizeSpeakerAliasKey(normalized)
         if (normalized.length > 0 && !seen.has(key)) {
             seen.add(key)
             result.push(normalized)
@@ -68,7 +68,7 @@ export const resolvePresetSpeakerIdentity = (
 ): PresetSpeakerIdentity | null => {
     const presetId = input.presetId.trim()
     const speakerKey = input.speakerKey.trim()
-    const speakerLabel = normalizeUserProfileSpeakerLabel(input.speakerLabel)
+    const speakerLabel = normalizeSpeakerLabel(input.speakerLabel)
     const speakerId = normalizeOptionalString(input.speakerId)
     const platform = normalizeOptionalString(input.platform)
     if (
@@ -121,7 +121,7 @@ export const reconcilePresetSpeaker = async (
         identity.speakerKey,
         ...speakers.map((speaker) => speaker.speakerKey),
         ...speakers.flatMap((speaker) =>
-            speaker.speakerAliases.map(normalizeUserProfileSpeakerAliasKey)
+            speaker.speakerAliases.map(normalizeSpeakerAliasKey)
         )
     ])
     const profiles = (

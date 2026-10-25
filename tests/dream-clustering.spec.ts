@@ -35,7 +35,7 @@ const createVectorReader = (entries: ReturnType<typeof createEntries>) => {
             reason: 'index-absent',
             rows: []
         }),
-        readDreamVectors: async (_presetId, ids) => {
+        readVectorSnapshot: async (_presetId, ids) => {
             calls.push(ids)
             return {
                 embeddingModelId: 'test',
@@ -158,8 +158,8 @@ it('connects complete candidates to refinement and retains initial on ANN unavai
 it('rejects a changed index generation between vector pages', async () => {
     const entries = createEntries(257)
     const vectors = createVectorReader(entries)
-    const read = vectors.reader.readDreamVectors
-    vectors.reader.readDreamVectors = async (...args) => ({
+    const read = vectors.reader.readVectorSnapshot
+    vectors.reader.readVectorSnapshot = async (...args) => ({
         ...(await read(...args)),
         generation: String(vectors.calls.length)
     })
@@ -191,8 +191,8 @@ it('stops submitting vector pages after cancellation', async () => {
     const entries = createEntries(257)
     const vectors = createVectorReader(entries)
     const controller = new AbortController()
-    const read = vectors.reader.readDreamVectors
-    vectors.reader.readDreamVectors = async (...args) => {
+    const read = vectors.reader.readVectorSnapshot
+    vectors.reader.readVectorSnapshot = async (...args) => {
         const page = await read(...args)
         controller.abort(new Error('cancel vector read'))
         return page

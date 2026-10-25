@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { HumanMessage } from '@langchain/core/messages'
 import type { Session } from 'koishi'
 import type { MemoryScope } from '../src/contracts/memory'
-import { createUserProfileSpeakerKey } from '../src/service/memory/speaker_identity'
+import { createSpeakerKey } from '../src/service/memory/speaker_identity'
 import { toChatLunaTranscriptMessageResult } from '../src/service/transcript/chatluna_transcript_adapter'
 
 const createScope = (platform?: string): MemoryScope => ({
@@ -47,7 +47,7 @@ it('derives ChatLuna profile identity and global name from message user id', asy
     assert.equal(result.reason, null)
     assert.equal(
         result.message?.speakerKey,
-        createUserProfileSpeakerKey('onebot', 'user-2')
+        createSpeakerKey('onebot', 'user-2')
     )
     assert.equal(result.message?.speakerLabel, '全局昵称-user-2')
 })

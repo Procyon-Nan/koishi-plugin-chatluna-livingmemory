@@ -13,7 +13,7 @@ export interface LivingMemoryPromptSectionsOptions {
     speakerKeys?: string[]
 }
 
-export const hydrateLivingMemoryPromptVariable = async (
+const loadSnapshotText = async (
     dependencies: Pick<LivingMemoryPromptHydrationDependencies, 'snapshots'>,
     scope: Pick<MemoryScope, 'presetId' | 'conversationId'>
 ) => {
@@ -30,7 +30,7 @@ export const hydrateLivingMemoryPromptSections = async (
     const [snapshot, userProfiles] = await Promise.all([
         options.includeSnapshot === false
             ? Promise.resolve('')
-            : hydrateLivingMemoryPromptVariable(dependencies, scope),
+            : loadSnapshotText(dependencies, scope),
         dependencies.userProfiles.renderForSpeakers(
             scope.presetId,
             options.speakerKeys ?? []

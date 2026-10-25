@@ -1,5 +1,5 @@
 import type { MemoryIndexSourceRecord } from '../../contracts/vector_index'
-import { summarizeError } from '../shared/utils'
+import { formatErrorDetails } from '../shared/utils'
 import type { LivingMemoryVectorIndexWorkerClient } from './worker_client'
 import type {
     VectorIndexDocument,
@@ -187,7 +187,7 @@ export const reconcileVectorIndexPreset = async (options: {
         })
         return indexedCount
     } catch (error) {
-        const message = summarizeError(error)
+        const message = formatErrorDetails(error)
         await worker.markPresetState({
             presetId,
             state: 'dirty',

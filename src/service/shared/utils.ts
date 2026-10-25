@@ -21,7 +21,7 @@ export const toNonEmptyString = (value: unknown) => {
 /**
  * 将任意抛出值转为可记录的文本；Error 优先保留堆栈以便定位。
  */
-export const summarizeError = (error: unknown) => {
+export const formatErrorDetails = (error: unknown) => {
     if (error instanceof Error) {
         return error.stack ?? error.message
     }

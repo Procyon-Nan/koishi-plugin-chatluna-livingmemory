@@ -1,5 +1,5 @@
 import { Context } from 'koishi'
-import { summarizeError } from '../shared/utils'
+import { formatErrorDetails } from '../shared/utils'
 import {
     type CharacterPresetProvider,
     characterPresetSuffix,
@@ -43,7 +43,7 @@ export class LivingMemoryPresetCatalog {
             this.logger.diagnostic('preset.catalog.skipped', {
                 workflow: 'webui',
                 source: 'chatluna',
-                error: summarizeError(error)
+                error: formatErrorDetails(error)
             })
             return []
         }
@@ -69,7 +69,7 @@ export class LivingMemoryPresetCatalog {
             this.logger.diagnostic('preset.catalog.skipped', {
                 workflow: 'webui',
                 source: 'character',
-                error: summarizeError(error)
+                error: formatErrorDetails(error)
             })
             return []
         }

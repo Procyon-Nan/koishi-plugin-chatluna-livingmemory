@@ -22,15 +22,12 @@ export class LivingMemoryDreamCoordinator {
     private readonly tasks = new Set<Promise<unknown>>()
 
     constructor(
-        private readonly jobRunner: Pick<
-            LivingMemoryDreamJobRunner,
-            'runManual'
-        >,
+        private readonly jobRunner: Pick<LivingMemoryDreamJobRunner, 'run'>,
         private readonly repository: DreamCoordinatorRepository,
         private readonly logger: LivingMemoryLogger
     ) {}
 
-    runManual(presetId: string): Promise<DreamTriggerResult> {
+    start(presetId: string): Promise<DreamTriggerResult> {
         this.controller.signal.throwIfAborted()
         return this.track(this.startJob(presetId))
     }
@@ -102,7 +99,7 @@ export class LivingMemoryDreamCoordinator {
             running = true
             void this.track(
                 this.jobRunner
-                    .runManual(scope, job.id, this.controller.signal)
+                    .run(scope, job.id, this.controller.signal)
                     .finally(() => {
                         this.lockByPreset.delete(presetId)
                     })

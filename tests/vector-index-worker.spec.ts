@@ -317,27 +317,10 @@ it('runs typed vector index worker mutations and filtered searches', async () =>
         ],
         deletes: ['memory-c']
     })
-    const vectors = await client.readVectors('preset-a', [
-        'memory-b',
+    const dreamPage = await client.readVectorSnapshot('preset-a', [
         'memory-b',
         'memory-c',
         'missing-memory'
-    ])
-    assert.deepEqual(
-        vectors.vectors.map(({ memoryId, vector }) => ({
-            memoryId,
-            vector: [...vector]
-        })),
-        [
-            { memoryId: 'memory-b', vector: [1, 0, 0] },
-            { memoryId: 'memory-b', vector: [1, 0, 0] }
-        ]
-    )
-    assert.deepEqual(vectors.missingMemoryIds, ['memory-c', 'missing-memory'])
-
-    const dreamPage = await client.readDreamVectors('preset-a', [
-        'memory-b',
-        'memory-c'
     ])
     assert.equal(dreamPage.dimension, 3)
     assert.equal(typeof dreamPage.generation, 'string')
@@ -346,7 +329,7 @@ it('runs typed vector index worker mutations and filtered searches', async () =>
     assert.equal(dreamPage.items[0].status, 'active')
     assert.ok(dreamPage.items[0].vector instanceof Float32Array)
     assert.deepEqual([...dreamPage.items[0].vector], [1, 0, 0])
-    assert.deepEqual(dreamPage.missingMemoryIds, ['memory-c'])
+    assert.deepEqual(dreamPage.missingMemoryIds, ['memory-c', 'missing-memory'])
 
     const inventory = await client.readInventoryPage(null, null, 2)
     assert.deepEqual(
@@ -428,8 +411,10 @@ it('rolls back a complete mutation batch when one upsert fails', async () => {
         /cannot preserve missing vector/
     )
 
-    const vectors = await client.readVectors('preset-a', ['stable-memory'])
-    assert.deepEqual([...vectors.vectors[0].vector], [1, 0, 0])
+    const vectors = await client.readVectorSnapshot('preset-a', [
+        'stable-memory'
+    ])
+    assert.deepEqual([...vectors.items[0].vector], [1, 0, 0])
     const inventory = await client.readInventoryPage('preset-a', null, 10)
     assert.equal(inventory.items[0].contentHash, 'content-stable-memory')
     await client.dispose()
@@ -620,7 +605,7 @@ it.each([false, true])(
                     ...manifest,
                     vectorExtensionVersion: '0.8.7'
                 })
-                const vectors = await client.readDreamVectors('preset-a', [
+                const vectors = await client.readVectorSnapshot('preset-a', [
                     'retained'
                 ])
                 assert.deepEqual([...vectors.items[0].vector], [1, 2, 3])

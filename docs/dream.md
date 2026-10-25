@@ -140,7 +140,7 @@ ANN 尚未就绪、查询计划选择精确扫描、候选不足或完整图形�
 | 位置 | 职责 |
 | --- | --- |
 | `workflows/dream/coordinator.ts`、`job_runner.ts` | 触发门槛、预设互斥、后台任务、取消排空与结果落库 |
-| `workflows/dream/full.ts` | 准备队列、固定目标、模型、分组、人设、会话与画像衔接 |
+| `workflows/dream/service.ts` | 准备队列、固定目标、模型、分组、人设、会话与画像衔接 |
 | `workflows/dream/clustering.ts` | 向量快照、阶段预算、规划结果与记忆批次映射 |
 | `workflows/dream/semantic/`、`workflows/dream/worker/` | 容量二分、候选收集、CSR 构图、跨组修复与 Worker 协议 |
 | `workflows/dream/session/runner.ts` | 决策请求、串行工具执行、轮次限制与换批 |

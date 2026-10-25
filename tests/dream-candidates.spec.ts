@@ -17,7 +17,7 @@ const setup = () => {
         vectors: Float32Array.from({ length: 122 }, (_, i) => i + 1)
     }
     const provider: DreamVectorProvider = {
-        readDreamVectors: async () => {
+        readVectorSnapshot: async () => {
             throw new Error('candidate stage uses the frozen matrix')
         },
         queryDreamNeighbors: async () => {

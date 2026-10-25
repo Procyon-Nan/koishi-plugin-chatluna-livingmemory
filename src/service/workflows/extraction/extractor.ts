@@ -17,7 +17,7 @@ export type LivingMemoryExtractionSkipReason =
     | 'model-not-configured'
     | 'model-unavailable'
 
-export interface LivingMemoryExtractionTrace {
+export interface LivingMemoryExtractionResult {
     extracted: AttributedMemoryItem[]
     prompt: PromptMessages | null
     output: string | null
@@ -44,11 +44,11 @@ export class LivingMemoryExtractor {
         private readonly mainModel: string
     ) {}
 
-    async extractWithTrace(
+    async extract(
         input: string,
         context: LivingMemoryExtractionContext,
         logger: LivingMemoryLogger
-    ): Promise<LivingMemoryExtractionTrace> {
+    ): Promise<LivingMemoryExtractionResult> {
         if (!isModelConfigured(this.mainModel)) {
             return {
                 extracted: [],

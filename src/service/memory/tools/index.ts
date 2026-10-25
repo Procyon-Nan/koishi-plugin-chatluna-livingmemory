@@ -1,7 +1,7 @@
 import { LivingMemoryCheckedMemoryTool } from './checked_memory_tool'
 import { LivingMemoryCreateMemoryTool } from './create_memory_tool'
 import { LivingMemoryDeleteMemoryTool } from './delete_memory_tool'
-import { LivingMemorySearchTool } from './embedding_search_tool'
+import { LivingMemorySearchTool } from './search_memory_tool'
 import { LivingMemoryGetMessagesTool } from './get_messages_tool'
 import { LivingMemoryMergeMemoriesTool } from './merge_memories_tool'
 import { LivingMemorySplitMemoryTool } from './split_memory_tool'

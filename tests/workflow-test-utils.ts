@@ -7,7 +7,7 @@ import type {
 } from '../src/contracts/memory'
 import type { LivingMemoryAgenticRecallTrace } from '../src/service/workflows/recall/agentic_recall'
 import type { DreamRunResult } from '../src/service/workflows/dream/types'
-import { summarizeError } from '../src/service/shared/utils'
+import { formatErrorDetails } from '../src/service/shared/utils'
 import { LivingMemoryLogger } from '../src/service/logging/logger'
 
 export const logger = new LivingMemoryLogger(
@@ -90,7 +90,7 @@ export const createJobStore = () => {
             status: 'failed',
             input,
             detail: null,
-            error: summarizeError(error),
+            error: formatErrorDetails(error),
             createdAt: startedAt,
             startedAt,
             finishedAt,

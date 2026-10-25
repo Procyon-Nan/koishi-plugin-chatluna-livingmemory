@@ -148,12 +148,8 @@ export class LivingMemoryVectorIndexWorkerClient {
         return this.request({ type: 'queryHybrid', ...query })
     }
 
-    readVectors(presetId: string, memoryIds: string[]) {
-        return this.request({ type: 'readVectors', presetId, memoryIds })
-    }
-
-    readDreamVectors(presetId: string, memoryIds: string[]) {
-        return this.request({ type: 'readDreamVectors', presetId, memoryIds })
+    readVectorSnapshot(presetId: string, memoryIds: string[]) {
+        return this.request({ type: 'readVectorSnapshot', presetId, memoryIds })
     }
 
     buildDreamAnnIndex() {

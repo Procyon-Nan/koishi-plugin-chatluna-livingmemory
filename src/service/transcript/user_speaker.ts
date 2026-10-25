@@ -1,5 +1,5 @@
 import type { Session } from 'koishi'
-import { createUserProfileSpeakerKey } from '../memory/speaker_identity'
+import { createSpeakerKey } from '../memory/speaker_identity'
 import { toNonEmptyString } from '../shared/utils'
 
 export type UserSpeakerCache = Map<string, Promise<ResolvedUserSpeaker>>
@@ -31,10 +31,7 @@ export const resolveUserSpeaker = async (
         }
 
         return {
-            speakerKey: createUserProfileSpeakerKey(
-                session.platform,
-                speakerId
-            ),
+            speakerKey: createSpeakerKey(session.platform, speakerId),
             speakerLabel
         }
     })()

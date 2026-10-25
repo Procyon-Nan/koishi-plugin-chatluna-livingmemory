@@ -100,5 +100,3 @@ export const personaCardResultSchema = z.object({
             '应当从预设原文中删除的行号列表：内容与人格、语气、称呼、关系、价值取向无关的行（工具调用指南、输出或格式规范、状态模板、安保约束等）。无需删除任何行时提交空数组。'
         )
 })
-
-export type PersonaCardResult = z.output<typeof personaCardResultSchema>

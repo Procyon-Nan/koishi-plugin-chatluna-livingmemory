@@ -1,8 +1,8 @@
 import type { MemoryScope } from '../../../contracts/memory'
 import type { LivingMemoryLogger } from '../../logging/logger'
-import { summarizeError } from '../../shared/utils'
+import { formatErrorDetails } from '../../shared/utils'
 import type { LivingMemoryJobTracker } from '../job_tracker'
-import type { LivingMemoryDreamService } from './full'
+import type { LivingMemoryDreamService } from './service'
 
 export class LivingMemoryDreamJobRunner {
     constructor(
@@ -14,7 +14,7 @@ export class LivingMemoryDreamJobRunner {
         private readonly logger: LivingMemoryLogger
     ) {}
 
-    async runManual(scope: MemoryScope, jobId: string, signal?: AbortSignal) {
+    async run(scope: MemoryScope, jobId: string, signal?: AbortSignal) {
         const logger = this.logger.with({
             workflow: 'dream',
             jobId,
@@ -62,7 +62,7 @@ export class LivingMemoryDreamJobRunner {
             try {
                 await this.jobTracker.markFailed(jobId, error, detail)
             } catch (updateError) {
-                jobStateUpdateError = summarizeError(updateError)
+                jobStateUpdateError = formatErrorDetails(updateError)
             }
             logger.warn('dream.failed', { detail, jobStateUpdateError }, error)
             throw error

@@ -6,7 +6,7 @@ import type {
 import type {
     DreamNeighborPageResult,
     DreamNeighborQuery,
-    DreamVectorReadPage,
+    VectorSnapshot,
     MemoryVectorIndexManifest,
     MemoryVectorIndexPresetStatus,
     MemoryVectorIndexState
@@ -102,14 +102,6 @@ export interface VectorIndexHybridHit extends VectorIndexKnnHit {
     boostedScore: number
 }
 
-export interface VectorIndexReadVectorsResult {
-    vectors: {
-        memoryId: string
-        vector: Float32Array<ArrayBuffer>
-    }[]
-    missingMemoryIds: string[]
-}
-
 export interface VectorIndexInventoryPage {
     items: VectorIndexInventoryItem[]
     nextCursor: string | null
@@ -143,13 +135,9 @@ export interface VectorIndexWorkerCommandMap {
         input: VectorIndexHybridQuery
         result: VectorIndexHybridHit[]
     }
-    readVectors: {
+    readVectorSnapshot: {
         input: { presetId: string; memoryIds: string[] }
-        result: VectorIndexReadVectorsResult
-    }
-    readDreamVectors: {
-        input: { presetId: string; memoryIds: string[] }
-        result: DreamVectorReadPage
+        result: VectorSnapshot
     }
     buildDreamAnnIndex: {
         input: Record<never, never>

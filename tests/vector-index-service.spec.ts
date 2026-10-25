@@ -379,7 +379,7 @@ it('builds the index once and reuses its manifest after restart', async () => {
         })
         assert.equal(hybridHits[0].memoryId, 'memory-b')
         assert.equal(hybridHits[0].keywordMatchCount, 1)
-        const page = await first.readDreamVectors('preset-a', ['memory-a'])
+        const page = await first.readVectorSnapshot('preset-a', ['memory-a'])
         assert.deepEqual(
             page.items.map((item) => item.memoryId),
             ['memory-a']
@@ -388,7 +388,7 @@ it('builds the index once and reuses its manifest after restart', async () => {
         assert.equal(page.dimension, 3)
         assert.equal(page.embeddingModelId, 'model-a')
         assert.deepEqual(
-            (await first.readDreamVectors('preset-a', ['missing-memory']))
+            (await first.readVectorSnapshot('preset-a', ['missing-memory']))
                 .missingMemoryIds,
             ['missing-memory']
         )
@@ -447,7 +447,7 @@ it('keeps exact recall ready when the independent HNSW maintenance fails', async
             await service.waitForInitialization()
             assert.equal(service.getStatus().state, 'ready')
             assert.equal(repository.jobs.at(-1)?.status, 'failed')
-            const page = await service.readDreamVectors('preset-a', [
+            const page = await service.readVectorSnapshot('preset-a', [
                 'memory-a'
             ])
             const result = await service.queryDreamNeighbors([

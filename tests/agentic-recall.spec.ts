@@ -18,7 +18,7 @@ import type {
 } from '../src/contracts/memory'
 import { memorySearchTool } from '../src/service/prompts/memory_tools'
 import { LivingMemoryAgenticRecallExecutor } from '../src/service/workflows/recall/agentic_recall'
-import type { LivingMemoryEmbeddingSearchEngine } from '../src/service/workflows/recall/embedding_search_engine'
+import type { LivingMemorySearchEngine } from '../src/service/workflows/recall/memory_search_engine'
 import { currentMessage, scope } from './workflow-test-utils'
 
 interface ModelInvocation {
@@ -159,7 +159,7 @@ const createHarness = (options: AgenticRecallHarnessOptions) => {
             searchInvocations.push(invocation)
             return await (options.search?.(invocation) ?? [])
         }
-    } as unknown as LivingMemoryEmbeddingSearchEngine
+    } as unknown as LivingMemorySearchEngine
     const context = {
         chatluna: {
             createChatModel: async () => ({ value: model })

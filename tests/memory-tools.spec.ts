@@ -6,10 +6,10 @@ import {
 import { createMemoryTool } from '../src/service/memory/tools'
 import { LivingMemoryGetMessagesTool } from '../src/service/memory/tools/get_messages_tool'
 import { memorySearchTool } from '../src/service/prompts/memory_tools'
-import { LivingMemorySearchTool } from '../src/service/memory/tools/embedding_search_tool'
+import { LivingMemorySearchTool } from '../src/service/memory/tools/search_memory_tool'
 import type { LivingMemorySearchInput } from '../src/contracts/memory'
 import type { LivingMemorySourceProvider } from '../src/contracts/workflows'
-import type { LivingMemoryEmbeddingSearchEngine } from '../src/service/workflows/recall/embedding_search_engine'
+import type { LivingMemorySearchEngine } from '../src/service/workflows/recall/memory_search_engine'
 import { resolveMainRunConversationId } from '../src/service/memory/helpers'
 import {
     describeLivingMemoryToolScopeFailure,
@@ -20,7 +20,7 @@ import {
 
 const mockEngine = {
     searchMemories: async () => []
-} as unknown as LivingMemoryEmbeddingSearchEngine
+} as unknown as LivingMemorySearchEngine
 
 const searchTool = createMemoryTool.search(mockEngine, true)
 
@@ -31,7 +31,7 @@ const createRecordingSearchProvider = () => {
             presetIds.push(presetId)
             return []
         }
-    } as unknown as LivingMemoryEmbeddingSearchEngine
+    } as unknown as LivingMemorySearchEngine
     return { presetIds, provider }
 }
 
@@ -58,7 +58,7 @@ it('always searches active memories with the shared tool schema', async () => {
             inputs.push(input)
             return []
         }
-    } as unknown as LivingMemoryEmbeddingSearchEngine
+    } as unknown as LivingMemorySearchEngine
 
     const mainTool = createMemoryTool.search(provider, true)
     assert.equal(mainTool.schema, memorySearchTool.schema)
@@ -393,7 +393,7 @@ it('renders search observations with memory ids and reports empty results', asyn
                 updatedAt: new Date('2026-07-02T00:00:00.000Z')
             }
         ]
-    } as unknown as LivingMemoryEmbeddingSearchEngine
+    } as unknown as LivingMemorySearchEngine
     const config = toolConfig({
         preset: 'default',
         agentContext: { kind: 'main', source: 'chatluna' }

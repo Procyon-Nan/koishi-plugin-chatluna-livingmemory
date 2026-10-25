@@ -7,7 +7,7 @@ import {
 } from '@langchain/core/messages'
 import { type RunnableConfig, RunnableLambda } from '@langchain/core/runnables'
 import type { ChatLunaChatModel } from 'koishi-plugin-chatluna/llm-core/platform/model'
-import { stringifyModelContent, summarizeError } from '../shared/utils'
+import { stringifyModelContent, formatErrorDetails } from '../shared/utils'
 import type {
     LivingMemoryLogBlock,
     LivingMemoryLogFields,
@@ -205,7 +205,7 @@ const invokeLoggedRunnable = async (
     } catch (error) {
         logger.diagnostic('model.failed', () => ({
             elapsedMs: performance.now() - startedAt,
-            error: summarizeError(error)
+            error: formatErrorDetails(error)
         }))
         throw error
     }

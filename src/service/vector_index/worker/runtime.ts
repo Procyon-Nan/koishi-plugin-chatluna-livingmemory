@@ -77,14 +77,8 @@ const execute = async (
                     command.cancellation
                 )
                 break
-            case 'readVectors':
-                result = await database.readVectors(
-                    command.presetId,
-                    command.memoryIds
-                )
-                break
-            case 'readDreamVectors':
-                result = await database.readDreamVectors(
+            case 'readVectorSnapshot':
+                result = await database.readVectorSnapshot(
                     command.presetId,
                     command.memoryIds
                 )
@@ -156,15 +150,10 @@ const execute = async (
 }
 
 const responseTransferList = (response: VectorIndexWorkerResponse) => {
-    if (response.ok && response.type === 'readDreamVectors') {
+    if (response.ok && response.type === 'readVectorSnapshot') {
         return response.result.items.map(({ vector }) => vector.buffer)
     }
-    if (!response.ok || response.type !== 'readVectors') {
-        return []
-    }
-    return [
-        ...new Set(response.result.vectors.map(({ vector }) => vector.buffer))
-    ]
+    return []
 }
 
 export const startVectorIndexWorker = (

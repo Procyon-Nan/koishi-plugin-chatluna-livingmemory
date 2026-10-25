@@ -10,7 +10,7 @@ import type {
 import type { Context } from 'koishi'
 import type { MemoryEntryRecord } from '../src/contracts/memory'
 import type { DreamRunResult } from '../src/service/workflows/dream/types'
-import { LivingMemoryDreamService } from '../src/service/workflows/dream/full'
+import { LivingMemoryDreamService } from '../src/service/workflows/dream/service'
 import { LivingMemoryDreamCoordinator } from '../src/service/workflows/dream/coordinator'
 import { LivingMemoryDreamJobRunner } from '../src/service/workflows/dream/job_runner'
 import { LivingMemoryJobTracker } from '../src/service/workflows/job_tracker'
@@ -120,7 +120,7 @@ const runService = async (
                     reason: 'index-absent',
                     rows: []
                 }),
-                readDreamVectors: async (_presetId, ids) => ({
+                readVectorSnapshot: async (_presetId, ids) => ({
                     embeddingModelId: 'test',
                     dimension: 2,
                     generation: 'test',
@@ -260,7 +260,7 @@ it.each(['completed', 'partial', 'failed'] as const)(
             new LivingMemoryJobTracker(store),
             logger
         )
-        await runner.runManual(scope, job.id)
+        await runner.run(scope, job.id)
         assert.equal(job.status, status)
         assert.match(job.detail!, /checked 1/)
         assert.ok(job.finishedAt)
@@ -304,8 +304,8 @@ it('serializes starts, recovers stale jobs and aborts and drains running jobs on
         logger
     )
     const [first, second] = await Promise.all([
-        coordinator.runManual(scope.presetId),
-        coordinator.runManual(scope.presetId)
+        coordinator.start(scope.presetId),
+        coordinator.start(scope.presetId)
     ])
     assert.equal(first.started, true)
     assert.equal(second.reason, 'preset-locked')
@@ -313,14 +313,14 @@ it('serializes starts, recovers stale jobs and aborts and drains running jobs on
     assert.equal(recoveries, 1)
     await coordinator.stop()
     assert.equal(store.jobs[0].status, 'failed')
-    assert.throws(() => coordinator.runManual(scope.presetId), /正在停止/)
+    assert.throws(() => coordinator.start(scope.presetId), /正在停止/)
 })
 
 it('does not start below 30 active memories and releases the starting lock after skipping', async () => {
     const store = createJobStore()
     let count = 29
     const coordinator = new LivingMemoryDreamCoordinator(
-        { runManual: async () => {} },
+        { run: async () => {} },
         {
             ...store,
             countActiveEntries: async () => count
@@ -328,11 +328,11 @@ it('does not start below 30 active memories and releases the starting lock after
         logger
     )
     assert.equal(
-        (await coordinator.runManual(scope.presetId)).reason,
+        (await coordinator.start(scope.presetId)).reason,
         'insufficient-memories'
     )
     assert.equal(store.jobs.length, 0)
     count = 30
-    assert.equal((await coordinator.runManual(scope.presetId)).started, true)
+    assert.equal((await coordinator.start(scope.presetId)).started, true)
     await coordinator.stop()
 })

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { createUserProfileSpeakerKey } from '../src/service/memory/speaker_identity'
+import { createSpeakerKey } from '../src/service/memory/speaker_identity'
 import { withLivingMemoryRepository } from './persistence-test-utils'
 
 it('reconciles nickname-based profiles into one stable user identity', async () => {
@@ -34,7 +34,7 @@ it('reconciles nickname-based profiles into one stable user identity', async () 
             updatedAt: new Date('2026-07-15T00:00:00.000Z')
         })
 
-        const stableKey = createUserProfileSpeakerKey('onebot', 'user-1')
+        const stableKey = createSpeakerKey('onebot', 'user-1')
         await repository.reconcilePresetSpeaker({
             presetId: 'preset-1',
             speakerKey: stableKey,
@@ -112,7 +112,7 @@ it('keeps users with the same nickname separate by stable identity', async () =>
         for (const speakerId of ['user-1', 'user-2']) {
             await repository.reconcilePresetSpeaker({
                 presetId: 'preset-1',
-                speakerKey: createUserProfileSpeakerKey('onebot', speakerId),
+                speakerKey: createSpeakerKey('onebot', speakerId),
                 speakerLabel: '相同昵称',
                 speakerId,
                 platform: 'onebot'
@@ -127,7 +127,7 @@ it('keeps users with the same nickname separate by stable identity', async () =>
 
 it('registers only missing preset speakers without touching existing rows', async () => {
     await withLivingMemoryRepository(async (_ctx, repository) => {
-        const stableKey = createUserProfileSpeakerKey('onebot', 'user-1')
+        const stableKey = createSpeakerKey('onebot', 'user-1')
         await repository.upsertPresetSpeaker({
             presetId: 'preset-1',
             speakerKey: stableKey,
@@ -136,7 +136,7 @@ it('registers only missing preset speakers without touching existing rows', asyn
             platform: 'onebot'
         })
 
-        const orphanKey = createUserProfileSpeakerKey('onebot', 'user-2')
+        const orphanKey = createSpeakerKey('onebot', 'user-2')
         await repository.registerMissingPresetSpeakers('preset-1', [
             { speakerKey: stableKey, speakerLabel: '窗口新昵称' },
             { speakerKey: orphanKey, speakerLabel: '旁观者昵称' },

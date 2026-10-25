@@ -6,7 +6,7 @@ import type {
     MemoryHybridSearchInput,
     MemoryVectorSearch
 } from '../src/contracts/vector_index'
-import { LivingMemoryEmbeddingSearchEngine } from '../src/service/workflows/recall/embedding_search_engine'
+import { LivingMemorySearchEngine } from '../src/service/workflows/recall/memory_search_engine'
 import { createCapturedLogger, logger } from './workflow-test-utils'
 
 const createEntry = (id: string): MemoryEntryRecord => ({
@@ -86,7 +86,7 @@ it('uses the vector index for hybrid search and restores hit order', async () =>
             ]
         }
     })
-    const engine = new LivingMemoryEmbeddingSearchEngine(
+    const engine = new LivingMemorySearchEngine(
         {} as Context,
         {
             memorySearchToolMaxResults: 30,
@@ -126,7 +126,7 @@ it('fails when an index hit no longer exists in the memory repository', async ()
     const vectorSearch = createVectorSearch({
         searchHybrid: async () => [createHit('missing-memory', 1)]
     })
-    const engine = new LivingMemoryEmbeddingSearchEngine(
+    const engine = new LivingMemorySearchEngine(
         {} as Context,
         {
             memorySearchToolMaxResults: 30,
@@ -160,7 +160,7 @@ it('reranks widened candidates per search text and keeps the best score', async 
             ]
         }
     })
-    const engine = new LivingMemoryEmbeddingSearchEngine(
+    const engine = new LivingMemorySearchEngine(
         createRerankerContext(async (documents, query) => {
             rerankQueries.push(query)
             assert.deepEqual(documents, [
@@ -218,7 +218,7 @@ it('falls back to hybrid order when the reranker fails', async () => {
             createHit('memory-b', 0.8)
         ]
     })
-    const engine = new LivingMemoryEmbeddingSearchEngine(
+    const engine = new LivingMemorySearchEngine(
         createRerankerContext(async () => {
             throw rerankError
         }),

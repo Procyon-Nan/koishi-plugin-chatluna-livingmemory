@@ -29,7 +29,7 @@ type ExtractionFormatter = Pick<
     LivingMemoryMessageFormatter,
     'toExtractionPayload'
 >
-type ExtractionModel = Pick<LivingMemoryExtractor, 'extractWithTrace'>
+type ExtractionModel = Pick<LivingMemoryExtractor, 'extract'>
 
 /** 提取排干所需的消息日志读取面。 */
 export type ExtractionMessageLog = Pick<
@@ -496,7 +496,7 @@ export class LivingMemoryExtractionCoordinator {
         const presetPrompt = await this.presetPersona.resolveOrGenerateCardText(
             scope.presetId
         )
-        const trace = await this.extractor.extractWithTrace(
+        const result = await this.extractor.extract(
             input,
             {
                 conversationId: scope.conversationId,
@@ -507,16 +507,16 @@ export class LivingMemoryExtractionCoordinator {
             },
             logger
         )
-        if (trace.skippedReason != null) {
+        if (result.skippedReason != null) {
             logger.diagnostic('extraction.skipped', {
-                reason: trace.skippedReason
+                reason: result.skippedReason
             })
         }
 
         // 结果工具在一次纠正重试后仍无法通过校验：持久化失败记录，
         // 使任务列表如实反映“结构化输出失败”而非“抽取 0 条”。
-        if (trace.parseError != null) {
-            const parseError = trace.parseError
+        if (result.parseError != null) {
+            const parseError = result.parseError
             logger.warn('extraction.parse.failed', {
                 error: parseError
             })
@@ -529,7 +529,7 @@ export class LivingMemoryExtractionCoordinator {
             return
         }
 
-        const extracted = trace.extracted
+        const extracted = result.extracted
         if (extracted.length > 0) {
             // 铸键不变量：窗口说话人随记忆一并提交，注册与追加在变更服务
             // 的同一预设级队列操作内完成（注册先行、两事务，依据见

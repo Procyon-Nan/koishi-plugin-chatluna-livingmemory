@@ -2,7 +2,7 @@ import type {
     LivingMemoryTranscriptMessage,
     MemoryScope
 } from '../../../contracts/memory'
-import { createUserProfileSpeakerKey } from '../../memory/speaker_identity'
+import { createSpeakerKey } from '../../memory/speaker_identity'
 import { resolveScopeAssistantLabel } from '../../memory/helpers'
 import { createLivingMemoryTranscriptMessageResult } from '../transcript_message'
 import type { ConversationLogMessage } from './types'
@@ -32,7 +32,7 @@ export const toLogTranscriptMessages = async (
         const userId = entry.userId
         return createLivingMemoryTranscriptMessageResult({
             role: 'user',
-            speakerKey: createUserProfileSpeakerKey(platform, userId),
+            speakerKey: createSpeakerKey(platform, userId),
             speakerLabel: entry.name,
             content: entry.content,
             createdAt: entry.timestamp,

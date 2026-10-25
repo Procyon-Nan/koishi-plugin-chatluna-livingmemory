@@ -1,13 +1,12 @@
 import type { PGlite } from '@electric-sql/pglite'
-import type { DreamVectorReadPage } from '../../../contracts/vector_index'
+import type { VectorSnapshot } from '../../../contracts/vector_index'
 import type {
     VectorIndexHybridHit,
     VectorIndexHybridQuery,
     VectorIndexInventoryItem,
     VectorIndexInventoryPage,
     VectorIndexKnnHit,
-    VectorIndexKnnQuery,
-    VectorIndexReadVectorsResult
+    VectorIndexKnnQuery
 } from '../worker_protocol'
 import {
     decodeVector,
@@ -193,49 +192,16 @@ export const queryVectorIndexHybrid = async (
         }))
 }
 
-export const readVectorIndexVectors = async (
+export const readVectorSnapshot = async (
     database: PGlite,
     presetId: string,
     memoryIds: string[]
-): Promise<VectorIndexReadVectorsResult> => {
-    if (memoryIds.length === 0) {
-        return { vectors: [], missingMemoryIds: [] }
-    }
-    const rows = (
-        await database.query<{ memoryId: string; embedding: string }>(
-            `SELECT memory_id AS "memoryId", embedding::text AS embedding
-             FROM lm_index_memory
-             WHERE preset_id = $1
-               AND memory_id = ANY($2::text[])`,
-            [presetId, memoryIds]
-        )
-    ).rows
-    const vectorsByMemoryId = new Map(
-        rows.map((row) => [row.memoryId, decodeVector(row.embedding)])
-    )
-    const vectors: VectorIndexReadVectorsResult['vectors'] = []
-    const missingMemoryIds: string[] = []
-    for (const memoryId of memoryIds) {
-        const vector = vectorsByMemoryId.get(memoryId)
-        if (vector === undefined) {
-            missingMemoryIds.push(memoryId)
-        } else {
-            vectors.push({ memoryId, vector: new Float32Array(vector) })
-        }
-    }
-    return { vectors, missingMemoryIds }
-}
-
-export const readDreamVectors = async (
-    database: PGlite,
-    presetId: string,
-    memoryIds: string[]
-): Promise<DreamVectorReadPage> => {
+): Promise<VectorSnapshot> => {
     return database.transaction(async (transaction) => {
         const manifest = (
             await transaction.query<
                 Pick<
-                    DreamVectorReadPage,
+                    VectorSnapshot,
                     'embeddingModelId' | 'dimension' | 'generation'
                 >
             >(`SELECT embedding_model_id AS "embeddingModelId", dimension, generation
@@ -245,7 +211,7 @@ export const readDreamVectors = async (
             await transaction.query<{
                 memoryId: string
                 contentHash: string
-                status: DreamVectorReadPage['items'][number]['status']
+                status: VectorSnapshot['items'][number]['status']
                 embedding: string
             }>(
                 `SELECT memory_id AS "memoryId", content_hash AS "contentHash",

@@ -4,7 +4,7 @@ import type {
     MemoryIndexSourceRecord,
     MemoryVectorIndexManifest
 } from '../../contracts/vector_index'
-import { summarizeError } from '../shared/utils'
+import { formatErrorDetails } from '../shared/utils'
 import { createVectorIndexDocument } from './documents'
 import { type EmbeddingsLike, embedMemoryIndexSources } from './embedding'
 import { LivingMemoryVectorIndexError } from './errors'
@@ -174,9 +174,9 @@ export const rebuildVectorIndex = async (options: {
                 cleanupError = abortError
             }
         }
-        let message = summarizeError(error)
+        let message = formatErrorDetails(error)
         if (cleanupError !== null) {
-            message += `; rebuild cleanup failed: ${summarizeError(cleanupError)}`
+            message += `; rebuild cleanup failed: ${formatErrorDetails(cleanupError)}`
         }
         throw new LivingMemoryVectorIndexError(
             'rebuild-failed',

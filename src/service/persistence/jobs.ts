@@ -6,7 +6,7 @@ import type {
     MemoryScope
 } from '../../contracts/memory'
 import type { JobRepository } from '../../contracts/workflows'
-import { summarizeError } from '../shared/utils'
+import { formatErrorDetails } from '../shared/utils'
 
 export class LivingMemoryJobRepository implements JobRepository {
     constructor(private readonly ctx: Context) {}
@@ -37,7 +37,7 @@ export class LivingMemoryJobRepository implements JobRepository {
         const finishedAt = new Date()
         return this.createJobRecord(scope, kind, input, {
             status: 'failed',
-            error: summarizeError(error),
+            error: formatErrorDetails(error),
             createdAt: startedAt,
             startedAt,
             finishedAt,

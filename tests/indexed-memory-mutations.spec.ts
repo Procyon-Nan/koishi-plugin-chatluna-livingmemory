@@ -16,7 +16,7 @@ import {
 import type { LivingMemoryLogger } from '../src/service/logging/logger'
 import {
     createSyntheticSpeakerLabel,
-    createUserProfileSpeakerKey
+    createSpeakerKey
 } from '../src/service/memory/speaker_identity'
 import {
     LivingMemoryFactsCommittedError,
@@ -934,7 +934,7 @@ it('registers scope-derived default speaker keys on create', async () => {
             { ...scope, platform: 'onebot', speakerId: 'user-9' },
             { type: 'fact', content: 'scope attributed memory' }
         )
-        const derivedKey = createUserProfileSpeakerKey('onebot', 'user-9')
+        const derivedKey = createSpeakerKey('onebot', 'user-9')
         assert.equal(
             (await repository.listPresetSpeakers(presetId)).find(
                 (speaker) => speaker.speakerKey === derivedKey

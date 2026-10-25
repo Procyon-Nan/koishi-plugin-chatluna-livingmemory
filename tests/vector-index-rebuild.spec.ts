@@ -265,8 +265,10 @@ it('reuses only valid legacy vectors during a full rebuild', async () => {
                 'content memory-e'
             ]
         ])
-        const vectors = await client.readVectors('preset-a', ['memory-a'])
-        assert.deepEqual([...vectors.vectors[0].vector], [1, 0, 0])
+        const vectors = await client.readVectorSnapshot('preset-a', [
+            'memory-a'
+        ])
+        assert.deepEqual([...vectors.items[0].vector], [1, 0, 0])
     })
 })
 
@@ -388,7 +390,7 @@ it('reconciles additions, metadata updates, content changes, and orphans', async
             embeddings: createEmbeddings(3, []),
             generation: 'reconcile'
         })
-        const before = await client.readVectors('preset-a', ['memory-a'])
+        const before = await client.readVectorSnapshot('preset-a', ['memory-a'])
 
         repository.sources.splice(
             0,
@@ -432,10 +434,10 @@ it('reconciles additions, metadata updates, content changes, and orphans', async
             inventory.items[0].updatedAt,
             +repository.sources[0].updatedAt
         )
-        const after = await client.readVectors('preset-a', ['memory-a'])
+        const after = await client.readVectorSnapshot('preset-a', ['memory-a'])
         assert.deepEqual(
-            [...after.vectors[0].vector],
-            [...before.vectors[0].vector]
+            [...after.items[0].vector],
+            [...before.items[0].vector]
         )
         const inspection = await client.inspect()
         assert.equal(inspection.presets[0].state, 'ready')

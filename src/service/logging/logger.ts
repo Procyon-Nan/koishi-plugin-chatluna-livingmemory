@@ -212,10 +212,6 @@ export class LivingMemoryLogger {
         )
     }
 
-    isDiagnosticEnabled() {
-        return this.isDebugEnabled()
-    }
-
     diagnostic(
         event: string,
         fields: LivingMemoryLogFieldsInput = {},

@@ -6,7 +6,8 @@
 - embedding 由记忆正文生成。正文变化时重新生成向量，其余字段变化保留向量；字段变更同步索引文档与关键词索引。
 - Worker 通过 SQL 的 `embedding::text` 读取向量，按 pgvector 数值数组文本解码为 `Float32Array`。
 - 模型检索固定查询活跃记忆。底层索引支持按 `memoryStatus` 查询，归档向量继续维护，重新激活时复用。
-- Dream 通过 `readDreamVectors` 分页读取已有正文向量。同一 Worker 事务返回正文 hash、状态和模型、维数、generation；向量 buffer 转移给主线程。Dream 组批入口负责与本轮正文快照核对，读取过程调用 embedding 次数为 0。
+- Dream 通过 `readVectorSnapshot` 分页读取已有正文向量。同一 Worker 事务返回正文 hash、状态和模型、维数、generation；向量 buffer 转移给主线程。Dream 组批入口负责与本轮正文快照核对，读取过程调用 embedding 次数为 0。
+- Worker 向量读取统一使用 `readVectorSnapshot`，索引重建、对账与事务回滚测试复用该接口。
 
 ## Dream HNSW 维护与查询
 

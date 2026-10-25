@@ -3,16 +3,13 @@ import type { MemoryScope } from '../../contracts/memory'
 
 const collapseWhitespace = (value: string) => value.replace(/\s+/gu, ' ').trim()
 
-export const normalizeUserProfileSpeakerLabel = collapseWhitespace
+export const normalizeSpeakerLabel = collapseWhitespace
 
-export const normalizeUserProfileSpeakerAliasKey = (speakerLabel: string) => {
+export const normalizeSpeakerAliasKey = (speakerLabel: string) => {
     return collapseWhitespace(speakerLabel).toLowerCase()
 }
 
-export const createUserProfileSpeakerKey = (
-    platform: string,
-    speakerId: string
-) => {
+export const createSpeakerKey = (platform: string, speakerId: string) => {
     return createHash('sha256')
         .update(`${platform.trim()}\u0000${speakerId.trim()}`)
         .digest('hex')
@@ -29,9 +26,7 @@ export const createSyntheticSpeakerLabel = (speakerKey: string): string =>
 export const resolveScopeSpeakerKeys = (scope: MemoryScope): string[] => {
     const platform = scope.platform?.trim()
     const speakerId = (scope.speakerId ?? scope.userId)?.trim()
-    return platform && speakerId
-        ? [createUserProfileSpeakerKey(platform, speakerId)]
-        : []
+    return platform && speakerId ? [createSpeakerKey(platform, speakerId)] : []
 }
 
 export const normalizeSpeakerKeys = (
@@ -61,7 +56,7 @@ export const resolveSpeakerKeysByLabels = (
             ...(speaker.speakerAliases ?? [])
         ]) {
             speakerKeyByLabel.set(
-                normalizeUserProfileSpeakerAliasKey(label),
+                normalizeSpeakerAliasKey(label),
                 speaker.speakerKey
             )
         }
@@ -70,7 +65,7 @@ export const resolveSpeakerKeysByLabels = (
     return normalizeSpeakerKeys(
         speakerLabels.map((label) => {
             const speakerKey = speakerKeyByLabel.get(
-                normalizeUserProfileSpeakerAliasKey(label)
+                normalizeSpeakerAliasKey(label)
             )
             if (speakerKey == null) {
                 throw new Error(`unknown speaker label: ${label}`)

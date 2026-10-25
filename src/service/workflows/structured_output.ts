@@ -16,7 +16,7 @@ import {
 } from 'koishi-plugin-chatluna/llm-core/agent'
 import type { ChatLunaChatModel } from 'koishi-plugin-chatluna/llm-core/platform/model'
 import type { PromptMessages } from '../prompts/prompt_format'
-import { summarizeError } from '../shared/utils'
+import { formatErrorDetails } from '../shared/utils'
 import type { LivingMemoryLogger } from '../logging/logger'
 import { createLoggedModel } from '../logging/model_calls'
 
@@ -376,7 +376,7 @@ export async function invokeStructuredOutput<Schema extends z.AnyZodObject>(
                 throw error
             }
 
-            lastError = summarizeError(error)
+            lastError = formatErrorDetails(error)
             const rawOutput =
                 isOutputParserException(error) &&
                 typeof error.llmOutput === 'string' &&

@@ -102,7 +102,7 @@ renderMemoriesForModel(group.entries, {
 | --- | --- |
 | `src/service/prompts/memory_entries.ts` | 集中字段格式与清单；调整 `ModelMemoryView`；实现带字段选择的统一渲染；删除 `formatMemoryEntryForPrompt()` |
 | `src/service/prompts/dream.ts` | 调用统一渲染器取得整批文本，再包裹 `memory_entries` 与 `dream_input`；删除逐条 speaker 查找、字段补拼与条目分隔 |
-| `src/service/memory/tools/embedding_search_tool.ts` | 将现有 ID 显示开关映射到搜索或上下文字段清单，其余检索和格式行为保持不变 |
+| `src/service/memory/tools/search_memory_tool.ts` | 将现有 ID 显示开关映射到搜索或上下文字段清单，其余检索和格式行为保持不变 |
 | `src/service/prompts/user_profile.ts` | 使用上下文字段清单，继续不显示记忆 ID |
 | `tests/prompt-contracts.spec.ts` | 调整既有完整字段与转义断言，覆盖统一 null 行规则及 speaker 空数组语义 |
 | `tests/memory-tools.spec.ts` | 复用既有搜索结果断言，验证字段集合与 ID 暴露面不变 |

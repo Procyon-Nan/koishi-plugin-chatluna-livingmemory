@@ -1,6 +1,6 @@
 import type { HumanMessage } from '@langchain/core/messages'
 import { Context, Service, Time } from 'koishi'
-import { LivingMemoryDreamService } from '../workflows/dream/full'
+import { LivingMemoryDreamService } from '../workflows/dream/service'
 import { LivingMemoryDreamWorkerClient } from '../workflows/dream/worker/client'
 import { LivingMemoryDreamJobRunner } from '../workflows/dream/job_runner'
 import { LivingMemoryExtractor } from '../workflows/extraction/extractor'
@@ -11,8 +11,8 @@ import {
     normalizeManualUserProfileContent
 } from '../user_profile'
 import {
-    createUserProfileSpeakerKey,
-    normalizeUserProfileSpeakerLabel
+    createSpeakerKey,
+    normalizeSpeakerLabel
 } from '../memory/speaker_identity'
 import { toNonEmptyString } from '../shared/utils'
 import {
@@ -57,7 +57,7 @@ import { LivingMemoryRecallCoordinator } from '../workflows/recall/coordinator'
 import { LivingMemoryVectorIndexService } from '../vector_index/service'
 import { LivingMemoryMutationService } from './memory_mutation_service'
 import { LivingMemoryAgenticRecallExecutor } from '../workflows/recall/agentic_recall'
-import { LivingMemoryEmbeddingSearchEngine } from '../workflows/recall/embedding_search_engine'
+import { LivingMemorySearchEngine } from '../workflows/recall/memory_search_engine'
 import {
     createLivingMemoryServiceStatus,
     validateLivingMemoryConfig
@@ -68,7 +68,6 @@ import {
 } from './scope'
 import {
     hydrateLivingMemoryPromptSections,
-    hydrateLivingMemoryPromptVariable,
     type LivingMemoryPromptSectionsOptions
 } from './prompt_hydration'
 import { loadMemorySourceMessages } from './query_projections'
@@ -88,7 +87,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     private readonly presetCatalog: LivingMemoryPresetCatalog
     private readonly userProfiles: LivingMemoryUserProfileService
     private readonly presetPersona: LivingMemoryPresetPersonaService
-    private readonly searchEngine: LivingMemoryEmbeddingSearchEngine
+    private readonly searchEngine: LivingMemorySearchEngine
     private readonly vectorIndex: LivingMemoryVectorIndexService
     private readonly dreamWorker: LivingMemoryDreamWorkerClient
     private readonly mutations: LivingMemoryMutationService
@@ -126,7 +125,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             this.vectorIndex,
             this.memoryLogger
         )
-        this.searchEngine = new LivingMemoryEmbeddingSearchEngine(
+        this.searchEngine = new LivingMemorySearchEngine(
             ctx,
             config,
             this.repository,
@@ -391,14 +390,14 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         >,
         speakerLabel: string
     ) {
-        const label = normalizeUserProfileSpeakerLabel(speakerLabel)
+        const label = normalizeSpeakerLabel(speakerLabel)
         const speakerId =
             toNonEmptyString(scope.speakerId) ?? toNonEmptyString(scope.userId)
         const platform = toNonEmptyString(scope.platform)
         if (label.length === 0 || speakerId == null || platform == null) {
             throw new Error('stable user profile identity is missing')
         }
-        const speakerKey = createUserProfileSpeakerKey(platform, speakerId)
+        const speakerKey = createSpeakerKey(platform, speakerId)
 
         await this.repository.reconcilePresetSpeaker({
             presetId: scope.presetId,
@@ -407,15 +406,6 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             speakerId,
             platform
         })
-    }
-
-    async hydratePromptVariable(
-        scope: Pick<MemoryScope, 'presetId' | 'conversationId'>
-    ) {
-        return await hydrateLivingMemoryPromptVariable(
-            { snapshots: this.repository },
-            scope
-        )
     }
 
     async hydratePromptSections(
@@ -531,7 +521,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         platform: string,
         userId: string
     ) {
-        const speakerKey = createUserProfileSpeakerKey(platform, userId)
+        const speakerKey = createSpeakerKey(platform, userId)
         return (
             await this.repository.listActiveMemorySpeakerLinks(presetId, [
                 speakerKey
@@ -544,7 +534,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         platform: string,
         userId: string
     ) {
-        const speakerKey = createUserProfileSpeakerKey(platform, userId)
+        const speakerKey = createSpeakerKey(platform, userId)
         return (
             await this.repository.listUserProfilesBySpeakerKeys(presetId, [
                 speakerKey
@@ -688,7 +678,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
 
     async runDream(presetId: string): Promise<DreamTriggerResult> {
         this.vectorIndex.assertPresetReady(presetId)
-        return this.dreamCoordinator.runManual(presetId)
+        return this.dreamCoordinator.start(presetId)
     }
 
     async reconcileVectorIndex(presetId: string) {

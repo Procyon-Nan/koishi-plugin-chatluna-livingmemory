@@ -13,7 +13,7 @@ import {
 import { MessageLogRegistry } from '../src/service/transcript/message_log/message_log_registry'
 import type { ConversationBackfillBot } from '../src/service/transcript/message_log/backfill'
 import type { ConversationLogMessage } from '../src/service/transcript/message_log/types'
-import type { LivingMemoryExtractionTrace } from '../src/service/workflows/extraction/extractor'
+import type { LivingMemoryExtractionResult } from '../src/service/workflows/extraction/extractor'
 import {
     createCapturedLogger,
     createJobStore,
@@ -23,9 +23,9 @@ import {
 
 const scope: MemoryScope = { ...baseScope, platform: 'onebot' }
 
-const createExtractionTrace = (
-    overrides: Partial<LivingMemoryExtractionTrace> = {}
-): LivingMemoryExtractionTrace => ({
+const createExtractionResult = (
+    overrides: Partial<LivingMemoryExtractionResult> = {}
+): LivingMemoryExtractionResult => ({
     extracted: [],
     prompt: null,
     output: null,
@@ -50,7 +50,7 @@ interface CoordinatorHarnessOptions {
     enableExtractionWhitelist?: boolean
     extractionWhitelist?: string[]
     backfillBot?: ConversationBackfillBot
-    extractWithTrace?: () => Promise<LivingMemoryExtractionTrace>
+    extract?: () => Promise<LivingMemoryExtractionResult>
     createFailedJob?: ExtractionJobRepository['createFailedJob']
     appendExtractedMemories?: ExtractionMemoryWriter['appendExtractedMemories']
 }
@@ -74,7 +74,7 @@ interface CoordinatorHarness {
 const createHarness = (
     options: CoordinatorHarnessOptions = {}
 ): CoordinatorHarness => {
-    const trace = options.extractWithTrace
+    const extract = options.extract
     const jobStore = createJobStore()
     const appended: CoordinatorHarness['appended'] = []
     const captured = createCapturedLogger(false)
@@ -127,10 +127,11 @@ const createHarness = (
         }) as never
     }
     const extractor = {
-        extractWithTrace: async (input: string) => {
+        extract: async (input: string) => {
             extractorCalls += 1
             extractorInputs.push(input)
-            return await (trace?.() ?? Promise.resolve(createExtractionTrace()))
+            return await (extract?.() ??
+                Promise.resolve(createExtractionResult()))
         }
     }
     const repository: ExtractionJobRepository & ExtractionMemoryWriter = {
@@ -546,12 +547,12 @@ describe('LivingMemoryExtractionCoordinator', () => {
         let modelCalls = 0
         const harness = createHarness({
             window: 2,
-            extractWithTrace: () => {
+            extract: () => {
                 modelCalls += 1
                 if (modelCalls <= 3) {
                     return Promise.reject(new Error('model down'))
                 }
-                return Promise.resolve(createExtractionTrace())
+                return Promise.resolve(createExtractionResult())
             }
         })
         await queueExtraction(harness)
@@ -631,12 +632,12 @@ describe('LivingMemoryExtractionCoordinator', () => {
     })
 
     it('writes extracted memories without creating jobs', async () => {
-        const trace = createExtractionTrace({
+        const result = createExtractionResult({
             extracted: [createExtractedMemory()]
         })
         const harness = createHarness({
             window: 2,
-            extractWithTrace: () => Promise.resolve(trace)
+            extract: () => Promise.resolve(result)
         })
         await queueExtraction(harness)
         harness.messageLog.appendReply(scope.conversationId, [
@@ -653,9 +654,9 @@ describe('LivingMemoryExtractionCoordinator', () => {
     it('submits window speakers with extracted memories for registry coverage', async () => {
         const harness = createHarness({
             window: 2,
-            extractWithTrace: () =>
+            extract: () =>
                 Promise.resolve(
-                    createExtractionTrace({
+                    createExtractionResult({
                         extracted: [createExtractedMemory()]
                     })
                 )
@@ -678,12 +679,12 @@ describe('LivingMemoryExtractionCoordinator', () => {
         let call = 0
         const harness = createHarness({
             window: 2,
-            extractWithTrace: () => {
+            extract: () => {
                 call += 1
                 return Promise.resolve(
                     call === 1
-                        ? createExtractionTrace()
-                        : createExtractionTrace({
+                        ? createExtractionResult()
+                        : createExtractionResult({
                               extracted: [createExtractedMemory()]
                           })
                 )
@@ -721,9 +722,9 @@ describe('LivingMemoryExtractionCoordinator', () => {
     it('records a failed job and consumes the chunk on parse errors', async () => {
         const harness = createHarness({
             window: 2,
-            extractWithTrace: () =>
+            extract: () =>
                 Promise.resolve(
-                    createExtractionTrace({ parseError: 'bad output' })
+                    createExtractionResult({ parseError: 'bad output' })
                 )
         })
         await queueExtraction(harness)
@@ -815,9 +816,9 @@ describe('LivingMemoryExtractionCoordinator', () => {
         })
         const harness = createHarness({
             window: 2,
-            extractWithTrace: async () => {
+            extract: async () => {
                 await extractorGate
-                return createExtractionTrace()
+                return createExtractionResult()
             }
         })
         await queueExtraction(harness)

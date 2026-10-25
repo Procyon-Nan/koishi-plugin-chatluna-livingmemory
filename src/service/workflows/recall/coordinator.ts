@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { isModelConfigured, summarizeError } from '../../shared/utils'
+import { isModelConfigured, formatErrorDetails } from '../../shared/utils'
 import { normalizeText, scopeKey } from '../../memory/helpers'
 import type { LivingMemoryLogger } from '../../logging/logger'
 import { renderSnapshotText } from '../../memory/snapshot/snapshot_text'
@@ -147,7 +147,7 @@ export class LivingMemoryRecallCoordinator {
             historyMessages = await loadHistoryMessages()
         } catch (error) {
             logger.diagnostic('recall.history.unavailable', {
-                error: summarizeError(error)
+                error: formatErrorDetails(error)
             })
         }
 

@@ -34,9 +34,9 @@ import type { LivingMemoryLogger } from '../../logging/logger'
 import { createLoggedModel } from '../../logging/model_calls'
 import { memorySearchTool } from '../../prompts/memory_tools'
 import { createMemoryTool } from '../../memory/tools'
-import type { LivingMemorySearchTool } from '../../memory/tools/embedding_search_tool'
+import type { LivingMemorySearchTool } from '../../memory/tools/search_memory_tool'
 import { resolveScopeAssistantLabel } from '../../memory/helpers'
-import type { LivingMemoryEmbeddingSearchEngine } from './embedding_search_engine'
+import type { LivingMemorySearchEngine } from './memory_search_engine'
 
 type LivingMemoryAgenticRecallConfig = Pick<
     LivingMemoryConfig,
@@ -227,7 +227,7 @@ export class LivingMemoryAgenticRecallExecutor {
     constructor(
         private readonly ctx: Context,
         private readonly config: LivingMemoryAgenticRecallConfig,
-        private readonly embeddingSearchEngine: LivingMemoryEmbeddingSearchEngine,
+        private readonly searchEngine: LivingMemorySearchEngine,
         private readonly logger: LivingMemoryLogger
     ) {}
 
@@ -256,7 +256,7 @@ export class LivingMemoryAgenticRecallExecutor {
         const recordedSearchCalls: RecordedAgenticSearchCall[] = []
         const searchTool = new RecordingLivingMemorySearchTool(
             createMemoryTool.search(
-                this.embeddingSearchEngine,
+                this.searchEngine,
                 false,
                 this.config.enableConversationIsolation
             ),

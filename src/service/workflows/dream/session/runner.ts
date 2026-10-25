@@ -23,7 +23,7 @@ import {
     buildDreamTurnFeedbackPrompt,
     buildDreamSystemPrompt
 } from '../../../prompts/dream'
-import { summarizeError } from '../../../shared/utils'
+import { formatErrorDetails } from '../../../shared/utils'
 import { LivingMemoryVectorIndexError } from '../../../vector_index/errors'
 import { DreamSessionHistory, dreamCompressionThreshold } from './history'
 import {
@@ -164,7 +164,7 @@ export async function runDreamSession(input: DreamSessionRunInput) {
                 decision = await agent.invoke(agentInput, config)
             } catch (error) {
                 signal?.throwIfAborted()
-                feedback = `本轮模型请求或工具参数解析失败：${summarizeError(error)}`
+                feedback = `本轮模型请求或工具参数解析失败：${formatErrorDetails(error)}`
                 const rejected = response as BaseMessage | undefined
                 if (rejected !== undefined) {
                     // 无法解析的调用不能重放为协议消息，否则部分 adapter 会再次解析失败。
@@ -175,7 +175,7 @@ export async function runDreamSession(input: DreamSessionRunInput) {
                     batch: state.currentBatch!.id,
                     round,
                     modelCallId,
-                    error: summarizeError(error)
+                    error: formatErrorDetails(error)
                 })
             }
             signal?.throwIfAborted()
@@ -229,12 +229,12 @@ export async function runDreamSession(input: DreamSessionRunInput) {
                         } catch (error) {
                             toolLogger.diagnostic('dream.tool.failed', () => ({
                                 elapsedMs: performance.now() - toolStartedAt,
-                                error: summarizeError(error)
+                                error: formatErrorDetails(error)
                             }))
                             signal?.throwIfAborted()
                             if (error instanceof LivingMemoryVectorIndexError)
                                 throw error
-                            observation = `工具执行失败：${summarizeError(error)}。请修正后重试。`
+                            observation = `工具执行失败：${formatErrorDetails(error)}。请修正后重试。`
                         }
                         history.append(toolResult(action, observation))
                     }

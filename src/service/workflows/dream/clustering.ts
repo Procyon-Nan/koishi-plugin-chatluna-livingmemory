@@ -1,6 +1,6 @@
 import type {
     DreamVectorProvider,
-    DreamVectorReadPage
+    VectorSnapshot
 } from '../../../contracts/vector_index'
 import type { DreamMemoryEntryRecord } from '../../../contracts/workflows'
 import type { LivingMemoryLogger } from '../../logging/logger'
@@ -52,7 +52,7 @@ export class DreamClusterer {
             }
         }
         checkRead()
-        const firstPage = await this.vectors.readDreamVectors(
+        const firstPage = await this.vectors.readVectorSnapshot(
             presetId,
             sorted.slice(0, vectorReadPageSize).map((entry) => entry.id),
             signal
@@ -90,7 +90,7 @@ export class DreamClusterer {
             dimension,
             vectors: new Float32Array(entryCount * dimension)
         }
-        const writePage = (page: DreamVectorReadPage, offset: number) => {
+        const writePage = (page: VectorSnapshot, offset: number) => {
             checkRead()
             if (
                 page.embeddingModelId !== embeddingModelId ||
@@ -133,7 +133,7 @@ export class DreamClusterer {
             offset += vectorReadPageSize
         ) {
             checkRead()
-            const page = await this.vectors.readDreamVectors(
+            const page = await this.vectors.readVectorSnapshot(
                 presetId,
                 sorted
                     .slice(offset, offset + vectorReadPageSize)

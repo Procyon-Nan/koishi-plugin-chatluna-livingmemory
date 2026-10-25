@@ -15,7 +15,7 @@ import type { LivingMemoryLogger } from '../../logging/logger'
 import { isModelConfigured } from '../../shared/utils'
 import { loadIndexedMemoryEntries } from './indexed_entries'
 
-type EmbeddingSearchEngineConfig = Pick<
+type MemorySearchConfig = Pick<
     LivingMemoryConfig,
     'memorySearchToolMaxResults' | 'memorySearchMinSimilarity' | 'rerankModel'
 >
@@ -32,10 +32,10 @@ const resolveMemoryTypes = (
     return input.memoryTypes as MemoryEntryType[]
 }
 
-export class LivingMemoryEmbeddingSearchEngine implements LivingMemorySearchProvider {
+export class LivingMemorySearchEngine implements LivingMemorySearchProvider {
     constructor(
         private readonly ctx: Context,
-        private readonly config: EmbeddingSearchEngineConfig,
+        private readonly config: MemorySearchConfig,
         private readonly repository: RecallRepository,
         private readonly vectorSearch: MemoryVectorSearch,
         private readonly logger: LivingMemoryLogger

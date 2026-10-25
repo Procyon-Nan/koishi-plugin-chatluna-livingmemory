@@ -80,7 +80,7 @@ it('applies shared field rules to extracted memories', async () => {
     const ctx = { chatluna } as unknown as Context
     const extractor = new LivingMemoryExtractor(ctx, 'test-model')
 
-    const trace = await extractor.extractWithTrace(
+    const result = await extractor.extract(
         'input',
         {
             conversationId: 'conversation-1',
@@ -91,8 +91,8 @@ it('applies shared field rules to extracted memories', async () => {
         logger
     )
 
-    assert.equal(trace.parseError, null)
-    assert.deepEqual(trace.extracted, [
+    assert.equal(result.parseError, null)
+    assert.deepEqual(result.extracted, [
         {
             type: 'fact',
             content: 'extracted content',

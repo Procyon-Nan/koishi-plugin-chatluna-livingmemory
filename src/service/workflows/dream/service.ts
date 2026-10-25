@@ -8,7 +8,7 @@ import type {
 } from '../../../contracts/workflows'
 import type { PresetPersonaResolver } from '../../../contracts/memory'
 import type { LivingMemoryMutationService } from '../../app/memory_mutation_service'
-import { isModelConfigured, summarizeError } from '../../shared/utils'
+import { isModelConfigured, formatErrorDetails } from '../../shared/utils'
 import { SerialTaskQueue } from '../../shared/serial_task_queue'
 import { resolveAssistantLabel } from '../../memory/helpers'
 import { DreamClusterer } from './clustering'
@@ -142,7 +142,7 @@ export class LivingMemoryDreamService {
         } catch (cause) {
             // 捕获目标之前的失败交由任务入口记录，之后的失败保留覆盖明细。
             if (state === undefined) throw cause
-            error = summarizeError(cause)
+            error = formatErrorDetails(cause)
         }
         const coverage = getDreamCoverage(state)
         let status: DreamRunResult['status'] = 'completed'
@@ -214,7 +214,9 @@ export class LivingMemoryDreamService {
                 error
             )
             const errorMessage =
-                error instanceof Error ? error.message : summarizeError(error)
+                error instanceof Error
+                    ? error.message
+                    : formatErrorDetails(error)
             return `user profiles failed: ${errorMessage}`
         }
     }

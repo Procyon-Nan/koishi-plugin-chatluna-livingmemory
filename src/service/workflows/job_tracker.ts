@@ -1,5 +1,5 @@
 import type { JobRepository } from '../../contracts/workflows'
-import { summarizeError } from '../shared/utils'
+import { formatErrorDetails } from '../shared/utils'
 
 export type JobTrackerRepository = Pick<JobRepository, 'updateJob'>
 
@@ -33,7 +33,7 @@ export class LivingMemoryJobTracker {
             finishedAt: new Date(),
             updatedAt: new Date(),
             detail,
-            error: summarizeError(error)
+            error: formatErrorDetails(error)
         })
     }
 }
