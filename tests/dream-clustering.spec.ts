@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import type { ManualDreamVectorReader } from '../src/contracts/vector_index'
+import type { DreamVectorProvider } from '../src/contracts/vector_index'
 import { DreamClusterer } from '../src/service/workflows/dream/clustering'
 import {
     buildDreamPartitionTargetSizes,
@@ -17,6 +17,9 @@ import {
     calculatePartitionQuality,
     compareEntryIds
 } from '../src/service/workflows/dream/partitioning/similarity'
+import { bisectDreamMemories } from '../src/service/workflows/dream/semantic/bisect'
+import { validateDreamPlan } from '../src/service/workflows/dream/semantic/validate'
+import { createMemoryContentHash } from '../src/service/vector_index/hashes'
 import { createMemoryEntry } from './workflow-test-utils'
 
 const createEntries = (count: number) =>
@@ -24,14 +27,6 @@ const createEntries = (count: number) =>
         ...createMemoryEntry(`memory-${index.toString().padStart(4, '0')}`),
         keywords: [`group-${index % 8}`, `topic-${index % 23}`]
     }))
-
-const createDreamWorker = (
-    runHdbscan: DreamWorkerRunner['runHdbscan']
-): DreamWorkerRunner => ({
-    partition: async (entries, targetSize) =>
-        partitionDreamEntries(entries, { targetSize }),
-    runHdbscan
-})
 
 it('selects balanced Dream partition counts around the target size', () => {
     assert.equal(selectDreamPartitionCount(400), 2)
@@ -217,279 +212,186 @@ it('keeps disconnected keyword islands in separate balanced partitions', () => {
 
 const createVectorReader = (entries: ReturnType<typeof createEntries>) => {
     const calls: string[][] = []
-    const vectorById = new Map(
+    const byId = new Map(
         entries.map((entry, index) => [
             entry.id,
-            new Float32Array([index + 1, 1])
+            {
+                memoryId: entry.id,
+                contentHash: createMemoryContentHash(entry.content),
+                status: 'active' as const,
+                vector: new Float32Array([index + 1, 1])
+            }
         ])
     )
-    const reader: ManualDreamVectorReader = {
-        readVectors: async (_presetId, memoryIds) => {
-            calls.push(memoryIds)
-            return new Map(memoryIds.map((id) => [id, vectorById.get(id)!]))
+    const reader: DreamVectorProvider = {
+        readDreamVectors: async (_presetId, ids) => {
+            calls.push(ids)
+            return {
+                embeddingModelId: 'test',
+                dimension: 2,
+                generation: 'generation-1',
+                items: ids.map((id) => byId.get(id)!),
+                missingMemoryIds: []
+            }
         }
     }
-    return { calls, reader }
+    return { calls, reader, byId }
 }
 
-it('runs one global HDBSCAN pass over all first-pass noise', async () => {
-    const entries = createEntries(351)
-    const partitions = partitionDreamEntries(entries)
-    const vectors = createVectorReader(entries)
-    const callSizes: number[] = []
-    const worker = createDreamWorker(async (input, onProgress) => {
-        assert.equal(input.dimension, 2)
-        assert.equal(input.vectors.length, input.entryCount * 2)
-        assert.equal(onProgress, undefined)
-        callSizes.push(input.entryCount)
-        if (callSizes.length <= partitions.length) {
-            return Int32Array.from({ length: input.entryCount }, (_, index) =>
-                index === 0 ? 0 : -1
-            )
-        }
-        return Int32Array.from({ length: input.entryCount }, (_, index) =>
-            index < 3 ? 4 : -1
+const worker: DreamWorkerRunner = {
+    bisect: async (input) => bisectDreamMemories(input)
+}
+
+it.each([0, 1, 29, 30, 31, 59, 60, 61, 135, 701])(
+    'covers %i entries once within the minimum batch count',
+    async (count) => {
+        const entries = createEntries(count)
+        const vectors = createVectorReader(entries)
+        const clusterer = new DreamClusterer(vectors.reader, worker)
+        const clusters = await clusterer.buildClusters('preset-1', entries)
+        const ids = clusters.flatMap((cluster) =>
+            cluster.entries.map((entry) => entry.id)
         )
-    })
-    const clusterer = new DreamClusterer(vectors.reader, worker)
+        assert.equal(clusters.length, Math.ceil(count / 30))
+        assert.ok(
+            clusters.every(
+                (cluster) =>
+                    cluster.entries.length > 0 && cluster.entries.length <= 30
+            )
+        )
+        assert.deepEqual(
+            [...ids].sort(),
+            entries.map((entry) => entry.id)
+        )
+        const reordered = await clusterer.buildClusters(
+            'preset-1',
+            [...entries].reverse()
+        )
+        assert.deepEqual(reordered, clusters)
+    }
+)
 
-    const clusters = await clusterer.buildClusters('preset-1', entries)
-
-    assert.deepEqual(
-        [...callSizes.slice(0, 2)].sort((left, right) => left - right),
-        [175, 176]
-    )
-    assert.equal(callSizes[2], 349)
+it('reads vectors in pages of 256 and keeps the source records', async () => {
+    const entries = createEntries(701)
+    const vectors = createVectorReader(entries)
+    const clusters = await new DreamClusterer(
+        vectors.reader,
+        worker
+    ).buildClusters('preset-1', entries)
     assert.deepEqual(
         vectors.calls.map((ids) => ids.length),
-        [175, 176, 349]
+        [256, 256, 189]
     )
-    const noise = partitions.flatMap((partition) => partition.slice(1))
-    assert.deepEqual(
-        clusters.slice(0, 3).map((cluster) => cluster.entries),
-        [[partitions[0][0]], [partitions[1][0]], noise.slice(0, 3)]
-    )
-    assert.equal(clusters.length, 15)
-    assert.deepEqual(
-        new Set(
-            clusters
-                .slice(3)
-                .flatMap((cluster) => cluster.entries.map((entry) => entry.id))
+    const originals = new Map(entries.map((entry) => [entry.id, entry]))
+    for (const entry of clusters.flatMap((cluster) => cluster.entries)) {
+        assert.equal(entry, originals.get(entry.id))
+    }
+})
+
+it('rejects a changed index generation between vector pages', async () => {
+    const entries = createEntries(257)
+    const vectors = createVectorReader(entries)
+    const read = vectors.reader.readDreamVectors
+    vectors.reader.readDreamVectors = async (...args) => ({
+        ...(await read(...args)),
+        generation: String(vectors.calls.length)
+    })
+    await assert.rejects(
+        new DreamClusterer(vectors.reader, worker).buildClusters(
+            'preset-1',
+            entries
         ),
-        new Set(noise.slice(3).map((entry) => entry.id))
+        /索引代际已变化/
+    )
+})
+
+it('rejects changed content before starting the algorithm', async () => {
+    const entries = createEntries(31)
+    const vectors = createVectorReader(entries)
+    vectors.byId.get(entries[0].id)!.contentHash = 'changed'
+    const bisect = vi.fn(worker.bisect)
+    await assert.rejects(
+        new DreamClusterer(vectors.reader, { bisect }).buildClusters(
+            'preset-1',
+            entries
+        ),
+        /正文与向量快照不符/
+    )
+    assert.equal(bisect.mock.calls.length, 0)
+})
+
+it('stops submitting vector pages after cancellation', async () => {
+    const entries = createEntries(257)
+    const vectors = createVectorReader(entries)
+    const controller = new AbortController()
+    const read = vectors.reader.readDreamVectors
+    vectors.reader.readDreamVectors = async (...args) => {
+        const page = await read(...args)
+        controller.abort(new Error('cancel vector read'))
+        return page
+    }
+    await assert.rejects(
+        new DreamClusterer(vectors.reader, worker).buildClusters(
+            'preset-1',
+            entries,
+            undefined,
+            controller.signal
+        ),
+        /cancel vector read/
+    )
+    assert.equal(vectors.calls.length, 1)
+})
+
+it('keeps separated directions together when both groups fit', async () => {
+    const entries = createEntries(60)
+    const vectors = createVectorReader(entries)
+    for (let i = 0; i < entries.length; i++) {
+        vectors.byId.get(entries[i].id)!.vector = new Float32Array(
+            i < 30 ? [1, 0] : [0, 1]
+        )
+    }
+    const clusters = await new DreamClusterer(
+        vectors.reader,
+        worker
+    ).buildClusters('preset-1', entries)
+    const groups = clusters.map((cluster) =>
+        cluster.entries.map((entry) => entry.id).sort()
     )
     assert.ok(
-        clusters.slice(3).every((cluster) => cluster.entries.length <= 30)
-    )
-    const clusteredIds = clusters.flatMap((cluster) =>
-        cluster.entries.map((entry) => entry.id)
-    )
-    assert.equal(clusteredIds.length, entries.length)
-    assert.equal(new Set(clusteredIds).size, entries.length)
-})
-
-it('reads first-pass partitions and global noise in bounded batches', async () => {
-    const entries = createEntries(701)
-    const partitions = partitionDreamEntries(entries)
-    const vectors = createVectorReader(entries)
-    const callSizes: number[] = []
-    const worker = createDreamWorker(async (input, onProgress) => {
-        assert.equal(onProgress, undefined)
-        callSizes.push(input.entryCount)
-        return new Int32Array(input.entryCount).fill(-1)
-    })
-    const clusterer = new DreamClusterer(vectors.reader, worker)
-
-    const clusters = await clusterer.buildClusters('preset-1', entries)
-
-    assert.deepEqual(
-        vectors.calls.map((ids) => ids.length),
-        [...partitions.map((partition) => partition.length), 350, 350, 1]
-    )
-    assert.deepEqual(callSizes, [
-        ...partitions.map((partition) => partition.length),
-        701
-    ])
-    // 701 条 final-noise 兜底簇按 30 条上限切分为 24 个单元。
-    assert.equal(clusters.length, 24)
-    assert.ok(clusters.every((cluster) => cluster.entries.length <= 30))
-    assert.deepEqual(
-        clusters
-            .map((cluster) => cluster.entries.length)
-            .sort((left, right) => left - right),
-        [...Array(19).fill(29), ...Array(5).fill(30)]
-    )
-    const clusteredIds = clusters.flatMap((cluster) =>
-        cluster.entries.map((entry) => entry.id)
-    )
-    assert.equal(clusteredIds.length, entries.length)
-    assert.equal(new Set(clusteredIds).size, entries.length)
-})
-
-it('skips the global noise pass when the first pass has no noise', async () => {
-    const entries = createEntries(351)
-    const vectors = createVectorReader(entries)
-    const callSizes: number[] = []
-    const worker = createDreamWorker(async (input) => {
-        callSizes.push(input.entryCount)
-        return new Int32Array(input.entryCount)
-    })
-    const clusterer = new DreamClusterer(vectors.reader, worker)
-
-    const clusters = await clusterer.buildClusters('preset-1', entries)
-
-    assert.deepEqual(
-        [...callSizes].sort((left, right) => left - right),
-        [175, 176]
-    )
-    assert.deepEqual(
-        vectors.calls
-            .map((ids) => ids.length)
-            .sort((left, right) => left - right),
-        [175, 176]
-    )
-    assert.equal(clusters.length, 12)
-    assert.ok(clusters.every((cluster) => cluster.entries.length <= 30))
-    const clusteredIds = clusters.flatMap((cluster) =>
-        cluster.entries.map((entry) => entry.id)
-    )
-    assert.equal(clusteredIds.length, entries.length)
-    assert.deepEqual(
-        new Set(clusteredIds),
-        new Set(entries.map((entry) => entry.id))
-    )
-})
-
-it('splits an oversized cluster into units within the size cap', async () => {
-    const entries = createEntries(100)
-    const vectors = createVectorReader(entries)
-    const clusterer = new DreamClusterer(
-        vectors.reader,
-        createDreamWorker(async ({ entryCount }) => new Int32Array(entryCount))
-    )
-
-    const clusters = await clusterer.buildClusters('preset-1', entries)
-
-    assert.deepEqual(
-        clusters.map((cluster) => cluster.id),
-        [1, 2, 3, 4].map((index) => `cluster-1:chunk-${index}`)
-    )
-    assert.deepEqual(
-        clusters.map((cluster) => cluster.entries.length),
-        [25, 25, 25, 25]
-    )
-    for (const cluster of clusters) {
-        const chunkIds = cluster.entries.map((entry) => entry.id)
-        assert.deepEqual([...chunkIds].sort(), chunkIds)
-    }
-    const ids = clusters.flatMap((cluster) =>
-        cluster.entries.map((entry) => entry.id)
-    )
-    assert.equal(ids.length, entries.length)
-    assert.equal(new Set(ids).size, entries.length)
-})
-
-it('keeps clusters within the cap intact and splits oversized ones', async () => {
-    const entries = createEntries(55)
-    const vectors = createVectorReader(entries)
-    const clusterer = new DreamClusterer(
-        vectors.reader,
-        createDreamWorker(async ({ entryCount }) =>
-            Int32Array.from({ length: entryCount }, (_, index) =>
-                index < 40 ? 0 : 1
-            )
+        groups.some(
+            (group) =>
+                JSON.stringify(group) ===
+                JSON.stringify(entries.slice(0, 30).map((entry) => entry.id))
         )
     )
-
-    const clusters = await clusterer.buildClusters('preset-1', entries)
-
-    assert.deepEqual(
-        clusters
-            .map((cluster) => cluster.entries.length)
-            .sort((left, right) => right - left),
-        [20, 20, 15]
-    )
-    assert.deepEqual(
-        clusters
-            .filter((cluster) => cluster.entries.length === 20)
-            .map((cluster) => cluster.id),
-        ['cluster-1:chunk-1', 'cluster-1:chunk-2']
-    )
-    assert.deepEqual(
-        clusters
-            .filter((cluster) => cluster.entries.length === 15)
-            .map((cluster) => cluster.id),
-        ['cluster-2']
+    assert.ok(
+        groups.some(
+            (group) =>
+                JSON.stringify(group) ===
+                JSON.stringify(entries.slice(30).map((entry) => entry.id))
+        )
     )
 })
 
-it('passes the unit size cap to partitioning only for oversized clusters', async () => {
-    const entries = createEntries(55)
-    const vectors = createVectorReader(entries)
-    const partitionCalls: {
-        entryCount: number
-        targetSize: number | undefined
-    }[] = []
-    const worker: DreamWorkerRunner = {
-        partition: async (clusterEntries, targetSize) => {
-            partitionCalls.push({
-                entryCount: clusterEntries.length,
-                targetSize
-            })
-            return partitionDreamEntries(clusterEntries, { targetSize })
-        },
-        runHdbscan: async ({ entryCount }) =>
-            Int32Array.from({ length: entryCount }, (_, index) =>
-                index < 40 ? 0 : 1
+it('handles identical directions and checks cancellation and an unfinished deadline', () => {
+    const input = {
+        matrix: {
+            entryCount: 61,
+            dimension: 2,
+            vectors: Float32Array.from({ length: 122 }, (_, i) =>
+                i % 2 === 0 ? 1 : 0
             )
-    }
-    const clusterer = new DreamClusterer(vectors.reader, worker)
-
-    await clusterer.buildClusters('preset-1', entries)
-
-    assert.deepEqual(partitionCalls, [
-        { entryCount: 55, targetSize: undefined },
-        { entryCount: 40, targetSize: 30 }
-    ])
-})
-
-it('skips the global HDBSCAN run for a single first-pass noise entry', async () => {
-    const entries = createEntries(4)
-    const vectors = createVectorReader(entries)
-    let hdbscanCalls = 0
-    const clusterer = new DreamClusterer(
-        vectors.reader,
-        createDreamWorker(async () => {
-            hdbscanCalls++
-            return Int32Array.from([0, 0, 0, -1])
-        })
-    )
-
-    const clusters = await clusterer.buildClusters('preset-1', entries)
-
-    assert.equal(hdbscanCalls, 1)
-    assert.deepEqual(
-        clusters.map((cluster) => cluster.entries.length),
-        [3, 1]
-    )
-})
-
-it('propagates asynchronous partition failures before reading vectors', async () => {
-    const entries = createEntries(10)
-    const vectors = createVectorReader(entries)
-    const worker: DreamWorkerRunner = {
-        partition: async () => {
-            throw new Error('Dream partition worker failed')
         },
-        runHdbscan: async () => {
-            throw new Error('HDBSCAN must not run')
-        }
+        cancellation: new SharedArrayBuffer(4),
+        budgetMs: 30_000
     }
-    const clusterer = new DreamClusterer(vectors.reader, worker)
-
-    await assert.rejects(
-        clusterer.buildClusters('preset-1', entries),
-        /Dream partition worker failed/u
+    const result = bisectDreamMemories(input)
+    validateDreamPlan(result.plan, 61)
+    assert.deepEqual(result.plan, bisectDreamMemories(input).plan)
+    assert.throws(
+        () => bisectDreamMemories({ ...input, budgetMs: 0 }),
+        /计算期限/
     )
-    assert.deepEqual(vectors.calls, [])
+    Atomics.store(new Int32Array(input.cancellation), 0, 1)
+    assert.throws(() => bisectDreamMemories(input), /已取消/)
 })

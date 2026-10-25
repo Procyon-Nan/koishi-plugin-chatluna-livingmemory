@@ -25,6 +25,7 @@ import {
 import {
     queryVectorIndexHybrid,
     queryVectorIndexKnn,
+    readDreamVectors,
     readVectorIndexInventoryPage,
     readVectorIndexVectors
 } from './queries'
@@ -255,6 +256,14 @@ export class LivingMemoryVectorIndexDatabase {
 
     readVectors(presetId: string, memoryIds: string[]) {
         return readVectorIndexVectors(
+            this.requireActiveDatabase(),
+            presetId,
+            memoryIds
+        )
+    }
+
+    readDreamVectors(presetId: string, memoryIds: string[]) {
+        return readDreamVectors(
             this.requireActiveDatabase(),
             presetId,
             memoryIds

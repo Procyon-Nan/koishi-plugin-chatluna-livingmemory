@@ -4,6 +4,7 @@ import {
     runDreamHdbscan
 } from '../hdbscan/algorithm'
 import { partitionDreamEntries } from '../partitioning'
+import { bisectDreamMemories } from '../semantic/bisect'
 import type {
     DreamWorkerError,
     DreamWorkerRequest,
@@ -86,6 +87,41 @@ workerPort.on('message', (request: DreamWorkerRequest) => {
 
         if (request.type === 'partition') {
             workerPort.postMessage(partition(request))
+            return
+        }
+
+        if (request.type === 'bisect') {
+            const startedAt = performance.now()
+            const result = bisectDreamMemories(
+                request,
+                request.reportProgress
+                    ? (completed, total) => {
+                          workerPort.postMessage({
+                              id: request.id,
+                              type: 'progress',
+                              progress: {
+                                  phase: 'bisect',
+                                  completed,
+                                  total,
+                                  elapsedMs: performance.now() - startedAt
+                              }
+                          } satisfies DreamWorkerResponse)
+                      }
+                    : undefined
+            )
+            workerPort.postMessage(
+                {
+                    id: request.id,
+                    type: 'bisect',
+                    ok: true,
+                    result
+                } satisfies DreamWorkerResponse,
+                [
+                    result.matrix.vectors.buffer,
+                    result.plan.labels.buffer,
+                    result.plan.sizes.buffer
+                ]
+            )
             return
         }
 

@@ -1,19 +1,15 @@
-import type {
-    DreamHdbscanMatrix,
-    DreamHdbscanPhase
-} from '../hdbscan/algorithm'
+import type { DreamHdbscanPhase } from '../hdbscan/algorithm'
 import type { DreamPartitionEntry } from '../partitioning/types'
+import type { DreamBisectInput, DreamBisectResult } from '../semantic/types'
 
-export interface DreamHdbscanProgress {
-    phase: DreamHdbscanPhase
+export interface DreamWorkerProgress {
+    phase: DreamHdbscanPhase | 'bisect'
     completed: number
     total: number
     elapsedMs: number
 }
 
-export type DreamHdbscanProgressHandler = (
-    progress: DreamHdbscanProgress
-) => void
+export type DreamWorkerProgressHandler = (progress: DreamWorkerProgress) => void
 
 export interface DreamWorkerError {
     name: string
@@ -22,6 +18,7 @@ export interface DreamWorkerError {
 }
 
 export type DreamWorkerCommand =
+    | ({ type: 'bisect'; reportProgress: boolean } & DreamBisectInput)
     | {
           type: 'ready'
       }
@@ -47,6 +44,12 @@ export type DreamWorkerRequest = WithRequestId<DreamWorkerCommand>
 export type DreamWorkerResponse =
     | {
           id: number
+          type: 'bisect'
+          ok: true
+          result: DreamBisectResult
+      }
+    | {
+          id: number
           type: 'ready'
           ok: true
       }
@@ -65,7 +68,7 @@ export type DreamWorkerResponse =
     | {
           id: number
           type: 'progress'
-          progress: DreamHdbscanProgress
+          progress: DreamWorkerProgress
       }
     | {
           id: number
@@ -74,13 +77,8 @@ export type DreamWorkerResponse =
       }
 
 export interface DreamWorkerRunner {
-    partition<Entry extends DreamPartitionEntry>(
-        entries: readonly Entry[],
-        targetSize?: number
-    ): Promise<Entry[][]>
-
-    runHdbscan(
-        matrix: DreamHdbscanMatrix,
-        onProgress?: DreamHdbscanProgressHandler
-    ): Promise<Int32Array<ArrayBuffer>>
+    bisect(
+        input: DreamBisectInput,
+        onProgress?: DreamWorkerProgressHandler
+    ): Promise<DreamBisectResult>
 }

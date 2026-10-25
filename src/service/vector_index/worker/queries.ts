@@ -1,4 +1,5 @@
 import type { PGlite } from '@electric-sql/pglite'
+import type { DreamVectorReadPage } from '../../../contracts/vector_index'
 import type {
     VectorIndexHybridHit,
     VectorIndexHybridQuery,
@@ -221,6 +222,47 @@ export const readVectorIndexVectors = async (
         }
     }
     return { vectors, missingMemoryIds }
+}
+
+export const readDreamVectors = async (
+    database: PGlite,
+    presetId: string,
+    memoryIds: string[]
+): Promise<DreamVectorReadPage> => {
+    return database.transaction(async (transaction) => {
+        const manifest = (
+            await transaction.query<
+                Pick<
+                    DreamVectorReadPage,
+                    'embeddingModelId' | 'dimension' | 'generation'
+                >
+            >(`SELECT embedding_model_id AS "embeddingModelId", dimension, generation
+               FROM lm_index_manifest WHERE singleton = 1`)
+        ).rows[0]
+        const rows = (
+            await transaction.query<{
+                memoryId: string
+                contentHash: string
+                status: DreamVectorReadPage['items'][number]['status']
+                embedding: string
+            }>(
+                `SELECT memory_id AS "memoryId", content_hash AS "contentHash",
+                        status, embedding::text AS embedding
+                 FROM lm_index_memory
+                 WHERE preset_id = $1 AND memory_id = ANY($2::text[])`,
+                [presetId, memoryIds]
+            )
+        ).rows
+        const found = new Set(rows.map((row) => row.memoryId))
+        return {
+            ...manifest,
+            items: rows.map(({ embedding, ...row }) => ({
+                ...row,
+                vector: decodeVector(embedding)
+            })),
+            missingMemoryIds: memoryIds.filter((id) => !found.has(id))
+        }
+    })
 }
 
 export const readVectorIndexInventoryPage = async (

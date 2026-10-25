@@ -113,11 +113,25 @@ export interface MemoryVectorSearch {
     ): Promise<MemoryHybridSearchHit[]>
 }
 
-export interface ManualDreamVectorReader {
-    readVectors(
+export interface DreamVectorReadPage {
+    embeddingModelId: string
+    dimension: number
+    generation: string
+    items: {
+        memoryId: string
+        contentHash: string
+        status: MemoryEntryStatus
+        vector: Float32Array<ArrayBuffer>
+    }[]
+    missingMemoryIds: string[]
+}
+
+export interface DreamVectorProvider {
+    readDreamVectors(
         presetId: string,
-        memoryIds: string[]
-    ): Promise<Map<string, Float32Array<ArrayBuffer>>>
+        memoryIds: string[],
+        signal?: AbortSignal
+    ): Promise<DreamVectorReadPage>
 }
 
 export interface MemoryIndexMutationSink {

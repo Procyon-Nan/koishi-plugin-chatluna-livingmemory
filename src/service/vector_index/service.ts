@@ -2,7 +2,7 @@ import { readdir, unlink } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import type { Context } from 'koishi'
 import type {
-    ManualDreamVectorReader,
+    DreamVectorProvider,
     MemoryHybridSearchHit,
     MemoryHybridSearchInput,
     MemoryIndexMutationBatch,
@@ -57,10 +57,7 @@ const legacyIndexFiles = new Set([
 const legacyRebuildFile = /^vector-index\.rebuild-.+\.sqlite$/u
 
 export class LivingMemoryVectorIndexService
-    implements
-        ManualDreamVectorReader,
-        MemoryIndexMutationSink,
-        MemoryVectorSearch
+    implements DreamVectorProvider, MemoryIndexMutationSink, MemoryVectorSearch
 {
     private readonly operationGate = new VectorIndexOperationGate()
     private readonly presetMutationQueue = new VectorIndexPresetMutationQueue(
@@ -237,18 +234,15 @@ export class LivingMemoryVectorIndexService
         }
     }
 
-    async readVectors(
+    async readDreamVectors(
         presetId: string,
-        memoryIds: string[]
-    ): Promise<Map<string, Float32Array<ArrayBuffer>>> {
+        memoryIds: string[],
+        signal?: AbortSignal
+    ) {
         return this.operationGate.run(async () => {
             await this.awaitPresetReadBarrier(presetId)
-            const items = await this.readRequiredVectors(presetId, memoryIds)
-            const vectors = new Map<string, Float32Array<ArrayBuffer>>()
-            for (const item of items) {
-                vectors.set(item.memoryId, item.vector)
-            }
-            return vectors
+            signal?.throwIfAborted()
+            return this.requireWorker().readDreamVectors(presetId, memoryIds)
         })
     }
 
@@ -474,22 +468,6 @@ export class LivingMemoryVectorIndexService
                 `searchTextIndex=${index}`
             )
         )
-    }
-
-    private async readRequiredVectors(presetId: string, memoryIds: string[]) {
-        const result = await this.requireWorker().readVectors(
-            presetId,
-            memoryIds
-        )
-        if (result.missingMemoryIds.length > 0) {
-            throw new LivingMemoryVectorIndexError(
-                'vector-missing',
-                'dirty',
-                `vector index entries are missing: preset=${presetId}, ` +
-                    `memoryIds=${result.missingMemoryIds.join(',')}`
-            )
-        }
-        return result.vectors
     }
 
     assertPresetReady(presetId: string) {

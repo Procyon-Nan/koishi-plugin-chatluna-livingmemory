@@ -125,7 +125,11 @@ chatluna-livingmemory/
 │       │       ├── coordinator.ts       # Dream 触发、排队与取消
 │       │       ├── job_runner.ts        # 任务记录与完成统计
 │       │       ├── full.ts              # 全量准备、聚类、会话与画像衔接
-│       │       ├── clustering.ts        # 聚类批次组装
+│       │       ├── clustering.ts        # 向量快照读取、容量二分与批次组装
+│       │       ├── semantic/
+│       │       │   ├── types.ts         # 向量矩阵、标签与二分契约
+│       │       │   ├── bisect.ts        # 容量约束球面二分
+│       │       │   └── validate.ts      # 分组覆盖、计数与容量校验
 │       │       ├── partitioning.ts      # 记忆分区入口
 │       │       ├── types.ts             # 批次与运行结果类型
 │       │       ├── partitioning/        # 初始分区、相似度与分区优化
@@ -181,6 +185,7 @@ chatluna-livingmemory/
 | --- | --- |
 | 身份、会话、消息日志、召回、提取、人设与画像 | [记忆与工作流](docs/memory-workflows.md) |
 | Dream 批次、工具进度、上下文压缩与任务状态 | [Dream 会话设计](docs/dream-session-plan.md) |
+| Dream 容量二分、HNSW 与跨组修复 | [语义分组实施方案](docs/dream-semantic-batching-implementation.md) |
 | 向量索引、目录所有权、重建与就绪状态 | [向量索引](docs/vector-index.md) |
 | 模型记忆字段与渲染 | [记忆视图](docs/memory-model-view-plan.md) |
 | WebUI 操作 | [WebUI 指南](docs/WEBUI_GUIDE.md) |

@@ -1,13 +1,13 @@
 # 全量 Dream 会话化设计
 
-更新日期：2026-10-21。会话化改造已完成；本文保留当前执行规则、代码职责和验收边界。历史运行证据见[验收记录](dream-session-acceptance.md)，实施过程以 Git 历史为准。
+更新日期：2026-10-25。本文记录当前执行规则、代码职责和验收边界。语义分组改造见[实施方案](dream-semantic-batching-implementation.md)，历史会话证据见[验收记录](dream-session-acceptance.md)。
 
 ## 1. 范围
 
 - 仅修改 LivingMemory，复用 ChatLuna 公开模型与 Agent 接口，不修改宿主。
 - 手动全量 Dream 检查启动时的全部活跃记忆，包括已固化项；预设活跃记忆不足 30 条时不启动。
-- 沿用现有分区、HDBSCAN、全局噪声整理和超大簇切分，每批最多 30 条。
-- 任务按预设互斥；不新增断点续跑、持久化会话历史、主题树或聚类算法。
+- 按正文向量进行容量约束球面二分，形成 `ceil(N / 30)` 个批次，每批 1–30 条。
+- 任务按预设互斥；跨预设的准备阶段通过一个串行队列执行，会话阶段独立运行。
 - 旧批次执行器、操作数组协议、专用合并事务、增量 Dream 及自动触发均已移除，不保留兼容或降级路径。
 - 增量流程重新设计、`persistence/entries.ts` 拆分不属于本次改造。
 
@@ -23,15 +23,22 @@ src/service/workflows/dream/
 │   ├── state.ts                 # 目标、可访问与已处理集合、批次与覆盖结果
 │   ├── history.ts               # 追加式历史、批次起点、用量与压缩
 │   └── tools.ts                 # Dream 的范围校验、固化与成功登记
-├── clustering.ts                # 聚类编排和每批 30 条上限
-├── partitioning.ts
-├── partitioning/                # 分区算法
-├── hdbscan/                     # 密度聚类算法
+├── clustering.ts                # 向量快照读取、容量二分与批次映射
+├── semantic/                    # 容量二分、数值契约和结果校验
+├── partitioning.ts              # 旧算法对照，待分组验收后清理
+├── partitioning/                # 旧关键词分区对照
+├── hdbscan/                     # 旧密度聚类对照
 ├── worker/                      # Worker 协议、客户端和执行入口
 └── types.ts                     # 簇、操作统计与任务结果
 ```
 
 `DreamCluster` 仅保留 `id` 与 `entries`。聚类来源字符串不再进入会话契约。
+
+准备阶段获得队列执行权后读取全部活跃记忆并固定目标集合。模型容量检查先于分组；正文按稳定 ID 排序，每页读取最多 256 条已有向量，同时核对正文 hash、active 状态、模型、维数和 generation。
+
+容量二分在 Dream Worker 内执行。矩阵以 ArrayBuffer 转移，共享取消位由 Worker 在计算中读取。每个二分节点携带最终批次数预算，按两个单位中心的语义费用选择合法切点，最多迭代 3 轮；分组出口统一核对覆盖、标签计数和容量。
+
+第一批实现执行 initial 阶段。数值工作集上限为 128 MiB，二分软期限为 30 秒，准备阶段整体软期限为 180 秒；读取完成后检查期限，在途数据库请求排空后结束。HNSW、refinement 开关与跨组修复按实施方案后续阶段接入。自动化检查、规模资源测量和业务质量验收列入版本更新前的集中验证。
 
 公共工具统一由 `src/service/memory/tools/index.ts` 的 `createMemoryTool` 创建，各工具实现与 `tool_runtime.ts` 位于同一目录。工厂无状态，按调用创建实例，不建立可变注册表或共享任务状态。
 

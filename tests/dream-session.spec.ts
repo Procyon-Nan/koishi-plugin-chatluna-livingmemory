@@ -18,7 +18,10 @@ import { LivingMemoryLogger } from '../src/service/logging/logger'
 import { createMemoryTool } from '../src/service/memory/tools'
 import { buildDreamMemoryBatchPrompt } from '../src/service/prompts/dream'
 import { DreamSessionHistory } from '../src/service/workflows/dream/session/history'
-import { runDreamSession } from '../src/service/workflows/dream/session/runner'
+import {
+    createDreamCallOptions,
+    runDreamSession
+} from '../src/service/workflows/dream/session/runner'
 import {
     createDreamSessionState,
     getDreamCoverage,
@@ -136,7 +139,7 @@ const createRun = (
     const captured = logger()
     return {
         presetId: 'preset',
-        sessionId: 'dream-test',
+        callOptions: createDreamCallOptions(model, 'dream-test'),
         assistantLabel: '角色',
         presetPrompt: '人设',
         speakers: [],
@@ -515,8 +518,8 @@ it('rejects oversized input instead of letting the host drop current batch messa
 it('rejects models unable to support the fixed threshold before calling them', async () => {
     const { model, requests } = createModel(() => new AIMessage('unused'))
     vi.spyOn(model, 'getModelMaxContextSize').mockReturnValue(200_000)
-    await assert.rejects(
-        runDreamSession(createRun(model)),
+    assert.throws(
+        () => createDreamCallOptions(model, 'dream-test'),
         /200k 输入及输出预算/
     )
     assert.equal(requests.length, 0)

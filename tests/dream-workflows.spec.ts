@@ -16,7 +16,8 @@ import { LivingMemoryDreamJobRunner } from '../src/service/workflows/dream/job_r
 import { LivingMemoryJobTracker } from '../src/service/workflows/job_tracker'
 import { LivingMemoryUserProfileService } from '../src/service/user_profile'
 import { LivingMemoryMutationService } from '../src/service/app/memory_mutation_service'
-import { partitionDreamEntries } from '../src/service/workflows/dream/partitioning'
+import { bisectDreamMemories } from '../src/service/workflows/dream/semantic/bisect'
+import { createMemoryContentHash } from '../src/service/vector_index/hashes'
 import { getJobStatusLabel, getJobStatusTagType } from '../client/utils/display'
 import { withLivingMemoryRepository } from './persistence-test-utils'
 import {
@@ -107,13 +108,23 @@ const runService = async (
             repository,
             mutations,
             {
-                readVectors: async (_presetId, ids) =>
-                    new Map(ids.map((id) => [id, new Float32Array([1, 0])]))
+                readDreamVectors: async (_presetId, ids) => ({
+                    embeddingModelId: 'test',
+                    dimension: 2,
+                    generation: 'test',
+                    missingMemoryIds: [],
+                    items: ids.map((id) => ({
+                        memoryId: id,
+                        status: 'active',
+                        contentHash: createMemoryContentHash(
+                            entries.find((entry) => entry.id === id)!.content
+                        ),
+                        vector: new Float32Array([1, 0])
+                    }))
+                })
             },
             {
-                partition: async (items, size) =>
-                    partitionDreamEntries(items, { targetSize: size }),
-                runHdbscan: async ({ entryCount }) => new Int32Array(entryCount)
+                bisect: async (input) => bisectDreamMemories(input)
             },
             profiles,
             persona

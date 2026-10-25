@@ -132,6 +132,10 @@ export class LivingMemoryVectorIndexWorkerClient {
         return this.request({ type: 'readVectors', presetId, memoryIds })
     }
 
+    readDreamVectors(presetId: string, memoryIds: string[]) {
+        return this.request({ type: 'readDreamVectors', presetId, memoryIds })
+    }
+
     applyMutation(mutation: VectorIndexMutation) {
         return this.request({ type: 'applyMutation', ...mutation })
     }

@@ -1,6 +1,6 @@
 import { Context } from 'koishi'
 import type { ChatLunaChatModel } from 'koishi-plugin-chatluna/llm-core/platform/model'
-import type { ManualDreamVectorReader } from '../../../contracts/vector_index'
+import type { DreamVectorProvider } from '../../../contracts/vector_index'
 import type {
     DreamMemoryEntryRecord,
     LivingMemoryConfig,
@@ -9,15 +9,20 @@ import type {
 import type { PresetPersonaResolver } from '../../../contracts/memory'
 import type { LivingMemoryMutationService } from '../../app/memory_mutation_service'
 import { isModelConfigured, summarizeError } from '../../shared/utils'
+import { SerialTaskQueue } from '../../shared/serial_task_queue'
 import { resolveAssistantLabel } from '../../memory/helpers'
 import { DreamClusterer } from './clustering'
 import type { DreamWorkerRunner } from './worker/protocol'
 import type { LivingMemoryUserProfileService } from '../../user_profile'
 import type { DreamRunResult } from './types'
 import type { LivingMemoryLogger } from '../../logging/logger'
-import { createDreamSessionState, getDreamCoverage } from './session/state'
+import {
+    createDreamSessionState,
+    getDreamCoverage,
+    type DreamSessionState
+} from './session/state'
 import { createDreamSessionTools } from './session/tools'
-import { runDreamSession } from './session/runner'
+import { createDreamCallOptions, runDreamSession } from './session/runner'
 
 export interface DreamRepository extends Pick<
     LivingMemoryUpdateProvider,
@@ -31,6 +36,7 @@ export interface DreamRepository extends Pick<
 
 export class LivingMemoryDreamService {
     private readonly clusterer: DreamClusterer
+    private readonly planningQueue = new SerialTaskQueue()
 
     constructor(
         private readonly ctx: Context,
@@ -45,7 +51,7 @@ export class LivingMemoryDreamService {
             | 'archiveActiveMemories'
             | 'setMemoryConsolidation'
         >,
-        vectors: ManualDreamVectorReader,
+        vectors: DreamVectorProvider,
         worker: DreamWorkerRunner,
         private readonly userProfiles: LivingMemoryUserProfileService,
         private readonly presetPersona: PresetPersonaResolver
@@ -60,29 +66,52 @@ export class LivingMemoryDreamService {
         signal?: AbortSignal
     ): Promise<DreamRunResult> {
         signal?.throwIfAborted()
-        const entries = await this.repository.listDreamEntriesByPreset(presetId)
-        const state = createDreamSessionState(entries.map((entry) => entry.id))
+        let state!: DreamSessionState
         let error: string | undefined
         let profileDetail = ''
+        const queuedAt = performance.now()
         try {
+            const { model, callOptions } = await this.planningQueue.run(
+                'dream-planning',
+                async () => {
+                    signal?.throwIfAborted()
+                    const startedAt = performance.now()
+                    logger.diagnostic('dream.planning.started', {
+                        queueWaitMs: startedAt - queuedAt
+                    })
+                    const entries =
+                        await this.repository.listDreamEntriesByPreset(presetId)
+                    state = createDreamSessionState(
+                        entries.map((entry) => entry.id)
+                    )
+                    signal?.throwIfAborted()
+                    if (!isModelConfigured(this.config.mainModel)) {
+                        throw new Error('Dream mainModel 未配置。')
+                    }
+                    const model = (
+                        await this.ctx.chatluna.createChatModel(
+                            this.config.mainModel
+                        )
+                    ).value
+                    if (model === undefined)
+                        throw new Error('Dream mainModel 不可用。')
+                    const callOptions = createDreamCallOptions(model, sessionId)
+                    state.clusters = await this.clusterer.buildClusters(
+                        presetId,
+                        entries,
+                        logger,
+                        signal,
+                        startedAt + 180_000
+                    )
+                    return { model, callOptions }
+                }
+            )
             signal?.throwIfAborted()
-            if (!isModelConfigured(this.config.mainModel)) {
-                throw new Error('Dream mainModel 未配置。')
-            }
-            const model = (
-                await this.ctx.chatluna.createChatModel(this.config.mainModel)
-            ).value
-            if (model === undefined) throw new Error('Dream mainModel 不可用。')
             const presetPrompt =
                 await this.presetPersona.resolveOrGenerateCardText(presetId)
             signal?.throwIfAborted()
             const speakers =
                 await this.mutations.ensurePresetSpeakersCoverage(presetId)
-            state.clusters = await this.clusterer.buildClusters(
-                presetId,
-                entries,
-                logger
-            )
             signal?.throwIfAborted()
             const tools = createDreamSessionTools({
                 presetId,
@@ -92,7 +121,7 @@ export class LivingMemoryDreamService {
             })
             await runDreamSession({
                 presetId,
-                sessionId,
+                callOptions,
                 assistantLabel: resolveAssistantLabel(presetId),
                 presetPrompt,
                 speakers,
@@ -111,6 +140,8 @@ export class LivingMemoryDreamService {
             )
             signal?.throwIfAborted()
         } catch (cause) {
+            // 捕获目标之前的失败交由任务入口记录，之后的失败保留覆盖明细。
+            if (state === undefined) throw cause
             error = summarizeError(cause)
         }
         const coverage = getDreamCoverage(state)

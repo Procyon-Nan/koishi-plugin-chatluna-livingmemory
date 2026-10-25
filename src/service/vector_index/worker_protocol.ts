@@ -4,6 +4,7 @@ import type {
     MemorySearchStatus
 } from '../../contracts/memory'
 import type {
+    DreamVectorReadPage,
     MemoryVectorIndexManifest,
     MemoryVectorIndexPresetStatus,
     MemoryVectorIndexState
@@ -143,6 +144,10 @@ export interface VectorIndexWorkerCommandMap {
     readVectors: {
         input: { presetId: string; memoryIds: string[] }
         result: VectorIndexReadVectorsResult
+    }
+    readDreamVectors: {
+        input: { presetId: string; memoryIds: string[] }
+        result: DreamVectorReadPage
     }
     applyMutation: {
         input: VectorIndexMutation

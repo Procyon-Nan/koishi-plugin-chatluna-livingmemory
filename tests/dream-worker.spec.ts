@@ -6,6 +6,8 @@ import {
     type DreamHdbscanMatrix
 } from '../src/service/workflows/dream/hdbscan/algorithm'
 import { partitionDreamEntries } from '../src/service/workflows/dream/partitioning'
+import { bisectDreamMemories } from '../src/service/workflows/dream/semantic/bisect'
+import { validateDreamPlan } from '../src/service/workflows/dream/semantic/validate'
 import { LivingMemoryDreamWorkerClient } from '../src/service/workflows/dream/worker/client'
 import { LivingMemoryVectorIndexWorkerClient } from '../src/service/vector_index/worker_client'
 import { dreamWorkerPath, vectorIndexWorkerPath } from './worker-test-utils'
@@ -60,6 +62,62 @@ it('starts the Dream worker and transfers vectors and labels', async () => {
     assert.deepEqual([...labels], [...expected])
     assert.ok(labels.buffer.byteLength > 0)
     await client.stop()
+})
+
+it('transfers the bisect matrix back with a complete capacity plan', async () => {
+    const client = new LivingMemoryDreamWorkerClient({
+        workerPath: dreamWorkerPath
+    })
+    await client.start()
+    try {
+        const matrix = createMatrix(
+            Array.from({ length: 61 }, (_, i) => [i + 1, 1])
+        )
+        const original = new Float32Array(matrix.vectors)
+        const input = {
+            matrix,
+            cancellation: new SharedArrayBuffer(4),
+            budgetMs: 30_000
+        }
+        const expected = bisectDreamMemories({
+            ...input,
+            matrix: { ...matrix, vectors: original }
+        })
+        const result = await client.bisect(input)
+        assert.equal(matrix.vectors.byteLength, 0)
+        assert.deepEqual(result.matrix.vectors, original)
+        assert.deepEqual(result.plan, expected.plan)
+        validateDreamPlan(result.plan, 61)
+    } finally {
+        await client.stop()
+    }
+})
+
+it('observes the shared cancellation flag and remains usable', async () => {
+    const client = new LivingMemoryDreamWorkerClient({
+        workerPath: dreamWorkerPath
+    })
+    await client.start()
+    try {
+        const cancellation = new SharedArrayBuffer(4)
+        Atomics.store(new Int32Array(cancellation), 0, 1)
+        await assert.rejects(
+            client.bisect({
+                matrix: createMatrix([[1, 0]]),
+                cancellation,
+                budgetMs: 30_000
+            }),
+            /已取消/
+        )
+        const result = await client.bisect({
+            matrix: createMatrix([[1, 0]]),
+            cancellation: new SharedArrayBuffer(4),
+            budgetMs: 30_000
+        })
+        assert.deepEqual([...result.plan.sizes], [1])
+    } finally {
+        await client.stop()
+    }
 })
 
 it('partitions entries without cloning full memory records', async () => {

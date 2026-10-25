@@ -312,6 +312,19 @@ it('runs typed vector index worker mutations and filtered searches', async () =>
     )
     assert.deepEqual(vectors.missingMemoryIds, ['memory-c', 'missing-memory'])
 
+    const dreamPage = await client.readDreamVectors('preset-a', [
+        'memory-b',
+        'memory-c'
+    ])
+    assert.equal(dreamPage.dimension, 3)
+    assert.equal(typeof dreamPage.generation, 'string')
+    assert.equal(dreamPage.items[0].memoryId, 'memory-b')
+    assert.equal(dreamPage.items[0].contentHash, 'content-memory-b-updated')
+    assert.equal(dreamPage.items[0].status, 'active')
+    assert.ok(dreamPage.items[0].vector instanceof Float32Array)
+    assert.deepEqual([...dreamPage.items[0].vector], [1, 0, 0])
+    assert.deepEqual(dreamPage.missingMemoryIds, ['memory-c'])
+
     const inventory = await client.readInventoryPage(null, null, 2)
     assert.deepEqual(
         inventory.items.map((item) => item.memoryId),

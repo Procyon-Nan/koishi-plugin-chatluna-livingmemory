@@ -3,8 +3,9 @@ import { resolveWorkerArtifact } from '../../../../worker_artifacts'
 import { toError } from '../../../shared/utils'
 import type { DreamHdbscanMatrix } from '../hdbscan/algorithm'
 import type { DreamPartitionEntry } from '../partitioning/types'
+import type { DreamBisectInput } from '../semantic/types'
 import type {
-    DreamHdbscanProgressHandler,
+    DreamWorkerProgressHandler,
     DreamWorkerCommand,
     DreamWorkerError,
     DreamWorkerResponse,
@@ -14,7 +15,7 @@ import type {
 interface PendingRequest {
     resolve: (response: DreamWorkerResponse) => void
     reject: (error: Error) => void
-    onProgress?: DreamHdbscanProgressHandler
+    onProgress?: DreamWorkerProgressHandler
 }
 
 const deserializeError = (serialized: DreamWorkerError) => {
@@ -92,9 +93,30 @@ export class LivingMemoryDreamWorkerClient implements DreamWorkerRunner {
         )
     }
 
+    async bisect(
+        input: DreamBisectInput,
+        onProgress?: DreamWorkerProgressHandler
+    ) {
+        const response = await this.request(
+            {
+                type: 'bisect',
+                ...input,
+                reportProgress: onProgress !== undefined
+            },
+            [input.matrix.vectors.buffer],
+            onProgress
+        )
+        if (response.type !== 'bisect') {
+            throw new Error(
+                `unexpected Dream worker response: ${response.type}`
+            )
+        }
+        return response.result
+    }
+
     async runHdbscan(
         matrix: DreamHdbscanMatrix,
-        onProgress?: DreamHdbscanProgressHandler
+        onProgress?: DreamWorkerProgressHandler
     ) {
         const response = await this.request(
             {
@@ -134,7 +156,7 @@ export class LivingMemoryDreamWorkerClient implements DreamWorkerRunner {
     private request(
         request: DreamWorkerCommand,
         transferList: ArrayBuffer[] = [],
-        onProgress?: DreamHdbscanProgressHandler
+        onProgress?: DreamWorkerProgressHandler
     ) {
         if (this.failure !== null) {
             return Promise.reject(this.failure)

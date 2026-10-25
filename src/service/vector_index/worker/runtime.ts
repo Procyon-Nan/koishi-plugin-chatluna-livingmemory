@@ -78,6 +78,12 @@ const execute = async (
                     command.memoryIds
                 )
                 break
+            case 'readDreamVectors':
+                result = await database.readDreamVectors(
+                    command.presetId,
+                    command.memoryIds
+                )
+                break
             case 'applyMutation':
                 result = await database.applyMutation(command)
                 break
@@ -145,6 +151,9 @@ const execute = async (
 }
 
 const responseTransferList = (response: VectorIndexWorkerResponse) => {
+    if (response.ok && response.type === 'readDreamVectors') {
+        return response.result.items.map(({ vector }) => vector.buffer)
+    }
     if (!response.ok || response.type !== 'readVectors') {
         return []
     }

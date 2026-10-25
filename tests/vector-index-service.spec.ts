@@ -376,12 +376,18 @@ it('builds the index once and reuses its manifest after restart', async () => {
         })
         assert.equal(hybridHits[0].memoryId, 'memory-b')
         assert.equal(hybridHits[0].keywordMatchCount, 1)
-        const vectors = await first.readVectors('preset-a', ['memory-a'])
-        assert.deepEqual([...vectors.keys()], ['memory-a'])
-        assert.ok(vectors.get('memory-a') instanceof Float32Array)
-        await assert.rejects(
-            first.readVectors('preset-a', ['missing-memory']),
-            /vector index entries are missing/u
+        const page = await first.readDreamVectors('preset-a', ['memory-a'])
+        assert.deepEqual(
+            page.items.map((item) => item.memoryId),
+            ['memory-a']
+        )
+        assert.ok(page.items[0].vector instanceof Float32Array)
+        assert.equal(page.dimension, 3)
+        assert.equal(page.embeddingModelId, 'model-a')
+        assert.deepEqual(
+            (await first.readDreamVectors('preset-a', ['missing-memory']))
+                .missingMemoryIds,
+            ['missing-memory']
         )
         await first.stop()
 

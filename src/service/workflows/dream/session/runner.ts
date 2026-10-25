@@ -42,7 +42,7 @@ const prompt = ChatPromptTemplate.fromMessages([
 
 interface DreamSessionRunInput {
     presetId: string
-    sessionId: string
+    callOptions: ReturnType<typeof createDreamCallOptions>
     assistantLabel: string
     presetPrompt: string
     speakers: PresetSpeakerRecord[]
@@ -53,9 +53,10 @@ interface DreamSessionRunInput {
     signal?: AbortSignal
 }
 
-export async function runDreamSession(input: DreamSessionRunInput) {
-    const { state, model, tools, logger, signal } = input
-    signal?.throwIfAborted()
+export function createDreamCallOptions(
+    model: ChatLunaChatModel,
+    sessionId: string
+) {
     const defaults = model.invocationParams()
     const requestedOutput = defaults.maxTokens
     const maxTokens =
@@ -67,13 +68,18 @@ export async function runDreamSession(input: DreamSessionRunInput) {
     ) {
         throw new Error('Dream 模型须能容纳 200k 输入及输出预算。')
     }
-    const callOptions = {
-        id: input.sessionId,
+    return {
+        id: sessionId,
         stream: false,
         maxTokens,
         maxTokenLimit,
         overrideRequestParams: defaults.overrideRequestParams
     } satisfies ChatLunaModelCallOptions
+}
+
+export async function runDreamSession(input: DreamSessionRunInput) {
+    const { state, model, tools, logger, signal, callOptions } = input
+    signal?.throwIfAborted()
     const history = new DreamSessionHistory(
         buildDreamSystemPrompt(input.assistantLabel, input.presetPrompt),
         model,
