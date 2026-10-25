@@ -7,8 +7,16 @@ import type { LivingMemoryLogger } from '../../logging/logger'
 import { createMemoryContentHash } from '../../vector_index/hashes'
 import type { DreamCluster } from './types'
 import type { DreamWorkerRunner } from './worker/protocol'
-import { dreamBatchSize, type DreamVectorMatrix } from './semantic/types'
+import {
+    dreamBatchSize,
+    dreamCandidateWidth,
+    dreamNeighborCount,
+    dreamRefineBudgetMs,
+    type DreamVectorMatrix,
+    type DreamRefineDiagnostics
+} from './semantic/types'
 import { validateDreamPlan } from './semantic/validate'
+import { collectDreamCandidates } from './semantic/candidates'
 
 const vectorReadPageSize = 256
 const initialBudgetMs = 30_000
@@ -25,7 +33,8 @@ export class DreamClusterer {
         entries: DreamMemoryEntryRecord[],
         logger?: LivingMemoryLogger,
         signal?: AbortSignal,
-        deadline = performance.now() + 180_000
+        deadline = performance.now() + 180_000,
+        refinement = false
     ): Promise<DreamCluster[]> {
         if (entries.length === 0) return []
         const startedAt = performance.now()
@@ -52,12 +61,23 @@ export class DreamClusterer {
         const { dimension, embeddingModelId, generation } = firstPage
         const entryCount = sorted.length
         // 包含矩阵、算法临时数组、排序空间、读页和返回标签的同时存活量。
-        const numericBytes =
+        const initialBytes =
             4 * entryCount * dimension +
             48 * entryCount +
             32 * dimension +
             12 * Math.ceil(entryCount / dreamBatchSize) +
             4 * Math.min(entryCount, vectorReadPageSize) * dimension
+        // 构图峰值含候选、top-q、排序键与次序、CSR 和标签检查点。
+        const refineBytes =
+            4 * entryCount * dimension +
+            entryCount *
+                (4 * dreamCandidateWidth + 1 + 64 * dreamNeighborCount + 96) +
+            32 * Math.ceil(entryCount / dreamBatchSize) +
+            16 * dimension +
+            1024
+        const numericBytes = refinement
+            ? Math.max(initialBytes, refineBytes)
+            : initialBytes
         if (
             !Number.isInteger(dimension) ||
             dimension < 1 ||
@@ -131,7 +151,7 @@ export class DreamClusterer {
         signal?.addEventListener('abort', cancel, { once: true })
         try {
             checkRead()
-            const { plan, elapsedMs } = await this.worker.bisect(
+            const initial = await this.worker.bisect(
                 {
                     matrix,
                     cancellation,
@@ -146,7 +166,65 @@ export class DreamClusterer {
                     })
             )
             checkRead()
+            let plan = initial.plan
             validateDreamPlan(plan, entryCount)
+            let stage = 'initial'
+            let candidateStats = {
+                candidateMs: 0,
+                queriedRows: 0,
+                fullCandidateRows: 0,
+                directedCandidateCount: 0
+            }
+            let diagnostics: DreamRefineDiagnostics = {
+                graphComplete: false,
+                graphEdgeCount: 0,
+                acceptedMoves: 0,
+                acceptedSwaps: 0,
+                edgeVisits: 0,
+                hintEdgeVisits: 0,
+                refineMs: 0,
+                stopReason: refinement ? 'single-group' : 'refinement-disabled'
+            }
+            if (refinement && plan.clusterCount > 1) {
+                const { candidates, ...stats } = await collectDreamCandidates({
+                    provider: this.vectors,
+                    presetId,
+                    generation,
+                    entries: sorted,
+                    matrix: initial.matrix,
+                    initial: plan,
+                    deadline: Math.min(
+                        performance.now() + 120_000,
+                        deadline - dreamRefineBudgetMs
+                    ),
+                    signal
+                })
+                candidateStats = stats
+                diagnostics.stopReason = stats.stopReason
+                if (candidates) {
+                    const refined = await this.worker.refine({
+                        matrix: initial.matrix,
+                        initial: {
+                            labels: plan.labels.slice(),
+                            sizes: plan.sizes.slice(),
+                            clusterCount: plan.clusterCount
+                        },
+                        candidates,
+                        cancellation,
+                        budgetMs: Math.min(
+                            dreamRefineBudgetMs,
+                            deadline - performance.now()
+                        )
+                    })
+                    signal?.throwIfAborted()
+                    diagnostics = refined.diagnostics
+                    if (refined.outcome === 'refined') {
+                        plan = refined.plan
+                        validateDreamPlan(plan, entryCount)
+                        stage = 'refined'
+                    }
+                }
+            }
             const clusters: DreamCluster[] = Array.from(
                 { length: plan.clusterCount },
                 (_, index) => ({ id: `cluster-${index + 1}`, entries: [] })
@@ -155,7 +233,7 @@ export class DreamClusterer {
                 clusters[plan.labels[row]].entries.push(entry)
             )
             logger?.diagnostic('dream.clustering.completed', {
-                stage: 'initial',
+                stage,
                 entryCount,
                 dimension,
                 embeddingModelId,
@@ -163,7 +241,9 @@ export class DreamClusterer {
                 seed: 7,
                 clusterCount: plan.clusterCount,
                 readVectorsMs,
-                initialMs: elapsedMs,
+                initialMs: initial.elapsedMs,
+                ...candidateStats,
+                ...diagnostics,
                 numericWorkingSetBytes: numericBytes,
                 sizes: [...plan.sizes]
             })

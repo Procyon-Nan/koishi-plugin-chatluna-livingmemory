@@ -88,6 +88,7 @@ export interface LivingMemoryConfig {
     enableSnapshotInjection: boolean
     enableUserProfileInjection: boolean
     mainModel: string
+    dreamSemanticRefinement: boolean
     subModel: string
     userProfileMinMemoryCount: number
     userProfileMemoryLimit: number

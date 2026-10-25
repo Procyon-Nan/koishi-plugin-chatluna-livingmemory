@@ -3,7 +3,7 @@ import { resolveWorkerArtifact } from '../../../../worker_artifacts'
 import { toError } from '../../../shared/utils'
 import type { DreamHdbscanMatrix } from '../hdbscan/algorithm'
 import type { DreamPartitionEntry } from '../partitioning/types'
-import type { DreamBisectInput } from '../semantic/types'
+import type { DreamBisectInput, DreamRefineInput } from '../semantic/types'
 import type {
     DreamWorkerProgressHandler,
     DreamWorkerCommand,
@@ -107,6 +107,22 @@ export class LivingMemoryDreamWorkerClient implements DreamWorkerRunner {
             onProgress
         )
         if (response.type !== 'bisect') {
+            throw new Error(
+                `unexpected Dream worker response: ${response.type}`
+            )
+        }
+        return response.result
+    }
+
+    async refine(input: DreamRefineInput) {
+        const response = await this.request({ type: 'refine', ...input }, [
+            input.matrix.vectors.buffer,
+            input.initial.labels.buffer,
+            input.initial.sizes.buffer,
+            input.candidates.counts.buffer,
+            input.candidates.neighbors.buffer
+        ])
+        if (response.type !== 'refine') {
             throw new Error(
                 `unexpected Dream worker response: ${response.type}`
             )

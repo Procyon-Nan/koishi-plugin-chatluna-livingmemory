@@ -104,7 +104,10 @@ const runService = async (
             {
                 chatluna: { createChatModel: async () => ({ value: model }) }
             } as unknown as Context,
-            { mainModel: options.mainModel ?? 'test' },
+            {
+                mainModel: options.mainModel ?? 'test',
+                dreamSemanticRefinement: false
+            },
             repository,
             mutations,
             {
@@ -127,6 +130,9 @@ const runService = async (
                 })
             },
             {
+                refine: async () => {
+                    throw new Error('initial batching uses bisect')
+                },
                 bisect: async (input) => bisectDreamMemories(input)
             },
             profiles,

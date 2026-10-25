@@ -7,6 +7,8 @@ import {
 } from '../src/service/workflows/dream/hdbscan/algorithm'
 import { partitionDreamEntries } from '../src/service/workflows/dream/partitioning'
 import { bisectDreamMemories } from '../src/service/workflows/dream/semantic/bisect'
+import { refineDreamMemories } from '../src/service/workflows/dream/semantic/refine'
+import { dreamCandidateWidth } from '../src/service/workflows/dream/semantic/types'
 import { validateDreamPlan } from '../src/service/workflows/dream/semantic/validate'
 import { LivingMemoryDreamWorkerClient } from '../src/service/workflows/dream/worker/client'
 import { LivingMemoryVectorIndexWorkerClient } from '../src/service/vector_index/worker_client'
@@ -29,6 +31,71 @@ it('builds both worker artifacts through the shared build script', async () => {
     assert.equal(dreamWorker.includes('better-sqlite3'), false)
     assert.equal(dreamWorker.includes('sqlite-vec'), false)
 })
+
+it.each([0, 20_000])(
+    'transfers refinement inputs and retains the main-thread checkpoint (budget=%i)',
+    async (budgetMs) => {
+        const client = new LivingMemoryDreamWorkerClient({
+            workerPath: dreamWorkerPath
+        })
+        await client.start()
+        try {
+            const checkpoint = Uint32Array.from({ length: 60 }, (_, row) =>
+                Math.floor(row / 30)
+            )
+            const neighbors = new Uint32Array(60 * dreamCandidateWidth)
+            for (let row = 0; row < 60; row++) {
+                neighbors.set(
+                    Array.from({ length: 60 }, (_, i) => i).filter(
+                        (i) => i !== row
+                    ),
+                    row * dreamCandidateWidth
+                )
+            }
+            const input = {
+                matrix: createMatrix(
+                    Array.from({ length: 60 }, (_, row) =>
+                        row % 2 === 0 ? [1, 0] : [0, 1]
+                    )
+                ),
+                initial: {
+                    labels: checkpoint.slice(),
+                    sizes: new Uint32Array([30, 30]),
+                    clusterCount: 2
+                },
+                candidates: {
+                    q: 10,
+                    counts: new Uint8Array(60).fill(59),
+                    neighbors
+                },
+                cancellation: new SharedArrayBuffer(4),
+                budgetMs
+            }
+            const expected = refineDreamMemories(structuredClone(input))
+            const result = await client.refine(input)
+            for (const array of [
+                input.matrix.vectors,
+                input.initial.labels,
+                input.initial.sizes,
+                input.candidates.counts,
+                input.candidates.neighbors
+            ]) {
+                assert.equal(array.byteLength, 0)
+            }
+            assert.equal(checkpoint.length, 60)
+            assert.equal(result.outcome, expected.outcome)
+            if (
+                result.outcome === 'refined' &&
+                expected.outcome === 'refined'
+            ) {
+                validateDreamPlan(result.plan, 60)
+                assert.deepEqual(result.plan, expected.plan)
+            }
+        } finally {
+            await client.stop()
+        }
+    }
+)
 
 it('starts both workers from source-loaded default paths', async () => {
     const dreamClient = new LivingMemoryDreamWorkerClient()

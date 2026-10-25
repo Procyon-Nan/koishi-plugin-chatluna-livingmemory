@@ -72,6 +72,13 @@ export const Config: Schema<Config> = Schema.intersect([
             .default('无')
     }).description('模型配置'),
     Schema.object({
+        dreamSemanticRefinement: Schema.boolean()
+            .description(
+                'Dream 使用语义近邻优化记忆分组，结合跨组移动与交换提高组内关联。'
+            )
+            .default(false)
+    }).description('Dream 配置'),
+    Schema.object({
         memorySearchToolMaxResults: Schema.number()
             .min(1)
             .max(60)

@@ -1,6 +1,11 @@
 import type { DreamHdbscanPhase } from '../hdbscan/algorithm'
 import type { DreamPartitionEntry } from '../partitioning/types'
-import type { DreamBisectInput, DreamBisectResult } from '../semantic/types'
+import type {
+    DreamBisectInput,
+    DreamBisectResult,
+    DreamRefineInput,
+    DreamRefineResult
+} from '../semantic/types'
 
 export interface DreamWorkerProgress {
     phase: DreamHdbscanPhase | 'bisect'
@@ -18,6 +23,7 @@ export interface DreamWorkerError {
 }
 
 export type DreamWorkerCommand =
+    | ({ type: 'refine' } & DreamRefineInput)
     | ({ type: 'bisect'; reportProgress: boolean } & DreamBisectInput)
     | {
           type: 'ready'
@@ -42,6 +48,7 @@ type WithRequestId<Command> = Command extends DreamWorkerCommand
 export type DreamWorkerRequest = WithRequestId<DreamWorkerCommand>
 
 export type DreamWorkerResponse =
+    | { id: number; type: 'refine'; ok: true; result: DreamRefineResult }
     | {
           id: number
           type: 'bisect'
@@ -77,6 +84,7 @@ export type DreamWorkerResponse =
       }
 
 export interface DreamWorkerRunner {
+    refine(input: DreamRefineInput): Promise<DreamRefineResult>
     bisect(
         input: DreamBisectInput,
         onProgress?: DreamWorkerProgressHandler

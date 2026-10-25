@@ -126,10 +126,13 @@ chatluna-livingmemory/
 │       │       ├── coordinator.ts       # Dream 触发、排队与取消
 │       │       ├── job_runner.ts        # 任务记录与完成统计
 │       │       ├── full.ts              # 全量准备、聚类、会话与画像衔接
-│       │       ├── clustering.ts        # 向量快照读取、容量二分与批次组装
+│       │       ├── clustering.ts        # 向量快照、分组规划与批次组装
 │       │       ├── semantic/
-│       │       │   ├── types.ts         # 向量矩阵、标签与二分契约
+│       │       │   ├── types.ts         # 向量矩阵、候选、图与分组契约
 │       │       │   ├── bisect.ts        # 容量约束球面二分
+│       │       │   ├── candidates.ts    # ANN 探测、候选筛选与补查
+│       │       │   ├── graph.ts         # 原维重评分、有向近邻与 CSR 并集图
+│       │       │   ├── refine.ts        # 有预算的跨组移动、交换与目标复核
 │       │       │   └── validate.ts      # 分组覆盖、计数与容量校验
 │       │       ├── partitioning.ts      # 记忆分区入口
 │       │       ├── types.ts             # 批次与运行结果类型

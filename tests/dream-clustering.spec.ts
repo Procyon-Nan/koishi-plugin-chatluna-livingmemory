@@ -18,6 +18,7 @@ import {
     compareEntryIds
 } from '../src/service/workflows/dream/partitioning/similarity'
 import { bisectDreamMemories } from '../src/service/workflows/dream/semantic/bisect'
+import { refineDreamMemories } from '../src/service/workflows/dream/semantic/refine'
 import { validateDreamPlan } from '../src/service/workflows/dream/semantic/validate'
 import { createMemoryContentHash } from '../src/service/vector_index/hashes'
 import { createMemoryEntry } from './workflow-test-utils'
@@ -242,6 +243,7 @@ const createVectorReader = (entries: ReturnType<typeof createEntries>) => {
 }
 
 const worker: DreamWorkerRunner = {
+    refine: async (input) => refineDreamMemories(input),
     bisect: async (input) => bisectDreamMemories(input)
 }
 
@@ -291,6 +293,60 @@ it('reads vectors in pages of 256 and keeps the source records', async () => {
     }
 })
 
+it('connects complete candidates to refinement and retains initial on ANN unavailability', async () => {
+    for (const available of [false, true]) {
+        const entries = createEntries(61)
+        const vectors = createVectorReader(entries)
+        vectors.reader.queryDreamNeighbors = async (queries) => ({
+            generation: 'generation-1',
+            backend: available ? 'hnsw' : 'unavailable',
+            completed: available ? queries.length : 0,
+            reason: available ? undefined : 'index-absent',
+            rows: available
+                ? queries.map((query) => ({
+                      sourceIndex: query.sourceIndex,
+                      hits: entries
+                          .filter((entry) => entry.id !== query.sourceMemoryId)
+                          .slice(0, 10)
+                          .map((entry) => ({
+                              memoryId: entry.id,
+                              contentHash: createMemoryContentHash(
+                                  entry.content
+                              ),
+                              cosineScore: 1
+                          }))
+                  }))
+                : []
+        })
+        const refine = vi.fn(worker.refine)
+        const clusters = await new DreamClusterer(vectors.reader, {
+            ...worker,
+            refine
+        }).buildClusters(
+            'preset-1',
+            entries,
+            undefined,
+            undefined,
+            performance.now() + 180_000,
+            true
+        )
+        assert.equal(refine.mock.calls.length, available ? 1 : 0)
+        assert.equal(clusters.length, 3)
+        assert.ok(
+            clusters.every(
+                (cluster) =>
+                    cluster.entries.length > 0 && cluster.entries.length <= 30
+            )
+        )
+        assert.deepEqual(
+            clusters
+                .flatMap((cluster) => cluster.entries.map((entry) => entry.id))
+                .sort(),
+            entries.map((entry) => entry.id)
+        )
+    }
+})
+
 it('rejects a changed index generation between vector pages', async () => {
     const entries = createEntries(257)
     const vectors = createVectorReader(entries)
@@ -314,7 +370,7 @@ it('rejects changed content before starting the algorithm', async () => {
     vectors.byId.get(entries[0].id)!.contentHash = 'changed'
     const bisect = vi.fn(worker.bisect)
     await assert.rejects(
-        new DreamClusterer(vectors.reader, { bisect }).buildClusters(
+        new DreamClusterer(vectors.reader, { ...worker, bisect }).buildClusters(
             'preset-1',
             entries
         ),

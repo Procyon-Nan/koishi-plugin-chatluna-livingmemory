@@ -5,6 +5,7 @@ import {
 } from '../hdbscan/algorithm'
 import { partitionDreamEntries } from '../partitioning'
 import { bisectDreamMemories } from '../semantic/bisect'
+import { refineDreamMemories } from '../semantic/refine'
 import type {
     DreamWorkerError,
     DreamWorkerRequest,
@@ -121,6 +122,22 @@ workerPort.on('message', (request: DreamWorkerRequest) => {
                     result.plan.labels.buffer,
                     result.plan.sizes.buffer
                 ]
+            )
+            return
+        }
+
+        if (request.type === 'refine') {
+            const result = refineDreamMemories(request)
+            workerPort.postMessage(
+                {
+                    id: request.id,
+                    type: 'refine',
+                    ok: true,
+                    result
+                } satisfies DreamWorkerResponse,
+                result.outcome === 'refined'
+                    ? [result.plan.labels.buffer, result.plan.sizes.buffer]
+                    : []
             )
             return
         }
