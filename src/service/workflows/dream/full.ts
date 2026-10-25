@@ -205,16 +205,17 @@ export class LivingMemoryDreamService {
             })
             return result.detail
         } catch (error) {
-            const errorSummary = summarizeError(error)
-            logger.diagnostic('dream.user-profile.failed', {
-                error: errorSummary,
-                elapsedMs: performance.now() - startedAt
-            })
             signal?.throwIfAborted()
+            logger.warn(
+                'dream.user-profile.failed',
+                {
+                    elapsedMs: performance.now() - startedAt
+                },
+                error
+            )
             const errorMessage =
-                error instanceof Error ? error.message : errorSummary
-            const detail = `user profiles failed: ${errorMessage}`
-            return detail
+                error instanceof Error ? error.message : summarizeError(error)
+            return `user profiles failed: ${errorMessage}`
         }
     }
 }

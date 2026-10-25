@@ -4,7 +4,7 @@ import type { Context } from 'koishi'
 import { parseRawModelName } from 'koishi-plugin-chatluna/llm-core/utils/count_tokens'
 import type { MemoryJobRecord } from '../../contracts/memory'
 import type { MemoryVectorIndexManifest } from '../../contracts/vector_index'
-import { isModelConfigured } from '../shared/utils'
+import { isModelConfigured, summarizeError } from '../shared/utils'
 import {
     type EmbeddingsLike,
     probeVectorIndexDimension,
@@ -138,11 +138,10 @@ export class LivingMemoryVectorIndexMaintenance {
                 }
             )
         } catch (error) {
-            this.options.logger.warn(
-                'vector-index.dream-ann.failed',
-                { workflow: 'vector-index' },
-                error
-            )
+            this.options.logger.warn('vector-index.dream-ann.unavailable', {
+                workflow: 'vector-index',
+                reason: summarizeError(error)
+            })
         }
     }
 

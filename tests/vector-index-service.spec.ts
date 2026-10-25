@@ -242,10 +242,11 @@ const createService = (options: {
             schemaVersion: options.schemaVersion,
             workerFactory:
                 options.workerFactory ??
-                ((onFailure) =>
+                ((onFailure, onWarning) =>
                     new LivingMemoryVectorIndexWorkerClient(
                         options.workerPath ?? workerPath,
-                        onFailure
+                        onFailure,
+                        onWarning
                     ))
         }
     )
@@ -998,7 +999,15 @@ it('keeps index jobs running until work completes and records failures', async (
         assert.match(repository.jobs[0].error ?? '', /embedding failure/u)
         assert.equal(service.getStatus().state, 'unavailable')
         assert.equal(repository.legacyEmbeddingsMigrated, false)
-        assert.equal(captured.warnings.length, 1)
+        assert.equal(captured.warnings.length, 2)
+        const failureLog = String(captured.warnings[0][0])
+        assert.match(failureLog, /event=vector-index.rebuild.failed/u)
+        assert.ok(failureLog.includes(`jobId=${repository.jobs[0].id}`))
+        assert.match(failureLog, /presetId=\*/u)
+        assert.match(
+            String(captured.warnings[1][0]),
+            /event=vector-index.unavailable/u
+        )
         await service.stop()
     })
 }, 120_000)

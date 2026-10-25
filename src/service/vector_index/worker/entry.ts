@@ -1,9 +1,16 @@
 import { parentPort } from 'node:worker_threads'
 import { LivingMemoryVectorIndexDatabase } from './database'
-import { startVectorIndexWorker } from './runtime'
+import { serializeError, startVectorIndexWorker } from './runtime'
+import type { VectorIndexWorkerWarning } from '../worker_protocol'
 
-if (parentPort === null) {
-    throw new Error('vector index worker requires a parent port')
-}
-
-startVectorIndexWorker(parentPort, new LivingMemoryVectorIndexDatabase())
+const port = parentPort!
+startVectorIndexWorker(
+    port,
+    new LivingMemoryVectorIndexDatabase({
+        reportWarning: (warning) =>
+            port.postMessage({
+                type: 'warning',
+                error: serializeError(warning)
+            } satisfies VectorIndexWorkerWarning)
+    })
+)

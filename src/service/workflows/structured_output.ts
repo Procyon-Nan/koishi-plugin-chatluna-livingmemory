@@ -57,9 +57,7 @@ interface StructuredOutputOptions<Schema extends z.AnyZodObject> {
     context: StructuredOutputContext
     logging?: {
         logger: LivingMemoryLogger
-        workflow: string
         stage: string
-        fields?: Record<string, unknown>
     }
 }
 
@@ -269,7 +267,6 @@ const guardModelInvocations = (
             logger: logging.logger,
             stage: logging.stage,
             attempt: currentAttempt,
-            fields: logging.fields,
             onCallId
         })
     }
@@ -318,8 +315,6 @@ export async function invokeStructuredOutput<Schema extends z.AnyZodObject>(
     let lastError = 'structured output failed'
     const logParseFailure = (attempt: number, error: string) => {
         options.logging?.logger.diagnostic('model.parse.failed', {
-            ...options.logging?.fields,
-            workflow: options.logging?.workflow,
             modelCallId: activeModelCallId,
             stage: options.logging?.stage,
             attempt,

@@ -16,7 +16,6 @@ import {
     userProfileResultSchema,
     userProfileResultToolName
 } from './prompts'
-import { summarizeError } from './shared/utils'
 import { invokeStructuredOutput } from './workflows/structured_output'
 import type { LivingMemoryLogger } from './logging/logger'
 import { normalizeSpeakerKeys } from './memory/speaker_identity'
@@ -106,11 +105,11 @@ export class LivingMemoryUserProfileService {
         presetId: string,
         speakerKeys: string[],
         model: ChatLunaChatModel,
-        logger?: LivingMemoryLogger,
+        logger: LivingMemoryLogger = this.logger,
         signal?: AbortSignal
     ): Promise<UserProfileGenerationResult> {
         signal?.throwIfAborted()
-        const runLogger = logger ?? this.logger
+        const runLogger = logger.with({ workflow: 'dream', presetId })
         if (!this.enabled) {
             return {
                 generated: 0,
@@ -221,8 +220,10 @@ export class LivingMemoryUserProfileService {
                 model,
                 assistantLabel,
                 presetPrompt,
-                logger,
-                runLogger,
+                runLogger.with({
+                    speaker: group.speakerLabel,
+                    speakerKey: group.speakerKey
+                }),
                 signal
             )
             if (outcome === 'generated') {
@@ -338,7 +339,7 @@ export class LivingMemoryUserProfileService {
     /**
      * 生成并写入单个说话者的画像。返回结果区分：generated 表示已改写画像，
      * kept 表示模型判断已有画像无需变更、只记下本次审阅的输入，failed 表示
-     * 模型调用或结构化校验失败并已通过 logProfileSkipped 记录。
+     * 模型调用或结构化校验失败时记录该用户的失败原因。
      */
     private async generateProfileForGroup(
         presetId: string,
@@ -346,8 +347,7 @@ export class LivingMemoryUserProfileService {
         model: ChatLunaChatModel,
         assistantLabel: string,
         presetPrompt: string,
-        logger: LivingMemoryLogger | undefined,
-        runLogger: LivingMemoryLogger,
+        logger: LivingMemoryLogger,
         signal?: AbortSignal
     ): Promise<'generated' | 'kept' | 'failed'> {
         let structuredResult
@@ -357,15 +357,6 @@ export class LivingMemoryUserProfileService {
                 presetPrompt,
                 group
             })
-            const logging = logger && {
-                logger,
-                workflow: 'dream',
-                stage: 'user-profile',
-                fields: {
-                    speaker: group.speakerLabel,
-                    speakerKey: group.speakerKey
-                }
-            }
             structuredResult = await invokeStructuredOutput({
                 model,
                 signal,
@@ -392,23 +383,20 @@ export class LivingMemoryUserProfileService {
                         group.speakerKey
                     ].join(':')
                 },
-                logging
+                logging: { logger, stage: 'user-profile' }
             })
         } catch (error) {
             signal?.throwIfAborted()
-            this.logProfileSkipped(runLogger, {
-                presetId,
-                speaker: group.speakerLabel,
-                reason: 'invoke-failed',
-                error: summarizeError(error)
-            })
+            logger.warn(
+                'user-profile.failed',
+                { reason: 'invoke-failed' },
+                error
+            )
             return 'failed'
         }
 
         if (structuredResult.parseError !== null) {
-            this.logProfileSkipped(runLogger, {
-                presetId,
-                speaker: group.speakerLabel,
+            logger.warn('user-profile.failed', {
                 reason: 'structured-output-failed',
                 error: structuredResult.parseError
             })
@@ -425,11 +413,7 @@ export class LivingMemoryUserProfileService {
                 group.existingProfile!.id,
                 sourceMemoryIds
             )
-            runLogger.diagnostic('user-profile.kept', {
-                workflow: 'dream',
-                presetId,
-                speaker: group.speakerLabel
-            })
+            logger.diagnostic('user-profile.kept')
             return 'kept'
         }
 
@@ -439,22 +423,8 @@ export class LivingMemoryUserProfileService {
             content: decision.content.replace(/\s+/gu, ' '),
             sourceMemoryIds
         })
+        logger.diagnostic('user-profile.updated')
         return 'generated'
-    }
-
-    private logProfileSkipped(
-        logger: LivingMemoryLogger,
-        fields: {
-            presetId: string
-            speaker: string
-            reason: string
-            error?: string
-        }
-    ) {
-        logger.diagnostic('user-profile.skipped', {
-            workflow: 'dream',
-            ...fields
-        })
     }
 
     async renderForSpeakers(presetId: string, speakerKeys: string[]) {

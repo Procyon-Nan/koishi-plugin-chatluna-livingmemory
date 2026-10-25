@@ -62,7 +62,7 @@ it('persists the agentic snapshot without persisting a successful job', async ()
     const jobStore = createJobStore()
     const snapshots: { query: string; items: AgenticMemorySnapshotItem[] }[] =
         []
-    const captured = createCapturedLogger()
+    const captured = createCapturedLogger(false)
     const coordinator = createCoordinator({
         repository: {
             createFailedJob: jobStore.createFailedJob,
@@ -88,6 +88,11 @@ it('persists the agentic snapshot without persisting a successful job', async ()
     const trace = createAgenticTrace('  remembered context  ')!
     assert.equal(snapshots[0].query, JSON.stringify(trace.item.toolCallSummary))
     assert.deepEqual(snapshots[0].items, [trace.item])
+    assert.ok(
+        captured.info.every(
+            (message) => !message.includes('remembered context')
+        )
+    )
 })
 
 it('keeps the previous snapshot without persisting a job for <NO_MEMORY>', async () => {

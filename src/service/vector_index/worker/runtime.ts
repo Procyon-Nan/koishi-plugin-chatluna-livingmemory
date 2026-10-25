@@ -18,7 +18,7 @@ interface VectorIndexWorkerPort {
     close(): void
 }
 
-const serializeError = (error: unknown): VectorIndexWorkerError => {
+export const serializeError = (error: unknown): VectorIndexWorkerError => {
     if (error instanceof Error) {
         const indexError =
             error instanceof LivingMemoryVectorIndexError ? error : null

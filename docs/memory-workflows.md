@@ -77,3 +77,10 @@
 - 快照注入直接读取持久化的最新快照。
 - `living_memory_get_messages` 使用会话已提供或检索返回的记忆 ID。
 - 管理指令的 text/user 删除匹配活跃记忆并归档，profile 删除目标画像；删除操作使用 60 秒确认窗口。
+
+## 运行日志
+
+- 日志统一经 `LivingMemoryLogger` 输出。运行入口创建上下文 logger，业务事件和模型调用沿用同一上下文；模型调用补充 `modelCallId`、阶段和尝试次数。
+- 提取日志携带 `workflow=extraction`、`runId`、预设和会话标识，外层任务异常沿用本次运行标识。人设卡片生成携带 `workflow=persona`、`runId` 和预设标识；画像生成沿用 Dream 上下文，并补充用户标识。
+- 提取最终结构化失败、用户画像生成失败和人设卡片生成失败输出普通警告；逐次模型响应与校验详情由 `debug` 控制。
+- 召回快照更新通过 `recall.snapshot.updated` 记录命中数量；启用 `debug` 时，`recall.snapshot.content` 输出快照正文。

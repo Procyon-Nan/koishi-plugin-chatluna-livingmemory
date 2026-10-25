@@ -32,6 +32,12 @@
 - 一个运行中的索引目录由单个进程独占。
 - 停止服务时停止接收操作，排空在途操作并等待 Worker 退出；关闭失败时终止 Worker。
 - 新 HMR generation 等待旧 generation 的 Worker 结束后启动。
+- Worker 的目录隔离与清理警告通过消息协议传给主线程，由 `LivingMemoryLogger` 以 `vector-index.worker.warning` 输出。
+
+## 维护日志
+
+- 索引任务入口统一记录开始、完成与失败，携带 `workflow=vector-index`、`jobId` 和 `presetId`；失败事件保留完整错误。
+- 服务层记录维护失败后的索引状态及原因；ANN 维护失败时记录 `vector-index.dream-ann.unavailable`，精确检索继续沿用主体索引状态。
 
 ## 预设状态与读取门禁
 

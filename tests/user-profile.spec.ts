@@ -42,6 +42,7 @@ const memory: MemoryEntryRecord = {
 
 const createHarness = (
     options: {
+        debug?: boolean
         presetId?: string
         speakerLabel?: string
         speakerAliases?: string[]
@@ -109,7 +110,7 @@ const createHarness = (
                 warn: () => {},
                 error: () => {}
             } as never,
-            () => true
+            () => options.debug ?? true
         ),
         { resolveOrGenerateCardText: async () => '你是测试角色。' }
     )
@@ -248,8 +249,8 @@ it('passes user profile rules and memory data through tool-calling messages', as
     assert.match(prompt.inputPrompt, /张三正在准备考试/u)
 })
 
-it('keeps user profile payloads out of ordinary debug logs', async () => {
-    const harness = createHarness()
+it('keeps user profile payloads out of logs when debug is disabled', async () => {
+    const harness = createHarness({ debug: false })
     await harness.run([createProfileCall()])
 
     assert.ok(

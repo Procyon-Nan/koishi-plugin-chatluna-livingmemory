@@ -240,6 +240,11 @@ export interface VectorIndexWorkerError {
     state: MemoryVectorIndexState | null
 }
 
+export interface VectorIndexWorkerWarning {
+    type: 'warning'
+    error: VectorIndexWorkerError
+}
+
 export type VectorIndexWorkerResponse = {
     [Name in VectorIndexWorkerCommandName]:
         | {

@@ -40,7 +40,8 @@ import {
 } from './generation_coordinator'
 
 export type VectorIndexWorkerFactory = (
-    onFailure: (error: Error) => void
+    onFailure: (error: Error) => void,
+    onWarning: (error: Error) => void
 ) => LivingMemoryVectorIndexWorkerClient
 
 interface VectorIndexServiceOptions {
@@ -48,8 +49,8 @@ interface VectorIndexServiceOptions {
     workerFactory?: VectorIndexWorkerFactory
 }
 
-const createDefaultWorker: VectorIndexWorkerFactory = (onFailure) =>
-    new LivingMemoryVectorIndexWorkerClient(undefined, onFailure)
+const createDefaultWorker: VectorIndexWorkerFactory = (onFailure, onWarning) =>
+    new LivingMemoryVectorIndexWorkerClient(undefined, onFailure, onWarning)
 
 const legacyIndexFiles = new Set([
     'vector-index.sqlite',
@@ -156,9 +157,17 @@ export class LivingMemoryVectorIndexService
 
         try {
             this.operationGate.assertAccepting()
-            this.worker = this.workerFactory((error) => {
-                this.recordWorkerFailure(error)
-            })
+            this.worker = this.workerFactory(
+                (error) => this.recordWorkerFailure(error),
+                (warning) =>
+                    this.logger.warn(
+                        'vector-index.worker.warning',
+                        {
+                            workflow: 'vector-index'
+                        },
+                        warning
+                    )
+            )
             const inspection = await this.worker.open(
                 this.databaseDirectory,
                 this.previousDatabaseDirectory
@@ -714,22 +723,18 @@ export class LivingMemoryVectorIndexService
             this.status.markRuntimeError(failure.message)
         }
         if (this.workerFailure === null) {
-            const event =
-                state === 'unavailable'
-                    ? 'vector-index.unavailable'
-                    : 'vector-index.maintenance.failed'
             if (state === 'unavailable') {
-                this.logger.error(
-                    event,
-                    { workflow: 'vector-index', state },
-                    failure
-                )
+                this.logger.error('vector-index.unavailable', {
+                    workflow: 'vector-index',
+                    state,
+                    reason: failure.message
+                })
             } else {
-                this.logger.warn(
-                    event,
-                    { workflow: 'vector-index', state },
-                    failure
-                )
+                this.logger.warn('vector-index.state', {
+                    workflow: 'vector-index',
+                    state,
+                    reason: failure.message
+                })
             }
         }
     }

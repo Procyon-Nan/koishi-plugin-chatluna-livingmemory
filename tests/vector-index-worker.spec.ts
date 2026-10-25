@@ -501,11 +501,18 @@ it('quarantines an unreadable recovered index before rebuilding', async () => {
     const originalContent = 'unreadable recovered index'
     await writeFile(previousPath, originalContent)
 
-    const client = new LivingMemoryVectorIndexWorkerClient(workerPath)
+    const warnings: Error[] = []
+    const client = new LivingMemoryVectorIndexWorkerClient(
+        workerPath,
+        undefined,
+        (warning) => warnings.push(warning)
+    )
     const inspection = await client.open(formalPath, previousPath)
     assert.equal(inspection.manifest, null)
     await client.dispose()
 
+    assert.equal(warnings.length, 1)
+    assert.ok(warnings[0].message.includes(formalPath))
     const quarantineName = (await readdir(temporaryDirectory)).find((name) =>
         name.startsWith('quarantine-recovery.failed-')
     )

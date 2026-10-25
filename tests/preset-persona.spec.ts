@@ -216,6 +216,9 @@ it('retries with a correction when line numbers fall out of range', async () => 
         harness.captured.info.some(
             (message) =>
                 message.includes('event=model.parse.failed') &&
+                message.includes('workflow=persona') &&
+                message.includes('presetId=preset-1') &&
+                message.includes('runId=') &&
                 message.includes('超出范围的行号')
         )
     )

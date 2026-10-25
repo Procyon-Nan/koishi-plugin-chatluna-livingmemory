@@ -47,7 +47,7 @@ export class LivingMemoryExtractor {
     async extractWithTrace(
         input: string,
         context: LivingMemoryExtractionContext,
-        logger?: LivingMemoryLogger
+        logger: LivingMemoryLogger
     ): Promise<LivingMemoryExtractionTrace> {
         if (!isModelConfigured(this.mainModel)) {
             return {
@@ -71,11 +71,6 @@ export class LivingMemoryExtractor {
         }
 
         const prompt = this.buildPrompt(input, context)
-        const logging = logger && {
-            logger,
-            workflow: 'extraction',
-            stage: 'memory-extraction'
-        }
         const result = await invokeStructuredOutput({
             model: model.value,
             prompt,
@@ -96,10 +91,10 @@ export class LivingMemoryExtractor {
                 presetId: context.presetId,
                 conversationId: context.conversationId
             },
-            logging
+            logging: { logger, stage: 'memory-extraction' }
         })
         if (result.value != null) {
-            logger?.diagnostic('extraction.result', {
+            logger.diagnostic('extraction.result', {
                 extracted: result.value.memories.length,
                 reason: result.value.reason
             })

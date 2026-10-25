@@ -12,6 +12,7 @@ import type {
     VectorIndexWorkerCommandName,
     VectorIndexWorkerError,
     VectorIndexWorkerResponse,
+    VectorIndexWorkerWarning,
     VectorIndexWorkerResult
 } from './worker_protocol'
 import type {
@@ -85,15 +86,25 @@ export class LivingMemoryVectorIndexWorkerClient {
 
     constructor(
         workerPath = resolveWorkerArtifact('vector-index-worker.mjs'),
-        private readonly onFailure?: (error: Error) => void
+        private readonly onFailure?: (error: Error) => void,
+        private readonly onWarning?: (error: Error) => void
     ) {
         this.worker = new Worker(workerPath)
         this.exitPromise = new Promise((resolve) => {
             this.resolveExit = resolve
         })
-        this.worker.on('message', (response: VectorIndexWorkerResponse) => {
-            this.handleResponse(response)
-        })
+        this.worker.on(
+            'message',
+            (
+                response: VectorIndexWorkerResponse | VectorIndexWorkerWarning
+            ) => {
+                if (response.type === 'warning') {
+                    this.onWarning?.(deserializeError(response.error))
+                    return
+                }
+                this.handleResponse(response)
+            }
+        )
         this.worker.on('error', (error: Error) => {
             this.fail(error)
         })

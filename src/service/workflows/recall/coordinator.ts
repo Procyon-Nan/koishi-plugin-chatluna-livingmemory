@@ -170,17 +170,16 @@ export class LivingMemoryRecallCoordinator {
                 JSON.stringify(trace.item.toolCallSummary),
                 [trace.item]
             )
-            logger.info(
-                'recall.snapshot.updated',
-                { matched: trace.item.matchedMemories.length },
-                [
-                    {
-                        title: 'snapshot.content',
-                        key: 'content',
-                        value: renderSnapshotText([trace.item])
-                    }
-                ]
-            )
+            logger.info('recall.snapshot.updated', {
+                matched: trace.item.matchedMemories.length
+            })
+            logger.diagnostic('recall.snapshot.content', {}, () => [
+                {
+                    title: 'snapshot.content',
+                    key: 'content',
+                    value: renderSnapshotText([trace.item])
+                }
+            ])
         } catch (error) {
             await this.repository.createFailedJob(
                 scope,

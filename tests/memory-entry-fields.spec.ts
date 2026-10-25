@@ -18,6 +18,7 @@ import {
     createToolCallMessage
 } from './tool-calling-test-utils'
 import { createTestContext } from './persistence-test-utils'
+import { logger } from './workflow-test-utils'
 
 const keywordInput = () => [
     '  alpha  ',
@@ -79,12 +80,16 @@ it('applies shared field rules to extracted memories', async () => {
     const ctx = { chatluna } as unknown as Context
     const extractor = new LivingMemoryExtractor(ctx, 'test-model')
 
-    const trace = await extractor.extractWithTrace('input', {
-        conversationId: 'conversation-1',
-        presetId: 'preset-1',
-        presetPrompt: '你是测试助手。',
-        speakers: [{ speakerLabel: '张三', speakerKey: 'speaker-key' }]
-    })
+    const trace = await extractor.extractWithTrace(
+        'input',
+        {
+            conversationId: 'conversation-1',
+            presetId: 'preset-1',
+            presetPrompt: '你是测试助手。',
+            speakers: [{ speakerLabel: '张三', speakerKey: 'speaker-key' }]
+        },
+        logger
+    )
 
     assert.equal(trace.parseError, null)
     assert.deepEqual(trace.extracted, [

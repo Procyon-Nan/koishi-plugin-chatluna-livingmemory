@@ -1,4 +1,4 @@
-import { createHash } from 'crypto'
+import { createHash, randomUUID } from 'crypto'
 import type { Context } from 'koishi'
 import type { ChatLunaChatModel } from 'koishi-plugin-chatluna/llm-core/platform/model'
 import type {
@@ -8,7 +8,6 @@ import type {
     PresetPersonaSource
 } from '../../contracts/memory'
 import type { LivingMemoryConfig } from '../../contracts/workflows'
-import { summarizeError } from '../shared/utils'
 import {
     buildPersonaCardPrompts,
     personaCardResultSchema,
@@ -192,9 +191,14 @@ export class LivingMemoryPresetPersonaService implements PresetPersonaResolver {
      * 落库行；模型侧失败时抛错，落库行保持原状。
      */
     async regenerateCard(presetId: string): Promise<void> {
+        const logger = this.logger.with({
+            workflow: 'persona',
+            presetId,
+            runId: randomUUID()
+        })
         const epoch = this.getClearEpoch(presetId)
         const raw = await resolvePresetPrompt(this.ctx, presetId)
-        const outcome = await this.prune(raw)
+        const outcome = await this.prune(presetId, raw, logger)
         if (outcome.failure !== null) {
             throw new Error(
                 `persona card generation failed: ${outcome.failure}`
@@ -230,7 +234,12 @@ export class LivingMemoryPresetPersonaService implements PresetPersonaResolver {
         rawHash: string,
         epoch: number
     ): Promise<string> {
-        const outcome = await this.prune(raw)
+        const logger = this.logger.with({
+            workflow: 'persona',
+            presetId,
+            runId: randomUUID()
+        })
+        const outcome = await this.prune(presetId, raw, logger)
         if (outcome.failure !== null) {
             return outcome.card
         }
@@ -246,11 +255,7 @@ export class LivingMemoryPresetPersonaService implements PresetPersonaResolver {
             try {
                 await this.persistGenerated(presetId, rawHash, outcome)
             } catch (error) {
-                this.logger.warn(
-                    'persona.persist.failed',
-                    { presetId, error: summarizeError(error) },
-                    error
-                )
+                logger.warn('persona.persist.failed', {}, error)
             }
             return outcome.card
         })
@@ -276,7 +281,11 @@ export class LivingMemoryPresetPersonaService implements PresetPersonaResolver {
      * 模型不可用、调用失败或结构化校验失败时回退原文，并在 `failure` 标明
      * 原因。
      */
-    private async prune(raw: string): Promise<PersonaCardOutcome> {
+    private async prune(
+        presetId: string,
+        raw: string,
+        logger: LivingMemoryLogger
+    ): Promise<PersonaCardOutcome> {
         const lines = splitLines(raw)
         const fallback = (
             failure: PersonaPruneFailure
@@ -292,10 +301,11 @@ export class LivingMemoryPresetPersonaService implements PresetPersonaResolver {
         try {
             model = await this.createModel()
         } catch (error) {
-            this.logger.diagnostic('persona.prune.skipped', {
-                reason: 'model-unavailable',
-                error: summarizeError(error)
-            })
+            logger.warn(
+                'persona.prune.failed',
+                { reason: 'model-unavailable' },
+                error
+            )
             return fallback('model-unavailable')
         }
 
@@ -322,25 +332,25 @@ export class LivingMemoryPresetPersonaService implements PresetPersonaResolver {
                     }
                 },
                 context: {
-                    presetId: '',
+                    presetId,
                     conversationId: 'persona-card'
                 },
                 logging: {
-                    logger: this.logger,
-                    workflow: 'persona',
+                    logger,
                     stage: 'persona-card'
                 }
             })
         } catch (error) {
-            this.logger.diagnostic('persona.prune.failed', {
-                reason: 'invoke-failed',
-                error: summarizeError(error)
-            })
+            logger.warn(
+                'persona.prune.failed',
+                { reason: 'invoke-failed' },
+                error
+            )
             return fallback('invoke-failed')
         }
 
         if (structuredResult.parseError !== null) {
-            this.logger.diagnostic('persona.prune.failed', {
+            logger.warn('persona.prune.failed', {
                 reason: 'structured-output-failed',
                 error: structuredResult.parseError
             })
@@ -350,14 +360,16 @@ export class LivingMemoryPresetPersonaService implements PresetPersonaResolver {
         return this.applyDeletions(
             raw,
             lines,
-            structuredResult.value.deletedLineNumbers
+            structuredResult.value.deletedLineNumbers,
+            logger
         )
     }
 
     private applyDeletions(
         raw: string,
         lines: string[],
-        deletedLineNumbers: number[]
+        deletedLineNumbers: number[],
+        logger: LivingMemoryLogger
     ): PersonaCardOutcome {
         const deleted = new Set(deletedLineNumbers)
         const kept = lines.filter((_line, index) => !deleted.has(index + 1))
@@ -377,7 +389,7 @@ export class LivingMemoryPresetPersonaService implements PresetPersonaResolver {
         const ratio = deletedLines / lines.length
         const tooShort = card.trim().length < MIN_CARD_LENGTH
         if (ratio > MAX_DELETION_RATIO || tooShort) {
-            this.logger.diagnostic('persona.prune.fallback', {
+            logger.diagnostic('persona.prune.fallback', {
                 reason:
                     ratio > MAX_DELETION_RATIO
                         ? 'deletion-ratio-exceeded'

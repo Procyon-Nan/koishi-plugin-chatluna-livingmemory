@@ -47,20 +47,22 @@ export class LivingMemoryVectorIndexJobRunner {
         operation: (job: MemoryJobRecord) => Promise<string>
     ) {
         this.onCurrentJobChanged(job.id)
+        const operationName = input.split(':', 1)[0]
+        const logger = this.logger.with({
+            workflow: 'vector-index',
+            jobId: job.id,
+            presetId: job.presetId
+        })
         let running = false
         try {
             await this.tracker.markRunning(job.id)
             running = true
+            logger.info(`vector-index.${operationName}.started`)
             const detail = await operation(job)
             await this.tracker.markCompleted(job.id, detail)
-            const operationName = input.split(':', 1)[0]
-            this.logger.info(`vector-index.${operationName}.completed`, {
-                workflow: 'vector-index',
-                jobId: job.id,
-                presetId: job.presetId,
-                detail
-            })
+            logger.info(`vector-index.${operationName}.completed`, { detail })
         } catch (error) {
+            logger.warn(`vector-index.${operationName}.failed`, {}, error)
             if (running) {
                 await this.tracker.markFailed(
                     job.id,

@@ -283,12 +283,14 @@ export class LivingMemoryExtractionCoordinator {
             return
         }
 
-        this.drain(key, state, scope, options).catch((error) => {
-            this.logger.warn(
-                'extraction.failed',
-                { operation: 'drain', conversationId: scope.conversationId },
-                error
-            )
+        const runLogger = this.logger.with({
+            workflow: 'extraction',
+            runId: randomUUID(),
+            conversationId: scope.conversationId,
+            presetId: scope.presetId
+        })
+        this.drain(key, state, scope, options, runLogger).catch((error) => {
+            runLogger.warn('extraction.failed', { operation: 'drain' }, error)
         })
     }
 
@@ -338,15 +340,10 @@ export class LivingMemoryExtractionCoordinator {
         key: string,
         state: ExtractionScopeState,
         scope: MemoryScope,
-        options: QueueExtractionOptions
+        options: QueueExtractionOptions,
+        runLogger: LivingMemoryLogger
     ) {
         this.runningScopeKeys.add(key)
-        const runLogger = this.logger.with({
-            workflow: 'extraction',
-            runId: randomUUID(),
-            conversationId: scope.conversationId,
-            presetId: scope.presetId
-        })
 
         try {
             while (true) {
@@ -520,7 +517,7 @@ export class LivingMemoryExtractionCoordinator {
         // 使任务列表如实反映“结构化输出失败”而非“抽取 0 条”。
         if (trace.parseError != null) {
             const parseError = trace.parseError
-            logger.diagnostic('extraction.parse.failed', {
+            logger.warn('extraction.parse.failed', {
                 error: parseError
             })
             await this.recordFailedExtraction(
