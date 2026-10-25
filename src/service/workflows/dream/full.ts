@@ -40,10 +40,7 @@ export class LivingMemoryDreamService {
 
     constructor(
         private readonly ctx: Context,
-        private readonly config: Pick<
-            LivingMemoryConfig,
-            'mainModel' | 'dreamSemanticRefinement'
-        >,
+        private readonly config: Pick<LivingMemoryConfig, 'mainModel'>,
         private readonly repository: DreamRepository,
         private readonly mutations: Pick<
             LivingMemoryMutationService,
@@ -104,8 +101,7 @@ export class LivingMemoryDreamService {
                         entries,
                         logger,
                         signal,
-                        startedAt + 180_000,
-                        this.config.dreamSemanticRefinement
+                        startedAt + 180_000
                     )
                     return { model, callOptions }
                 }

@@ -61,13 +61,11 @@ it('reuses probe rows, resumes completed prefixes and retries short rows once ag
         calls.set(row, (calls.get(row) ?? 0) + 1)
         const peers = input.entries.filter((_, index) => index !== row)
         const count = query.efSearch === 40 ? 5 : 10
-        const valid = peers
-            .slice(0, count)
-            .map((entry) => ({
-                memoryId: entry.id,
-                contentHash: createMemoryContentHash(entry.content),
-                cosineScore: 1
-            }))
+        const valid = peers.slice(0, count).map((entry) => ({
+            memoryId: entry.id,
+            contentHash: createMemoryContentHash(entry.content),
+            cosineScore: 1
+        }))
         return {
             generation: 'generation',
             backend: 'hnsw',

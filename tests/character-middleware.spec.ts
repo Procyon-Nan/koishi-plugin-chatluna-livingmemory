@@ -15,7 +15,6 @@ const testConfig: LivingMemoryConfig = {
     enableSnapshotInjection: false,
     enableUserProfileInjection: false,
     mainModel: 'test-model',
-    dreamSemanticRefinement: false,
     subModel: 'test-model',
     userProfileMinMemoryCount: 3,
     userProfileMemoryLimit: 5,

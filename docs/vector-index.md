@@ -20,7 +20,7 @@
 - 普通向量与混合召回通过 MATERIALIZED CTE 计算完整过滤集合的距离，再排序和截断，保持精确检索语义。
 - `queryDreamNeighbors` 每页接受 1–4 条直向量查询，核验 generation 后逐条执行短事务。每条使用局部 HNSW 搜索参数，先 EXPLAIN 确认命中指定索引，再返回 memoryId、contentHash、cosineScore。查询向量 buffer 转移至 Worker，由调用者提供可转移的查询副本。
 - 每条查询完成后检查 25 ms 软时间片，返回已完成前缀；`budget` 表示剩余行待后续页继续处理。`index-absent` 和 `plan-exact` 表示本轮 ANN 不可用，由 Dream 保留容量二分初解。页内取消通过共享标记在查询之间生效，在途 SQL 排空后结束请求。
-- Dream 开启 `dreamSemanticRefinement` 后调用候选接口，在主线程完成快照筛选与覆盖判断，再由 Dream Worker 重评分和跨组修复。真实旧库副本升级、资源占用和查询计划验收按实施方案在版本更新前执行。
+- Dream 多批次分组调用候选接口，在主线程完成快照筛选与覆盖判断，再由 Dream Worker 重评分和跨组修复，见 [Dream 流程](dream.md)。
 
 ## Worker 与目录所有权
 

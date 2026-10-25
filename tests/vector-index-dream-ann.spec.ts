@@ -62,7 +62,7 @@ it('keeps exact recall and uses verified HNSW candidates with transaction-local 
 
         // 查询计划的两个分支分别固定；生产查询沿用优化器选择。
         await database.exec(
-            'SET enable_seqscan = off; SET enable_bitmapscan = off'
+            'SET enable_seqscan = off; SET enable_bitmapscan = off; SET enable_sort = off'
         )
         assert.deepEqual(
             await queryVectorIndexKnn(database, exactQuery),
@@ -135,7 +135,7 @@ it('keeps exact recall and uses verified HNSW candidates with transaction-local 
         )
 
         await database.exec(
-            'SET enable_indexscan = off; SET enable_seqscan = on'
+            'SET enable_indexscan = off; SET enable_seqscan = on; SET enable_sort = on'
         )
         const exactPlan = await queryDreamNeighbors(
             database,

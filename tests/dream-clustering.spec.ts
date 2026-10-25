@@ -28,9 +28,13 @@ const createVectorReader = (entries: ReturnType<typeof createEntries>) => {
         ])
     )
     const reader: DreamVectorProvider = {
-        queryDreamNeighbors: async () => {
-            throw new Error('initial batching only reads vectors')
-        },
+        queryDreamNeighbors: async () => ({
+            generation: 'generation-1',
+            backend: 'unavailable',
+            completed: 0,
+            reason: 'index-absent',
+            rows: []
+        }),
         readDreamVectors: async (_presetId, ids) => {
             calls.push(ids)
             return {
@@ -125,14 +129,7 @@ it('connects complete candidates to refinement and retains initial on ANN unavai
         const clusters = await new DreamClusterer(vectors.reader, {
             ...worker,
             refine
-        }).buildClusters(
-            'preset-1',
-            entries,
-            undefined,
-            undefined,
-            performance.now() + 180_000,
-            true
-        )
+        }).buildClusters('preset-1', entries)
         assert.equal(refine.mock.calls.length, available ? 1 : 0)
         assert.equal(clusters.length, 3)
         assert.ok(

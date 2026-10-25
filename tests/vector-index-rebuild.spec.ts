@@ -107,7 +107,7 @@ const createManifest = (
     embeddingModelId: 'model-a',
     dimension,
     storageEngine: 'pglite-pgvector',
-    vectorExtensionVersion: '0.8.1',
+    vectorExtensionVersion: '0.8.7',
     generation,
     builtAt: Date.now()
 })
@@ -278,7 +278,7 @@ it('does not abort through the old worker after finalize takes cleanup ownership
             repository: new TestRebuildRepository([]),
             worker: {
                 openRebuildDatabase: async () => ({
-                    vectorExtensionVersion: '0.8.1',
+                    vectorExtensionVersion: '0.8.7',
                     manifest: null,
                     indexedCount: 0,
                     inventory: [],
@@ -316,7 +316,7 @@ it('aborts through the worker when finalize fails before taking cleanup ownershi
             repository: new TestRebuildRepository([]),
             worker: {
                 openRebuildDatabase: async () => ({
-                    vectorExtensionVersion: '0.8.1',
+                    vectorExtensionVersion: '0.8.7',
                     manifest: null,
                     indexedCount: 0,
                     inventory: [],
@@ -326,7 +326,7 @@ it('aborts through the worker when finalize fails before taking cleanup ownershi
                 abortRebuild: async () => {
                     abortCalls += 1
                     return {
-                        vectorExtensionVersion: '0.8.1',
+                        vectorExtensionVersion: '0.8.7',
                         manifest: null,
                         indexedCount: 0,
                         inventory: [],

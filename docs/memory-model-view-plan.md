@@ -108,7 +108,7 @@ renderMemoriesForModel(group.entries, {
 | `tests/memory-tools.spec.ts` | 复用既有搜索结果断言，验证字段集合与 ID 暴露面不变 |
 | `tests/dream-session.spec.ts` | 复用既有完整批次、压缩保留与前缀检查，避免新增只测试搬移行为的用例 |
 | `AGENTS.md` | 明确字段格式与字段清单统一位于 `memory_entries.ts`，模型记忆视图统一经 `renderMemoriesForModel()`；保留按需显示 ID 的规则 |
-| `docs/dream-session-plan.md` | 同步统一字段渲染职责，记录缺失可选字段省略行的显示语义 |
+| `docs/dream.md` | 同步统一字段渲染职责，记录缺失可选字段省略行的显示语义 |
 | `CHANGELOG.md` | 按当前版本记录本次接口与显示规则调整，未提交使用 pending |
 
 `renderMemorySourceMessagesForModel()` 渲染的是来源消息及其来源关系，不属于记忆条目字段投影，保持现有实现。通用写入、导入、数据库 schema 和模型生成字段约束均不修改。

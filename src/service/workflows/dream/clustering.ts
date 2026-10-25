@@ -33,8 +33,7 @@ export class DreamClusterer {
         entries: DreamMemoryEntryRecord[],
         logger?: LivingMemoryLogger,
         signal?: AbortSignal,
-        deadline = performance.now() + 180_000,
-        refinement = false
+        deadline = performance.now() + 180_000
     ): Promise<DreamCluster[]> {
         if (entries.length === 0) return []
         const startedAt = performance.now()
@@ -75,9 +74,7 @@ export class DreamClusterer {
             32 * Math.ceil(entryCount / dreamBatchSize) +
             16 * dimension +
             1024
-        const numericBytes = refinement
-            ? Math.max(initialBytes, refineBytes)
-            : initialBytes
+        const numericBytes = Math.max(initialBytes, refineBytes)
         if (
             !Number.isInteger(dimension) ||
             dimension < 1 ||
@@ -183,9 +180,9 @@ export class DreamClusterer {
                 edgeVisits: 0,
                 hintEdgeVisits: 0,
                 refineMs: 0,
-                stopReason: refinement ? 'single-group' : 'refinement-disabled'
+                stopReason: 'single-group'
             }
-            if (refinement && plan.clusterCount > 1) {
+            if (plan.clusterCount > 1) {
                 const { candidates, ...stats } = await collectDreamCandidates({
                     provider: this.vectors,
                     presetId,

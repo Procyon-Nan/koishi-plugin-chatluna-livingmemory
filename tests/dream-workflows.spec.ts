@@ -105,15 +105,18 @@ const runService = async (
                 chatluna: { createChatModel: async () => ({ value: model }) }
             } as unknown as Context,
             {
-                mainModel: options.mainModel ?? 'test',
-                dreamSemanticRefinement: false
+                mainModel: options.mainModel ?? 'test'
             },
             repository,
             mutations,
             {
-                queryDreamNeighbors: async () => {
-                    throw new Error('initial batching only reads vectors')
-                },
+                queryDreamNeighbors: async () => ({
+                    generation: 'test',
+                    backend: 'unavailable',
+                    completed: 0,
+                    reason: 'index-absent',
+                    rows: []
+                }),
                 readDreamVectors: async (_presetId, ids) => ({
                     embeddingModelId: 'test',
                     dimension: 2,

@@ -185,8 +185,7 @@ chatluna-livingmemory/
 | 修改范围 | 文档 |
 | --- | --- |
 | 身份、会话、消息日志、召回、提取、人设与画像 | [记忆与工作流](docs/memory-workflows.md) |
-| Dream 批次、工具进度、上下文压缩与任务状态 | [Dream 会话设计](docs/dream-session-plan.md) |
-| Dream 容量二分、HNSW 与跨组修复 | [语义分组实施方案](docs/dream-semantic-batching-implementation.md) |
+| Dream 语义分组、工具会话、上下文压缩与任务状态 | [Dream 流程](docs/dream.md) |
 | 向量索引、目录所有权、重建与就绪状态 | [向量索引](docs/vector-index.md) |
 | 模型记忆字段与渲染 | [记忆视图](docs/memory-model-view-plan.md) |
 | WebUI 操作 | [WebUI 指南](docs/WEBUI_GUIDE.md) |

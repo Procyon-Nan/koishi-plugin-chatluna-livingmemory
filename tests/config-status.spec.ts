@@ -9,7 +9,6 @@ const createConfig = (
     enableSnapshotInjection: true,
     enableUserProfileInjection: false,
     mainModel: 'test-model',
-    dreamSemanticRefinement: false,
     subModel: 'test/sub-model',
     userProfileMinMemoryCount: 3,
     userProfileMemoryLimit: 20,
