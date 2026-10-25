@@ -14,7 +14,10 @@ import type {
     VectorIndexWorkerResponse,
     VectorIndexWorkerResult
 } from './worker_protocol'
-import type { MemoryVectorIndexManifest } from '../../contracts/vector_index'
+import type {
+    DreamNeighborQuery,
+    MemoryVectorIndexManifest
+} from '../../contracts/vector_index'
 
 interface PendingRequest {
     resolve: (result: unknown) => void
@@ -46,6 +49,10 @@ const commandTransferList = (
         case 'queryKnn':
         case 'queryHybrid':
             return [command.vector.buffer]
+        case 'queryDreamNeighbors':
+            return uniqueBuffers(
+                command.queries.map((query) => query.vector.buffer)
+            )
         case 'applyMutation':
             return uniqueBuffers(
                 command.upserts.flatMap((upsert) => {
@@ -134,6 +141,31 @@ export class LivingMemoryVectorIndexWorkerClient {
 
     readDreamVectors(presetId: string, memoryIds: string[]) {
         return this.request({ type: 'readDreamVectors', presetId, memoryIds })
+    }
+
+    buildDreamAnnIndex() {
+        return this.request({ type: 'buildDreamAnnIndex' })
+    }
+
+    async queryDreamNeighbors(
+        queries: DreamNeighborQuery[],
+        signal?: AbortSignal
+    ) {
+        signal?.throwIfAborted()
+        const cancellation = new Int32Array(new SharedArrayBuffer(4))
+        const cancel = () => Atomics.store(cancellation, 0, 1)
+        signal?.addEventListener('abort', cancel, { once: true })
+        try {
+            const result = await this.request({
+                type: 'queryDreamNeighbors',
+                queries,
+                cancellation
+            })
+            signal?.throwIfAborted()
+            return result
+        } finally {
+            signal?.removeEventListener('abort', cancel)
+        }
     }
 
     applyMutation(mutation: VectorIndexMutation) {

@@ -74,12 +74,14 @@ export const queryVectorIndexKnn = async (
     const limitParameter = parameters.length
     const rows = (
         await database.query<KnnRow>(
-            `SELECT
-                memory_id AS "memoryId",
-                1 - (embedding <=> $${vectorParameter}::vector) AS "cosineScore"
-             FROM lm_index_memory
-             WHERE ${conditions.join(' AND ')}
-             ORDER BY embedding <=> $${vectorParameter}::vector, memory_id ASC
+            `WITH scored AS MATERIALIZED (
+                SELECT memory_id, embedding <=> $${vectorParameter}::vector AS distance
+                FROM lm_index_memory
+                WHERE ${conditions.join(' AND ')}
+             )
+             SELECT memory_id AS "memoryId", 1 - distance AS "cosineScore"
+             FROM scored
+             ORDER BY distance ASC, memory_id ASC
              LIMIT $${limitParameter}`,
             parameters
         )

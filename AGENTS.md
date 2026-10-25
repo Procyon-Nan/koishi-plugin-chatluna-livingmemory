@@ -108,6 +108,7 @@ chatluna-livingmemory/
 │       │       ├── ownership_endpoint.ts # 索引目录所有权
 │       │       ├── schema.ts            # pgvector 表与索引定义
 │       │       ├── queries.ts           # 向量与关键词查询
+│       │       ├── dream_ann.ts         # Dream HNSW 构建、就绪检查与候选查询
 │       │       ├── mutations.ts         # 索引事务写入
 │       │       └── vector_values.ts     # 向量值转换
 │       ├── workflows/

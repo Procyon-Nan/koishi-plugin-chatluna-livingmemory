@@ -108,6 +108,9 @@ const runService = async (
             repository,
             mutations,
             {
+                queryDreamNeighbors: async () => {
+                    throw new Error('initial batching only reads vectors')
+                },
                 readDreamVectors: async (_presetId, ids) => ({
                     embeddingModelId: 'test',
                     dimension: 2,

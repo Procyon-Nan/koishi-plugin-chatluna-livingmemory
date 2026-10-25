@@ -132,6 +132,34 @@ export interface DreamVectorProvider {
         memoryIds: string[],
         signal?: AbortSignal
     ): Promise<DreamVectorReadPage>
+    queryDreamNeighbors(
+        queries: DreamNeighborQuery[],
+        signal?: AbortSignal
+    ): Promise<DreamNeighborPageResult>
+}
+
+export interface DreamNeighborQuery {
+    sourceIndex: number
+    presetId: string
+    generation: string
+    sourceMemoryId: string
+    vector: Float32Array<ArrayBuffer>
+    limit: number
+    efSearch: number
+}
+
+export interface DreamNeighborHit {
+    memoryId: string
+    contentHash: string
+    cosineScore: number
+}
+
+export interface DreamNeighborPageResult {
+    generation: string
+    completed: number
+    backend: 'hnsw' | 'unavailable'
+    rows: { sourceIndex: number; hits: DreamNeighborHit[] }[]
+    reason?: 'index-absent' | 'plan-exact' | 'budget'
 }
 
 export interface MemoryIndexMutationSink {

@@ -1,9 +1,10 @@
 import { PGlite } from '@electric-sql/pglite'
 import { vector } from '@electric-sql/pglite-pgvector'
 import { randomUUID } from 'node:crypto'
-import { existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type {
+    DreamNeighborQuery,
     MemoryVectorIndexManifest,
     MemoryVectorIndexState
 } from '../../../contracts/vector_index'
@@ -36,6 +37,8 @@ import {
     upgradeVectorIndexSchema
 } from './schema'
 import { LivingMemoryVectorIndexOwnershipEndpoint } from './ownership_endpoint'
+import { LivingMemoryVectorIndexError } from '../errors'
+import { buildDreamAnnIndex, queryDreamNeighbors } from './dream_ann'
 
 interface ManifestRow {
     schemaVersion: number
@@ -125,31 +128,42 @@ export class LivingMemoryVectorIndexDatabase {
             inspection = await this.inspect()
         } catch (error) {
             if (existsSync(previousDatabaseDirectory)) {
-                return this.restorePreviousDatabase(
+                inspection = await this.restorePreviousDatabase(
                     databaseDirectory,
                     previousDatabaseDirectory,
                     error
                 )
+            } else {
+                await this.closeConnection()
+                this.quarantineDatabaseDirectory(
+                    databaseDirectory,
+                    'database open',
+                    error
+                )
+                this.database = await this.openConnection(databaseDirectory)
+                this.mode = 'active'
+                inspection = await this.inspect()
             }
-            await this.closeConnection()
-            this.quarantineDatabaseDirectory(
+        }
+
+        if (
+            existsSync(previousDatabaseDirectory) &&
+            inspection.manifest === null
+        ) {
+            inspection = await this.restorePreviousDatabase(
                 databaseDirectory,
-                'database open',
-                error
+                previousDatabaseDirectory,
+                null
             )
-            this.database = await this.openConnection(databaseDirectory)
-            this.mode = 'active'
-            return this.inspect()
+        }
+        if (inspection.vectorExtensionVersion === '0.8.1') {
+            inspection = await this.upgradeVectorExtension(
+                databaseDirectory,
+                inspection
+            )
         }
 
         if (existsSync(previousDatabaseDirectory)) {
-            if (inspection.manifest === null) {
-                return this.restorePreviousDatabase(
-                    databaseDirectory,
-                    previousDatabaseDirectory,
-                    null
-                )
-            }
             this.cleanupDatabaseDirectory(
                 previousDatabaseDirectory,
                 'previous index cleanup after recovery'
@@ -252,6 +266,21 @@ export class LivingMemoryVectorIndexDatabase {
 
     queryHybrid(query: VectorIndexHybridQuery) {
         return queryVectorIndexHybrid(this.requireActiveDatabase(), query)
+    }
+
+    buildDreamAnnIndex() {
+        return buildDreamAnnIndex(this.requireActiveDatabase())
+    }
+
+    queryDreamNeighbors(
+        queries: DreamNeighborQuery[],
+        cancellation: Int32Array<SharedArrayBuffer>
+    ) {
+        return queryDreamNeighbors(
+            this.requireActiveDatabase(),
+            queries,
+            cancellation
+        )
     }
 
     readVectors(presetId: string, memoryIds: string[]) {
@@ -381,6 +410,39 @@ export class LivingMemoryVectorIndexDatabase {
         } catch (error) {
             await database.close()
             throw error
+        }
+    }
+
+    private async upgradeVectorExtension(
+        directory: string,
+        inspection: VectorIndexInspection
+    ) {
+        const backupDirectory = `${directory}.vector-0.8.1-backup-${randomUUID()}`
+        try {
+            await this.closeConnection()
+            cpSync(directory, backupDirectory, {
+                recursive: true,
+                errorOnExist: true,
+                force: false
+            })
+            this.database = await this.openConnection(directory)
+            await this.database.transaction(async (tx) => {
+                await tx.exec("ALTER EXTENSION vector UPDATE TO '0.8.7'")
+                if (inspection.manifest !== null) {
+                    await tx.exec(`UPDATE lm_index_manifest
+                        SET vector_extension_version = (
+                            SELECT extversion FROM pg_extension WHERE extname = 'vector'
+                        ) WHERE singleton = 1 AND vector_extension_version = '0.8.1'`)
+                }
+            })
+            return await this.inspect()
+        } catch (cause) {
+            throw new LivingMemoryVectorIndexError(
+                'extension-migration-failed',
+                'unavailable',
+                `pgvector 0.8.1 to 0.8.7 migration failed: database=${directory}, backup=${backupDirectory}: ${summarizeError(cause)}`,
+                { cause }
+            )
         }
     }
 

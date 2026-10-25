@@ -2,6 +2,7 @@ import type { MemoryVectorIndexState } from '../../contracts/vector_index'
 
 export type LivingMemoryVectorIndexErrorCode =
     | 'embedding-unavailable'
+    | 'extension-migration-failed'
     | 'lock-conflict'
     | 'lock-unavailable'
     | 'mutation-failed'

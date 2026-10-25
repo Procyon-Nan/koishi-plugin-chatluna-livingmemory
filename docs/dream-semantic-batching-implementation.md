@@ -9,6 +9,8 @@
 
 2026-10-25：第一批代码接入容量二分、Dream 向量快照读取、Worker 数组转移与取消、准备阶段串行队列，并前移模型容量检查。当前执行 initial，refinement 配置随第三批实际修复功能接入。第一批相关测试已同步；自动化检查、规模资源测量及业务质量验收在版本更新前集中执行。后续依照第 14 节推进依赖升级、HNSW 和跨组修复。
 
+2026-10-25：第二批代码接入 PGlite 0.5.11 / pglite-pgvector 0.0.12、普通召回精确 CTE、0.8.1→0.8.7 冷备份与升级事务、主表 active HNSW 以及 Dream ANN 小页接口。按用户决策，启动对账与全量重建完成后自动运行独立 HNSW 维护任务，后续复用已有索引。每页最多 4 条，逐条验证 EXPLAIN、检查 25 ms 软时间片与共享取消标记。测试覆盖已补充，暂缓执行；迁移事务测试使用模拟旧版本元数据，真实旧二进制库副本兼容性与第 14 节性能验收仍待版本更新前执行。当前 Dream 组批继续使用 initial，候选收集与跨组修复属于第三批。
+
 ## 1. 实施结论
 
 将 Dream 的分组实现替换为：
@@ -434,7 +436,7 @@ ANALYZE lm_index_memory;
 
 索引覆盖各 preset 的 active 记忆；正文向量继续存储在同一主表。归档、删除、更新与新写入通过 PostgreSQL 的现有索引维护路径处理。
 
-索引构建由独立维护入口触发，复用现有 operation gate、worker 和目录生命周期。每轮 Dream 读取 ANN ready 状态，使用已建索引。维护默认单线程，maintenance_work_mem 初始为 64 MB，具体值以整机验收确定。进程关闭依照现有顺序先停止入口、排空任务，再关闭数据库。
+索引构建在启动对账或全量重建完成后自动触发独立维护任务，复用现有 operation gate、worker 和目录生命周期；后续启动复用已建索引。每轮 Dream 读取 ANN ready 状态，使用已建索引。维护默认单线程，maintenance_work_mem 初始为 64 MB，具体值以整机验收确定。进程关闭依照现有顺序先停止入口、排空任务，再关闭数据库。
 
 新建库先建 schema、批量写入向量，再建立 HNSW。SQL 扩展迁移、HNSW 构建和每轮分组准备新增 embedding 调用数为 0，补丁升级保留既有正文向量。原有启动维数探针会调用一次 embedding，验收时单独计数。更换 embedding 模型或维数继续走项目原有重建逻辑。
 
@@ -461,7 +463,7 @@ $vector 与 $limit 在实际实现中使用 PostgreSQL 的编号参数。CTE 计
 
 ### 7.4 Dream 专用 ANN 查询
 
-每页在向量 worker 的一个短事务内执行，使用 transaction-scoped 设置：
+每页在向量 worker 内逐条查询，每条查询的 EXPLAIN 与 SELECT 共用一个短事务，使用 transaction-scoped 设置：
 
 ~~~sql
 SET LOCAL hnsw.ef_search = 40;

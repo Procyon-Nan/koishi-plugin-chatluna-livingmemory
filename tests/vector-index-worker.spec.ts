@@ -21,6 +21,7 @@ import type {
 import type { MemoryVectorIndexManifest } from '../src/contracts/vector_index'
 import { LivingMemoryVectorIndexDatabase } from '../src/service/vector_index/worker/database'
 import { startVectorIndexWorker } from '../src/service/vector_index/worker/runtime'
+import { createVectorIndexSchema } from '../src/service/vector_index/worker/schema'
 import { LivingMemoryVectorIndexWorkerClient } from '../src/service/vector_index/worker_client'
 import type {
     VectorIndexDocument,
@@ -49,7 +50,7 @@ const createManifest = (): MemoryVectorIndexManifest => ({
     embeddingModelId: 'test-embedding-model',
     dimension: 3,
     storageEngine: 'pglite-pgvector',
-    vectorExtensionVersion: '0.8.1',
+    vectorExtensionVersion: '0.8.7',
     generation: 'test-generation',
     builtAt: Date.now()
 })
@@ -141,6 +142,7 @@ it('runs typed vector index worker mutations and filtered searches', async () =>
     const previousPath = resolve(temporaryDirectory, 'vector-index.previous')
 
     const initial = await client.open(formalPath, previousPath)
+    assert.equal(initial.vectorExtensionVersion, '0.8.7')
     assert.equal(initial.manifest, null)
     assert.equal(initial.indexedCount, 0)
 
@@ -195,6 +197,27 @@ it('runs typed vector index worker mutations and filtered searches', async () =>
     const finalized = await client.openCandidate(formalPath)
     await rm(previousPath, { recursive: true })
     assert.equal(finalized.indexedCount, 4)
+    const neighborQuery = () => ({
+        sourceIndex: 0,
+        presetId: 'preset-a',
+        generation: manifest.generation,
+        sourceMemoryId: 'memory-a',
+        vector: new Float32Array([1, 0, 0]),
+        limit: 2,
+        efSearch: 40
+    })
+    assert.equal(
+        (await client.queryDreamNeighbors([neighborQuery()])).reason,
+        'index-absent'
+    )
+    assert.deepEqual(await client.buildDreamAnnIndex(), { built: true })
+    assert.deepEqual(await client.buildDreamAnnIndex(), { built: false })
+    await assert.rejects(
+        client.queryDreamNeighbors([
+            { ...neighborQuery(), generation: 'stale' }
+        ]),
+        /generation changed/u
+    )
 
     const factHits = await client.queryKnn(
         query([1, 0, 0], {
@@ -547,6 +570,97 @@ it('closes the worker port when database disposal fails', async () => {
     }
     assert.equal(response.error.message, disposeError.message)
 })
+
+it.each([false, true])(
+    'preserves the database and cold backup during extension migration (fail=%s)',
+    async (fail) => {
+        const name = `extension-migration-${fail}`
+        const formalPath = resolve(temporaryDirectory, name)
+        const manifest = {
+            ...createManifest(),
+            vectorExtensionVersion: '0.8.1'
+        }
+        const seed = await PGlite.create(formalPath, { extensions: { vector } })
+        try {
+            await seed.exec('CREATE EXTENSION vector')
+            await createVectorIndexSchema(seed, manifest)
+            // 模拟旧版本元数据以覆盖升级事务；旧二进制目录兼容性纳入发布验收。
+            await seed.exec(`
+            UPDATE pg_extension SET extversion = '0.8.1' WHERE extname = 'vector';
+            INSERT INTO lm_index_memory VALUES (
+                'retained', 'preset-a', NULL, 'active', 'fact', true,
+                'content-retained', 'keywords', 0, '[1,2,3]'
+            );
+        `)
+            if (fail) {
+                await seed.exec(`ALTER TABLE lm_index_manifest ADD CONSTRAINT fail_upgrade
+                CHECK (vector_extension_version = '0.8.1')`)
+            }
+        } finally {
+            await seed.close()
+        }
+        const client = new LivingMemoryVectorIndexWorkerClient(workerPath)
+        try {
+            const opening = client.open(formalPath, `${formalPath}.previous`)
+            if (fail) {
+                await assert.rejects(opening, {
+                    code: 'extension-migration-failed'
+                })
+            } else {
+                const inspection = await opening
+                assert.equal(inspection.vectorExtensionVersion, '0.8.7')
+                assert.deepEqual(inspection.manifest, {
+                    ...manifest,
+                    vectorExtensionVersion: '0.8.7'
+                })
+                const vectors = await client.readDreamVectors('preset-a', [
+                    'retained'
+                ])
+                assert.deepEqual([...vectors.items[0].vector], [1, 2, 3])
+                assert.equal(vectors.items[0].contentHash, 'content-retained')
+            }
+        } finally {
+            await client.dispose()
+        }
+        const directories = await readdir(temporaryDirectory)
+        assert.equal(
+            directories.some((item) => item.startsWith(`${name}.failed-`)),
+            false
+        )
+        const backup = directories.find((item) =>
+            item.startsWith(`${name}.vector-0.8.1-backup-`)
+        )!
+        assert.ok(backup)
+        for (const path of [formalPath, resolve(temporaryDirectory, backup)]) {
+            const stored = await PGlite.create(path, { extensions: { vector } })
+            try {
+                const expectedVersion =
+                    fail || path !== formalPath ? '0.8.1' : '0.8.7'
+                const extension = await stored.query<{ extversion: string }>(
+                    "SELECT extversion FROM pg_extension WHERE extname = 'vector'"
+                )
+                assert.equal(extension.rows[0].extversion, expectedVersion)
+                const row = await stored.query<{
+                    generation: string
+                    version: string
+                }>(
+                    'SELECT generation, vector_extension_version AS version FROM lm_index_manifest'
+                )
+                assert.deepEqual(row.rows[0], {
+                    generation: manifest.generation,
+                    version: expectedVersion
+                })
+                const vectorRow = await stored.query<{ embedding: string }>(
+                    'SELECT embedding::text AS embedding FROM lm_index_memory'
+                )
+                assert.equal(vectorRow.rows[0].embedding, '[1,2,3]')
+            } finally {
+                await stored.close()
+            }
+        }
+    },
+    60_000
+)
 
 it('rejects pending requests when the worker cannot start', async () => {
     const client = new LivingMemoryVectorIndexWorkerClient(

@@ -2,6 +2,7 @@ import { readdir, unlink } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import type { Context } from 'koishi'
 import type {
+    DreamNeighborQuery,
     DreamVectorProvider,
     MemoryHybridSearchHit,
     MemoryHybridSearchInput,
@@ -243,6 +244,20 @@ export class LivingMemoryVectorIndexService
             await this.awaitPresetReadBarrier(presetId)
             signal?.throwIfAborted()
             return this.requireWorker().readDreamVectors(presetId, memoryIds)
+        })
+    }
+
+    async queryDreamNeighbors(
+        queries: DreamNeighborQuery[],
+        signal?: AbortSignal
+    ) {
+        return this.operationGate.run(async () => {
+            for (const presetId of new Set(
+                queries.map((query) => query.presetId)
+            )) {
+                await this.awaitPresetReadBarrier(presetId)
+            }
+            return this.requireWorker().queryDreamNeighbors(queries, signal)
         })
     }
 

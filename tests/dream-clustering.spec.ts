@@ -224,6 +224,9 @@ const createVectorReader = (entries: ReturnType<typeof createEntries>) => {
         ])
     )
     const reader: DreamVectorProvider = {
+        queryDreamNeighbors: async () => {
+            throw new Error('initial batching only reads vectors')
+        },
         readDreamVectors: async (_presetId, ids) => {
             calls.push(ids)
             return {

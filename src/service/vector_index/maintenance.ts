@@ -113,12 +113,37 @@ export class LivingMemoryVectorIndexMaintenance {
             await this.runReconcileJob(embeddings, dimension, upgradeSchema)
         }
         await this.options.repository.completeLegacyEmbeddingMigration()
+        await this.maintainDreamAnnIndex()
     }
 
     async rebuild(reason: string) {
         const { embeddings, dimension } = await this.createEmbeddingContext()
         await this.runRebuildJob(embeddings, dimension, reason, false)
         await this.options.repository.completeLegacyEmbeddingMigration()
+        await this.maintainDreamAnnIndex()
+    }
+
+    private async maintainDreamAnnIndex() {
+        if (this.options.shouldStop()) return
+        try {
+            await this.jobRunner.run(
+                GLOBAL_INDEX_JOB_PRESET,
+                'dream-ann: startup or rebuild',
+                async () => {
+                    const { built } =
+                        await this.options.operationGate.runExclusive(() =>
+                            this.options.worker().buildDreamAnnIndex()
+                        )
+                    return `Dream HNSW index ${built ? 'built' : 'reused'}`
+                }
+            )
+        } catch (error) {
+            this.options.logger.warn(
+                'vector-index.dream-ann.failed',
+                { workflow: 'vector-index' },
+                error
+            )
+        }
     }
 
     createPresetReconcileJob(presetId: string, reason: string) {

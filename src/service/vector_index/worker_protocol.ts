@@ -4,6 +4,8 @@ import type {
     MemorySearchStatus
 } from '../../contracts/memory'
 import type {
+    DreamNeighborPageResult,
+    DreamNeighborQuery,
     DreamVectorReadPage,
     MemoryVectorIndexManifest,
     MemoryVectorIndexPresetStatus,
@@ -148,6 +150,17 @@ export interface VectorIndexWorkerCommandMap {
     readDreamVectors: {
         input: { presetId: string; memoryIds: string[] }
         result: DreamVectorReadPage
+    }
+    buildDreamAnnIndex: {
+        input: Record<never, never>
+        result: { built: boolean }
+    }
+    queryDreamNeighbors: {
+        input: {
+            queries: DreamNeighborQuery[]
+            cancellation: Int32Array<SharedArrayBuffer>
+        }
+        result: DreamNeighborPageResult
     }
     applyMutation: {
         input: VectorIndexMutation

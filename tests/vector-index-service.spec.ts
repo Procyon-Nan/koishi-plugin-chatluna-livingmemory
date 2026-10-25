@@ -349,6 +349,8 @@ it('builds the index once and reuses its manifest after restart', async () => {
             'vector index rebuild completed: jobId=job-1 presetId=* indexed=2'
         )
         assert.equal(repository.legacyEmbeddingsMigrated, true)
+        assert.equal(repository.jobs[1].status, 'completed')
+        assert.equal(repository.jobs[1].detail, 'Dream HNSW index built')
         assert.ok(
             firstCalls.some((texts) => texts.includes('content memory-a'))
         )
@@ -407,15 +409,73 @@ it('builds the index once and reuses its manifest after restart', async () => {
             secondStatus.manifest?.generation,
             firstStatus.manifest?.generation
         )
-        assert.equal(repository.jobs[1].status, 'completed')
+        assert.equal(repository.jobs[2].status, 'completed')
         assert.equal(
-            repository.jobs[1].detail,
-            'vector index reconcile completed: jobId=job-2 presetId=* indexed=2'
+            repository.jobs[2].detail,
+            'vector index reconcile completed: jobId=job-3 presetId=* indexed=2'
         )
+        assert.equal(repository.jobs[3].detail, 'Dream HNSW index reused')
         assert.equal(secondCalls.length, 1)
         await second.stop()
     })
 }, 60_000)
+
+it('keeps exact recall ready when the independent HNSW maintenance fails', async () => {
+    await withTemporaryDirectory(async (baseDir) => {
+        const repository = new TestVectorIndexRepository([
+            createSource('memory-a')
+        ])
+        const service = createService({
+            baseDir,
+            repository,
+            modelId: 'model-a',
+            dimension: 3,
+            workerFactory: (onFailure) => {
+                const worker = new LivingMemoryVectorIndexWorkerClient(
+                    workerPath,
+                    onFailure
+                )
+                worker.buildDreamAnnIndex = async () => {
+                    throw new Error('injected HNSW build failure')
+                }
+                return worker
+            }
+        })
+        try {
+            await service.start()
+            await service.waitForInitialization()
+            assert.equal(service.getStatus().state, 'ready')
+            assert.equal(repository.jobs.at(-1)?.status, 'failed')
+            const page = await service.readDreamVectors('preset-a', [
+                'memory-a'
+            ])
+            const result = await service.queryDreamNeighbors([
+                {
+                    sourceIndex: 0,
+                    sourceMemoryId: 'memory-a',
+                    presetId: 'preset-a',
+                    generation: page.generation,
+                    vector: page.items[0].vector,
+                    limit: 10,
+                    efSearch: 40
+                }
+            ])
+            assert.equal(result.reason, 'index-absent')
+            const hits = await service.searchHybrid({
+                presetId: 'preset-a',
+                searchTexts: ['content memory-a'],
+                keywords: [],
+                memoryTypes: null,
+                memoryStatus: 'active',
+                maxCandidates: 1,
+                minSimilarity: 0
+            })
+            assert.equal(hits[0].memoryId, 'memory-a')
+        } finally {
+            await service.stop()
+        }
+    })
+})
 
 it('removes legacy SQLite index files after initialization succeeds', async () => {
     await withTemporaryDirectory(async (baseDir) => {
@@ -531,7 +591,7 @@ it('restarts the worker and reinitializes the existing index', async () => {
         await service.waitForInitialization()
 
         assert.equal(service.getStatus().state, 'ready')
-        assert.equal(repository.jobs.length, 2)
+        assert.equal(repository.jobs.length, 4)
         await service.stop()
     })
 })
@@ -620,7 +680,8 @@ it('starts a full rebuild without blocking the caller', async () => {
 
         assert.equal(service.getStatus().state, 'ready')
         assert.equal(repository.legacyPageCalls, legacyPageCalls)
-        assert.match(repository.jobs.at(-1)?.input ?? '', /manual rebuild/u)
+        assert.match(repository.jobs.at(-2)?.input ?? '', /manual rebuild/u)
+        assert.equal(repository.jobs.at(-1)?.detail, 'Dream HNSW index built')
         await service.stop()
     })
 }, 120_000)

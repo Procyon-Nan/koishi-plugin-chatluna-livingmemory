@@ -72,6 +72,15 @@ const execute = async (
             case 'queryHybrid':
                 result = await database.queryHybrid(command)
                 break
+            case 'buildDreamAnnIndex':
+                result = await database.buildDreamAnnIndex()
+                break
+            case 'queryDreamNeighbors':
+                result = await database.queryDreamNeighbors(
+                    command.queries,
+                    command.cancellation
+                )
+                break
             case 'readVectors':
                 result = await database.readVectors(
                     command.presetId,

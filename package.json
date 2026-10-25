@@ -35,8 +35,8 @@
         "memory"
     ],
     "dependencies": {
-        "@electric-sql/pglite": "0.5.8",
-        "@electric-sql/pglite-pgvector": "0.0.9",
+        "@electric-sql/pglite": "0.5.11",
+        "@electric-sql/pglite-pgvector": "0.0.12",
         "@langchain/core": "^0.3.80",
         "zod": "3.25.76"
     },
