@@ -111,7 +111,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { MemorySnapshotRecord } from '../types'
+import type { MemorySnapshotRecord } from '../../src/contracts/memory'
 import {
     formatImportance,
     formatSearchTexts,

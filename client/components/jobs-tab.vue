@@ -83,7 +83,7 @@
 import { ElMessage } from 'element-plus'
 import * as api from '../api'
 import { usePagedResource } from '../composables/use-paged-resource'
-import type { MemoryJobRecord } from '../types'
+import type { MemoryJobRecord } from '../../src/contracts/memory'
 import {
     formatTime,
     getJobKindLabel,

@@ -24,7 +24,6 @@ client/
 ├── index.ts          # 入口：注册图标与 ctx.page()
 ├── dashboard.vue     # 主页面
 ├── api.ts            # send() 的类型化封装
-├── types.ts          # 浏览器安全的契约镜像与 RPC 事件类型
 ├── components/       # 各标签页与弹窗
 ├── composables/      # 分页、选中状态等共享逻辑
 ├── utils/            # 显示格式化
@@ -46,7 +45,13 @@ src/
 ```json
 {
     "type": "module",
-    "files": ["lib", "dist", "client"],
+    "files": [
+        "lib",
+        "dist",
+        "client",
+        "src/contracts",
+        "src/service/memory/entry_fields.ts"
+    ],
     "scripts": {
         "build:client": "koishi-console build"
     },
@@ -59,7 +64,7 @@ src/
 }
 ```
 
-`koishi.browser: true` 声明插件带有客户端 bundle。`files` 需包含 `dist`（生产构建产物）和 `client`（开发模式直接加载的源码）。
+`koishi.browser: true` 声明插件带有客户端 bundle。`files` 包含 `dist`（生产构建产物）、`client`（开发模式入口）及客户端引用的共享源码。
 
 ### 2. 入口路径
 
@@ -135,20 +140,20 @@ export default (ctx: Context) => {
 
 ### 5. 客户端类型
 
-客户端由 `koishi-console build`（Vite）构建，无法解析 `koishi-plugin-chatluna`、`@langchain/core` 等服务端依赖。`client/types.ts` 因此自行声明共享数据形状，不从 `src/` 导入；修改 `src/contracts/` 时须同步该镜像。
+客户端通过 `import type` 直接引用 `src/contracts/` 中的记录、查询参数和 RPC 契约。运行时使用的记忆类型列表来自 `src/contracts/memory.ts`，关键词上限来自纯模块 `src/service/memory/entry_fields.ts`。`client/tsconfig.json` 的源码根目录覆盖客户端与共享模块，发布清单同时包含这些共享模块，供客户端开发入口使用。
 
-RPC 事件类型分两侧声明：
+两侧共用 `LivingMemoryConsoleEvents`：
 
-- 服务端在 `src/integrations/koishi-augmentations.ts` 中把 `src/contracts/rpc.ts` 的事件并入 `@koishijs/plugin-console` 的 `Events`，约束 `addListener`。
-- 客户端在 `client/types.ts` 中声明 `LivingMemoryClientEvents`，`client/api.ts` 据此给 `send` 加上类型：
+- 服务端在 `src/types.ts` 中把 `src/contracts/rpc.ts` 的事件并入 `@koishijs/plugin-console` 的 `Events`，约束 `addListener`。
+- 客户端在 `client/api.ts` 中直接导入该契约，为 `send` 标注参数与返回值：
 
 ```ts
 const sendLivingMemory = send as unknown as <
-    Name extends keyof LivingMemoryClientEvents
+    Name extends keyof LivingMemoryConsoleEvents
 >(
     name: Name,
-    ...args: Parameters<LivingMemoryClientEvents[Name]>
-) => Promise<Awaited<ReturnType<LivingMemoryClientEvents[Name]>>>
+    ...args: Parameters<LivingMemoryConsoleEvents[Name]>
+) => Promise<Awaited<ReturnType<LivingMemoryConsoleEvents[Name]>>>
 ```
 
 ### 6. 双向通信

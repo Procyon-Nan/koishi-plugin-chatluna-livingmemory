@@ -17,6 +17,8 @@
         "lib",
         "dist",
         "client",
+        "src/contracts",
+        "src/service/memory/entry_fields.ts",
         "resources"
     ],
     "exports": {

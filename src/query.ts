@@ -18,17 +18,6 @@ import type {
     UserProfileListQuery
 } from './contracts/rpc'
 
-export type {
-    JobListQuery,
-    MemoryListFilter,
-    MemoryListQuery,
-    MemoryListResult,
-    PageRequest,
-    PageResult,
-    SnapshotListQuery,
-    UserProfileListQuery
-} from './contracts/rpc'
-
 const clampPage = (value?: number) => {
     return value != null && value > 0 ? Math.floor(value) : 1
 }

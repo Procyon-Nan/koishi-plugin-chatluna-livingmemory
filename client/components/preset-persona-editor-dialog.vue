@@ -79,7 +79,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import * as api from '../api'
 import { formatTime } from '../utils/display'
-import type { PresetPersonaCardInfo } from '../types'
+import type { PresetPersonaCardInfo } from '../../src/contracts/memory'
 
 const props = defineProps<{
     modelValue: boolean

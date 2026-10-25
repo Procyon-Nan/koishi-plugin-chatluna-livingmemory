@@ -180,7 +180,7 @@ import {
     type LivingMemorySearchDetailedResult,
     type LivingMemorySearchInput,
     type MemoryEntryType
-} from '../types'
+} from '../../src/contracts/memory'
 
 const props = defineProps<{
     presetId: string

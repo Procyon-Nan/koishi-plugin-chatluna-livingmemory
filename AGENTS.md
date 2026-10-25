@@ -12,15 +12,13 @@ chatluna-livingmemory/
 ├── src/
 │   ├── index.ts                         # 插件入口、配置 schema 与集成装配
 │   ├── query.ts                         # 对外记忆查询接口
-│   ├── types.ts                         # 公共契约导出
+│   ├── types.ts                         # 公共契约导出与 Koishi、Console 类型扩展
 │   ├── worker_artifacts.ts              # Worker 构建产物定位
 │   ├── contracts/
 │   │   ├── memory.ts                    # 记忆、来源、快照、画像与任务数据
 │   │   ├── workflows.ts                 # 工作流配置、输入输出与服务接口
 │   │   ├── vector_index.ts              # 索引文档、查询、变更与状态接口
 │   │   └── rpc.ts                       # Console RPC 契约
-│   ├── integrations/
-│   │   └── koishi-augmentations.ts      # Koishi 服务、事件与 Console 类型合并
 │   ├── plugins/
 │   │   ├── message_collector.ts         # 消息采集入口
 │   │   ├── chat_middleware.ts           # ChatLuna 对话生命周期接入
@@ -72,7 +70,6 @@ chatluna-livingmemory/
 │       │   ├── preset_personas.ts       # 人设卡片仓库
 │       │   └── speaker_reconciliation.ts # 预设用户身份核对
 │       ├── prompts/
-│       │   ├── index.ts                 # 提示词模块导出
 │       │   ├── schema.ts                # 模型结构化输出 schema
 │       │   ├── memory_tools.ts          # 记忆工具名称、描述与参数 schema
 │       │   ├── memory_entries.ts        # 模型记忆字段清单与统一渲染
@@ -146,7 +143,6 @@ chatluna-livingmemory/
 │   ├── index.ts                         # Console 页面与图标注册
 │   ├── dashboard.vue                    # 管理页面入口
 │   ├── api.ts                           # RPC 调用
-│   ├── types.ts                         # 浏览器端契约镜像
 │   ├── env.d.ts                         # 浏览器端环境类型
 │   ├── components/                      # 记忆、快照、画像、人设、任务与检索组件
 │   ├── composables/                     # 分页、选中状态与记忆列表逻辑

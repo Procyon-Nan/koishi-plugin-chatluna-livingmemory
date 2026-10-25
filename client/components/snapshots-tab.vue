@@ -88,7 +88,7 @@ import { ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as api from '../api'
 import { usePagedResource } from '../composables/use-paged-resource'
-import type { MemorySnapshotRecord } from '../types'
+import type { MemorySnapshotRecord } from '../../src/contracts/memory'
 import { formatTime, snapshotHitCount } from '../utils/display'
 import SnapshotDetailDialog from './snapshot-detail-dialog.vue'
 

@@ -74,8 +74,6 @@ import { loadMemorySourceMessages } from './query_projections'
 import { LivingMemoryLogger } from '../logging/logger'
 import { MessageLogRegistry } from '../transcript/message_log/message_log_registry'
 
-export type { QueueExtractionOptions } from '../memory/helpers'
-
 export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     readonly memoryLogger: LivingMemoryLogger
     /** 会话消息日志：召回与提取共用的唯一消息历史视界。 */

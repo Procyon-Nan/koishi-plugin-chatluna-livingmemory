@@ -2,10 +2,10 @@ import { Context } from 'koishi'
 import type { AttributedMemoryItem } from '../../../contracts/workflows'
 import { isModelConfigured } from '../../shared/utils'
 import {
-    buildExtractionPrompts,
     extractionResultSchema,
     extractionResultToolName
-} from '../../prompts'
+} from '../../prompts/schema'
+import { buildExtractionPrompts } from '../../prompts/extraction'
 import type { PromptMessages } from '../../prompts/prompt_format'
 import { normalizeMemoryKeywords } from '../../memory/entry_fields'
 import { invokeStructuredOutput } from '../structured_output'

@@ -72,7 +72,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import * as api from '../api'
-import type { UserProfileRecord } from '../types'
+import type { UserProfileRecord } from '../../src/contracts/memory'
 import { formatTime } from '../utils/display'
 
 const props = defineProps<{

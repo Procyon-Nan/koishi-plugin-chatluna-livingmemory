@@ -1,4 +1,4 @@
-import type { MemoryVectorIndexStatus } from '../types'
+import type { MemoryVectorIndexStatus } from '../../src/contracts/vector_index'
 
 export const isVectorWorkflowReady = (
     status: MemoryVectorIndexStatus | null,

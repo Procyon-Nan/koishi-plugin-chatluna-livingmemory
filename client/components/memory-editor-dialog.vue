@@ -159,15 +159,15 @@
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import * as api from '../api'
+import { MAX_MEMORY_KEYWORDS } from '../../src/service/memory/entry_fields'
 import {
-    MAX_MEMORY_KEYWORDS,
     memoryEntryTypes,
     type MemoryEntryRecord,
     type MemoryEntryStatus,
     type MemoryEntryType,
     type MemoryMutationInput,
     type PresetSpeakerRecord
-} from '../types'
+} from '../../src/contracts/memory'
 import { formatTime, getMemoryTypeLabel } from '../utils/display'
 
 const props = defineProps<{

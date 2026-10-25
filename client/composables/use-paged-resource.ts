@@ -1,5 +1,5 @@
 import { ref, shallowRef } from 'vue'
-import type { PageResult } from '../types'
+import type { PageResult } from '../../src/contracts/rpc'
 
 export type PageLoader<T, TResult extends PageResult<T>> = (
     page: number,

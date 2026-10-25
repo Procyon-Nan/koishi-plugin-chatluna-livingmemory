@@ -1,4 +1,7 @@
-import type { MemoryEntryStatus, MemorySnapshotRecord } from '../types'
+import type {
+    MemoryEntryStatus,
+    MemorySnapshotRecord
+} from '../../src/contracts/memory'
 
 const memoryTypeLabels: Record<string, string> = {
     identity: '身份',

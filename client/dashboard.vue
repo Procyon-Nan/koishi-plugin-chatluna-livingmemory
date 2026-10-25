@@ -343,11 +343,13 @@ import { toErrorMessage } from './utils/display'
 import type {
     LivingMemoryPresetExport,
     LivingMemoryPresetImportResult,
-    MemoryConfigWarning,
-    MemoryEntryRecord,
+    MemoryEntryRecord
+} from '../src/contracts/memory'
+import type { MemoryConfigWarning } from '../src/contracts/workflows'
+import type {
     MemoryVectorIndexState,
     MemoryVectorIndexStatus
-} from './types'
+} from '../src/contracts/vector_index'
 
 type DashboardTab =
     | 'memories'

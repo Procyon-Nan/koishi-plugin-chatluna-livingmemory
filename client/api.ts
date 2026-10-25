@@ -1,33 +1,39 @@
 import { send } from '@koishijs/client'
 import type {
     DreamTriggerResult,
-    LivingMemoryClientEvents,
+    MemoryServiceStatus
+} from '../src/contracts/workflows'
+import type {
+    LivingMemoryConsoleEvents,
+    JobListQuery,
+    MemoryListQuery,
+    SnapshotListQuery,
+    UserProfileListQuery,
+    MemoryListFilter,
+    MemoryListResult,
+    PageResult
+} from '../src/contracts/rpc'
+import type {
     LivingMemoryPresetExport,
     LivingMemoryPresetImportResult,
     LivingMemorySearchDetailedResult,
     LivingMemorySearchInput,
     MemoryEntryRecord,
-    MemoryEntryStatus,
-    MemoryEntryType,
     MemoryJobRecord,
-    MemoryListFilter,
-    MemoryListResult,
     MemoryMutationInput,
     MemoryUpdatePatch,
-    MemoryServiceStatus,
     MemorySnapshotRecord,
-    PageResult,
     PresetPersonaCardInfo,
     PresetSpeakerRecord,
     UserProfileRecord
-} from './types'
+} from '../src/contracts/memory'
 
 const sendLivingMemory = send as unknown as <
-    Name extends keyof LivingMemoryClientEvents
+    Name extends keyof LivingMemoryConsoleEvents
 >(
     name: Name,
-    ...args: Parameters<LivingMemoryClientEvents[Name]>
-) => Promise<Awaited<ReturnType<LivingMemoryClientEvents[Name]>>>
+    ...args: Parameters<LivingMemoryConsoleEvents[Name]>
+) => Promise<Awaited<ReturnType<LivingMemoryConsoleEvents[Name]>>>
 
 export async function listPresetIds(): Promise<string[]> {
     return await sendLivingMemory('living-memory/listPresetIds')
@@ -37,39 +43,8 @@ export async function getStatus(): Promise<MemoryServiceStatus> {
     return await sendLivingMemory('living-memory/getStatus')
 }
 
-export interface MemoryListParams {
-    presetId: string
-    keyword?: string
-    speakerKey?: string
-    type?: MemoryEntryType
-    status?: MemoryEntryStatus | 'all'
-    page?: number
-    pageSize?: number
-}
-
-export interface SnapshotListParams {
-    presetId: string
-    conversationId?: string
-    page?: number
-    pageSize?: number
-}
-
-export interface JobListParams {
-    presetId: string
-    kind?: string
-    status?: string
-    page?: number
-    pageSize?: number
-}
-
-export interface UserProfileListParams {
-    presetId: string
-    page?: number
-    pageSize?: number
-}
-
 export async function listMemories(
-    params: MemoryListParams
+    params: MemoryListQuery
 ): Promise<MemoryListResult> {
     return await sendLivingMemory('living-memory/listMemories', params)
 }
@@ -119,7 +94,7 @@ export async function deleteMemories(
 }
 
 export async function listSnapshots(
-    params: SnapshotListParams
+    params: SnapshotListQuery
 ): Promise<PageResult<MemorySnapshotRecord>> {
     return await sendLivingMemory('living-memory/listSnapshots', params)
 }
@@ -131,13 +106,13 @@ export async function deleteSnapshot(
 }
 
 export async function listJobs(
-    params: JobListParams
+    params: JobListQuery
 ): Promise<PageResult<MemoryJobRecord>> {
     return await sendLivingMemory('living-memory/listJobs', params)
 }
 
 export async function listUserProfiles(
-    params: UserProfileListParams
+    params: UserProfileListQuery
 ): Promise<PageResult<UserProfileRecord>> {
     return await sendLivingMemory('living-memory/listUserProfiles', params)
 }

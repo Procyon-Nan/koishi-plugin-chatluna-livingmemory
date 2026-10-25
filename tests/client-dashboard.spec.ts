@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { usePagedResource } from '../client/composables/use-paged-resource'
-import type { MemoryVectorIndexStatus } from '../client/types'
+import type { MemoryVectorIndexStatus } from '../src/contracts/vector_index'
 import { isVectorWorkflowReady } from '../client/utils/vector-index'
 
 const vectorStatus = (

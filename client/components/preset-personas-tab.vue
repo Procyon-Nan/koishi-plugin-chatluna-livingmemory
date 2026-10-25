@@ -101,7 +101,7 @@ import { onMounted, ref, shallowRef } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as api from '../api'
 import { formatTime } from '../utils/display'
-import type { PresetPersonaCardInfo } from '../types'
+import type { PresetPersonaCardInfo } from '../../src/contracts/memory'
 import PresetPersonaEditorDialog from './preset-persona-editor-dialog.vue'
 
 const props = withDefaults(

@@ -2,14 +2,16 @@ import { computed, ref, shallowRef } from 'vue'
 import type { Ref } from 'vue'
 import * as api from '../api'
 import {
+    memoryEntryTypes,
     type MemoryEntryRecord,
     type MemoryEntryStatus,
-    type MemoryEntryType,
-    memoryEntryTypes,
-    type MemoryListFacets,
-    type MemoryListFilter,
-    type MemoryListResult
-} from '../types'
+    type MemoryEntryType
+} from '../../src/contracts/memory'
+import type {
+    MemoryListFacets,
+    MemoryListFilter,
+    MemoryListResult
+} from '../../src/contracts/rpc'
 import { usePagedResource } from './use-paged-resource'
 
 const createEmptyTypeCounts = (): Record<MemoryEntryType, number> => {

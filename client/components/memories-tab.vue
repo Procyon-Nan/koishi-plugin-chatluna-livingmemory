@@ -326,7 +326,7 @@ import {
     type MemoryEntryRecord,
     type MemoryEntryType,
     type PresetSpeakerRecord
-} from '../types'
+} from '../../src/contracts/memory'
 import {
     formatImportance,
     formatImportancePercent,

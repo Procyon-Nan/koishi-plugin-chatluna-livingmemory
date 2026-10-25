@@ -9,10 +9,10 @@ import type {
 } from '../../contracts/memory'
 import type { LivingMemoryConfig } from '../../contracts/workflows'
 import {
-    buildPersonaCardPrompts,
     personaCardResultSchema,
     personaCardResultToolName
-} from '../prompts'
+} from '../prompts/schema'
+import { buildPersonaCardPrompts } from '../prompts/persona_card'
 import { invokeStructuredOutput } from '../workflows/structured_output'
 import type { LivingMemoryLogger } from '../logging/logger'
 import { SerialTaskQueue } from '../shared/serial_task_queue'

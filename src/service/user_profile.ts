@@ -12,10 +12,10 @@ import type {
 } from '../contracts/workflows'
 import { resolveAssistantLabel } from './memory/helpers'
 import {
-    buildUserProfilePrompts,
     userProfileResultSchema,
     userProfileResultToolName
-} from './prompts'
+} from './prompts/schema'
+import { buildUserProfilePrompts } from './prompts/user_profile'
 import { invokeStructuredOutput } from './workflows/structured_output'
 import type { LivingMemoryLogger } from './logging/logger'
 import { normalizeSpeakerKeys } from './memory/speaker_identity'

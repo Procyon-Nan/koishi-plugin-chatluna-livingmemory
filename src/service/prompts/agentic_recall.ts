@@ -11,9 +11,9 @@ export interface AgenticRecallPromptInput {
     chatHistory: string
 }
 
-export type AgenticRecallPromptMessages = PromptMessages
-
-export const buildAgenticRecallPrompts = (params: AgenticRecallPromptInput) => {
+export const buildAgenticRecallPrompts = (
+    params: AgenticRecallPromptInput
+): PromptMessages => {
     const { assistantLabel, lastMessage, chatHistory } = params
     const escapedAssistantLabel = escapeXmlText(assistantLabel)
     const systemPrompt = [

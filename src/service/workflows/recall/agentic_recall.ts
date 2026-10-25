@@ -28,8 +28,8 @@ import type {
 } from '../../../contracts/memory'
 import type { LivingMemoryConfig } from '../../../contracts/workflows'
 import { LivingMemoryMessageFormatter } from '../../transcript/message_formatter'
-import { buildAgenticRecallPrompts } from '../../prompts'
-import type { AgenticRecallPromptMessages } from '../../prompts'
+import { buildAgenticRecallPrompts } from '../../prompts/agentic_recall'
+import type { PromptMessages } from '../../prompts/prompt_format'
 import type { LivingMemoryLogger } from '../../logging/logger'
 import { createLoggedModel } from '../../logging/model_calls'
 import { memorySearchTool } from '../../prompts/memory_tools'
@@ -69,7 +69,7 @@ const agenticRecallPromptTemplate = ChatPromptTemplate.fromMessages([
 ])
 
 export interface LivingMemoryAgenticRecallTrace {
-    prompt: AgenticRecallPromptMessages
+    prompt: PromptMessages
     item: AgenticMemorySnapshotItem
 }
 
@@ -327,7 +327,7 @@ export class LivingMemoryAgenticRecallExecutor {
         scope: MemoryScope,
         currentMessage: LivingMemoryTranscriptMessage,
         historyMessages: LivingMemoryTranscriptMessage[]
-    ): AgenticRecallPromptMessages {
+    ): PromptMessages {
         const assistantLabel = resolveScopeAssistantLabel(scope)
         const lastMessage = this.formatter.toExtractionPayload([
             currentMessage

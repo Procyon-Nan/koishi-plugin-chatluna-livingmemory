@@ -88,7 +88,7 @@ import { ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as api from '../api'
 import { usePagedResource } from '../composables/use-paged-resource'
-import type { UserProfileRecord } from '../types'
+import type { UserProfileRecord } from '../../src/contracts/memory'
 import { formatTime } from '../utils/display'
 import ProfileEditorDialog from './profile-editor-dialog.vue'
 
