@@ -56,17 +56,17 @@ const formatMemoryField = (
             return `keywords=${entry.keywords.join('、')}`
         case 'content':
             return `content:\n${entry.content}`
-        case 'speakerLabels':
-            return `speakerLabels=${JSON.stringify(
-                entry.speakerKeys!.map(
-                    (key) => speakers!.get(key)!.speakerLabel
-                )
-            )}`
+        case 'speakerLabels': {
+            const labels = entry.speakerKeys!.map(
+                (key) => speakers!.get(key)!.speakerLabel
+            )
+            return `speakerLabels=${JSON.stringify(labels)}`
+        }
         default: {
             const value = entry[field]
-            return value === null
-                ? null
-                : `${field === 'sourceLabel' ? 'source' : field}=${value}`
+            if (value === null) return null
+            const label = field === 'sourceLabel' ? 'source' : field
+            return `${label}=${value}`
         }
     }
 }
@@ -97,12 +97,12 @@ export function renderMemoriesForModel(
           )
         : undefined
     return entries
-        .map((entry) =>
-            options.fields
+        .map((entry) => {
+            const lines = options.fields
                 .map((field) => formatMemoryField(entry, field, speakers))
                 .filter((line) => line !== null)
-                .join('\n')
-        )
+            return lines.join('\n')
+        })
         .join('\n\n---\n\n')
 }
 
@@ -112,10 +112,10 @@ export function renderMemoriesForModel(
 export const renderMemorySourceMessagesForModel = (
     memory: LivingMemoryGetMessagesMemory
 ) => {
-    const header = [
-        `id=${memory.id}`,
-        ...(memory.sourceLabel == null ? [] : [`source=${memory.sourceLabel}`])
-    ]
+    const header = [`id=${memory.id}`]
+    if (memory.sourceLabel != null) {
+        header.push(`source=${memory.sourceLabel}`)
+    }
 
     if (memory.sourceOrigins.length === 0) {
         return [...header, '（该记忆没有记录来源消息）'].join('\n')
@@ -123,12 +123,12 @@ export const renderMemorySourceMessagesForModel = (
 
     const originCount = memory.sourceOrigins.length
     const blocks = memory.sourceOrigins.map((origin, index) => {
-        const lines = [
-            ...(originCount > 1
-                ? [`来源对话 ${index + 1}/${originCount}：`]
-                : []),
-            ...origin.messages.flatMap((message) => message.transcriptLines)
-        ]
+        const lines = origin.messages.flatMap(
+            (message) => message.transcriptLines
+        )
+        if (originCount > 1) {
+            lines.unshift(`来源对话 ${index + 1}/${originCount}：`)
+        }
         return lines.join('\n')
     })
 

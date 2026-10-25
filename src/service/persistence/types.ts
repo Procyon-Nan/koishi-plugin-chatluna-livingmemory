@@ -1,6 +1,7 @@
 import type { Context } from 'koishi'
 import type {
     MemoryEntryRecord,
+    PresetPersonaRecord,
     PresetSpeakerRecord
 } from '../../contracts/memory'
 
@@ -33,13 +34,4 @@ export interface PresetSpeakerTableRecord extends Omit<
     speakerAliases: string[] | null
 }
 
-export interface PresetPersonaTableRecord {
-    presetId: string
-    card: string
-    rawHash: string
-    source: string
-    totalLines: number | null
-    deletedLines: number | null
-    usedRawFallback: boolean | null
-    updatedAt: Date
-}
+export type PresetPersonaTableRecord = PresetPersonaRecord

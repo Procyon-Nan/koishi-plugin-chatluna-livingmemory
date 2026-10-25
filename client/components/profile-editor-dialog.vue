@@ -21,7 +21,7 @@
                     <h2>{{ profile?.speakerLabel ?? '用户画像' }}</h2>
                     <p v-if="profile != null">
                         基于
-                        {{ profile.sourceMemoryIds?.length ?? 0 }} 条记忆生成
+                        {{ profile.sourceMemoryIds.length }} 条记忆生成
                         <span aria-hidden="true">·</span>
                         更新于 {{ formatTime(profile.updatedAt) }}
                     </p>

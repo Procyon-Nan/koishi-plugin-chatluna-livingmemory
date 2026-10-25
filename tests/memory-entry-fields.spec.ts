@@ -7,7 +7,6 @@ import {
     MAX_MEMORY_KEYWORDS,
     normalizeMemoryImportance,
     normalizeMemoryKeywords,
-    normalizeMemoryStatus,
     normalizeMemoryText,
     normalizeOptionalMemoryText
 } from '../src/service/memory/entry_fields'
@@ -24,7 +23,6 @@ const keywordInput = () => [
     '  alpha  ',
     'alpha',
     '',
-    null,
     ...Array.from(
         { length: MAX_MEMORY_KEYWORDS },
         (_, index) => `keyword-${index}`
@@ -33,7 +31,7 @@ const keywordInput = () => [
 
 it('normalizes memory text fields consistently', () => {
     assert.equal(normalizeMemoryText('  memory content  '), 'memory content')
-    assert.equal(normalizeMemoryText(null), '')
+    assert.equal(normalizeOptionalMemoryText(null), null)
     assert.equal(normalizeOptionalMemoryText('  summary  '), 'summary')
     assert.equal(normalizeOptionalMemoryText('   '), null)
 })
@@ -46,17 +44,15 @@ it('normalizes and limits memory keywords consistently', () => {
     assert.equal(keywords.at(-1), `keyword-${MAX_MEMORY_KEYWORDS - 2}`)
 })
 
-it('normalizes importance and status consistently', () => {
-    assert.equal(normalizeMemoryImportance(' 0.75 '), 0.75)
+it('normalizes optional importance consistently', () => {
+    assert.equal(normalizeMemoryImportance(0.75), 0.75)
     assert.equal(normalizeMemoryImportance(-1), 0)
     assert.equal(normalizeMemoryImportance(2), 1)
-    assert.equal(normalizeMemoryImportance('invalid'), null)
+    assert.equal(normalizeMemoryImportance(null), null)
     assert.equal(
         normalizeMemoryImportance(undefined) ?? DEFAULT_MEMORY_IMPORTANCE,
         0.5
     )
-    assert.equal(normalizeMemoryStatus('archived'), 'archived')
-    assert.equal(normalizeMemoryStatus('invalid'), 'active')
 })
 
 it('applies shared field rules to extracted memories', async () => {
@@ -119,9 +115,7 @@ it('applies shared field rules to manual persistence writes', async () => {
                 content: '  manual content  ',
                 summary: '  manual summary  ',
                 sentiment: '   ',
-                keywords: keywordInput().filter(
-                    (keyword): keyword is string => typeof keyword === 'string'
-                ),
+                keywords: keywordInput(),
                 importance: 2
             }
         )

@@ -73,11 +73,11 @@ export interface LivingMemoryAgenticRecallTrace {
     item: AgenticMemorySnapshotItem
 }
 
-const uniqueTexts = (groups: (readonly string[] | undefined)[]) => {
+const uniqueTexts = (groups: (readonly string[])[]) => {
     return [
         ...new Set(
             groups
-                .flatMap((group) => group ?? [])
+                .flat()
                 .map((text) => text.trim())
                 .filter((text) => text.length > 0)
         )
@@ -146,7 +146,7 @@ const createSearchInputKey = (input: unknown) => {
 
 const orderRecordedSearchCalls = (
     calls: RecordedAgenticSearchCall[],
-    steps: AgentStep[] | undefined
+    steps: AgentStep[]
 ) => {
     const callsByInput = new Map<string, RecordedAgenticSearchCall[]>()
     for (const call of calls) {
@@ -156,7 +156,7 @@ const orderRecordedSearchCalls = (
     }
 
     const ordered: RecordedAgenticSearchCall[] = []
-    for (const step of steps ?? []) {
+    for (const step of steps) {
         if (step.action.tool !== memorySearchTool.name) {
             continue
         }
@@ -195,9 +195,9 @@ class RecordingLivingMemorySearchTool extends StructuredTool {
         // AgentRunner 会复制 RunnableConfig，显式复用本次 run 的 agentContext，
         // 以保持工具参数重试计数的请求级作用域。
         const delegateConfig = {
-            ...(runConfig ?? {}),
+            ...runConfig,
             configurable: {
-                ...(runConfig?.configurable ?? {}),
+                ...runConfig?.configurable,
                 agentContext: this.agentContext
             }
         } as ToolRunnableConfig
@@ -287,7 +287,7 @@ export class LivingMemoryAgenticRecallExecutor {
         }
         const { toolCallSummaries, matchedResults } = this.collectSearchResults(
             recordedSearchCalls,
-            result.intermediateSteps
+            result.intermediateSteps!
         )
         const finalText = result.output.trim()
         const uniqueMemories = uniqueSnapshotMemoryItems(matchedResults)
@@ -414,7 +414,7 @@ export class LivingMemoryAgenticRecallExecutor {
 
     private collectSearchResults(
         recordedSearchCalls: RecordedAgenticSearchCall[],
-        intermediateSteps: AgentStep[] | undefined
+        intermediateSteps: AgentStep[]
     ) {
         const toolCallSummaries: AgenticMemorySearchToolCallSummary[] = []
         const matchedResults: LivingMemorySearchResult[] = []

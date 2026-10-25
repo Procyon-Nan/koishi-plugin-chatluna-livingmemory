@@ -410,7 +410,13 @@ export class LivingMemoryExtractionCoordinator {
             chunk
         )
         try {
-            await this.run(scope, messages, options, runLogger)
+            if (messages.length > 0) {
+                await this.run(scope, messages, options, runLogger)
+            } else {
+                runLogger.diagnostic('extraction.skipped', {
+                    reason: 'empty-transcript'
+                })
+            }
             state.cursorSeq = chunk[chunk.length - 1].seq
             state.failStreak = 0
             return true

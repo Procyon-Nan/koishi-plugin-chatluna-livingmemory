@@ -145,12 +145,12 @@ export class LivingMemoryDreamService {
             error = summarizeError(cause)
         }
         const coverage = getDreamCoverage(state)
-        const status =
-            error !== undefined || coverage.processedCount === 0
-                ? 'failed'
-                : coverage.unprocessedMemoryIds.length > 0
-                  ? 'partial'
-                  : 'completed'
+        let status: DreamRunResult['status'] = 'completed'
+        if (error !== undefined || coverage.processedCount === 0) {
+            status = 'failed'
+        } else if (coverage.unprocessedMemoryIds.length > 0) {
+            status = 'partial'
+        }
         const detail = [
             `dream: ${status}, processed ${coverage.processedCount}/${coverage.targetCount}, batches ${state.clusters.length}`,
             `checked ${state.stats.kept}, merged ${state.stats.merged}, split ${state.stats.split}, updated ${state.stats.updated}, archived ${state.stats.archived}`,
@@ -184,6 +184,8 @@ export class LivingMemoryDreamService {
         logger: LivingMemoryLogger,
         signal?: AbortSignal
     ) {
+        const startedAt = performance.now()
+        logger.diagnostic('dream.user-profile.started')
         try {
             // 画像阶段不会执行时无需查询候选用户；此时 regenerate 在读取
             // speakerKeys 之前即返回 disabled，由它统一给出跳过说明。
@@ -197,16 +199,21 @@ export class LivingMemoryDreamService {
                 logger,
                 signal
             )
+            logger.diagnostic('dream.user-profile.completed', {
+                ...result,
+                elapsedMs: performance.now() - startedAt
+            })
             return result.detail
         } catch (error) {
-            signal?.throwIfAborted()
             const errorSummary = summarizeError(error)
+            logger.diagnostic('dream.user-profile.failed', {
+                error: errorSummary,
+                elapsedMs: performance.now() - startedAt
+            })
+            signal?.throwIfAborted()
             const errorMessage =
                 error instanceof Error ? error.message : errorSummary
             const detail = `user profiles failed: ${errorMessage}`
-            logger.diagnostic('dream.user-profile.failed', {
-                error: errorSummary
-            })
             return detail
         }
     }

@@ -104,27 +104,35 @@ it('connects complete candidates to refinement and retains initial on ANN unavai
     for (const available of [false, true]) {
         const entries = createEntries(61)
         const vectors = createVectorReader(entries)
-        vectors.reader.queryDreamNeighbors = async (queries) => ({
-            generation: 'generation-1',
-            backend: available ? 'hnsw' : 'unavailable',
-            completed: available ? queries.length : 0,
-            reason: available ? undefined : 'index-absent',
-            rows: available
-                ? queries.map((query) => ({
-                      sourceIndex: query.sourceIndex,
-                      hits: entries
-                          .filter((entry) => entry.id !== query.sourceMemoryId)
-                          .slice(0, 10)
-                          .map((entry) => ({
-                              memoryId: entry.id,
-                              contentHash: createMemoryContentHash(
-                                  entry.content
-                              ),
-                              cosineScore: 1
-                          }))
-                  }))
-                : []
-        })
+        vectors.reader.queryDreamNeighbors = async (queries) => {
+            if (!available) {
+                return {
+                    generation: 'generation-1',
+                    backend: 'unavailable',
+                    completed: 0,
+                    reason: 'index-absent',
+                    rows: []
+                }
+            }
+            const rows = queries.map((query) => {
+                const hits = entries
+                    .filter((entry) => entry.id !== query.sourceMemoryId)
+                    .slice(0, 10)
+                    .map((entry) => ({
+                        memoryId: entry.id,
+                        contentHash: createMemoryContentHash(entry.content),
+                        cosineScore: 1
+                    }))
+                return { sourceIndex: query.sourceIndex, hits }
+            })
+            return {
+                generation: 'generation-1',
+                backend: 'hnsw',
+                completed: queries.length,
+                reason: undefined,
+                rows
+            }
+        }
         const refine = vi.fn(worker.refine)
         const clusters = await new DreamClusterer(vectors.reader, {
             ...worker,

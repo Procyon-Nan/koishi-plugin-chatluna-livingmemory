@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import type { BaseLanguageModelInput } from '@langchain/core/language_models/base'
-import { isAIMessage, type BaseMessage } from '@langchain/core/messages'
+import {
+    coerceMessageLikeToMessage,
+    isAIMessage,
+    type BaseMessage
+} from '@langchain/core/messages'
 import { type RunnableConfig, RunnableLambda } from '@langchain/core/runnables'
 import type { ChatLunaChatModel } from 'koishi-plugin-chatluna/llm-core/platform/model'
 import { stringifyModelContent, summarizeError } from '../shared/utils'
@@ -30,14 +34,6 @@ const resolveFields = (
     return typeof fields === 'function' ? fields() : fields
 }
 
-const messageType = (message: BaseMessage) => {
-    try {
-        return message._getType()
-    } catch {
-        return message.constructor.name
-    }
-}
-
 interface NormalizedMessage {
     role: string
     content: BaseMessage['content']
@@ -55,7 +51,7 @@ const normalizeMessage = (message: BaseMessage): NormalizedMessage => {
         tool_call_id?: unknown
     }
     return {
-        role: messageType(message),
+        role: message._getType(),
         name: candidate.name,
         content: message.content,
         toolCalls:
@@ -67,7 +63,9 @@ const normalizeMessage = (message: BaseMessage): NormalizedMessage => {
 
 const toMessages = (input: BaseLanguageModelInput): NormalizedMessage[] => {
     if (Array.isArray(input)) {
-        return input.map((message) => normalizeMessage(message as BaseMessage))
+        return input.map((message) =>
+            normalizeMessage(coerceMessageLikeToMessage(message))
+        )
     }
     if (typeof input === 'string') {
         return [{ role: 'text', content: input }]
@@ -179,32 +177,34 @@ const invokeLoggedRunnable = async (
     if (logPrompt) {
         logger.diagnostic('model.prompt', {}, () => toPromptBlocks(input))
     }
+    const startedAt = performance.now()
+    logger.diagnostic('model.started')
     try {
         const response = await runnable.invoke(input, runConfig)
         context.onResponse?.(response)
         const usage = isAIMessage(response)
             ? response.usage_metadata
             : undefined
+        // 使用日志字段名，避免 token_details 被凭据脱敏规则整组隐藏。
+        const usageFields = usage && {
+            input: usage.input_tokens,
+            output: usage.output_tokens,
+            total: usage.total_tokens,
+            inputDetails: usage.input_token_details,
+            outputDetails: usage.output_token_details
+        }
         logger.diagnostic(
             'model.response',
             {
-                usage:
-                    usage === undefined
-                        ? undefined
-                        : {
-                              input: usage.input_tokens,
-                              output: usage.output_tokens,
-                              total: usage.total_tokens,
-                              // 使用日志字段名，避免 token_details 被凭据脱敏规则整组隐藏。
-                              inputDetails: usage.input_token_details,
-                              outputDetails: usage.output_token_details
-                          }
+                elapsedMs: performance.now() - startedAt,
+                usage: usageFields
             },
             () => toResponseBlocks(response, context.logResponseText ?? true)
         )
         return response
     } catch (error) {
         logger.diagnostic('model.failed', () => ({
+            elapsedMs: performance.now() - startedAt,
             error: summarizeError(error)
         }))
         throw error

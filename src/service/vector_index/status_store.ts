@@ -58,16 +58,13 @@ export class VectorIndexStatusStore {
         const presets: MemoryVectorIndexPresetStatus[] = []
         for (const [presetId, preset] of this.presets) {
             const building = this.overlay.buildingPresets.get(presetId)
-            presets.push(
-                building === undefined
-                    ? { ...preset }
-                    : {
-                          ...preset,
-                          state: 'building',
-                          expectedCount: building.expectedCount,
-                          updatedAt: building.updatedAt
-                      }
-            )
+            const status = { ...preset }
+            if (building !== undefined) {
+                status.state = 'building'
+                status.expectedCount = building.expectedCount
+                status.updatedAt = building.updatedAt
+            }
+            presets.push(status)
         }
         for (const [presetId, building] of this.overlay.buildingPresets) {
             if (this.presets.has(presetId)) {
@@ -85,17 +82,19 @@ export class VectorIndexStatusStore {
         presets.sort((left, right) =>
             left.presetId.localeCompare(right.presetId)
         )
+        let lastError =
+            this.overlay.runtimeError ?? this.overlay.unavailableMessage
+        if (lastError === null) {
+            lastError =
+                presets.find((preset) => preset.lastError !== null)
+                    ?.lastError ?? null
+        }
         return {
             state: this.resolveState(presets),
             manifest: this.manifest === null ? null : { ...this.manifest },
             presets,
             currentJobId: this.overlay.currentJobId,
-            lastError:
-                this.overlay.runtimeError ??
-                this.overlay.unavailableMessage ??
-                presets.find((preset) => preset.lastError !== null)
-                    ?.lastError ??
-                null
+            lastError
         }
     }
 

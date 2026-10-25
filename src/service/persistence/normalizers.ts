@@ -1,22 +1,17 @@
 import { createHash } from 'crypto'
 import type {
     MemoryEntryRecord,
-    PresetPersonaRecord,
-    PresetPersonaSource,
     PresetSpeakerRecord,
     UserProfileRecord
 } from '../../contracts/memory'
 import type {
     LivingMemoryEntrySpeakerRecord,
-    PresetPersonaTableRecord,
     PresetSpeakerTableRecord
 } from './types'
 import {
     normalizeMemoryImportance,
-    normalizeMemoryStatus,
     normalizeOptionalMemoryText
 } from '../memory/entry_fields'
-import { normalizeMemorySourceOrigins } from '../memory/origins/source_origins'
 import { normalizeSpeakerKeys } from '../memory/speaker_identity'
 
 // 空串与 null 都归一为「无会话归属、全局可见」；历史 WebUI 伪会话键（webui: 前缀）
@@ -34,18 +29,13 @@ export const normalizeEntryRecord = (
 ): MemoryEntryRecord => ({
     ...record,
     speakerKeys: normalizeSpeakerKeys(record.speakerKeys),
-    status: normalizeMemoryStatus(record.status),
     summary: normalizeOptionalMemoryText(record.summary),
     sentiment: normalizeOptionalMemoryText(record.sentiment),
     importance: normalizeMemoryImportance(record.importance),
     sourceConversationId: normalizeSourceConversationId(
         record.sourceConversationId
     ),
-    sourceLabel: normalizeOptionalMemoryText(record.sourceLabel),
-    sourceOrigins: normalizeMemorySourceOrigins(
-        (record as { sourceOrigins?: unknown }).sourceOrigins
-    ),
-    isConsolidated: record.isConsolidated === true
+    sourceLabel: normalizeOptionalMemoryText(record.sourceLabel)
 })
 
 export const normalizeUserProfileRecord = (
@@ -54,12 +44,7 @@ export const normalizeUserProfileRecord = (
     ...record,
     speakerKey: record.speakerKey.trim(),
     speakerLabel: record.speakerLabel.trim(),
-    content: record.content.trim(),
-    sourceMemoryIds: Array.isArray(record.sourceMemoryIds)
-        ? record.sourceMemoryIds.filter(
-              (id): id is string => typeof id === 'string' && id.length > 0
-          )
-        : []
+    content: record.content.trim()
 })
 
 export const normalizeOptionalString = (value: string | null | undefined) => {
@@ -102,43 +87,17 @@ export const createPresetImportId = (
 
 export const normalizePresetSpeakerRecord = (
     record: PresetSpeakerTableRecord
-): PresetSpeakerRecord => ({
-    ...record,
-    speakerKey: record.speakerKey.trim(),
-    speakerLabel: record.speakerLabel.trim(),
-    speakerAliases: Array.isArray(record.speakerAliases)
-        ? [
-              ...new Set(
-                  record.speakerAliases
-                      .filter(
-                          (alias): alias is string => typeof alias === 'string'
-                      )
-                      .map((alias) => alias.trim())
-                      .filter((alias) => alias.length > 0)
-              )
-          ]
-        : [record.speakerLabel.trim()].filter((alias) => alias.length > 0),
-    speakerId: normalizeOptionalString(record.speakerId),
-    platform: normalizeOptionalString(record.platform)
-})
-
-const normalizePersonaSource = (value: string): PresetPersonaSource =>
-    value === 'manual' ? 'manual' : 'generated'
-
-const normalizeLineCount = (value: number | null) =>
-    typeof value === 'number' && Number.isFinite(value) && value >= 0
-        ? Math.floor(value)
-        : 0
-
-export const normalizePresetPersonaRecord = (
-    record: PresetPersonaTableRecord
-): PresetPersonaRecord => ({
-    presetId: record.presetId.trim(),
-    card: record.card,
-    rawHash: record.rawHash,
-    source: normalizePersonaSource(record.source),
-    totalLines: normalizeLineCount(record.totalLines),
-    deletedLines: normalizeLineCount(record.deletedLines),
-    usedRawFallback: record.usedRawFallback === true,
-    updatedAt: record.updatedAt
-})
+): PresetSpeakerRecord => {
+    const aliases = record.speakerAliases ?? [record.speakerLabel]
+    const speakerAliases = aliases
+        .map((alias) => alias.trim())
+        .filter((alias) => alias.length > 0)
+    return {
+        ...record,
+        speakerKey: record.speakerKey.trim(),
+        speakerLabel: record.speakerLabel.trim(),
+        speakerAliases: [...new Set(speakerAliases)],
+        speakerId: normalizeOptionalString(record.speakerId),
+        platform: normalizeOptionalString(record.platform)
+    }
+}

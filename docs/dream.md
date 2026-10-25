@@ -113,6 +113,24 @@ ANN 尚未就绪、查询计划选择精确扫描、候选不足或完整图形�
 
 历史中的 assistant 副本保留内容和协议元数据，用量通过原始响应单独记录。日志保留供应商返回的输入、输出、推理和缓存明细，缺失项记为“未返回”。
 
+## Debug 日志
+
+启用插件的 `debug` 配置后，通过现有 logger 输出诊断事件。Dream 日志携带 `jobId`、`presetId`；模型调用增加 `modelCallId` 和阶段，主会话还带批次与轮次。
+
+| 事件 | 内容 |
+| --- | --- |
+| `dream.session.started` | 系统提示词与工具名称，任务内记录一次 |
+| `dream.batch.started` | 本批完整输入、条目数与总批次数，每批记录一次 |
+| `model.started`、`model.response`、`model.failed` | 模型调用开始、响应或错误、耗时；响应包含工具参数和供应商用量 |
+| `dream.tool.started`、`dream.tool.completed`、`dream.tool.failed` | 工具名称、调用 ID、执行结果或错误及耗时；结果包含新增记忆 ID 和索引同步警告 |
+| `dream.round.completed`、`dream.feedback` | 本轮有效性、连续无效轮数、本批处理数量及追加给模型的反馈 |
+| `dream.batch.completed`、`dream.batch.skipped` | 批次耗时与处理数量，跳过时附原因和剩余 ID |
+| `dream.user-profile.started`、`dream.user-profile.completed`、`dream.user-profile.failed` | 画像阶段开始、生成数量、跳过原因、详情或错误及耗时 |
+
+会话输入按系统、批次、反馈分别记录新增内容。模型调用耗时以一次宿主模型调用为单位，包含其内部重试等待；网络请求次数需结合宿主或网关日志确认。公共模型日志同时适用于压缩、画像及其他使用该包装层的工作流。
+
+分组、压缩沿用已有阶段事件；任务开始和终态始终输出，终态包含覆盖与各工具操作统计。
+
 ## 代码职责
 
 以下路径相对于 `src/service/`：

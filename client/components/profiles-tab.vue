@@ -21,7 +21,7 @@
                             </h3>
                         </div>
                         <span class="profile-source-count">
-                            {{ profile.sourceMemoryIds?.length ?? 0 }}
+                            {{ profile.sourceMemoryIds.length }}
                             条来源记忆
                         </span>
                     </div>

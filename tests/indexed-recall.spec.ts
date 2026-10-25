@@ -168,15 +168,16 @@ it('reranks widened candidates per search text and keeps the best score', async 
                 'content-memory-b',
                 'content-memory-c'
             ])
-            return query === 'first query'
-                ? [
-                      { index: 2, relevanceScore: 0.6 },
-                      { index: 0, relevanceScore: 0.2 }
-                  ]
-                : [
-                      { index: 1, relevanceScore: 0.9 },
-                      { index: 2, relevanceScore: 0.1 }
-                  ]
+            if (query === 'first query') {
+                return [
+                    { index: 2, relevanceScore: 0.6 },
+                    { index: 0, relevanceScore: 0.2 }
+                ]
+            }
+            return [
+                { index: 1, relevanceScore: 0.9 },
+                { index: 2, relevanceScore: 0.1 }
+            ]
         }),
         {
             memorySearchToolMaxResults: 2,

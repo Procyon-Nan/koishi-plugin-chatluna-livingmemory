@@ -20,18 +20,14 @@ interface VectorIndexWorkerPort {
 
 const serializeError = (error: unknown): VectorIndexWorkerError => {
     if (error instanceof Error) {
+        const indexError =
+            error instanceof LivingMemoryVectorIndexError ? error : null
         return {
             name: error.name,
             message: error.message,
             stack: error.stack ?? null,
-            code:
-                error instanceof LivingMemoryVectorIndexError
-                    ? error.code
-                    : null,
-            state:
-                error instanceof LivingMemoryVectorIndexError
-                    ? error.state
-                    : null
+            code: indexError?.code ?? null,
+            state: indexError?.state ?? null
         }
     }
     return {

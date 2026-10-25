@@ -80,21 +80,35 @@ export function createDreamCallOptions(
 export async function runDreamSession(input: DreamSessionRunInput) {
     const { state, model, tools, logger, signal, callOptions } = input
     signal?.throwIfAborted()
+    const systemPrompt = buildDreamSystemPrompt(
+        input.assistantLabel,
+        input.presetPrompt
+    )
     const history = new DreamSessionHistory(
-        buildDreamSystemPrompt(input.assistantLabel, input.presetPrompt),
+        systemPrompt,
         model,
         callOptions,
         logger
     )
+    logger.diagnostic(
+        'dream.session.started',
+        () => ({ tools: tools.map((tool) => tool.name) }),
+        () => [{ title: 'system', value: systemPrompt }]
+    )
     let modelCalls = 0
+    let round = 0
+    let modelCallId: string | undefined
     let response: BaseMessage | undefined
     const agent = createOpenAIAgent({
         llm: createLoggedModel(model, {
             logger,
             stage: 'dream-decision',
             attempt: () => modelCalls,
-            fields: () => ({ batch: state.currentBatch?.id }),
-            promptLogging: 'first',
+            fields: () => ({ batch: state.currentBatch?.id, round }),
+            promptLogging: 'none',
+            onCallId: (id) => {
+                modelCallId = id
+            },
             onResponse: (message) => {
                 response = message
                 history.recordUsage(message)
@@ -108,28 +122,39 @@ export async function runDreamSession(input: DreamSessionRunInput) {
         signal,
         configurable: { preset: input.presetId }
     }
-    const progress = (feedback: string) =>
-        history.append(
-            new HumanMessage(
-                buildDreamTurnFeedbackPrompt(
-                    pendingDreamMemoryIds(state),
-                    feedback
-                )
-            )
+    const progress = (feedback: string) => {
+        const content = buildDreamTurnFeedbackPrompt(
+            pendingDreamMemoryIds(state),
+            feedback
         )
+        history.append(new HumanMessage(content))
+        logger.diagnostic(
+            'dream.feedback',
+            { batch: state.currentBatch!.id, round, modelCallId },
+            () => [{ title: 'feedback', value: content }]
+        )
+    }
 
     while (advanceDreamBatch(state) !== undefined) {
         signal?.throwIfAborted()
-        history.startBatch(
-            buildDreamMemoryBatchPrompt(state.currentBatch!, input.speakers)
+        const batch = state.currentBatch!
+        const batchLogger = logger.with({ batch: batch.id })
+        const batchStartedAt = performance.now()
+        const batchPrompt = buildDreamMemoryBatchPrompt(batch, input.speakers)
+        history.startBatch(batchPrompt)
+        batchLogger.diagnostic(
+            'dream.batch.started',
+            { entries: batch.entries.length, batches: state.clusters.length },
+            () => [{ title: 'input', value: batchPrompt }]
         )
         let ineffectiveRounds = 0
-        for (let round = 1; round <= maxBatchRounds; round++) {
+        for (round = 1; round <= maxBatchRounds; round++) {
             const messages = await history.prepareDecisionMessages(
                 tools,
                 signal
             )
             modelCalls++
+            modelCallId = undefined
             response = undefined
             let effective = false
             let feedback = '请继续处理当前批次。'
@@ -149,6 +174,7 @@ export async function runDreamSession(input: DreamSessionRunInput) {
                 logger.diagnostic('dream.round.failed', {
                     batch: state.currentBatch!.id,
                     round,
+                    modelCallId,
                     error: summarizeError(error)
                 })
             }
@@ -170,6 +196,17 @@ export async function runDreamSession(input: DreamSessionRunInput) {
                             )
                         }
                         let observation: string
+                        const toolLogger = batchLogger.with({
+                            round,
+                            modelCallId,
+                            tool: action.tool,
+                            toolCallId:
+                                'toolCallId' in action
+                                    ? action.toolCallId
+                                    : undefined
+                        })
+                        const toolStartedAt = performance.now()
+                        toolLogger.diagnostic('dream.tool.started')
                         try {
                             const tool = tools.find(
                                 (candidate) => candidate.name === action.tool
@@ -182,7 +219,18 @@ export async function runDreamSession(input: DreamSessionRunInput) {
                                 config
                             )
                             effective = true
+                            toolLogger.diagnostic(
+                                'dream.tool.completed',
+                                {
+                                    elapsedMs: performance.now() - toolStartedAt
+                                },
+                                () => [{ title: 'result', value: observation }]
+                            )
                         } catch (error) {
+                            toolLogger.diagnostic('dream.tool.failed', () => ({
+                                elapsedMs: performance.now() - toolStartedAt,
+                                error: summarizeError(error)
+                            }))
                             signal?.throwIfAborted()
                             if (error instanceof LivingMemoryVectorIndexError)
                                 throw error
@@ -193,8 +241,24 @@ export async function runDreamSession(input: DreamSessionRunInput) {
                 }
             }
             signal?.throwIfAborted()
-            if (pendingDreamMemoryIds(state).length === 0) break
+            const pending = pendingDreamMemoryIds(state)
             ineffectiveRounds = effective ? 0 : ineffectiveRounds + 1
+            batchLogger.diagnostic('dream.round.completed', {
+                round,
+                modelCallId,
+                effective,
+                ineffectiveRounds,
+                processed: batch.entries.length - pending.length,
+                remaining: pending.length
+            })
+            if (pending.length === 0) {
+                batchLogger.diagnostic('dream.batch.completed', {
+                    round,
+                    processed: batch.entries.length,
+                    elapsedMs: performance.now() - batchStartedAt
+                })
+                break
+            }
             if (
                 ineffectiveRounds >= maxIneffectiveRounds ||
                 round === maxBatchRounds
@@ -211,7 +275,9 @@ export async function runDreamSession(input: DreamSessionRunInput) {
                     batch: state.currentBatch!.id,
                     round,
                     reason,
-                    memoryIds: pendingDreamMemoryIds(state)
+                    memoryIds: pending,
+                    processed: batch.entries.length - pending.length,
+                    elapsedMs: performance.now() - batchStartedAt
                 })
                 break
             }

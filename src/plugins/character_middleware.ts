@@ -401,16 +401,16 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                         const focusUserId = toNonEmptyString(
                             payload.focusMessage?.id
                         )
-                        const focusLabel =
-                            focusUserId == null
-                                ? ''
-                                : await resolveUserSpeaker(
-                                      payload.session,
-                                      focusUserId,
-                                      speakerCache
-                                  )
-                                      .then((speaker) => speaker.speakerLabel)
-                                      .catch(() => '')
+                        let focusLabel = ''
+                        if (focusUserId != null) {
+                            focusLabel = await resolveUserSpeaker(
+                                payload.session,
+                                focusUserId,
+                                speakerCache
+                            )
+                                .then((speaker) => speaker.speakerLabel)
+                                .catch(() => '')
+                        }
                         return buildMemoryTranscriptOrigin({
                             isDirect: true,
                             speakerLabel: focusLabel,

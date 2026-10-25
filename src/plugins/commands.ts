@@ -15,22 +15,14 @@ export function apply(ctx: Context) {
         .action(
             async ({ session, options }, preset, operation, filter, value) => {
                 const commandSession = session!
-                const shortFilterCount = [
-                    options?.text,
-                    options?.user,
-                    options?.profile
-                ].filter((item) => item != null).length
+                const selectedFilters = [
+                    ['text', options?.text],
+                    ['user', options?.user],
+                    ['profile', options?.profile]
+                ].filter(([, value]) => value != null)
                 const resolvedOperation = options?.delete ? 'delete' : operation
-                const resolvedFilter =
-                    options?.text != null
-                        ? 'text'
-                        : options?.user != null
-                          ? 'user'
-                          : options?.profile != null
-                            ? 'profile'
-                            : filter
-                const resolvedValue =
-                    options?.text ?? options?.user ?? options?.profile ?? value
+                const [resolvedFilter, resolvedValue] =
+                    selectedFilters[0] ?? [filter, value]
 
                 if (
                     resolvedOperation !== 'delete' ||
@@ -38,7 +30,7 @@ export function apply(ctx: Context) {
                         resolvedFilter !== 'user' &&
                         resolvedFilter !== 'profile') ||
                     resolvedValue == null ||
-                    shortFilterCount > 1
+                    selectedFilters.length > 1
                 ) {
                     return '命令格式：livingmemory [-c] <预设名> delete <text|user|profile> <匹配值>\n简写：livingmemory [-c] <预设名> -d -<t|u|p> <匹配值>'
                 }
@@ -75,17 +67,21 @@ export function apply(ctx: Context) {
                     return '已删除用户画像'
                 }
 
-                const memoryIds =
-                    resolvedFilter === 'text'
-                        ? await ctx.chatluna_living_memory.findActiveMemoryIdsByText(
-                              presetId,
-                              resolvedValue
-                          )
-                        : await ctx.chatluna_living_memory.findActiveMemoryIdsByUser(
-                              presetId,
-                              commandSession.platform,
-                              resolvedValue
-                          )
+                let memoryIds: string[]
+                if (resolvedFilter === 'text') {
+                    memoryIds =
+                        await ctx.chatluna_living_memory.findActiveMemoryIdsByText(
+                            presetId,
+                            resolvedValue
+                        )
+                } else {
+                    memoryIds =
+                        await ctx.chatluna_living_memory.findActiveMemoryIdsByUser(
+                            presetId,
+                            commandSession.platform,
+                            resolvedValue
+                        )
+                }
 
                 if (memoryIds.length === 0) {
                     return '未查询到满足删除条件的记忆'

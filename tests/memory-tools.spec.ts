@@ -85,37 +85,40 @@ it('always searches active memories with the shared tool schema', async () => {
 
 it('renders source messages as the original transcript of one memory', async () => {
     const service: LivingMemorySourceProvider = {
-        getMemorySourceMessages: async (_presetId: string, memoryId: string) =>
-            memoryId === 'memory-1'
-                ? {
-                      id: 'memory-1',
-                      sourceLabel: '来源于「摸鱼群」（群聊 ID：10001）的群聊',
-                      sourceOrigins: [
-                          {
-                              messages: [
-                                  {
-                                      role: 'user',
-                                      content: '展览你去看了吗',
-                                      transcriptLines: [
-                                          '[2026-07-01 12:00] Alice说：展览你去看了吗'
-                                      ]
-                                  }
-                              ]
-                          },
-                          {
-                              messages: [
-                                  {
-                                      role: 'assistant',
-                                      content: '下周再一起去',
-                                      transcriptLines: [
-                                          '[2026-07-03 15:00] Alice说：下周再一起去'
-                                      ]
-                                  }
-                              ]
-                          }
-                      ]
-                  }
-                : null
+        getMemorySourceMessages: async (
+            _presetId: string,
+            memoryId: string
+        ) => {
+            if (memoryId !== 'memory-1') return null
+            return {
+                id: 'memory-1',
+                sourceLabel: '来源于「摸鱼群」（群聊 ID：10001）的群聊',
+                sourceOrigins: [
+                    {
+                        messages: [
+                            {
+                                role: 'user',
+                                content: '展览你去看了吗',
+                                transcriptLines: [
+                                    '[2026-07-01 12:00] Alice说：展览你去看了吗'
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        messages: [
+                            {
+                                role: 'assistant',
+                                content: '下周再一起去',
+                                transcriptLines: [
+                                    '[2026-07-03 15:00] Alice说：下周再一起去'
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
     }
     const config = toolConfig({
         preset: 'default',

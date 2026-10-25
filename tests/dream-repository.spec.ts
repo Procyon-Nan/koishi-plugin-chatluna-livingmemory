@@ -162,7 +162,13 @@ it('maintains active memory speaker links across memory lifecycle changes', asyn
         // speakerKeys 为空的记忆不产生关联行。
         const [shared, solo, anonymous] = await repository.appendMemories(
             scope,
-            [],
+            [
+                {
+                    role: 'user',
+                    content: 'shared, solo, anonymous',
+                    transcriptLines: ['shared, solo, anonymous']
+                }
+            ],
             [
                 createExtractedItem('shared', ['speaker-a', 'speaker-b']),
                 createExtractedItem('solo', ['speaker-a']),

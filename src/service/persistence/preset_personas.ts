@@ -3,7 +3,6 @@ import type {
     PresetPersonaRecord,
     PresetPersonaSource
 } from '../../contracts/memory'
-import { normalizePresetPersonaRecord } from './normalizers'
 
 export interface PresetPersonaWriteInput {
     presetId: string
@@ -31,8 +30,7 @@ export class LivingMemoryPresetPersonaRepository {
                 presetId
             }
         )
-        const row = rows[0]
-        return row == null ? undefined : normalizePresetPersonaRecord(row)
+        return rows[0]
     }
 
     async listPresetPersonas(): Promise<PresetPersonaRecord[]> {
@@ -40,9 +38,9 @@ export class LivingMemoryPresetPersonaRepository {
             'living_memory_preset_persona',
             {}
         )
-        return rows
-            .map(normalizePresetPersonaRecord)
-            .sort((left, right) => left.presetId.localeCompare(right.presetId))
+        return rows.sort((left, right) =>
+            left.presetId.localeCompare(right.presetId)
+        )
     }
 
     async upsertPresetPersona(input: PresetPersonaWriteInput): Promise<void> {

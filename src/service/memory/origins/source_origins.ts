@@ -4,9 +4,6 @@ import type {
     MemorySourceOrigin
 } from '../../../contracts/memory'
 
-const cloneStringArray = (value: string[] | undefined) =>
-    Array.isArray(value) ? [...value] : undefined
-
 const isRecord = (value: unknown): value is Record<string, unknown> => {
     return typeof value === 'object' && value != null && !Array.isArray(value)
 }
@@ -60,10 +57,7 @@ const normalizeSourceMessage = (value: unknown): MemorySourceMessage => {
         )
     }
 
-    const speakerLabel =
-        typeof value.speakerLabel === 'string' ? value.speakerLabel : undefined
-    const createdAt =
-        typeof value.createdAt === 'string' ? value.createdAt : undefined
+    const { speakerLabel, createdAt } = value
     const contentLines = readOptionalStringArray(value, 'contentLines')
 
     return {
@@ -85,7 +79,7 @@ export const cloneSourceMessage = (
         : { speakerLabel: message.speakerLabel }),
     ...(message.contentLines == null
         ? {}
-        : { contentLines: cloneStringArray(message.contentLines) }),
+        : { contentLines: [...message.contentLines] }),
     ...(message.createdAt == null ? {} : { createdAt: message.createdAt }),
     transcriptLines: [...message.transcriptLines],
     content: message.content
@@ -93,15 +87,7 @@ export const cloneSourceMessage = (
 
 export const createSourceOriginsFromMessages = (
     messages: MemorySourceMessage[]
-): MemorySourceOrigin[] => {
-    return messages.length > 0
-        ? [
-              {
-                  messages: messages.map(cloneSourceMessage)
-              }
-          ]
-        : []
-}
+): MemorySourceOrigin[] => [{ messages: messages.map(cloneSourceMessage) }]
 
 const fingerprintSourceOrigin = (origin: MemorySourceOrigin) => {
     return JSON.stringify(
@@ -141,9 +127,6 @@ export const mergeMemorySourceOrigins = (
 export const normalizeMemorySourceOrigins = (
     value: unknown
 ): MemorySourceOrigin[] => {
-    if (value == null) {
-        return []
-    }
     if (!Array.isArray(value)) {
         throw new Error('sourceOrigins must be an array.')
     }

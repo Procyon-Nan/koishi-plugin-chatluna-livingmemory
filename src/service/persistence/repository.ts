@@ -51,6 +51,7 @@ import {
 } from './speaker_reconciliation'
 import type { LivingMemoryTransaction } from './types'
 import { SerialTaskQueue } from '../shared/serial_task_queue'
+import { normalizeMemorySourceOrigins } from '../memory/origins/source_origins'
 
 const PRESET_IMPORT_BATCH_SIZE = 100
 const TRANSACTION_QUEUE_KEY = 'living-memory-transaction'
@@ -677,7 +678,7 @@ export class LivingMemoryRepository
             importance: entry.importance,
             sourceConversationId: entry.sourceConversationId,
             sourceLabel,
-            sourceOrigins: entry.sourceOrigins,
+            sourceOrigins: normalizeMemorySourceOrigins(entry.sourceOrigins),
             isConsolidated,
             createdAt: new Date(entry.createdAt),
             updatedAt: new Date(entry.updatedAt)

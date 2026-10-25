@@ -357,6 +357,15 @@ export class LivingMemoryUserProfileService {
                 presetPrompt,
                 group
             })
+            const logging = logger && {
+                logger,
+                workflow: 'dream',
+                stage: 'user-profile',
+                fields: {
+                    speaker: group.speakerLabel,
+                    speakerKey: group.speakerKey
+                }
+            }
             structuredResult = await invokeStructuredOutput({
                 model,
                 signal,
@@ -383,18 +392,7 @@ export class LivingMemoryUserProfileService {
                         group.speakerKey
                     ].join(':')
                 },
-                logging:
-                    logger == null
-                        ? undefined
-                        : {
-                              logger,
-                              workflow: 'dream',
-                              stage: 'user-profile',
-                              fields: {
-                                  speaker: group.speakerLabel,
-                                  speakerKey: group.speakerKey
-                              }
-                          }
+                logging
             })
         } catch (error) {
             signal?.throwIfAborted()

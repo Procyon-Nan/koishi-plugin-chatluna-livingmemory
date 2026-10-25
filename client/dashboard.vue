@@ -433,20 +433,13 @@ const currentPresetVectorCount = computed(() => {
     return `${preset.indexedCount} / ${preset.expectedCount}`
 })
 
-const currentVectorJobId = computed(() => {
-    const jobId = vectorIndexStatus.value?.currentJobId
-    if (jobId === null || jobId === undefined) {
-        return '无'
-    }
-    return jobId
-})
+const currentVectorJobId = computed(
+    () => vectorIndexStatus.value?.currentJobId ?? '无'
+)
 
 const vectorIndexError = computed(() => {
     const presetError = currentPresetVectorStatus.value?.lastError
-    if (presetError !== null && presetError !== undefined) {
-        return presetError
-    }
-    return vectorIndexStatus.value?.lastError ?? null
+    return presetError ?? vectorIndexStatus.value?.lastError ?? null
 })
 
 const vectorWorkflowReady = computed(() => {

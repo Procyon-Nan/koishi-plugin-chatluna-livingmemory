@@ -7,10 +7,7 @@ import {
     extractionResultToolName
 } from '../../prompts'
 import type { PromptMessages } from '../../prompts/prompt_format'
-import {
-    normalizeMemoryKeywords,
-    normalizeMemoryText
-} from '../../memory/entry_fields'
+import { normalizeMemoryKeywords } from '../../memory/entry_fields'
 import { invokeStructuredOutput } from '../structured_output'
 import { resolveScopeAssistantLabel } from '../../memory/helpers'
 import type { LivingMemoryLogger } from '../../logging/logger'
@@ -74,6 +71,11 @@ export class LivingMemoryExtractor {
         }
 
         const prompt = this.buildPrompt(input, context)
+        const logging = logger && {
+            logger,
+            workflow: 'extraction',
+            stage: 'memory-extraction'
+        }
         const result = await invokeStructuredOutput({
             model: model.value,
             prompt,
@@ -94,14 +96,7 @@ export class LivingMemoryExtractor {
                 presetId: context.presetId,
                 conversationId: context.conversationId
             },
-            logging:
-                logger == null
-                    ? undefined
-                    : {
-                          logger,
-                          workflow: 'extraction',
-                          stage: 'memory-extraction'
-                      }
+            logging
         })
         if (result.value != null) {
             logger?.diagnostic('extraction.result', {
@@ -113,10 +108,10 @@ export class LivingMemoryExtractor {
             result.value?.memories.map((item): AttributedMemoryItem => {
                 return {
                     type: item.type,
-                    content: normalizeMemoryText(item.content),
-                    summary: normalizeMemoryText(item.summary),
+                    content: item.content,
+                    summary: item.summary,
                     keywords: normalizeMemoryKeywords(item.keywords),
-                    sentiment: normalizeMemoryText(item.sentiment),
+                    sentiment: item.sentiment,
                     importance: item.importance,
                     speakerKeys: resolveSpeakerKeysByLabels(
                         item.speakerLabels,

@@ -87,20 +87,20 @@ export const pullConversationBackfill = async (
 
     // at 目标昵称解析：批次内去重，失败缓存为 null 退 @id（下次 warmup 重解析）
     const atLabelCache = new Map<string, Promise<string | null>>()
-    const lookupAtLabel: AtLabelLookup | null =
-        bot.getUser == null
-            ? null
-            : (userId) => {
-                  const cached = atLabelCache.get(userId)
-                  if (cached != null) {
-                      return cached
-                  }
-                  const pending = Promise.resolve(bot.getUser?.(userId))
-                      .then((user) => toNonEmptyString(user?.name) ?? null)
-                      .catch(() => null)
-                  atLabelCache.set(userId, pending)
-                  return pending
-              }
+    let lookupAtLabel: AtLabelLookup | null = null
+    if (bot.getUser != null) {
+        lookupAtLabel = (userId) => {
+            const cached = atLabelCache.get(userId)
+            if (cached != null) {
+                return cached
+            }
+            const pending = Promise.resolve(bot.getUser?.(userId))
+                .then((user) => toNonEmptyString(user?.name) ?? null)
+                .catch(() => null)
+            atLabelCache.set(userId, pending)
+            return pending
+        }
+    }
 
     const results: ConversationLogEntryInput[] = []
     let nextId: string | undefined

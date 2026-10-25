@@ -20,7 +20,6 @@ import type {
 import {
     normalizeMemoryImportance,
     normalizeMemoryKeywords,
-    normalizeMemoryStatus,
     normalizeMemoryText,
     normalizeOptionalMemoryText
 } from '../memory/entry_fields'
@@ -574,7 +573,7 @@ export class LivingMemoryEntryRepository
             presetId: scope.presetId,
             speakerKeys: normalizeSpeakerKeys(speakerKeys),
             type: fields.type,
-            status: normalizeMemoryStatus(fields.status),
+            status: fields.status ?? 'active',
             content: normalizeMemoryText(fields.content),
             keywords: normalizeMemoryKeywords(fields.keywords),
             summary: normalizeOptionalMemoryText(fields.summary),
@@ -888,32 +887,29 @@ export class LivingMemoryEntryRepository
                 : normalizeMemoryKeywords(patch.keywords)
         const summary =
             patch.summary === undefined
-                ? (current.summary ?? null)
+                ? current.summary
                 : normalizeOptionalMemoryText(patch.summary)
         const status =
-            patch.status === undefined
-                ? normalizeMemoryStatus(current.status)
-                : normalizeMemoryStatus(patch.status)
+            patch.status === undefined ? current.status : patch.status
         const sentiment =
-            patch.sentiment === undefined
-                ? normalizeOptionalMemoryText(current.sentiment)
-                : normalizeOptionalMemoryText(patch.sentiment)
+            patch.sentiment === undefined ? current.sentiment : patch.sentiment
         const importance =
             patch.importance === undefined
-                ? normalizeMemoryImportance(current.importance)
-                : normalizeMemoryImportance(patch.importance)
+                ? current.importance
+                : patch.importance
+        const speakerKeys =
+            patch.speakerKeys === undefined
+                ? current.speakerKeys
+                : normalizeSpeakerKeys(patch.speakerKeys)
         return {
-            speakerKeys:
-                patch.speakerKeys === undefined
-                    ? current.speakerKeys
-                    : normalizeSpeakerKeys(patch.speakerKeys),
+            speakerKeys,
             type: patch.type ?? current.type,
             status,
             content,
             keywords,
             summary,
-            sentiment,
-            importance
+            sentiment: normalizeOptionalMemoryText(sentiment),
+            importance: normalizeMemoryImportance(importance)
         }
     }
 }

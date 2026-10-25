@@ -2,7 +2,8 @@ import assert from 'node:assert/strict'
 import { LivingMemoryLogger } from '../src/service/logging/logger'
 import type {
     MemoryEntryRecord,
-    UserProfileInput
+    UserProfileInput,
+    UserProfileRecord
 } from '../src/contracts/memory'
 import type {
     UserProfileMemoryRepository,
@@ -53,21 +54,19 @@ const createHarness = (
     const reviewedProfiles: { profileId: string; sourceMemoryIds: string[] }[] =
         []
     const debugMessages: string[] = []
-    const existingProfiles =
-        options.existingSourceMemoryIds == null
-            ? []
-            : [
-                  {
-                      id: 'profile-1',
-                      presetId: options.presetId ?? 'preset-1',
-                      speakerKey: '张三',
-                      speakerLabel: options.speakerLabel ?? '张三',
-                      content: '旧画像',
-                      sourceMemoryIds: options.existingSourceMemoryIds,
-                      createdAt: now,
-                      updatedAt: options.existingProfileUpdatedAt ?? now
-                  }
-              ]
+    const existingProfiles: UserProfileRecord[] = []
+    if (options.existingSourceMemoryIds != null) {
+        existingProfiles.push({
+            id: 'profile-1',
+            presetId: options.presetId ?? 'preset-1',
+            speakerKey: '张三',
+            speakerLabel: options.speakerLabel ?? '张三',
+            content: '旧画像',
+            sourceMemoryIds: options.existingSourceMemoryIds,
+            createdAt: now,
+            updatedAt: options.existingProfileUpdatedAt ?? now
+        })
+    }
     const repository: UserProfileRepository & UserProfileMemoryRepository = {
         getEntriesByPresetAndIds: async () => [memory],
         listActiveMemorySpeakerLinks: async () => [

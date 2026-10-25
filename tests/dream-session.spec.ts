@@ -115,14 +115,13 @@ const createRun = (
     batches: (string | string[])[] = ['a', 'b']
 ) => {
     const state = createDreamSessionState(batches.flatMap((batch) => batch))
-    state.clusters = batches.map((batch, index) =>
-        typeof batch === 'string'
-            ? cluster(batch)
-            : {
-                  id: `batch-${index}`,
-                  entries: batch.flatMap((id) => cluster(id).entries)
-              }
-    )
+    state.clusters = batches.map((batch, index) => {
+        if (typeof batch === 'string') return cluster(batch)
+        return {
+            id: `batch-${index}`,
+            entries: batch.flatMap((id) => cluster(id).entries)
+        }
+    })
     const checked = createMemoryTool.checked(async ({ memoryIds }) => {
         recordDreamOperation(state, memoryIds, 'kept')
         return { warnings: [] }
@@ -168,14 +167,13 @@ it('runs the real host agent with stable request prefixes, paired tools and invo
         },
         response_metadata: { marker: 'keep' }
     })
-    const { model, requests } = createModel((_params, index) =>
-        index === 1
-            ? original
-            : new AIMessage({
-                  content: '',
-                  tool_calls: [check(['b'], 'check-b')]
-              })
-    )
+    const { model, requests } = createModel((_params, index) => {
+        if (index === 1) return original
+        return new AIMessage({
+            content: '',
+            tool_calls: [check(['b'], 'check-b')]
+        })
+    })
     const usage = {
         input_tokens: 90_000,
         output_tokens: 20,
@@ -281,24 +279,21 @@ it('keeps successful work, retries ineffective rounds and moves on after three c
 })
 
 it('limits repeated updates of processed memories to sixty rounds and preserves partial batch results', async () => {
-    const { model, requests } = createModel(
-        (_params, index) =>
-            new AIMessage({
-                content: '',
-                tool_calls:
-                    index === 1
-                        ? [check(['a'], 'a')]
-                        : index <= 60
-                          ? [
-                                {
-                                    id: `update-${index}`,
-                                    name: 'living_memory_update_memory',
-                                    args: { memoryId: 'a' }
-                                }
-                            ]
-                          : [check(['c'], 'c')]
-            })
-    )
+    const { model, requests } = createModel((_params, index) => {
+        let action
+        if (index === 1) {
+            action = check(['a'], 'a')
+        } else if (index <= 60) {
+            action = {
+                id: `update-${index}`,
+                name: 'living_memory_update_memory',
+                args: { memoryId: 'a' }
+            }
+        } else {
+            action = check(['c'], 'c')
+        }
+        return new AIMessage({ content: '', tool_calls: [action] })
+    })
     const run = createRun(model, [['a', 'b'], 'c'])
     await runDreamSession(run)
     assert.equal(requests.length, 61)
@@ -542,14 +537,16 @@ it('keeps unparseable calls as correction data without replaying broken protocol
             ]
         }
     })
-    const { model, requests } = createModel((params, index) =>
-        params.id?.endsWith(':compression')
-            ? new AIMessage('早期结论')
-            : new AIMessage({
-                  content: '',
-                  tool_calls: [check([index === 1 ? 'a' : 'b'], 'correct')]
-              })
-    )
+    const { model, requests } = createModel((params, index) => {
+        if (params.id?.endsWith(':compression')) {
+            return new AIMessage('早期结论')
+        }
+        const memoryId = index === 1 ? 'a' : 'b'
+        return new AIMessage({
+            content: '',
+            tool_calls: [check([memoryId], 'correct')]
+        })
+    })
     const invoke = model.invoke.bind(model)
     let calls = 0
     vi.spyOn(model, 'invoke').mockImplementation(async (...args) => {

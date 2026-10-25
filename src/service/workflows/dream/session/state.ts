@@ -52,7 +52,8 @@ export function advanceDreamBatch(state: DreamSessionState) {
 }
 
 export function pendingDreamMemoryIds(state: DreamSessionState): string[] {
-    return (state.currentBatch?.entries ?? [])
+    const entries = state.currentBatch!.entries
+    return entries
         .filter((entry) => !state.processedMemoryIds.has(entry.id))
         .map((entry) => entry.id)
 }
@@ -89,14 +90,11 @@ export function recordSkippedDreamBatch(
     state: DreamSessionState,
     reason: string
 ) {
-    const memoryIds = pendingDreamMemoryIds(state)
-    if (state.currentBatch !== undefined && memoryIds.length > 0) {
-        state.skippedBatches.push({
-            batchId: state.currentBatch.id,
-            memoryIds,
-            reason
-        })
-    }
+    state.skippedBatches.push({
+        batchId: state.currentBatch!.id,
+        memoryIds: pendingDreamMemoryIds(state),
+        reason
+    })
 }
 
 export function getDreamCoverage(state: DreamSessionState) {

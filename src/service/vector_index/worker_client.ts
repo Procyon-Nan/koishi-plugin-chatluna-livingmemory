@@ -25,14 +25,16 @@ interface PendingRequest {
 }
 
 const deserializeError = (serialized: VectorIndexWorkerError) => {
-    const error =
-        serialized.code === null || serialized.state === null
-            ? new Error(serialized.message)
-            : new LivingMemoryVectorIndexError(
-                  serialized.code,
-                  serialized.state,
-                  serialized.message
-              )
+    let error: Error
+    if (serialized.code === null || serialized.state === null) {
+        error = new Error(serialized.message)
+    } else {
+        error = new LivingMemoryVectorIndexError(
+            serialized.code,
+            serialized.state,
+            serialized.message
+        )
+    }
     error.name = serialized.name
     if (serialized.stack !== null) {
         error.stack = serialized.stack

@@ -49,12 +49,12 @@ export class LivingMemoryRecallCoordinator {
         currentMessage: LivingMemoryTranscriptMessage,
         loadHistoryMessages: () => Promise<LivingMemoryTranscriptMessage[]>
     ) {
-        const disabledReason =
-            this.config.recallIntervalMessages === 0
-                ? 'disabled'
-                : !isModelConfigured(this.config.subModel)
-                  ? 'model-not-configured'
-                  : null
+        let disabledReason: string | null = null
+        if (this.config.recallIntervalMessages === 0) {
+            disabledReason = 'disabled'
+        } else if (!isModelConfigured(this.config.subModel)) {
+            disabledReason = 'model-not-configured'
+        }
         if (disabledReason != null) {
             this.logger.diagnostic('recall.skipped', {
                 workflow: 'recall',

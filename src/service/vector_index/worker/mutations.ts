@@ -18,7 +18,7 @@ const readCount = async (
     parameters: unknown[] = []
 ) => {
     const row = (await database.query<CountRow>(sql, parameters)).rows[0]
-    return Number(row?.count ?? 0)
+    return Number(row.count)
 }
 
 export const countVectorIndexMemories = (database: PGlite) =>

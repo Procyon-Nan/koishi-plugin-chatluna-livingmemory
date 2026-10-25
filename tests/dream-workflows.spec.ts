@@ -38,18 +38,21 @@ const runService = async (
         rounds: number
     }
     await withLivingMemoryRepository(async (_ctx, repository) => {
-        const entries = await repository.appendMemories(
-            scope,
-            [],
-            Array.from({ length: 31 }, (_, i) => ({
-                type: 'fact' as const,
-                content: `正文 ${i}`,
-                summary: `摘要 ${i}`,
-                keywords: ['共同主题'],
-                sentiment: '平静',
-                importance: 0.5,
-                speakerKeys: []
-            }))
+        const entries = await Promise.all(
+            Array.from({ length: 31 }, (_, i) =>
+                repository.createMemory(
+                    scope,
+                    {
+                        type: 'fact' as const,
+                        content: `正文 ${i}`,
+                        summary: `摘要 ${i}`,
+                        keywords: ['共同主题'],
+                        sentiment: '平静',
+                        importance: 0.5
+                    },
+                    []
+                )
+            )
         )
         // 全量包含已固化记忆，固定目标不受后续新建记忆影响。
         await repository.setMemoryConsolidation(

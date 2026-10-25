@@ -274,14 +274,14 @@ export class LivingMemoryLogger {
             if (blocks?.length === 0) {
                 return
             }
-            const completeMessage =
-                blocks === undefined
-                    ? message
-                    : [
-                          message,
-                          ...blocks.map(formatBlock),
-                          `--- end ${event} ---`
-                      ].join('\n')
+            let completeMessage = message
+            if (blocks !== undefined) {
+                completeMessage = [
+                    message,
+                    ...blocks.map(formatBlock),
+                    `--- end ${event} ---`
+                ].join('\n')
+            }
             emitCompleteMessage(this.sink, () => {
                 if (error === undefined) {
                     this.sink[level](completeMessage)

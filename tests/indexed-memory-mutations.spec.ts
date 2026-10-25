@@ -871,7 +871,11 @@ it('splits bulk deletions into fixed-size batches', async () => {
             importance: 0.5,
             speakerKeys: []
         }))
-        const created = await repository.appendMemories(scope, [], extracted)
+        const created = await Promise.all(
+            extracted.map((memory) =>
+                repository.createMemory(scope, memory, memory.speakerKeys)
+            )
+        )
 
         const result = await mutations.deleteMemories(
             presetId,
@@ -950,20 +954,17 @@ it('backfills registry rows for active memory keys missing rows on Dream coverag
             sink,
             createLoggerStub().logger
         )
-        await repository.appendMemories(
+        await repository.createMemory(
             scope,
-            [],
-            [
-                {
-                    type: 'fact',
-                    content: 'legacy memory without registry row',
-                    keywords: [],
-                    summary: '',
-                    sentiment: '',
-                    importance: 0.5,
-                    speakerKeys: ['orphan-key']
-                }
-            ]
+            {
+                type: 'fact',
+                content: 'legacy memory without registry row',
+                keywords: [],
+                summary: '',
+                sentiment: '',
+                importance: 0.5
+            },
+            ['orphan-key']
         )
 
         const speakers = await mutations.ensurePresetSpeakersCoverage(presetId)

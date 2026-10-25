@@ -40,22 +40,21 @@ workerPort.on('message', (request: DreamWorkerRequest) => {
 
         if (request.type === 'bisect') {
             const startedAt = performance.now()
+            const reportProgress = (completed: number, total: number) => {
+                workerPort.postMessage({
+                    id: request.id,
+                    type: 'progress',
+                    progress: {
+                        phase: 'bisect',
+                        completed,
+                        total,
+                        elapsedMs: performance.now() - startedAt
+                    }
+                } satisfies DreamWorkerResponse)
+            }
             const result = bisectDreamMemories(
                 request,
-                request.reportProgress
-                    ? (completed, total) => {
-                          workerPort.postMessage({
-                              id: request.id,
-                              type: 'progress',
-                              progress: {
-                                  phase: 'bisect',
-                                  completed,
-                                  total,
-                                  elapsedMs: performance.now() - startedAt
-                              }
-                          } satisfies DreamWorkerResponse)
-                      }
-                    : undefined
+                request.reportProgress ? reportProgress : undefined
             )
             workerPort.postMessage(
                 {

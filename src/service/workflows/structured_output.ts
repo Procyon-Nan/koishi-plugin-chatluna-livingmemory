@@ -78,9 +78,8 @@ const toActions = (decision: StructuredOutputDecision): AgentAction[] => {
 const formatDecision = (decision: StructuredOutputDecision) => {
     if (!Array.isArray(decision) && 'returnValues' in decision) {
         const output = decision.returnValues['output']
-        return typeof output === 'string'
-            ? output
-            : (JSON.stringify(output, null, 2) ?? String(output ?? ''))
+        if (typeof output === 'string') return output
+        return JSON.stringify(output, null, 2) ?? String(output ?? '')
     }
 
     return JSON.stringify(
@@ -201,16 +200,17 @@ const createRetryEntries = (
     error: string,
     stringifiedArrayField?: string
 ): ScratchpadEntry[] => {
-    const correction = [
+    const instructions = [
         `结构化结果无效：${error}。`,
-        `必须且只能调用 ${toolName} 一次，并完整修正工具参数。`,
-        ...(stringifiedArrayField == null
-            ? []
-            : [
-                  `${stringifiedArrayField} 必须直接传 JSON 数组：正确 {"${stringifiedArrayField}":[]}；错误 {"${stringifiedArrayField}":"[]"}。`
-              ]),
-        '不要在普通文本中输出结果。'
-    ].join(' ')
+        `必须且只能调用 ${toolName} 一次，并完整修正工具参数。`
+    ]
+    if (stringifiedArrayField != null) {
+        instructions.push(
+            `${stringifiedArrayField} 必须直接传 JSON 数组：正确 {"${stringifiedArrayField}":[]}；错误 {"${stringifiedArrayField}":"[]"}。`
+        )
+    }
+    instructions.push('不要在普通文本中输出结果。')
+    const correction = instructions.join(' ')
     const actions = decision == null ? [] : toActions(decision)
 
     if (actions.length > 0) {
@@ -263,16 +263,16 @@ const guardModelInvocations = (
     currentAttempt: () => number,
     onCallId: (modelCallId: string) => void
 ) => {
-    const loggedModel =
-        logging == null
-            ? model
-            : createLoggedModel(model, {
-                  logger: logging.logger,
-                  stage: logging.stage,
-                  attempt: currentAttempt,
-                  fields: logging.fields,
-                  onCallId
-              })
+    let loggedModel = model
+    if (logging != null) {
+        loggedModel = createLoggedModel(model, {
+            logger: logging.logger,
+            stage: logging.stage,
+            attempt: currentAttempt,
+            fields: logging.fields,
+            onCallId
+        })
+    }
     return {
         withConfig: (config: RunnableConfig) => {
             const boundModel = loggedModel.withConfig(config)

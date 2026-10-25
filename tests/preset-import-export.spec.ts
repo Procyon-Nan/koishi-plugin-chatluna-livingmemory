@@ -234,7 +234,13 @@ it('round-trips memory source labels through version 4 exports', async () => {
         const sourceLabel = '来源于「测试群」（群聊 ID：10000）的群聊'
         const [memory] = await repository.appendMemories(
             { conversationId: 'group:10000', presetId: sourcePresetId },
-            [],
+            [
+                {
+                    role: 'user',
+                    content: 'group memory',
+                    transcriptLines: ['group memory']
+                }
+            ],
             [
                 {
                     type: 'fact',

@@ -311,6 +311,6 @@ export const readVectorIndexInventoryPage = async (
     return {
         items,
         nextCursor:
-            rows.length > limit ? (items.at(-1)?.memoryId ?? null) : null
+            rows.length > limit ? items[items.length - 1].memoryId : null
     }
 }

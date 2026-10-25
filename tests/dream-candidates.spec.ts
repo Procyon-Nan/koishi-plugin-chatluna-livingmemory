@@ -117,18 +117,16 @@ it('stops on probe shortage or ANN unavailability and reports its completed cove
         let calls = 0
         input.provider.queryDreamNeighbors = async (queries) => {
             calls++
+            const completedQueries = backend === 'hnsw' ? queries : []
             return {
                 generation: 'generation',
                 backend,
                 completed: backend === 'hnsw' ? queries.length : 0,
                 reason: backend === 'unavailable' ? 'plan-exact' : undefined,
-                rows:
-                    backend === 'hnsw'
-                        ? queries.map((query) => ({
-                              sourceIndex: query.sourceIndex,
-                              hits: []
-                          }))
-                        : []
+                rows: completedQueries.map((query) => ({
+                    sourceIndex: query.sourceIndex,
+                    hits: []
+                }))
             }
         }
         const result = await collectDreamCandidates(input)

@@ -54,19 +54,18 @@ export class DreamSessionHistory {
     append(...messages: BaseMessage[]) {
         // usage 单独记录；入列时保留签名、推理内容与工具元数据，供后续各轮复用。
         this.messages.push(
-            ...messages.map((message) =>
-                isAIMessage(message)
-                    ? new AIMessage({
-                          content: message.content,
-                          name: message.name,
-                          id: message.id,
-                          additional_kwargs: message.additional_kwargs,
-                          response_metadata: message.response_metadata,
-                          tool_calls: message.tool_calls,
-                          invalid_tool_calls: message.invalid_tool_calls
-                      })
-                    : message
-            )
+            ...messages.map((message) => {
+                if (!isAIMessage(message)) return message
+                return new AIMessage({
+                    content: message.content,
+                    name: message.name,
+                    id: message.id,
+                    additional_kwargs: message.additional_kwargs,
+                    response_metadata: message.response_metadata,
+                    tool_calls: message.tool_calls,
+                    invalid_tool_calls: message.invalid_tool_calls
+                })
+            })
         )
     }
 
