@@ -11,7 +11,6 @@ import {
 export const refineDreamPlan = (
     graph: DreamSparseGraph,
     plan: DreamPlanLabels,
-    initialObjective: number,
     checkCancellation: () => void,
     maxEdgeVisits = 100 * plan.labels.length * graph.q
 ) => {
@@ -36,10 +35,6 @@ export const refineDreamPlan = (
     let hintEdgeVisits = 0
     let acceptedMoves = 0
     let acceptedSwaps = 0
-    let bestObjective = initialObjective
-    let expectedObjective = initialObjective
-    const bestLabels = labels.slice()
-    const bestSizes = sizes.slice()
     let stopReason = 'refine-passes'
 
     const scanRow = (
@@ -200,33 +195,8 @@ export const refineDreamPlan = (
             }
             labels[u] = b
             used[u] = 1
-            expectedObjective += bestGain
             accepted++
         }
-        // 每遍结束或达到边访问上限后复核目标，保留最佳合法分组。
-        const objective = calculateDreamGraphObjective(
-            graph,
-            plan,
-            checkCancellation
-        )
-        const tolerance =
-            64 *
-            Number.EPSILON *
-            Math.max(1, objective) *
-            Math.max(1, graph.weights.length)
-        if (
-            !Number.isFinite(objective) ||
-            objective + tolerance < bestObjective ||
-            Math.abs(objective - expectedObjective) > tolerance
-        ) {
-            throw new Error('Dream 图目标与已提交收益不符。')
-        }
-        if (objective >= bestObjective) {
-            bestObjective = objective
-            bestLabels.set(labels)
-            bestSizes.set(sizes)
-        }
-        expectedObjective = objective
         if (stopped) break
         if (accepted === 0) {
             stopReason = 'local-optimum'
@@ -235,9 +205,12 @@ export const refineDreamPlan = (
     }
     checkCancellation()
     return {
-        plan: { labels: bestLabels, sizes: bestSizes, clusterCount },
-        initialObjective,
-        finalObjective: bestObjective,
+        plan,
+        finalObjective: calculateDreamGraphObjective(
+            graph,
+            plan,
+            checkCancellation
+        ),
         acceptedMoves,
         acceptedSwaps,
         edgeVisits,
@@ -290,7 +263,6 @@ export const refineDreamMemories = (
     const { plan, ...result } = refineDreamPlan(
         graph,
         input.initial,
-        initialObjective,
         checkCancellation
     )
     return {

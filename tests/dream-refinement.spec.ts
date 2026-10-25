@@ -115,7 +115,7 @@ it('retains initial when every candidate edge has zero weight', () => {
     assert.equal(result.diagnostics.graphEdgeCount, 0)
 })
 
-it('keeps a complete checkpoint when the edge budget ends before a whole row scan', () => {
+it('returns the current complete plan when the edge budget ends before a whole row scan', () => {
     const input = fullGroupsInput()
     const graph = buildDreamGraph(input.matrix, input.candidates, () => {})
     const before = input.initial.labels.slice()
@@ -124,7 +124,7 @@ it('keeps a complete checkpoint when the edge budget ends before a whole row sca
         input.initial,
         () => {}
     )
-    const result = refineDreamPlan(graph, input.initial, objective, () => {}, 0)
+    const result = refineDreamPlan(graph, input.initial, () => {}, 0)
     assert.equal(result.stopReason, 'edge-budget')
     assert.equal(result.finalObjective, objective)
     assert.deepEqual(result.plan.labels, before)
@@ -189,13 +189,7 @@ it('matches exhaustive objective changes for the first accepted move or swap', (
             clusterCount: 3
         }
         // 首个锚点及四个交换伙伴各扫描一次，随后通过边访问上限结束搜索。
-        const result = refineDreamPlan(
-            graph,
-            plan,
-            objective(original),
-            () => {},
-            (n - 1) * graph.q
-        )
+        const result = refineDreamPlan(graph, plan, () => {}, (n - 1) * graph.q)
         assert.equal(result.acceptedMoves + result.acceptedSwaps, 1)
         assert.equal(objective(result.plan.labels), best)
         assert.equal(result.finalObjective, best)
