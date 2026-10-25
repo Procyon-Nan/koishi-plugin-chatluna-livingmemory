@@ -14,8 +14,7 @@ import { dreamWorkerPath, vectorIndexWorkerPath } from './worker-test-utils'
 
 const createBisectInput = (matrix: DreamVectorMatrix) => ({
     matrix,
-    cancellation: new SharedArrayBuffer(4),
-    budgetMs: 30_000
+    cancellation: new SharedArrayBuffer(4)
 })
 
 const createMatrix = (rows: number[][]): DreamVectorMatrix => ({
@@ -36,70 +35,63 @@ it('builds both worker artifacts through the shared build script', async () => {
     assert.equal(dreamWorker.includes('sqlite-vec'), false)
 })
 
-it.each([0, 20_000])(
-    'transfers refinement inputs and retains the main-thread checkpoint (budget=%i)',
-    async (budgetMs) => {
-        const client = new LivingMemoryDreamWorkerClient({
-            workerPath: dreamWorkerPath
-        })
-        await client.start()
-        try {
-            const checkpoint = Uint32Array.from({ length: 60 }, (_, row) =>
-                Math.floor(row / 30)
-            )
-            const neighbors = new Uint32Array(60 * dreamCandidateWidth)
-            for (let row = 0; row < 60; row++) {
-                neighbors.set(
-                    Array.from({ length: 60 }, (_, i) => i).filter(
-                        (i) => i !== row
-                    ),
-                    row * dreamCandidateWidth
-                )
-            }
-            const input = {
-                matrix: createMatrix(
-                    Array.from({ length: 60 }, (_, row) =>
-                        row % 2 === 0 ? [1, 0] : [0, 1]
-                    )
+it('transfers refinement inputs and retains the main-thread checkpoint', async () => {
+    const client = new LivingMemoryDreamWorkerClient({
+        workerPath: dreamWorkerPath
+    })
+    await client.start()
+    try {
+        const checkpoint = Uint32Array.from({ length: 60 }, (_, row) =>
+            Math.floor(row / 30)
+        )
+        const neighbors = new Uint32Array(60 * dreamCandidateWidth)
+        for (let row = 0; row < 60; row++) {
+            neighbors.set(
+                Array.from({ length: 60 }, (_, i) => i).filter(
+                    (i) => i !== row
                 ),
-                initial: {
-                    labels: checkpoint.slice(),
-                    sizes: new Uint32Array([30, 30]),
-                    clusterCount: 2
-                },
-                candidates: {
-                    q: 10,
-                    counts: new Uint8Array(60).fill(59),
-                    neighbors
-                },
-                cancellation: new SharedArrayBuffer(4),
-                budgetMs
-            }
-            const expected = refineDreamMemories(structuredClone(input))
-            const result = await client.refine(input)
-            for (const array of [
-                input.matrix.vectors,
-                input.initial.labels,
-                input.initial.sizes,
-                input.candidates.counts,
-                input.candidates.neighbors
-            ]) {
-                assert.equal(array.byteLength, 0)
-            }
-            assert.equal(checkpoint.length, 60)
-            assert.equal(result.outcome, expected.outcome)
-            if (
-                result.outcome === 'refined' &&
-                expected.outcome === 'refined'
-            ) {
-                validateDreamPlan(result.plan, 60)
-                assert.deepEqual(result.plan, expected.plan)
-            }
-        } finally {
-            await client.stop()
+                row * dreamCandidateWidth
+            )
         }
+        const input = {
+            matrix: createMatrix(
+                Array.from({ length: 60 }, (_, row) =>
+                    row % 2 === 0 ? [1, 0] : [0, 1]
+                )
+            ),
+            initial: {
+                labels: checkpoint.slice(),
+                sizes: new Uint32Array([30, 30]),
+                clusterCount: 2
+            },
+            candidates: {
+                q: 10,
+                counts: new Uint8Array(60).fill(59),
+                neighbors
+            },
+            cancellation: new SharedArrayBuffer(4)
+        }
+        const expected = refineDreamMemories(structuredClone(input))
+        const result = await client.refine(input)
+        for (const array of [
+            input.matrix.vectors,
+            input.initial.labels,
+            input.initial.sizes,
+            input.candidates.counts,
+            input.candidates.neighbors
+        ]) {
+            assert.equal(array.byteLength, 0)
+        }
+        assert.equal(checkpoint.length, 60)
+        assert.equal(result.outcome, expected.outcome)
+        if (result.outcome === 'refined' && expected.outcome === 'refined') {
+            validateDreamPlan(result.plan, 60)
+            assert.deepEqual(result.plan, expected.plan)
+        }
+    } finally {
+        await client.stop()
     }
-)
+})
 
 it('starts both workers from source-loaded default paths', async () => {
     const dreamClient = new LivingMemoryDreamWorkerClient()
@@ -122,8 +114,7 @@ it('transfers the bisect matrix back with a complete capacity plan', async () =>
         const original = new Float32Array(matrix.vectors)
         const input = {
             matrix,
-            cancellation: new SharedArrayBuffer(4),
-            budgetMs: 30_000
+            cancellation: new SharedArrayBuffer(4)
         }
         const expected = bisectDreamMemories({
             ...input,
@@ -150,15 +141,13 @@ it('observes the shared cancellation flag and remains usable', async () => {
         await assert.rejects(
             client.bisect({
                 matrix: createMatrix([[1, 0]]),
-                cancellation,
-                budgetMs: 30_000
+                cancellation
             }),
             /已取消/
         )
         const result = await client.bisect({
             matrix: createMatrix([[1, 0]]),
-            cancellation: new SharedArrayBuffer(4),
-            budgetMs: 30_000
+            cancellation: new SharedArrayBuffer(4)
         })
         assert.deepEqual([...result.plan.sizes], [1])
     } finally {

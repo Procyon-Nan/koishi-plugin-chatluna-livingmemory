@@ -239,7 +239,7 @@ it('keeps separated directions together when both groups fit', async () => {
     )
 })
 
-it('handles identical directions and checks cancellation and an unfinished deadline', () => {
+it('handles identical directions and checks cancellation', () => {
     const input = {
         matrix: {
             entryCount: 61,
@@ -248,16 +248,11 @@ it('handles identical directions and checks cancellation and an unfinished deadl
                 i % 2 === 0 ? 1 : 0
             )
         },
-        cancellation: new SharedArrayBuffer(4),
-        budgetMs: 30_000
+        cancellation: new SharedArrayBuffer(4)
     }
     const result = bisectDreamMemories(input)
     validateDreamPlan(result.plan, 61)
     assert.deepEqual(result.plan, bisectDreamMemories(input).plan)
-    assert.throws(
-        () => bisectDreamMemories({ ...input, budgetMs: 0 }),
-        /计算期限/
-    )
     Atomics.store(new Int32Array(input.cancellation), 0, 1)
     assert.throws(() => bisectDreamMemories(input), /已取消/)
 })

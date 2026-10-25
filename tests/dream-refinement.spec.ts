@@ -44,8 +44,7 @@ const fullGroupsInput = () => ({
         clusterCount: 2
     },
     candidates: candidatesFor(60),
-    cancellation: new SharedArrayBuffer(4),
-    budgetMs: 20_000
+    cancellation: new SharedArrayBuffer(4)
 })
 
 it('improves full groups through swaps and preserves capacity and coverage', () => {
@@ -90,11 +89,8 @@ it('ranks candidates using original vectors and stores symmetric union weights o
     assert.equal(graph.topWeights[0], Math.fround(Math.SQRT1_2))
 })
 
-it('retains initial on graph timeout and propagates cancellation', () => {
+it('propagates cancellation', () => {
     const input = fullGroupsInput()
-    const timed = refineDreamMemories({ ...input, budgetMs: 0 })
-    assert.equal(timed.outcome, 'use-initial')
-    assert.equal(timed.diagnostics.stopReason, 'budget-before-graph')
     Atomics.store(new Int32Array(input.cancellation), 0, 1)
     assert.throws(() => refineDreamMemories(input), /已取消/u)
 })
@@ -112,8 +108,7 @@ it('retains initial when every candidate edge has zero weight', () => {
             clusterCount: 1
         },
         candidates: candidatesFor(2),
-        cancellation: new SharedArrayBuffer(4),
-        budgetMs: 20_000
+        cancellation: new SharedArrayBuffer(4)
     })
     assert.equal(result.outcome, 'use-initial')
     assert.equal(result.diagnostics.stopReason, 'empty-graph')
@@ -129,14 +124,7 @@ it('keeps a complete checkpoint when the edge budget ends before a whole row sca
         input.initial,
         () => {}
     )
-    const result = refineDreamPlan(
-        graph,
-        input.initial,
-        objective,
-        () => true,
-        () => {},
-        0
-    )
+    const result = refineDreamPlan(graph, input.initial, objective, () => {}, 0)
     assert.equal(result.stopReason, 'edge-budget')
     assert.equal(result.finalObjective, objective)
     assert.deepEqual(result.plan.labels, before)
@@ -200,12 +188,13 @@ it('matches exhaustive objective changes for the first accepted move or swap', (
             sizes: new Uint32Array([2, 2, 2]),
             clusterCount: 3
         }
+        // 首个锚点及四个交换伙伴各扫描一次，随后通过边访问上限结束搜索。
         const result = refineDreamPlan(
             graph,
             plan,
             objective(original),
-            () => plan.labels.every((label, row) => label === original[row]),
-            () => {}
+            () => {},
+            (n - 1) * graph.q
         )
         assert.equal(result.acceptedMoves + result.acceptedSwaps, 1)
         assert.equal(objective(result.plan.labels), best)

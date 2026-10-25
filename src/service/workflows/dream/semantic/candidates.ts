@@ -17,7 +17,6 @@ export const collectDreamCandidates = async ({
     entries,
     matrix,
     initial,
-    deadline,
     signal
 }: {
     provider: DreamVectorProvider
@@ -26,7 +25,6 @@ export const collectDreamCandidates = async ({
     entries: DreamMemoryEntryRecord[]
     matrix: DreamVectorMatrix
     initial: DreamPlanLabels
-    deadline: number
     signal?: AbortSignal
 }) => {
     const startedAt = performance.now()
@@ -54,7 +52,6 @@ export const collectDreamCandidates = async ({
         let offset = 0
         while (offset < rows.length) {
             signal?.throwIfAborted()
-            if (performance.now() >= deadline) return 'candidate-budget'
             const pageRows = rows.slice(offset, offset + 4)
             const page = await provider.queryDreamNeighbors(
                 pageRows.map((row) => ({
@@ -158,8 +155,6 @@ export const collectDreamCandidates = async ({
         stopReason = await collectRows(remaining)
     }
     signal?.throwIfAborted()
-    if (!stopReason && performance.now() >= deadline)
-        stopReason = 'candidate-budget'
     return {
         candidates: stopReason ? undefined : candidates,
         candidateMs: performance.now() - startedAt,

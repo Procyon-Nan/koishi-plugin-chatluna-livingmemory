@@ -1,7 +1,6 @@
 export const dreamBatchSize = 30
 export const dreamCandidateWidth = 64
 export const dreamNeighborCount = 10
-export const dreamRefineBudgetMs = 20_000
 
 export interface DreamVectorMatrix {
     entryCount: number
@@ -18,7 +17,6 @@ export interface DreamPlanLabels {
 export interface DreamBisectInput {
     matrix: DreamVectorMatrix
     cancellation: SharedArrayBuffer
-    budgetMs: number
 }
 
 export interface DreamBisectResult {

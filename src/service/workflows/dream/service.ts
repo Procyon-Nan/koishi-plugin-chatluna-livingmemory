@@ -100,8 +100,7 @@ export class LivingMemoryDreamService {
                         presetId,
                         entries,
                         logger,
-                        signal,
-                        startedAt + 180_000
+                        signal
                     )
                     return { model, callOptions }
                 }

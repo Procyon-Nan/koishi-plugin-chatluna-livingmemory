@@ -12,7 +12,6 @@ export const refineDreamPlan = (
     graph: DreamSparseGraph,
     plan: DreamPlanLabels,
     initialObjective: number,
-    canContinue: () => boolean,
     checkCancellation: () => void,
     maxEdgeVisits = 100 * plan.labels.length * graph.q
 ) => {
@@ -63,10 +62,7 @@ export const refineDreamPlan = (
             edge < graph.offsets[row + 1];
             edge++
         ) {
-            if (edge % 1024 === 0 && !canContinue()) {
-                stopReason = 'refine-budget'
-                return undefined
-            }
+            if (edge % 1024 === 0) checkCancellation()
             const neighbor = graph.neighbors[edge]
             const weight = graph.weights[edge]
             const group = labels[neighbor]
@@ -81,11 +77,7 @@ export const refineDreamPlan = (
         let accepted = 0
         let stopped = false
         for (let u = 0; u < n; u++) {
-            if (!canContinue()) {
-                stopReason = 'refine-budget'
-                stopped = true
-                break
-            }
+            checkCancellation()
             if (used[u]) continue
             if (scanRow(u, anchorSums, anchorTouched) === undefined) {
                 stopped = true
@@ -138,11 +130,7 @@ export const refineDreamPlan = (
                 for (let slot = 0; slot < sizes[b]; slot++) {
                     const v = members[b * dreamBatchSize + slot]
                     if (used[v]) continue
-                    if (!canContinue()) {
-                        stopReason = 'refine-budget'
-                        stopped = true
-                        break
-                    }
+                    checkCancellation()
                     hintEdgeVisits += graph.q
                     let hint = 0
                     for (let i = v * graph.q; i < (v + 1) * graph.q; i++) {
@@ -153,7 +141,6 @@ export const refineDreamPlan = (
                     partnerHints[slot] = hint
                     partnerOrder[partnerCount++] = slot
                 }
-                if (stopped) break
                 partnerOrder
                     .subarray(0, partnerCount)
                     .sort(
@@ -187,11 +174,7 @@ export const refineDreamPlan = (
                 if (stopped) break
             }
             if (stopped) break
-            if (!canContinue()) {
-                stopReason = 'refine-budget'
-                stopped = true
-                break
-            }
+            checkCancellation()
             if (bestGroup < 0) continue
             const b = bestGroup
             const slot = slotOf[u]
@@ -220,7 +203,7 @@ export const refineDreamPlan = (
             expectedObjective += bestGain
             accepted++
         }
-        // 结束复核使用预留时间，搜索预算只计量收益计算访问。
+        // 每遍结束或达到边访问上限后复核目标，保留最佳合法分组。
         const objective = calculateDreamGraphObjective(
             graph,
             plan,
@@ -272,60 +255,34 @@ export const refineDreamMemories = (
         if (Atomics.load(cancelled, 0) !== 0)
             throw new Error('Dream 分组已取消。')
     }
-    const deadline =
-        startedAt + input.budgetMs - Math.min(1000, input.budgetMs * 0.1)
-    const canContinue = () => {
-        checkCancellation()
-        return performance.now() < deadline
-    }
-    const budgetReached = Symbol('refine-budget')
-    const checkGraphExecution = () => {
-        if (!canContinue()) throw budgetReached
-    }
+    checkCancellation()
+    const graph = buildDreamGraph(
+        input.matrix,
+        input.candidates,
+        checkCancellation
+    )
+    const initialObjective = calculateDreamGraphObjective(
+        graph,
+        input.initial,
+        checkCancellation
+    )
     const diagnostics: DreamRefineDiagnostics = {
-        graphComplete: false,
-        graphEdgeCount: 0,
+        graphComplete: true,
+        graphEdgeCount: graph.weights.length / 2,
+        initialObjective,
+        finalObjective: initialObjective,
         acceptedMoves: 0,
         acceptedSwaps: 0,
         edgeVisits: 0,
         hintEdgeVisits: 0,
         refineMs: 0,
-        stopReason: 'budget-before-graph'
+        stopReason: 'empty-graph'
     }
-    let graph: DreamSparseGraph
-    let initialObjective: number
-    try {
-        checkGraphExecution()
-        graph = buildDreamGraph(
-            input.matrix,
-            input.candidates,
-            checkGraphExecution
-        )
-        initialObjective = calculateDreamGraphObjective(
-            graph,
-            input.initial,
-            checkGraphExecution
-        )
-    } catch (error) {
-        if (error !== budgetReached) throw error
-        return {
-            outcome: 'use-initial',
-            diagnostics: {
-                ...diagnostics,
-                refineMs: performance.now() - startedAt
-            }
-        }
-    }
-    diagnostics.graphComplete = true
-    diagnostics.graphEdgeCount = graph.weights.length / 2
-    diagnostics.initialObjective = initialObjective
-    diagnostics.finalObjective = initialObjective
     if (graph.weights.length === 0) {
         return {
             outcome: 'use-initial',
             diagnostics: {
                 ...diagnostics,
-                stopReason: 'empty-graph',
                 refineMs: performance.now() - startedAt
             }
         }
@@ -334,7 +291,6 @@ export const refineDreamMemories = (
         graph,
         input.initial,
         initialObjective,
-        canContinue,
         checkCancellation
     )
     return {

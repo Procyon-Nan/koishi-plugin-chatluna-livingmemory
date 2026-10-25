@@ -11,7 +11,6 @@ import {
     dreamBatchSize,
     dreamCandidateWidth,
     dreamNeighborCount,
-    dreamRefineBudgetMs,
     type DreamVectorMatrix,
     type DreamRefineDiagnostics
 } from './semantic/types'
@@ -19,7 +18,6 @@ import { validateDreamPlan } from './semantic/validate'
 import { collectDreamCandidates } from './semantic/candidates'
 
 const vectorReadPageSize = 256
-const initialBudgetMs = 30_000
 const maxNumericWorkingSetBytes = 128 * 1024 * 1024
 
 export class DreamClusterer {
@@ -32,8 +30,7 @@ export class DreamClusterer {
         presetId: string,
         entries: DreamMemoryEntryRecord[],
         logger?: LivingMemoryLogger,
-        signal?: AbortSignal,
-        deadline = performance.now() + 180_000
+        signal?: AbortSignal
     ): Promise<DreamCluster[]> {
         if (entries.length === 0) return []
         const startedAt = performance.now()
@@ -45,13 +42,7 @@ export class DreamClusterer {
                 throw new Error(`Dream 目标记忆 ID 重复：${sorted[i].id}`)
             }
         }
-        const checkRead = () => {
-            signal?.throwIfAborted()
-            if (performance.now() >= deadline) {
-                throw new Error('Dream 分组准备达到执行期限。')
-            }
-        }
-        checkRead()
+        signal?.throwIfAborted()
         const firstPage = await this.vectors.readVectorSnapshot(
             presetId,
             sorted.slice(0, vectorReadPageSize).map((entry) => entry.id),
@@ -91,7 +82,7 @@ export class DreamClusterer {
             vectors: new Float32Array(entryCount * dimension)
         }
         const writePage = (page: VectorSnapshot, offset: number) => {
-            checkRead()
+            signal?.throwIfAborted()
             if (
                 page.embeddingModelId !== embeddingModelId ||
                 page.dimension !== dimension ||
@@ -132,7 +123,7 @@ export class DreamClusterer {
             offset < entryCount;
             offset += vectorReadPageSize
         ) {
-            checkRead()
+            signal?.throwIfAborted()
             const page = await this.vectors.readVectorSnapshot(
                 presetId,
                 sorted
@@ -147,22 +138,18 @@ export class DreamClusterer {
         const cancel = () => Atomics.store(new Int32Array(cancellation), 0, 1)
         signal?.addEventListener('abort', cancel, { once: true })
         try {
-            checkRead()
+            signal?.throwIfAborted()
             const initial = await this.worker.bisect(
                 {
                     matrix,
-                    cancellation,
-                    budgetMs: Math.min(
-                        initialBudgetMs,
-                        deadline - performance.now()
-                    )
+                    cancellation
                 },
                 (progress) =>
                     logger?.diagnostic('dream.clustering.progress', {
                         ...progress
                     })
             )
-            checkRead()
+            signal?.throwIfAborted()
             let plan = initial.plan
             validateDreamPlan(plan, entryCount)
             let stage = 'initial'
@@ -190,10 +177,6 @@ export class DreamClusterer {
                     entries: sorted,
                     matrix: initial.matrix,
                     initial: plan,
-                    deadline: Math.min(
-                        performance.now() + 120_000,
-                        deadline - dreamRefineBudgetMs
-                    ),
                     signal
                 })
                 candidateStats = stats
@@ -207,11 +190,7 @@ export class DreamClusterer {
                             clusterCount: plan.clusterCount
                         },
                         candidates,
-                        cancellation,
-                        budgetMs: Math.min(
-                            dreamRefineBudgetMs,
-                            deadline - performance.now()
-                        )
+                        cancellation
                     })
                     signal?.throwIfAborted()
                     diagnostics = refined.diagnostics

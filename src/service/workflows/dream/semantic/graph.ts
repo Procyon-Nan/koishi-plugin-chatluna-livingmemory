@@ -9,16 +9,16 @@ import {
 export const buildDreamGraph = (
     matrix: DreamVectorMatrix,
     candidates: DreamCandidates,
-    checkExecution: () => void
+    checkCancellation: () => void
 ): DreamSparseGraph => {
     const { entryCount: n, dimension, vectors } = matrix
     const { q, counts, neighbors } = candidates
     const inverseNorms = new Float64Array(n)
     for (let row = 0; row < n; row++) {
-        checkExecution()
+        checkCancellation()
         let norm = 0
         for (let d = 0; d < dimension; d++) {
-            if (d % 4096 === 0) checkExecution()
+            if (d % 4096 === 0) checkCancellation()
             norm += vectors[row * dimension + d] ** 2
         }
         inverseNorms[row] = 1 / Math.sqrt(norm)
@@ -30,7 +30,7 @@ export const buildDreamGraph = (
     // 数值工作集上限约束 N，两个行号可编码为精确整数键 a*N+b。
     const keys = new Float64Array(n * q)
     for (let row = 0; row < n; row++) {
-        checkExecution()
+        checkCancellation()
         const count = counts[row]
         const start = row * dreamCandidateWidth
         for (let i = 0; i < count; i++) {
@@ -39,7 +39,7 @@ export const buildDreamGraph = (
             const b = Math.max(row, neighbor)
             let dot = 0
             for (let d = 0; d < dimension; d++) {
-                if (d % 4096 === 0) checkExecution()
+                if (d % 4096 === 0) checkCancellation()
                 dot += vectors[a * dimension + d] * vectors[b * dimension + d]
             }
             scores[i] = Math.max(
@@ -64,13 +64,13 @@ export const buildDreamGraph = (
     const order = Uint32Array.from({ length: keys.length }, (_, i) => i)
     let comparisons = 0
     order.sort((a, b) => {
-        if (++comparisons % 4096 === 0) checkExecution()
+        if (++comparisons % 4096 === 0) checkCancellation()
         return keys[a] - keys[b] || a - b
     })
     const offsets = new Uint32Array(n + 1)
     let previous = -1
     for (let i = 0; i < order.length; i++) {
-        if (i % 4096 === 0) checkExecution()
+        if (i % 4096 === 0) checkCancellation()
         const slot = order[i]
         const key = keys[slot]
         if (topWeights[slot] === 0 || key === previous) continue
@@ -84,7 +84,7 @@ export const buildDreamGraph = (
     const cursor = offsets.slice(0, n)
     previous = -1
     for (let i = 0; i < order.length; i++) {
-        if (i % 4096 === 0) checkExecution()
+        if (i % 4096 === 0) checkCancellation()
         const slot = order[i]
         const key = keys[slot]
         if (topWeights[slot] === 0 || key === previous) continue
@@ -97,7 +97,7 @@ export const buildDreamGraph = (
         graphNeighbors[right] = a
         weights[left] = weights[right] = topWeights[slot]
     }
-    checkExecution()
+    checkCancellation()
     return {
         offsets,
         neighbors: graphNeighbors,
@@ -111,7 +111,7 @@ export const buildDreamGraph = (
 export const calculateDreamGraphObjective = (
     graph: DreamSparseGraph,
     plan: DreamPlanLabels,
-    checkExecution: () => void
+    checkCancellation: () => void
 ) => {
     let objective = 0
     for (let row = 0; row < plan.labels.length; row++) {
@@ -120,12 +120,12 @@ export const calculateDreamGraphObjective = (
             edge < graph.offsets[row + 1];
             edge++
         ) {
-            if (edge % 4096 === 0) checkExecution()
+            if (edge % 4096 === 0) checkCancellation()
             const neighbor = graph.neighbors[edge]
             if (row < neighbor && plan.labels[row] === plan.labels[neighbor])
                 objective += graph.weights[edge]
         }
     }
-    checkExecution()
+    checkCancellation()
     return objective
 }

@@ -1,20 +1,17 @@
 import { dreamBatchSize, type DreamBisectInput } from './types'
 
 export const bisectDreamMemories = (
-    { matrix, cancellation, budgetMs }: DreamBisectInput,
+    { matrix, cancellation }: DreamBisectInput,
     onProgress?: (completed: number, total: number) => void
 ) => {
     const startedAt = performance.now()
     const cancelled = new Int32Array(cancellation)
-    const checkExecution = () => {
+    const checkCancellation = () => {
         if (Atomics.load(cancelled, 0) !== 0) {
             throw new Error('Dream 分组已取消。')
         }
-        if (performance.now() - startedAt >= budgetMs) {
-            throw new Error('Dream 容量二分达到计算期限。')
-        }
     }
-    checkExecution()
+    checkCancellation()
     const { entryCount, dimension, vectors } = matrix
     const clusterCount = Math.ceil(entryCount / dreamBatchSize)
     const labels = new Uint32Array(entryCount)
@@ -29,7 +26,7 @@ export const bisectDreamMemories = (
     const sumRight = new Float64Array(dimension)
 
     for (let row = 0; row < entryCount; row++) {
-        if (row % 64 === 0) checkExecution()
+        if (row % 64 === 0) checkCancellation()
         let squaredNorm = 0
         for (let d = 0; d < dimension; d++) {
             const value = vectors[row * dimension + d]
@@ -57,7 +54,7 @@ export const bisectDreamMemories = (
         let selected = members[0]
         let lowest = Infinity
         for (let i = 0; i < members.length; i++) {
-            if (i % 64 === 0) checkExecution()
+            if (i % 64 === 0) checkCancellation()
             const row = members[i]
             const score = dot(row, center)
             if (score < lowest || (score === lowest && row < selected)) {
@@ -75,7 +72,7 @@ export const bisectDreamMemories = (
             ? []
             : [{ start: 0, end: entryCount, groups: clusterCount }]
     while (stack.length > 0) {
-        checkExecution()
+        checkCancellation()
         const { start, end, groups } = stack.pop()!
         const members = permutation.subarray(start, end)
         if (groups === 1) {
@@ -106,13 +103,13 @@ export const bisectDreamMemories = (
         let bestCut = low
         for (let iteration = 0; iteration < 3; iteration++) {
             for (let i = 0; i < members.length; i++) {
-                if (i % 64 === 0) checkExecution()
+                if (i % 64 === 0) checkCancellation()
                 const row = members[i]
                 deltas[row] = dot(row, centerRight) - dot(row, centerLeft)
             }
             let comparisons = 0
             members.sort((a, b) => {
-                if (++comparisons % 4096 === 0) checkExecution()
+                if (++comparisons % 4096 === 0) checkCancellation()
                 return deltas[a] - deltas[b] || a - b
             })
             let prefix = 0
@@ -134,7 +131,7 @@ export const bisectDreamMemories = (
             sumLeft.fill(0)
             sumRight.fill(0)
             for (let i = 0; i < members.length; i++) {
-                if (i % 64 === 0) checkExecution()
+                if (i % 64 === 0) checkCancellation()
                 const row = members[i]
                 const sum = i < cut ? sumLeft : sumRight
                 for (let d = 0; d < dimension; d++) {
@@ -169,7 +166,7 @@ export const bisectDreamMemories = (
         stack.push({ start: middle, end, groups: rightGroups })
         stack.push({ start, end: middle, groups: leftGroups })
     }
-    checkExecution()
+    checkCancellation()
     return {
         matrix,
         plan: { labels, sizes, clusterCount },

@@ -36,8 +36,7 @@ const setup = () => {
             ),
             sizes: new Uint32Array([30, 30, 1]),
             clusterCount: 3
-        },
-        deadline: performance.now() + 120_000
+        }
     }
 }
 
@@ -136,11 +135,8 @@ it('stops on probe shortage or ANN unavailability and reports its completed cove
     }
 })
 
-it('distinguishes deadline fallback from cancellation, generation changes and provider failures', async () => {
+it('propagates cancellation, generation changes and provider failures', async () => {
     const input = setup()
-    const timed = await collectDreamCandidates({ ...input, deadline: 0 })
-    assert.equal(timed.stopReason, 'candidate-budget')
-    assert.equal(timed.queriedRows, 0)
     input.provider.queryDreamNeighbors = async () => ({
         generation: 'changed',
         backend: 'unavailable',
