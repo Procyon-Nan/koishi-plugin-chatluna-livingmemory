@@ -63,8 +63,7 @@ it('reuses probe rows, resumes completed prefixes and retries short rows once ag
         const count = query.efSearch === 40 ? 5 : 10
         const valid = peers.slice(0, count).map((entry) => ({
             memoryId: entry.id,
-            contentHash: createMemoryContentHash(entry.content),
-            cosineScore: 1
+            contentHash: createMemoryContentHash(entry.content)
         }))
         return {
             generation: 'generation',
@@ -81,18 +80,15 @@ it('reuses probe rows, resumes completed prefixes and retries short rows once ag
                             memoryId: input.entries[row].id,
                             contentHash: createMemoryContentHash(
                                 input.entries[row].content
-                            ),
-                            cosineScore: 1
+                            )
                         },
                         {
                             memoryId: 'new-memory',
-                            contentHash: 'new',
-                            cosineScore: 1
+                            contentHash: 'new'
                         },
                         {
                             memoryId: peers[10].id,
-                            contentHash: 'changed',
-                            cosineScore: 1
+                            contentHash: 'changed'
                         }
                     ]
                 }

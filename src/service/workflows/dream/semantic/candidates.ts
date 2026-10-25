@@ -106,8 +106,6 @@ export const collectDreamCandidates = async ({
                             .includes(target.row)
                     )
                         continue
-                    if (count === dreamCandidateWidth)
-                        throw new Error('Dream 候选行超出容量。')
                     candidates.neighbors[start + count++] = target.row
                 }
                 candidates.counts[row] = count

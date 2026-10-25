@@ -105,8 +105,7 @@ export const queryDreamNeighbors = async (
                 SET LOCAL work_mem = '4MB';
             `)
             const sql = `SELECT memory_id AS "memoryId",
-                                content_hash AS "contentHash",
-                                1 - (embedding <=> $1::vector) AS "cosineScore"
+                                content_hash AS "contentHash"
                          FROM lm_index_memory
                          WHERE preset_id = $2 AND status = 'active'
                            AND memory_id <> $3

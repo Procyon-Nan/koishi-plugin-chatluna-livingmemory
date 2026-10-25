@@ -151,7 +151,6 @@ export interface DreamNeighborQuery {
 export interface DreamNeighborHit {
     memoryId: string
     contentHash: string
-    cosineScore: number
 }
 
 export interface DreamNeighborPageResult {

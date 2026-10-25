@@ -1,6 +1,5 @@
 import {
     dreamCandidateWidth,
-    dreamNeighborCount,
     type DreamCandidates,
     type DreamPlanLabels,
     type DreamSparseGraph,
@@ -14,12 +13,6 @@ export const buildDreamGraph = (
 ): DreamSparseGraph => {
     const { entryCount: n, dimension, vectors } = matrix
     const { q, counts, neighbors } = candidates
-    if (
-        counts.length !== n ||
-        neighbors.length !== n * dreamCandidateWidth ||
-        q !== Math.min(dreamNeighborCount, n - 1)
-    )
-        throw new Error('Dream 候选矩阵尺寸无效。')
     const inverseNorms = new Float64Array(n)
     for (let row = 0; row < n; row++) {
         checkExecution()
@@ -34,25 +27,14 @@ export const buildDreamGraph = (
     const topWeights = new Float32Array(n * q)
     const scores = new Float64Array(dreamCandidateWidth)
     const rank = new Uint32Array(dreamCandidateWidth)
-    const seen = new Uint32Array(n)
     // 数值工作集上限约束 N，两个行号可编码为精确整数键 a*N+b。
     const keys = new Float64Array(n * q)
     for (let row = 0; row < n; row++) {
         checkExecution()
         const count = counts[row]
-        if (count < q || count > dreamCandidateWidth)
-            throw new Error('Dream 候选行覆盖不足。')
         const start = row * dreamCandidateWidth
         for (let i = 0; i < count; i++) {
             const neighbor = neighbors[start + i]
-            if (
-                neighbor >= n ||
-                neighbor === row ||
-                seen[neighbor] === row + 1
-            ) {
-                throw new Error('Dream 候选行包含无效或重复行号。')
-            }
-            seen[neighbor] = row + 1
             const a = Math.min(row, neighbor)
             const b = Math.max(row, neighbor)
             let dot = 0

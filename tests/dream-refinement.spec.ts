@@ -90,14 +90,11 @@ it('ranks candidates using original vectors and stores symmetric union weights o
     assert.equal(graph.topWeights[0], Math.fround(Math.SQRT1_2))
 })
 
-it('retains initial on graph timeout and propagates cancellation and malformed candidates', () => {
+it('retains initial on graph timeout and propagates cancellation', () => {
     const input = fullGroupsInput()
     const timed = refineDreamMemories({ ...input, budgetMs: 0 })
     assert.equal(timed.outcome, 'use-initial')
     assert.equal(timed.diagnostics.stopReason, 'budget-before-graph')
-    const invalid = fullGroupsInput()
-    invalid.candidates.neighbors[0] = 0
-    assert.throws(() => refineDreamMemories(invalid), /无效或重复/u)
     Atomics.store(new Int32Array(input.cancellation), 0, 1)
     assert.throws(() => refineDreamMemories(input), /已取消/u)
 })

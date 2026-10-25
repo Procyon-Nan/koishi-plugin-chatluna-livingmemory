@@ -120,8 +120,7 @@ it('connects complete candidates to refinement and retains initial on ANN unavai
                     .slice(0, 10)
                     .map((entry) => ({
                         memoryId: entry.id,
-                        contentHash: createMemoryContentHash(entry.content),
-                        cosineScore: 1
+                        contentHash: createMemoryContentHash(entry.content)
                     }))
                 return { sourceIndex: query.sourceIndex, hits }
             })

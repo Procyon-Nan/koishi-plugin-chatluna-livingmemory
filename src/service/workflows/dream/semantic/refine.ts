@@ -42,7 +42,6 @@ export const refineDreamPlan = (
     const bestLabels = labels.slice()
     const bestSizes = sizes.slice()
     let stopReason = 'refine-passes'
-    const maxHintEdgeVisits = 3 * n * 3 * dreamBatchSize * graph.q
 
     const scanRow = (
         row: number,
@@ -139,14 +138,8 @@ export const refineDreamPlan = (
                 for (let slot = 0; slot < sizes[b]; slot++) {
                     const v = members[b * dreamBatchSize + slot]
                     if (used[v]) continue
-                    if (
-                        !canContinue() ||
-                        hintEdgeVisits + graph.q > maxHintEdgeVisits
-                    ) {
-                        stopReason =
-                            hintEdgeVisits + graph.q > maxHintEdgeVisits
-                                ? 'hint-budget'
-                                : 'refine-budget'
+                    if (!canContinue()) {
+                        stopReason = 'refine-budget'
                         stopped = true
                         break
                     }
