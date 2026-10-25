@@ -66,7 +66,7 @@ it('reuses probe rows, resumes completed prefixes and retries short rows once ag
         }))
         return {
             generation: 'generation',
-            backend: 'hnsw',
+            available: true,
             completed: 1,
             reason: 'budget',
             rows: [
@@ -107,17 +107,17 @@ it('reuses probe rows, resumes completed prefixes and retries short rows once ag
 })
 
 it('stops on probe shortage or ANN unavailability and reports its completed coverage', async () => {
-    for (const backend of ['hnsw', 'unavailable'] as const) {
+    for (const available of [true, false]) {
         const input = setup()
         let calls = 0
         input.provider.queryDreamNeighbors = async (queries) => {
             calls++
-            const completedQueries = backend === 'hnsw' ? queries : []
+            const completedQueries = available ? queries : []
             return {
                 generation: 'generation',
-                backend,
-                completed: backend === 'hnsw' ? queries.length : 0,
-                reason: backend === 'unavailable' ? 'plan-exact' : undefined,
+                available,
+                completed: completedQueries.length,
+                reason: available ? undefined : 'index-absent',
                 rows: completedQueries.map((query) => ({
                     sourceIndex: query.sourceIndex,
                     hits: []
@@ -128,7 +128,7 @@ it('stops on probe shortage or ANN unavailability and reports its completed cove
         assert.equal(result.candidates, undefined)
         assert.equal(
             result.stopReason,
-            backend === 'hnsw' ? 'candidate-short' : 'plan-exact'
+            available ? 'candidate-short' : 'index-absent'
         )
         assert.ok(result.queriedRows <= 32)
         assert.ok(calls <= 16)
@@ -139,7 +139,7 @@ it('propagates cancellation, generation changes and provider failures', async ()
     const input = setup()
     input.provider.queryDreamNeighbors = async () => ({
         generation: 'changed',
-        backend: 'unavailable',
+        available: false,
         completed: 0,
         rows: [],
         reason: 'index-absent'
@@ -156,7 +156,7 @@ it('propagates cancellation, generation changes and provider failures', async ()
         controller.abort(new Error('user cancellation'))
         return {
             generation: 'generation',
-            backend: 'hnsw',
+            available: true,
             completed: queries.length,
             rows: queries.map((query) => ({
                 sourceIndex: query.sourceIndex,

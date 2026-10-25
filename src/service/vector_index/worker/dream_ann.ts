@@ -50,15 +50,6 @@ export const buildDreamAnnIndex = async (database: PGlite) => {
     return { built: true }
 }
 
-interface QueryPlan {
-    'Index Name'?: string
-    Plans?: QueryPlan[]
-}
-
-const usesDreamHnsw = (plan: QueryPlan): boolean =>
-    plan['Index Name'] === DREAM_HNSW_INDEX ||
-    (plan.Plans?.some(usesDreamHnsw) ?? false)
-
 export const queryDreamNeighbors = async (
     database: PGlite,
     queries: DreamNeighborQuery[],
@@ -83,13 +74,13 @@ export const queryDreamNeighbors = async (
     const result: DreamNeighborPageResult = {
         generation,
         completed: 0,
-        backend: 'unavailable',
+        available: false,
         rows: []
     }
     if (!(await isDreamAnnReady(database))) {
         return { ...result, reason: 'index-absent' }
     }
-    result.backend = 'hnsw'
+    result.available = true
     for (const query of queries) {
         if (Atomics.load(cancellation, 0) !== 0) {
             throw new Error('Dream neighbor query cancelled')
@@ -117,17 +108,8 @@ export const queryDreamNeighbors = async (
                 query.sourceMemoryId,
                 query.limit
             ]
-            const explanation = await tx.query<{
-                'QUERY PLAN': { Plan: QueryPlan }[]
-            }>(`EXPLAIN (FORMAT JSON) ${sql}`, params)
-            if (!usesDreamHnsw(explanation.rows[0]['QUERY PLAN'][0].Plan)) {
-                return null
-            }
             return (await tx.query<DreamNeighborHit>(sql, params)).rows
         })
-        if (hits === null) {
-            return { ...result, backend: 'unavailable', reason: 'plan-exact' }
-        }
         result.rows.push({ sourceIndex: query.sourceIndex, hits })
         result.completed++
         if (

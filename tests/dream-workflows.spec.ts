@@ -115,7 +115,7 @@ const runService = async (
             {
                 queryDreamNeighbors: async () => ({
                     generation: 'test',
-                    backend: 'unavailable',
+                    available: false,
                     completed: 0,
                     reason: 'index-absent',
                     rows: []

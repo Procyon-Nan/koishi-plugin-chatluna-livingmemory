@@ -156,9 +156,9 @@ export interface DreamNeighborHit {
 export interface DreamNeighborPageResult {
     generation: string
     completed: number
-    backend: 'hnsw' | 'unavailable'
+    available: boolean
     rows: { sourceIndex: number; hits: DreamNeighborHit[] }[]
-    reason?: 'index-absent' | 'plan-exact' | 'budget'
+    reason?: 'index-absent' | 'budget'
 }
 
 export interface MemoryIndexMutationSink {

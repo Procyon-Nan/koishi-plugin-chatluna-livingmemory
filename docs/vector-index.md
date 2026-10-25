@@ -20,8 +20,8 @@
 - `lm_index_memory_dream_hnsw_v1` 覆盖主表所有 active 记忆，使用 cosine、m=16、ef_construction=64；后续写入由 PostgreSQL 同步维护。
 - ANN 可用性由实际索引定义和 valid/ready 判断，独立于主体索引状态。构建 SQL 失败记录维护任务失败，主体 ready 时精确查询继续可用；Worker 故障沿用全局不可用处理。
 - 普通向量与混合召回通过 MATERIALIZED CTE 计算完整过滤集合的距离，再排序和截断，保持精确检索语义。
-- `queryDreamNeighbors` 每页接受 1–4 条直向量查询，核验 generation 后逐条执行短事务。每条使用局部 HNSW 搜索参数，先 EXPLAIN 确认命中指定索引，再返回 memoryId、contentHash、cosineScore。查询向量 buffer 转移至 Worker，由调用者提供可转移的查询副本。
-- 每条查询完成后检查 25 ms 软时间片，返回已完成前缀；`budget` 表示剩余行待后续页继续处理。`index-absent` 和 `plan-exact` 表示本轮 ANN 不可用，由 Dream 保留容量二分初解。页内取消通过共享标记在查询之间生效，在途 SQL 排空后结束请求。
+- `queryDreamNeighbors` 每页接受 1–4 条直向量查询，核验 generation 和 HNSW 索引就绪状态后逐条执行短事务。每条使用局部 HNSW 搜索参数，由 PostgreSQL 优化器选择 HNSW 或精确扫描，返回 memoryId、contentHash。查询向量 buffer 转移至 Worker，由调用者提供可转移的查询副本。
+- 返回的 `available` 表示候选查询可用。每条查询完成后检查 25 ms 软时间片，返回已完成前缀；`budget` 表示剩余行待后续页继续处理。`index-absent` 表示 HNSW 索引尚未就绪，由 Dream 保留容量二分初解。页内取消通过共享标记在查询之间生效，在途 SQL 排空后结束请求。
 - Dream 多批次分组调用候选接口，在主线程完成快照筛选与覆盖判断，再由 Dream Worker 重评分和跨组修复，见 [Dream 流程](dream.md)。
 
 ## Worker 与目录所有权

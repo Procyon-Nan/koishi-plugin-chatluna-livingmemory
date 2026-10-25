@@ -74,7 +74,7 @@ export const collectDreamCandidates = async ({
             if (
                 page.completed !== page.rows.length ||
                 page.completed > pageRows.length ||
-                (page.backend === 'hnsw' && page.completed === 0)
+                (page.available && page.completed === 0)
             ) {
                 throw new Error('Dream 候选页完成前缀无效。')
             }
@@ -110,8 +110,7 @@ export const collectDreamCandidates = async ({
                 if (oldCount < candidates.q && count >= candidates.q)
                     fullCandidateRows++
             }
-            if (page.backend === 'unavailable')
-                return page.reason ?? 'ann-unavailable'
+            if (!page.available) return page.reason ?? 'ann-unavailable'
             offset += page.completed
             await setImmediate()
         }

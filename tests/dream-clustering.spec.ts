@@ -30,7 +30,7 @@ const createVectorReader = (entries: ReturnType<typeof createEntries>) => {
     const reader: DreamVectorProvider = {
         queryDreamNeighbors: async () => ({
             generation: 'generation-1',
-            backend: 'unavailable',
+            available: false,
             completed: 0,
             reason: 'index-absent',
             rows: []
@@ -108,7 +108,7 @@ it('connects complete candidates to refinement and retains initial on ANN unavai
             if (!available) {
                 return {
                     generation: 'generation-1',
-                    backend: 'unavailable',
+                    available: false,
                     completed: 0,
                     reason: 'index-absent',
                     rows: []
@@ -126,7 +126,7 @@ it('connects complete candidates to refinement and retains initial on ANN unavai
             })
             return {
                 generation: 'generation-1',
-                backend: 'hnsw',
+                available: true,
                 completed: queries.length,
                 reason: undefined,
                 rows

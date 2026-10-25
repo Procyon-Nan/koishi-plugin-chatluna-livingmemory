@@ -11,7 +11,7 @@ import {
 import { createVectorIndexSchema } from '../src/service/vector_index/worker/schema'
 import { queryVectorIndexKnn } from '../src/service/vector_index/worker/queries'
 
-it('keeps exact recall and uses verified HNSW candidates with transaction-local settings', async () => {
+it('keeps exact recall and accepts indexed and exact candidate queries with transaction-local settings', async () => {
     const database = await PGlite.create({ extensions: { vector } })
     try {
         await database.exec('CREATE EXTENSION vector')
@@ -74,7 +74,7 @@ it('keeps exact recall and uses verified HNSW candidates with transaction-local 
             [query],
             cancellation
         )
-        assert.equal(result.backend, 'hnsw')
+        assert.equal(result.available, true)
         assert.equal(result.completed, 1)
         assert.deepEqual(
             result.rows[0].hits.map((hit) => hit.memoryId),
@@ -137,15 +137,17 @@ it('keeps exact recall and uses verified HNSW candidates with transaction-local 
         await database.exec(
             'SET enable_indexscan = off; SET enable_seqscan = on; SET enable_sort = on'
         )
-        const exactPlan = await queryDreamNeighbors(
+        const exactResult = await queryDreamNeighbors(
             database,
             [query],
             cancellation
         )
-        assert.equal(exactPlan.reason, 'plan-exact')
-        assert.equal(exactPlan.completed, 0)
-        assert.equal(exactPlan.backend, 'unavailable')
-        assert.deepEqual(exactPlan.rows, [])
+        assert.equal(exactResult.completed, 1)
+        assert.equal(exactResult.available, true)
+        assert.deepEqual(
+            exactResult.rows[0].hits.map((hit) => hit.memoryId),
+            ['new', '3', '4', '5', '6', '8', '9', '11', '12', '13']
+        )
     } finally {
         await database.close()
     }
