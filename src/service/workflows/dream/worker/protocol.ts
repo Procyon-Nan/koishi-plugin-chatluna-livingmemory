@@ -1,5 +1,3 @@
-import type { DreamHdbscanPhase } from '../hdbscan/algorithm'
-import type { DreamPartitionEntry } from '../partitioning/types'
 import type {
     DreamBisectInput,
     DreamBisectResult,
@@ -8,7 +6,7 @@ import type {
 } from '../semantic/types'
 
 export interface DreamWorkerProgress {
-    phase: DreamHdbscanPhase | 'bisect'
+    phase: 'bisect'
     completed: number
     total: number
     elapsedMs: number
@@ -27,18 +25,6 @@ export type DreamWorkerCommand =
     | ({ type: 'bisect'; reportProgress: boolean } & DreamBisectInput)
     | {
           type: 'ready'
-      }
-    | {
-          type: 'partition'
-          entries: DreamPartitionEntry[]
-          targetSize?: number
-      }
-    | {
-          type: 'hdbscan'
-          entryCount: number
-          dimension: number
-          vectors: Float32Array<ArrayBuffer>
-          reportProgress: boolean
       }
 
 type WithRequestId<Command> = Command extends DreamWorkerCommand
@@ -59,18 +45,6 @@ export type DreamWorkerResponse =
           id: number
           type: 'ready'
           ok: true
-      }
-    | {
-          id: number
-          type: 'partition'
-          ok: true
-          partitions: number[][]
-      }
-    | {
-          id: number
-          type: 'hdbscan'
-          ok: true
-          labels: Int32Array<ArrayBuffer>
       }
     | {
           id: number

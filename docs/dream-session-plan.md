@@ -26,9 +26,6 @@ src/service/workflows/dream/
 │   └── tools.ts                 # Dream 的范围校验、固化与成功登记
 ├── clustering.ts                # 向量快照、分组规划与批次映射
 ├── semantic/                    # 容量二分、候选收集、构图、修复与校验
-├── partitioning.ts              # 旧算法对照，待分组验收后清理
-├── partitioning/                # 旧关键词分区对照
-├── hdbscan/                     # 旧密度聚类对照
 ├── worker/                      # Worker 协议、客户端和执行入口
 └── types.ts                     # 簇、操作统计与任务结果
 ```

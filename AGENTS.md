@@ -134,10 +134,7 @@ chatluna-livingmemory/
 │       │       │   ├── graph.ts         # 原维重评分、有向近邻与 CSR 并集图
 │       │       │   ├── refine.ts        # 有预算的跨组移动、交换与目标复核
 │       │       │   └── validate.ts      # 分组覆盖、计数与容量校验
-│       │       ├── partitioning.ts      # 记忆分区入口
 │       │       ├── types.ts             # 批次与运行结果类型
-│       │       ├── partitioning/        # 初始分区、相似度与分区优化
-│       │       ├── hdbscan/             # HDBSCAN 算法与标签整理
 │       │       ├── worker/              # Dream Worker 入口、客户端与协议
 │       │       └── session/
 │       │           ├── runner.ts        # 模型会话循环与工具执行

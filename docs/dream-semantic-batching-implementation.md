@@ -13,6 +13,8 @@
 
 第三批本地进度（2026-10-25）：已接入候选探测与一次补查、完整覆盖门槛、冻结原维重评分、CSR 并集图、在线 move/swap 和预算检查点；增加 `dreamSemanticRefinement`，开发默认 false。Worker 转移矩阵、候选和初解副本，主线程持有原始标签检查点。预留修复预算的 10%（最多 1 秒）进行结束目标复核，图目标、访问计数和停止原因统一进入分组日志。已补充小图穷举收益对照、满容量交换、分页与 hash 筛选、预算和取消、Worker 转移测试；按仓库规则待版本更新前集中执行。第 14 节要求的真实语料质量与目标配额验收仍待第四批完成。
 
+第四批本地进度（2026-10-25）：已清理生产源码中的关键词分区与 HDBSCAN、旧 Worker 命令及专属测试。Worker 产物统一为 `dream-semantic-worker.mjs`，错误传递、主线程响应、停止与启动失败用例迁移到容量二分接口。旧算法对照使用固定基线 `734123e`；前三批提交分别为 `5666f06`、`a50bac8`、`cc9f166`。按用户决策，本批完成清理，集中检查、旧库迁移、目标配额与真实语料质量验收留到版本更新；`dreamSemanticRefinement` 继续默认 false，发布默认值待验收确定。
+
 ## 1. 实施结论
 
 将 Dream 的分组实现替换为：
@@ -797,9 +799,9 @@ HNSW 候选来自实时主索引；候选接收时限定本轮 ID 与正文 hash
 | docs/dream-session-plan.md、docs/vector-index.md | 当前运行规则及维护行为 |
 | AGENTS.md | 新目录与文件职责 |
 
-优先保留现有 Worker 构建入口。若将 dream-hdbscan-worker.mjs 重命名，同一提交更新 scripts/build-workers.mjs、worker_artifacts.ts、客户端定位与打包测试。
+Worker 构建入口复用 scripts/build-workers.mjs，Dream 产物为 dream-semantic-worker.mjs；客户端与测试使用统一名称，worker_artifacts.ts 继续按文件名定位产物。
 
-旧 partitioning / hdbscan 代码在基线对照和新算法验收完成后，根据全仓引用移除或转入离线研究 fixture。生产默认路径只保留选定实现；旧算法通过固定历史版本参与对照。
+生产源码中的 partitioning / hdbscan 及旧 Worker 命令已清理；旧算法通过固定基线 734123e 参与离线对照，质量验收状态记录在本地执行进度中。
 
 ## 14. 分阶段提交顺序
 

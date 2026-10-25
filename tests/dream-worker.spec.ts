@@ -1,20 +1,24 @@
 import assert from 'node:assert/strict'
 import { readFile, stat } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
-import {
-    runDreamHdbscan,
-    type DreamHdbscanMatrix
-} from '../src/service/workflows/dream/hdbscan/algorithm'
-import { partitionDreamEntries } from '../src/service/workflows/dream/partitioning'
 import { bisectDreamMemories } from '../src/service/workflows/dream/semantic/bisect'
 import { refineDreamMemories } from '../src/service/workflows/dream/semantic/refine'
-import { dreamCandidateWidth } from '../src/service/workflows/dream/semantic/types'
+import {
+    dreamCandidateWidth,
+    type DreamVectorMatrix
+} from '../src/service/workflows/dream/semantic/types'
 import { validateDreamPlan } from '../src/service/workflows/dream/semantic/validate'
 import { LivingMemoryDreamWorkerClient } from '../src/service/workflows/dream/worker/client'
 import { LivingMemoryVectorIndexWorkerClient } from '../src/service/vector_index/worker_client'
 import { dreamWorkerPath, vectorIndexWorkerPath } from './worker-test-utils'
 
-const createMatrix = (rows: number[][]): DreamHdbscanMatrix => ({
+const createBisectInput = (matrix: DreamVectorMatrix) => ({
+    matrix,
+    cancellation: new SharedArrayBuffer(4),
+    budgetMs: 30_000
+})
+
+const createMatrix = (rows: number[][]): DreamVectorMatrix => ({
     entryCount: rows.length,
     dimension: rows[0]?.length ?? 0,
     vectors: new Float32Array(rows.flat())
@@ -106,31 +110,6 @@ it('starts both workers from source-loaded default paths', async () => {
     await vectorIndexClient.dispose()
 })
 
-it('starts the Dream worker and transfers vectors and labels', async () => {
-    const client = new LivingMemoryDreamWorkerClient({
-        workerPath: dreamWorkerPath
-    })
-    await client.start()
-    const matrix = createMatrix([
-        [1, 0],
-        [0.99, 0.01],
-        [0, 1],
-        [0.01, 0.99],
-        [-1, 0]
-    ])
-    const expected = runDreamHdbscan({
-        ...matrix,
-        vectors: new Float32Array(matrix.vectors)
-    })
-
-    const labels = await client.runHdbscan(matrix)
-
-    assert.equal(matrix.vectors.byteLength, 0)
-    assert.deepEqual([...labels], [...expected])
-    assert.ok(labels.buffer.byteLength > 0)
-    await client.stop()
-})
-
 it('transfers the bisect matrix back with a complete capacity plan', async () => {
     const client = new LivingMemoryDreamWorkerClient({
         workerPath: dreamWorkerPath
@@ -187,88 +166,6 @@ it('observes the shared cancellation flag and remains usable', async () => {
     }
 })
 
-it('partitions entries without cloning full memory records', async () => {
-    const entries = Array.from({ length: 720 }, (_, index) => ({
-        id: `memory-${index.toString().padStart(4, '0')}`,
-        keywords: [`group-${index % 8}`, `topic-${index % 23}`],
-        content: `content-${index}`
-    }))
-    const expected = partitionDreamEntries(entries).map((partition) =>
-        partition.map((entry) => entry.id)
-    )
-    const client = new LivingMemoryDreamWorkerClient({
-        workerPath: dreamWorkerPath
-    })
-    await client.start()
-
-    const partitions = await client.partition(entries)
-
-    assert.deepEqual(
-        partitions.map((partition) => partition.map((entry) => entry.id)),
-        expected
-    )
-    assert.ok(
-        partitions.every((partition) =>
-            partition.every((entry) => entries.includes(entry))
-        )
-    )
-    await client.stop()
-})
-
-it('partitions with an explicit target size through the worker', async () => {
-    const entries = Array.from({ length: 95 }, (_, index) => ({
-        id: `memory-${index.toString().padStart(4, '0')}`,
-        keywords: [`group-${index % 8}`, `topic-${index % 23}`]
-    }))
-    const expected = partitionDreamEntries(entries, {
-        targetSize: 30
-    }).map((partition) => partition.map((entry) => entry.id))
-    const client = new LivingMemoryDreamWorkerClient({
-        workerPath: dreamWorkerPath
-    })
-    await client.start()
-
-    const partitions = await client.partition(entries, 30)
-
-    assert.deepEqual(
-        partitions.map((partition) => partition.map((entry) => entry.id)),
-        expected
-    )
-    assert.equal(partitions.length, 4)
-    assert.ok(
-        partitions.every(
-            (partition) => partition.length <= 30 && partition.length > 0
-        )
-    )
-    assert.equal(partitions.flat().length, entries.length)
-    await client.stop()
-})
-
-it('keeps the main event loop responsive during partitioning', async () => {
-    const entries = Array.from({ length: 5_000 }, (_, index) => ({
-        id: `memory-${index.toString().padStart(4, '0')}`,
-        keywords: [`group-${index % 8}`, `topic-${index % 23}`]
-    }))
-    const client = new LivingMemoryDreamWorkerClient({
-        workerPath: dreamWorkerPath
-    })
-    await client.start()
-
-    let completed = false
-    const partitioning = client.partition(entries).then((partitions) => {
-        completed = true
-        return partitions
-    })
-    await new Promise((resolve) => setTimeout(resolve, 0))
-
-    assert.equal(completed, false)
-    const partitions = await partitioning
-    assert.equal(partitions.length, 17)
-    assert.equal(partitions.flat().length, entries.length)
-    assert.ok(partitions.every((partition) => partition.length <= 350))
-    await client.stop()
-})
-
 it('keeps the main event loop responsive during clustering', async () => {
     let state = 0x12345678
     const random = () => {
@@ -284,9 +181,11 @@ it('keeps the main event loop responsive during clustering', async () => {
     await client.start()
 
     let completed = false
-    const clustering = client.runHdbscan(createMatrix(rows)).then(() => {
-        completed = true
-    })
+    const clustering = client
+        .bisect(createBisectInput(createMatrix(rows)))
+        .then(() => {
+            completed = true
+        })
     await new Promise((resolve) => setTimeout(resolve, 0))
 
     assert.equal(completed, false)
@@ -301,12 +200,8 @@ it('returns worker algorithm errors to the caller', async () => {
     await client.start()
 
     await assert.rejects(
-        client.runHdbscan({
-            entryCount: 3,
-            dimension: 2,
-            vectors: new Float32Array(5)
-        }),
-        /matrix shape mismatch/
+        client.bisect(createBisectInput(createMatrix([[0, 0]]))),
+        /有限正范数/
     )
     await client.stop()
 })
@@ -323,7 +218,7 @@ it('rejects active requests when the worker stops', async () => {
     await client.start()
 
     const rejection = assert.rejects(
-        client.runHdbscan(createMatrix(rows)),
+        client.bisect(createBisectInput(createMatrix(rows))),
         /worker stopped/
     )
     await client.stop()
@@ -342,7 +237,7 @@ it('rejects startup and later requests when the worker is unavailable', async ()
         /Cannot find module|cannot find module/
     )
     await assert.rejects(
-        client.runHdbscan(createMatrix([[1, 0]])),
+        client.bisect(createBisectInput(createMatrix([[1, 0]]))),
         /Cannot find module|cannot find module/
     )
     await client.stop()

@@ -15,7 +15,7 @@ export const vectorIndexWorkerPath = resolve(
 export const dreamWorkerPath = resolve(
     projectRoot,
     'lib',
-    'dream-hdbscan-worker.mjs'
+    'dream-semantic-worker.mjs'
 )
 
 let workerBuild: Promise<unknown> | null = null

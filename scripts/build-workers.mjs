@@ -7,14 +7,14 @@ const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const outputDirectory = resolve(projectRoot, 'lib')
 const outputs = [
     resolve(outputDirectory, 'vector-index-worker.mjs'),
-    resolve(outputDirectory, 'dream-hdbscan-worker.mjs')
+    resolve(outputDirectory, 'dream-semantic-worker.mjs')
 ]
 
 await build({
     absWorkingDir: projectRoot,
     entryPoints: {
         'vector-index-worker': 'src/service/vector_index/worker/entry.ts',
-        'dream-hdbscan-worker': 'src/service/workflows/dream/worker/entry.ts'
+        'dream-semantic-worker': 'src/service/workflows/dream/worker/entry.ts'
     },
     outdir: outputDirectory,
     bundle: true,

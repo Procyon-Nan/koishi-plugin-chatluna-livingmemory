@@ -1,8 +1,6 @@
 import { Worker } from 'node:worker_threads'
 import { resolveWorkerArtifact } from '../../../../worker_artifacts'
 import { toError } from '../../../shared/utils'
-import type { DreamHdbscanMatrix } from '../hdbscan/algorithm'
-import type { DreamPartitionEntry } from '../partitioning/types'
 import type { DreamBisectInput, DreamRefineInput } from '../semantic/types'
 import type {
     DreamWorkerProgressHandler,
@@ -44,7 +42,7 @@ export class LivingMemoryDreamWorkerClient implements DreamWorkerRunner {
     constructor(options: DreamWorkerClientOptions = {}) {
         this.workerPath =
             options.workerPath ??
-            resolveWorkerArtifact('dream-hdbscan-worker.mjs')
+            resolveWorkerArtifact('dream-semantic-worker.mjs')
         this.onFailure = options.onFailure
     }
 
@@ -72,25 +70,6 @@ export class LivingMemoryDreamWorkerClient implements DreamWorkerRunner {
         })
 
         await this.request({ type: 'ready' })
-    }
-
-    async partition<Entry extends DreamPartitionEntry>(
-        entries: readonly Entry[],
-        targetSize?: number
-    ): Promise<Entry[][]> {
-        const response = await this.request({
-            type: 'partition',
-            entries: entries.map(({ id, keywords }) => ({ id, keywords })),
-            targetSize
-        })
-        if (response.type !== 'partition') {
-            throw new Error(
-                `unexpected Dream worker response: ${response.type}`
-            )
-        }
-        return response.partitions.map((partition) =>
-            partition.map((entryIndex) => entries[entryIndex])
-        )
     }
 
     async bisect(
@@ -128,29 +107,6 @@ export class LivingMemoryDreamWorkerClient implements DreamWorkerRunner {
             )
         }
         return response.result
-    }
-
-    async runHdbscan(
-        matrix: DreamHdbscanMatrix,
-        onProgress?: DreamWorkerProgressHandler
-    ) {
-        const response = await this.request(
-            {
-                type: 'hdbscan',
-                entryCount: matrix.entryCount,
-                dimension: matrix.dimension,
-                vectors: matrix.vectors,
-                reportProgress: onProgress !== undefined
-            },
-            [matrix.vectors.buffer],
-            onProgress
-        )
-        if (response.type !== 'hdbscan') {
-            throw new Error(
-                `unexpected Dream worker response: ${response.type}`
-            )
-        }
-        return response.labels
     }
 
     async stop() {
