@@ -55,8 +55,7 @@ it('improves full groups through swaps and preserves capacity and coverage', () 
     assert.ok(result.diagnostics.acceptedSwaps > 0)
     assert.equal(result.diagnostics.acceptedMoves, 0)
     assert.ok(
-        result.diagnostics.finalObjective! >
-            result.diagnostics.initialObjective!
+        result.diagnostics.finalObjective > result.diagnostics.initialObjective
     )
     assert.ok(result.diagnostics.edgeVisits <= 100 * 60 * 10)
     assert.ok(result.diagnostics.hintEdgeVisits <= 3 * 60 * 3 * 30 * 10)

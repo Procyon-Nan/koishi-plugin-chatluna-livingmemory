@@ -231,6 +231,19 @@ export class LivingMemoryLogger {
         this.emit('info', event, fields, undefined, blocks)
     }
 
+    summary(event: string, detail: string | string[]) {
+        const content = Array.isArray(detail)
+            ? `\n${detail.join('\n')}`
+            : ` ${detail}`
+        try {
+            emitCompleteMessage(this.sink, () => {
+                this.sink.info(`事件：${event};${content}`)
+            })
+        } catch (error) {
+            this.reportFailure(error)
+        }
+    }
+
     warn(
         event: string,
         fields: LivingMemoryLogFieldsInput = {},

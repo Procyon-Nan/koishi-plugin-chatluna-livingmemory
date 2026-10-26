@@ -52,8 +52,8 @@ export interface DreamRefineDiagnostics {
     acceptedSwaps: number
     edgeVisits: number
     hintEdgeVisits: number
-    initialObjective?: number
-    finalObjective?: number
+    initialObjective: number
+    finalObjective: number
     refineMs: number
     stopReason: string
 }

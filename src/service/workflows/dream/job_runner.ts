@@ -23,7 +23,7 @@ export class LivingMemoryDreamJobRunner {
         let detail: string | null = null
         try {
             await this.jobTracker.markRunning(jobId)
-            logger.info('dream.started')
+            logger.summary('Dream 开始', `预设：${scope.presetId}`)
             const result = await this.dream.run(
                 scope.presetId,
                 jobId,

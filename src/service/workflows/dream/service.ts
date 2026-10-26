@@ -69,16 +69,11 @@ export class LivingMemoryDreamService {
         let state!: DreamSessionState
         let error: string | undefined
         let profileDetail = ''
-        const queuedAt = performance.now()
         try {
             const { model, callOptions } = await this.planningQueue.run(
                 'dream-planning',
                 async () => {
                     signal?.throwIfAborted()
-                    const startedAt = performance.now()
-                    logger.diagnostic('dream.planning.started', {
-                        queueWaitMs: startedAt - queuedAt
-                    })
                     const entries =
                         await this.repository.listDreamEntriesByPreset(presetId)
                     state = createDreamSessionState(
