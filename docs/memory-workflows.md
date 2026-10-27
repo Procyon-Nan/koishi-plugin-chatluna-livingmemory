@@ -13,6 +13,8 @@
 
 - ChatLuna 在 `before-chat` 注入当前会话最近一次快照和用户画像；在 `after-chat` 追加实际回复并触发提取。
 - Character 经专用生命周期事件维护上下文，通过预设中的 `{living_memory}` 变量注入。
+- Character 每次 `message_collect` 开始新一轮。首次求值 `{living_memory}` 时注册会话、补写 session 平台消息并等待回填，从本插件消息池一次读取末条消息及前 `recallHistoryMessages` 条历史，固定为本轮上下文。请求模板与历史模板复用本轮生成的变量文本。
+- Character 的 `before-chat` 消费这份上下文并启动异步召回；预设未使用 `{living_memory}` 时，在 `before-chat` 准备同样的上下文。`focusMessage` 继续用于实际回复识别和提取来源描述。
 - 会话清空时同步清除快照、召回锚点、提取游标和消息日志，并推进日志纪元。回填只接受当前纪元的消息。
 - 消息角色在入账时确定。采集与回填共用同步的消息元素文本化过程，非文本元素转为占位文本；文本化与入账连续执行。
 - 说话人与 at 目标使用用户昵称，取 `event.user.name` 或 `resolveUserSpeaker`，缺失时使用 userId。群名片字段为 `author.nick`、`member`、`session.username`。
@@ -24,7 +26,7 @@
 
 - Recall 异步运行，当前对话注入已有快照，新生成快照供后续对话使用。
 - `recallIntervalMessages` 为 0 时关闭。会话首次触发立即召回，此后按日志消息数计算间隔，闲聊计入。锚点保存在内存中，重启或召回失败后重新计数，下次触发立即召回。
-- 输入历史为当前触发消息之前最近 `recallHistoryMessages` 条日志。
+- ChatLuna 输入历史为当前触发消息之前最近 `recallHistoryMessages` 条日志。Character 当前消息取本轮准备时消息池的末条，历史取其前面最近 `recallHistoryMessages` 条；末条为用户消息时启动召回。
 - `subModel` 通过内部 `living_memory_search` 检索活跃记忆，快照保存模型整理后的文本与搜索轨迹。
 - 重排序失败时使用混合检索排序。用户关联信息用于说明归属。
 - 无可靠结果（包括 `<NO_MEMORY>`）时保留已有快照。
@@ -61,6 +63,7 @@
 入口：`src/service/user_profile.ts`。
 
 - 用户画像在 Dream 内生成，生成与注入受 `enableUserProfileInjection` 控制；用户身份登记独立运行。
+- Character 画像选择与本轮召回共用同一份“历史消息＋当前消息”，按其中的用户身份读取已有画像并在本轮变量中注入。例如窗口包含 B、C 的历史发言和 A 的当前发言时，本轮同时注入三人已有的画像；窗口固定后到达的新消息参与后续轮次。
 - 结果为 `update` 或 `keep`，均需填写理由。首次生成必须返回 `update`。
 - `keep` 保留正文并记录本次输入；输入未变时，下次 Dream 跳过该用户。
 - Dream 跳过批次后继续画像阶段；致命中断或取消后停止后续生成和写入。画像失败保留已有画像。
@@ -81,6 +84,7 @@
 
 ## 运行日志
 
+- Character 每轮变量首次生成成功后，通过 `debug` 控制的单行“记忆注入”摘要记录预设、会话和快照正文长度；画像注入开启时附加“人物画像”正文长度。长度按实际拼入变量的去首尾空白正文统计，同轮重复求值复用文本与已记录的结果。
 - 日志统一经 `LivingMemoryLogger` 输出。运行入口创建上下文 logger，业务事件和模型调用沿用同一上下文；模型调用补充 `modelCallId`、阶段和尝试次数。
 - 提取日志携带 `workflow=extraction`、`runId`、预设和会话标识，外层任务异常沿用本次运行标识。人设卡片生成携带 `workflow=persona`、`runId` 和预设标识；画像生成沿用 Dream 上下文，并补充用户标识。
 - 提取最终结构化失败、用户画像生成失败和人设卡片生成失败输出普通警告；逐次模型响应与校验详情由 `debug` 控制。

@@ -181,19 +181,6 @@ export class MessageLogRegistry {
         count: number,
         current: RecallMessageIdentity | null
     ): Promise<ConversationLogMessage[]> {
-        return (await this.loadRecallContext(conversationId, count, current))
-            .history
-    }
-
-    /** 当前消息与历史从同一次日志读取中取得，定位失败时不以末条消息冒充。 */
-    async loadRecallContext(
-        conversationId: string,
-        count: number,
-        current: RecallMessageIdentity | string | null
-    ): Promise<{
-        current: ConversationLogMessage | null
-        history: ConversationLogMessage[]
-    }> {
         await this.warmup(conversationId)
         // 先取完整日志定位边界，再截取历史窗口。
         const entries = this.lastN(conversationId, LOG_CAPACITY)
@@ -202,21 +189,11 @@ export class MessageLogRegistry {
             current != null && index >= 0;
             index--
         ) {
-            if (
-                typeof current === 'string'
-                    ? entries[index].messageId === current
-                    : matchesCurrentMessage(entries[index], current)
-            ) {
-                return {
-                    current: entries[index],
-                    history: entries.slice(Math.max(0, index - count), index)
-                }
+            if (matchesCurrentMessage(entries[index], current)) {
+                return entries.slice(Math.max(0, index - count), index)
             }
         }
-        return {
-            current: null,
-            history: entries.slice(Math.max(0, entries.length - count))
-        }
+        return entries.slice(Math.max(0, entries.length - count))
     }
 
     /** 清条目并更新纪元；绑定保留，监听与游标读取继续。 */

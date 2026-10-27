@@ -180,6 +180,7 @@ chatluna-livingmemory/
 
 | 修改范围 | 文档 |
 | --- | --- |
+| 日志级别、事件、格式与记录责任 | [日志规范](docs/logging.md) |
 | 身份、会话、消息日志、召回、提取、人设与画像 | [记忆与工作流](docs/memory-workflows.md) |
 | Dream 语义分组、工具会话、上下文压缩与任务状态 | [Dream 流程](docs/dream.md) |
 | 向量索引、目录所有权、重建与就绪状态 | [向量索引](docs/vector-index.md) |
