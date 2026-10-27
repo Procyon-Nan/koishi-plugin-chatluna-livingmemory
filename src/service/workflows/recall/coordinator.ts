@@ -159,9 +159,13 @@ export class LivingMemoryRecallCoordinator {
                 logger
             )
             if (trace == null) {
-                logger.info('recall.snapshot.unchanged', {
-                    reason: 'no-memory-selected'
-                })
+                const conversation = scope.conversationId
+                    .replace(/^group:/, '群聊 ')
+                    .replace(/^private:/, '私聊 ')
+                logger.summary(
+                    '召回结束',
+                    `预设：${scope.presetId}; 会话：${conversation}; 结果：沿用当前快照`
+                )
                 return
             }
 

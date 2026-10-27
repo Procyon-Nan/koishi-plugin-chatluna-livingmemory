@@ -74,29 +74,69 @@ const toMessages = (input: BaseLanguageModelInput): NormalizedMessage[] => {
     return prompt.map(normalizeMessage)
 }
 
+const messageRoleLabels: Record<string, string> = {
+    system: '系统消息',
+    human: '用户消息',
+    ai: '助手消息',
+    tool: '工具消息',
+    function: '函数消息',
+    generic: '自定义消息',
+    developer: '开发者消息',
+    text: '文本输入'
+}
+
+const modelStageLabels: Record<string, string> = {
+    'agentic-decision': '召回',
+    'dream-decision': 'Dream',
+    'dream-compression': 'Dream 上下文压缩',
+    'memory-extraction': '记忆提取',
+    'persona-card': '人设卡片',
+    'user-profile': '人物画像'
+}
+
+const formatModelLogDetails = (
+    fields: LivingMemoryLogFields,
+    callNumber?: number
+) => {
+    const details = [`模型：${fields.model}`]
+    if (callNumber !== undefined) {
+        details.push(`调用序号：${callNumber}`)
+    }
+    if (fields.presetId != null) {
+        details.push(`预设：${fields.presetId}`)
+    }
+    if (fields.conversationId != null) {
+        const conversation = String(fields.conversationId)
+            .replace(/^group:/, '群聊 ')
+            .replace(/^private:/, '私聊 ')
+        details.push(`会话：${conversation}`)
+    }
+    return details.join('; ')
+}
+
 const toPromptBlocks = (input: BaseLanguageModelInput) => {
     const blocks: LivingMemoryLogBlock[] = []
-    for (const [index, message] of toMessages(input).entries()) {
+    for (const message of toMessages(input)) {
+        const title = messageRoleLabels[message.role] ?? message.role
         blocks.push({
-            title: `message[${index}]`,
+            title,
             fields: {
-                role: message.role,
-                name: message.name,
-                toolCallId: message.toolCallId
+                名称: message.name,
+                工具调用ID: message.toolCallId
             },
             key: 'content',
             value: message.content
         })
         if (message.toolCalls !== undefined) {
             blocks.push({
-                title: `message[${index}].toolCalls`,
+                title: `${title}的工具调用`,
                 key: 'toolCalls',
                 value: message.toolCalls
             })
         }
         if (message.invalidToolCalls !== undefined) {
             blocks.push({
-                title: `message[${index}].invalidToolCalls`,
+                title: `${title}的无效工具调用`,
                 key: 'invalidToolCalls',
                 value: message.invalidToolCalls
             })
@@ -106,32 +146,24 @@ const toPromptBlocks = (input: BaseLanguageModelInput) => {
 }
 
 const toResponseBlocks = (response: BaseMessage, logResponseText: boolean) => {
-    const message = normalizeMessage(response)
-    const text = stringifyModelContent(message.content)
+    const text = stringifyModelContent(response.content)
     const blocks: LivingMemoryLogBlock[] = []
     if (logResponseText && text.length > 0) {
         blocks.push({
-            title: 'response.text',
+            title: '模型文本',
             key: 'text',
             value: text
         })
     }
-    if (
-        message.toolCalls !== undefined &&
-        (!Array.isArray(message.toolCalls) || message.toolCalls.length > 0)
-    ) {
-        blocks.push({
-            title: 'response.tool_calls',
-            key: 'tool_calls',
-            value: message.toolCalls
-        })
-    }
-    if (logResponseText && blocks.length === 0) {
-        blocks.push({
-            title: 'response.text',
-            key: 'text',
-            value: text
-        })
+    if (isAIMessage(response)) {
+        for (const call of response.tool_calls ?? []) {
+            blocks.push({
+                title: '工具调用',
+                subtitle: call.id == null ? call.name : `${call.name}:${call.id}`,
+                key: 'args',
+                value: call.args
+            })
+        }
     }
     return blocks
 }
@@ -171,36 +203,33 @@ const invokeLoggedRunnable = async (
         attempt,
         model: modelName
     })
+    const stage = modelStageLabels[context.stage] ?? context.stage
     const promptLogging = context.promptLogging ?? 'all'
     const logPrompt =
         promptLogging === 'all' || (promptLogging === 'first' && attempt === 1)
     if (logPrompt) {
-        logger.diagnostic('model.prompt', {}, () => toPromptBlocks(input))
+        logger.diagnosticSummary((fields) => ({
+            event: `${stage}模型输入`,
+            detail: formatModelLogDetails(
+                fields,
+                promptLogging === 'all' ? attempt : undefined
+            ),
+            blocks: toPromptBlocks(input)
+        }))
     }
     const startedAt = performance.now()
-    logger.diagnostic('model.started')
+    logger.diagnosticSummary((fields) => ({
+        event: `${stage}模型调用`,
+        detail: formatModelLogDetails(fields, attempt)
+    }))
     try {
         const response = await runnable.invoke(input, runConfig)
         context.onResponse?.(response)
-        const usage = isAIMessage(response)
-            ? response.usage_metadata
-            : undefined
-        // 使用日志字段名，避免 token_details 被凭据脱敏规则整组隐藏。
-        const usageFields = usage && {
-            input: usage.input_tokens,
-            output: usage.output_tokens,
-            total: usage.total_tokens,
-            inputDetails: usage.input_token_details,
-            outputDetails: usage.output_token_details
-        }
-        logger.diagnostic(
-            'model.response',
-            {
-                elapsedMs: performance.now() - startedAt,
-                usage: usageFields
-            },
-            () => toResponseBlocks(response, context.logResponseText ?? true)
-        )
+        logger.diagnosticSummary((fields) => ({
+            event: `${stage}模型响应`,
+            detail: formatModelLogDetails(fields),
+            blocks: toResponseBlocks(response, context.logResponseText ?? true)
+        }))
         return response
     } catch (error) {
         logger.diagnostic('model.failed', () => ({

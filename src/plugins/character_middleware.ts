@@ -364,11 +364,6 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
             const round = prepareRound(payload)
             const { scope, currentMessage, history } = await round.context
 
-            logger.diagnostic('character.before.received', {
-                conversationId: scope.conversationId,
-                presetId: scope.presetId
-            })
-
             if (currentMessage == null || currentMessage.role !== 'user') {
                 logger.diagnostic('character.before.skipped', {
                     conversationId: scope.conversationId,
@@ -418,12 +413,6 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                     payload.focusMessage
                 )
             )
-            logger.diagnostic('character.after.received', {
-                conversationId: scope.conversationId,
-                presetId: scope.presetId,
-                messages: payload.messages.length
-            })
-
             await ctx.chatluna_living_memory.queueExtraction(scope, {
                 resolveTranscriptOrigin: async () => {
                     if (payload.session.isDirect) {

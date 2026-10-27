@@ -261,13 +261,14 @@ export class LivingMemoryExtractionCoordinator {
             state.cursorSeq
         )
         if (backlog < window) {
-            this.logger.diagnostic('extraction.pending', {
-                workflow: 'extraction',
-                conversationId: scope.conversationId,
-                presetId: scope.presetId,
-                backlog,
-                window,
-                reason: 'window-not-reached'
+            this.logger.diagnosticSummary(() => {
+                const conversation = scope.conversationId
+                    .replace(/^group:/, '群聊 ')
+                    .replace(/^private:/, '私聊 ')
+                return {
+                    event: '等待记忆提取',
+                    detail: `预设：${scope.presetId}; 会话：${conversation}; 消息提取阈值：${backlog}/${window} 条`
+                }
             })
             return
         }

@@ -7,6 +7,7 @@ export type LivingMemoryLogFieldsInput =
 
 export interface LivingMemoryLogBlock {
     title: string
+    subtitle?: string
     value: unknown
     key?: string
     fields?: LivingMemoryLogFields
@@ -150,14 +151,28 @@ const orderedFieldNames = (fields: LivingMemoryLogFields) => {
     ]
 }
 
-const formatBlock = (block: LivingMemoryLogBlock) => {
+const formatBlock = (
+    block: LivingMemoryLogBlock,
+    style: 'structured' | 'summary' = 'structured'
+) => {
     const title = block.title.replace(/\r?\n/gu, ' ')
     const fields = block.fields ?? {}
     const detail = orderedFieldNames(fields)
-        .map((key) => `${key}=${formatValue(fields[key], key)}`)
-        .join(' ')
+        .map((key) =>
+            style === 'summary'
+                ? `${key}：${formatValue(fields[key], key)}`
+                : `${key}=${formatValue(fields[key], key)}`
+        )
+        .join(style === 'summary' ? '; ' : ' ')
     const heading = detail.length > 0 ? `${title} ${detail}` : title
-    return `--- ${heading} ---\n${formatBlockValue(block.value, block.key ?? '')}`
+    const label =
+        style === 'summary' ? `========${heading}========` : `--- ${heading} ---`
+    const lines = [label]
+    if (block.subtitle != null) {
+        lines.push(block.subtitle.replace(/\r?\n/gu, ' '))
+    }
+    lines.push(formatBlockValue(block.value, block.key ?? ''))
+    return lines.join('\n')
 }
 
 const emitCompleteMessage = (sink: LivingMemoryLogSink, emit: () => void) => {
@@ -221,6 +236,30 @@ export class LivingMemoryLogger {
             return
         }
         this.emit('info', event, fields, undefined, blocks)
+    }
+
+    diagnosticSummary(
+        render: (context: LivingMemoryLogFields) => {
+            event: string
+            detail: string
+            blocks?: LivingMemoryLogBlock[]
+        }
+    ) {
+        if (!this.isDebugEnabled()) return
+        try {
+            const { event, detail, blocks } = render(this.context)
+            let content = detail
+            if (blocks?.length) {
+                content +=
+                    '\n' +
+                    blocks
+                        .map((block) => formatBlock(block, 'summary'))
+                        .join('\n\n')
+            }
+            this.summary(event, content)
+        } catch (error) {
+            this.reportFailure(error)
+        }
     }
 
     info(
@@ -287,7 +326,7 @@ export class LivingMemoryLogger {
             if (blocks !== undefined) {
                 completeMessage = [
                     message,
-                    ...blocks.map(formatBlock),
+                    ...blocks.map((block) => formatBlock(block)),
                     `--- end ${event} ---`
                 ].join('\n')
             }

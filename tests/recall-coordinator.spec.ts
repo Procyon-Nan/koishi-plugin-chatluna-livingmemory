@@ -114,7 +114,7 @@ it('keeps the previous snapshot without persisting a job for <NO_MEMORY>', async
     await waitFor(
         () =>
             captured.info.some((message) =>
-                message.includes('event=recall.snapshot.unchanged')
+                message.includes('事件：召回结束;')
             ),
         'agentic no-memory result'
     )
@@ -203,7 +203,7 @@ it('serializes recall runs for the same scope without persisted running state', 
     await waitFor(
         () =>
             captured.info.some((message) =>
-                message.includes('event=recall.snapshot.unchanged')
+                message.includes('事件：召回结束;')
             ),
         'serialized recall completion'
     )
