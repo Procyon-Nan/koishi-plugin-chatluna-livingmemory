@@ -124,6 +124,7 @@ chatluna-livingmemory/
 │       │       ├── coordinator.ts       # Dream 触发、排队与取消
 │       │       ├── job_runner.ts        # 任务记录与完成统计
 │       │       ├── service.ts           # 全量准备、聚类、会话与画像衔接
+│       │       ├── incremental.ts       # 提取种子近邻分组与逐组刷新
 │       │       ├── clustering.ts        # 向量快照、分组规划与批次组装
 │       │       ├── semantic/
 │       │       │   ├── types.ts         # 向量矩阵、候选、图与分组契约

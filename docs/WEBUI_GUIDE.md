@@ -215,3 +215,5 @@ const moduleDirectory =
 | 5    | bundle 请求状态码          | 200 正常 / 403 路径检查拦截 / 404 文件不存在      |
 | 6    | Vue Router 是否注册路由    | DevTools → Console 搜索 `Vue Router warn`         |
 | 7    | dist/index.js 内容是否正确 | 检查 `export{...as default}` 和 `ctx.page` 关键词 |
+
+预设导出格式为 v5，包含现行记忆字段；导入支持 v1～v5，历史固化状态随字段转换舍弃。

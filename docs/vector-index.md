@@ -13,7 +13,7 @@
 
 入口：`src/service/vector_index/maintenance.ts`、`src/service/vector_index/worker/dream_ann.ts`。
 
-- 运行时使用 PGlite 0.5.11、pglite-pgvector 0.0.12，内嵌 vector 扩展 0.8.7。核心 schema 版本保持 4。
+- 运行时使用 PGlite 0.5.11、pglite-pgvector 0.0.12，内嵌 vector 扩展 0.8.7。核心 schema 版本为 5。v3/v4 原地迁移时移除固化列及相关索引；v3 同时补齐来源会话列。升级保留向量、generation 与 HNSW。
 - 启动打开已有 0.8.1 扩展库后，关闭连接并生成同级 `vector-index.pglite.vector-0.8.1-backup-<uuid>` 冷备份；重新打开后通过事务升级扩展、同步已知旧版本的 manifest 扩展版本，保留模型、维数、generation 和正文向量。备份保留供发布验收和回退使用，清理由管理员处理。
 - 升级错误通过 `extension-migration-failed` 上报，保留原目录和冷备份。升级成功后进入原有启动对账；原有维数探针照常执行一次 embedding。
 - 启动对账或全量重建完成后，自动运行独立 `dream-ann` 索引维护任务。新库在批量写入与切换完成后建立索引；后续启动复用满足定义且 valid/ready 的索引。维护复用现有任务队列、操作门禁和 Worker，采用单线程、64 MB maintenance_work_mem。
@@ -50,3 +50,5 @@
 - `lm_index_preset_state` 保存 `ready`、`dirty` 终态；`building`、`unavailable` 等瞬态保存在主进程内存。
 - 状态账本对应数据库条目或索引文档中存在的预设，孤儿行通过全量对账清除。
 - 读取就绪状态按预设判断。manifest 缺失、全局维护窗口或 Worker 故障时暂停全部读取；单个预设未就绪时只阻止该预设的读取。
+
+增量 Dream 的同次提取 ID 排除条件直接进入候选 SQL，先过滤再截断、重排。检索参数和降级沿用公共搜索引擎。
