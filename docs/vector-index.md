@@ -18,6 +18,7 @@
 - 升级错误通过 `extension-migration-failed` 上报，保留原目录和冷备份。升级成功后进入原有启动对账；原有维数探针照常执行一次 embedding。
 - 启动对账或全量重建完成后，自动运行独立 `dream-ann` 索引维护任务。新库在批量写入与切换完成后建立索引；后续启动复用满足定义且 valid/ready 的索引。维护复用现有任务队列、操作门禁和 Worker，采用单线程、64 MB maintenance_work_mem。
 - `lm_index_memory_dream_hnsw_v1` 覆盖主表所有 active 记忆，使用 cosine、m=16、ef_construction=64；后续写入由 PostgreSQL 同步维护。
+- 1～2000 维使用 `vector` HNSW；2001～4000 维使用 `embedding::halfvec(维度)` 表达式 HNSW，候选查询采用相同的半精度转换。原始向量继续以 `vector` 保存，普通召回和 Dream 构图重评分使用原始精度。已有向量可直接构建半精度索引。
 - ANN 可用性由实际索引定义和 valid/ready 判断，独立于主体索引状态。构建 SQL 失败记录维护任务失败，主体 ready 时精确查询继续可用；Worker 故障沿用全局不可用处理。
 - 普通向量与混合召回通过 MATERIALIZED CTE 计算完整过滤集合的距离，再排序和截断，保持精确检索语义。
 - `queryDreamNeighbors` 每页接受 1–4 条直向量查询，核验 generation 和 HNSW 索引就绪状态后逐条执行短事务。每条使用局部 HNSW 搜索参数，由 PostgreSQL 优化器选择 HNSW 或精确扫描，返回 memoryId、contentHash。查询向量 buffer 转移至 Worker，由调用者提供可转移的查询副本。

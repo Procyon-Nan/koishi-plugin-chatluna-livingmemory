@@ -9,14 +9,23 @@ import { toPgVector } from './vector_values'
 
 const DREAM_HNSW_INDEX = 'lm_index_memory_dream_hnsw_v1'
 
+const usesHalfPrecision = (dimension: number) =>
+    dimension > 2000 && dimension <= 4000
+
 export const isDreamAnnReady = async (database: PGlite) => {
     const result = await database.query<{ ready: boolean }>(
         `SELECT i.indisvalid AND i.indisready
                 AND i.indrelid = 'lm_index_memory'::regclass
                 AND am.amname = 'hnsw'
                 AND i.indnkeyatts = 1 AND i.indnatts = 1
-                AND a.attname = 'embedding'
-                AND opc.opcname = 'vector_cosine_ops'
+                AND CASE WHEN manifest.dimension BETWEEN 2001 AND 4000
+                    THEN opc.opcname = 'halfvec_cosine_ops'
+                        AND i.indexprs IS NOT NULL
+                        AND format_type(ia.atttypid, ia.atttypmod) =
+                            'halfvec(' || manifest.dimension || ')'
+                    ELSE a.attname = 'embedding'
+                        AND opc.opcname = 'vector_cosine_ops'
+                    END
                 AND c.reloptions @> ARRAY['m=16', 'ef_construction=64']
                 AND pg_get_expr(i.indpred, i.indrelid) = '(status = ''active''::text)'
                 AS ready
@@ -24,7 +33,9 @@ export const isDreamAnnReady = async (database: PGlite) => {
          JOIN pg_class c ON c.oid = i.indexrelid
          JOIN pg_am am ON am.oid = c.relam
          JOIN pg_opclass opc ON opc.oid = i.indclass[0]
-         JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = i.indkey[0]
+         LEFT JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = i.indkey[0]
+         JOIN pg_attribute ia ON ia.attrelid = i.indexrelid AND ia.attnum = 1
+         CROSS JOIN lm_index_manifest manifest
          WHERE i.indexrelid = to_regclass($1)`,
         [DREAM_HNSW_INDEX]
     )
@@ -35,13 +46,21 @@ export const buildDreamAnnIndex = async (database: PGlite) => {
     if (await isDreamAnnReady(database)) {
         return { built: false }
     }
+    const { dimension } = (
+        await database.query<{ dimension: number }>(
+            'SELECT dimension FROM lm_index_manifest WHERE singleton = 1'
+        )
+    ).rows[0]
+    const indexExpression = usesHalfPrecision(dimension)
+        ? `(embedding::halfvec(${dimension})) halfvec_cosine_ops`
+        : 'embedding vector_cosine_ops'
     await database.transaction(async (tx) => {
         await tx.exec(`
             SET LOCAL maintenance_work_mem = '64MB';
             SET LOCAL max_parallel_maintenance_workers = 0;
             DROP INDEX IF EXISTS ${DREAM_HNSW_INDEX};
             CREATE INDEX ${DREAM_HNSW_INDEX}
-            ON lm_index_memory USING hnsw (embedding vector_cosine_ops)
+            ON lm_index_memory USING hnsw (${indexExpression})
             WITH (m = 16, ef_construction = 64)
             WHERE status = 'active';
             ANALYZE lm_index_memory;
@@ -59,9 +78,9 @@ export const queryDreamNeighbors = async (
         throw new Error('Dream neighbor page requires 1 to 4 queries')
     }
     const startedAt = performance.now()
-    const { generation } = (
-        await database.query<{ generation: string }>(
-            'SELECT generation FROM lm_index_manifest WHERE singleton = 1'
+    const { generation, dimension } = (
+        await database.query<{ generation: string; dimension: number }>(
+            'SELECT generation, dimension FROM lm_index_manifest WHERE singleton = 1'
         )
     ).rows[0]
     if (queries.some((query) => query.generation !== generation)) {
@@ -81,6 +100,9 @@ export const queryDreamNeighbors = async (
         return { ...result, reason: 'index-absent' }
     }
     result.available = true
+    const distanceExpression = usesHalfPrecision(dimension)
+        ? `embedding::halfvec(${dimension}) <=> $1::halfvec(${dimension})`
+        : 'embedding <=> $1::vector'
     for (const query of queries) {
         if (Atomics.load(cancellation, 0) !== 0) {
             throw new Error('Dream neighbor query cancelled')
@@ -100,7 +122,7 @@ export const queryDreamNeighbors = async (
                          FROM lm_index_memory
                          WHERE preset_id = $2 AND status = 'active'
                            AND memory_id <> $3
-                         ORDER BY embedding <=> $1::vector, memory_id ASC
+                         ORDER BY ${distanceExpression}, memory_id ASC
                          LIMIT $4`
             const params = [
                 toPgVector(query.vector),
