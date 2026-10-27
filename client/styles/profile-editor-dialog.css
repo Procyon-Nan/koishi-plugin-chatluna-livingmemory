@@ -125,7 +125,7 @@
         display: none;
     }
 
-    .profile-editor-actions :global(.el-button) {
+    .profile-editor-actions :deep(.el-button) {
         flex: 1;
     }
 }
