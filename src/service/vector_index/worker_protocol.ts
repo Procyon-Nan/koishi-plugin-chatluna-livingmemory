@@ -76,6 +76,7 @@ export interface VectorIndexMutation {
 export interface VectorIndexFilter {
     presetId: string
     conversationId?: string
+    excludedMemoryIds?: string[]
     types: MemoryEntryType[] | null
     memoryStatus: MemorySearchStatus
 }

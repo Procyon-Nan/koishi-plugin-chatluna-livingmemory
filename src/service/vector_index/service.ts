@@ -285,6 +285,7 @@ export class LivingMemoryVectorIndexService
                 const hits = await this.requireWorker().queryHybrid({
                     presetId: input.presetId,
                     conversationId: input.conversationId,
+                    excludedMemoryIds: input.excludedMemoryIds,
                     types: input.memoryTypes,
                     memoryStatus: input.memoryStatus,
                     limit: input.maxCandidates,

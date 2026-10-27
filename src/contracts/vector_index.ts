@@ -97,6 +97,7 @@ export interface MemoryHybridSearchHit {
 export interface MemoryHybridSearchInput {
     presetId: string
     conversationId?: string
+    excludedMemoryIds?: string[]
     searchTexts: string[]
     memoryTypes: MemoryEntryType[] | null
     memoryStatus: MemorySearchStatus

@@ -41,6 +41,12 @@ const appendFilters = (query: VectorIndexKnnQuery, alias = '') => {
         query.presetId,
         toStatusValues(query.memoryStatus)
     ]
+    if (query.excludedMemoryIds?.length) {
+        conditions.push(
+            `${prefix}memory_id <> ALL($${parameters.length + 1}::text[])`
+        )
+        parameters.push(query.excludedMemoryIds)
+    }
     if (query.conversationId !== undefined) {
         conditions.push(
             `(${prefix}source_conversation_id = $${parameters.length + 1} OR ${prefix}source_conversation_id IS NULL)`

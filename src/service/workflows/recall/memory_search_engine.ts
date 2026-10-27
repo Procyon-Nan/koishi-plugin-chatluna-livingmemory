@@ -68,13 +68,15 @@ export class LivingMemorySearchEngine implements LivingMemorySearchProvider {
     async searchMemoriesDetailed(
         presetId: string,
         input: LivingMemorySearchInput,
-        conversationId?: string
+        conversationId?: string,
+        excludedMemoryIds?: string[]
     ): Promise<LivingMemorySearchDetailedResult[]> {
         const limit = this.config.memorySearchToolMaxResults
         const hasReranker = isModelConfigured(this.config.rerankModel)
         const hits = await this.vectorSearch.searchHybrid({
             presetId,
             conversationId,
+            excludedMemoryIds,
             searchTexts: input.searchTexts,
             keywords: input.searchKeywords ?? [],
             memoryTypes: resolveMemoryTypes(input),

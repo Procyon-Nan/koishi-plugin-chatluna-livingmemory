@@ -110,6 +110,7 @@ it('uses the vector index for hybrid search and restores hit order', async () =>
     assert.deepEqual(query, {
         presetId: 'preset-a',
         conversationId: undefined,
+        excludedMemoryIds: undefined,
         searchTexts: ['first query', 'second query'],
         keywords: ['memory-b'],
         memoryTypes: ['fact'],

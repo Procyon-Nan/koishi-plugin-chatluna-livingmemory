@@ -199,3 +199,14 @@ it('keeps the semantic-only path unchanged for empty normalized keywords', async
     ])
     assert.equal(calls.length, 1)
 })
+
+it('excludes extraction IDs in both SQL candidate paths before the result limit', async () => {
+    const { database, calls } = createDatabase([], [])
+    await queryVectorIndexHybrid(database, createQuery({ excludedMemoryIds: ['new-a', 'new-b'] }))
+    assert.equal(calls.length, 2)
+    for (const call of calls) {
+        assert.match(call.text, /memory_id <> ALL\(\$3::text\[\]\)/u)
+        assert.deepEqual(call.parameters?.[2], ['new-a', 'new-b'])
+    }
+    assert.ok(calls[0].text.indexOf('memory_id <> ALL') < calls[0].text.indexOf('LIMIT'))
+})
