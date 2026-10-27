@@ -1,4 +1,4 @@
-import type { DreamCluster } from '../workflows/dream/types'
+import type { DreamBatch } from '../workflows/dream/types'
 import type { PresetSpeakerRecord } from '../../contracts/memory'
 import { dreamMemoryFields, renderMemoriesForModel } from './memory_entries'
 import {
@@ -8,14 +8,14 @@ import {
 } from './prompt_format'
 
 export const buildDreamMemoryBatchPrompt = (
-    cluster: DreamCluster,
+    batch: DreamBatch,
     speakers: PresetSpeakerRecord[]
 ) => {
     return [
         '<dream_input>',
         ...formatXmlBlock(
             'memory_entries',
-            renderMemoriesForModel(cluster.entries, {
+            renderMemoriesForModel(batch.entries, {
                 fields: dreamMemoryFields,
                 speakers
             })
@@ -43,7 +43,7 @@ export const buildDreamSystemPrompt = (
         ...formatXmlBlock('preset_context', presetPrompt.trim()),
         '',
         '<task>',
-        '你要阅览并调用合适的工具整理自己的长期记忆，所有长期记忆会分批输入给你进行处理。每一批记忆整理完成后，下一批会自动输入，直到所有记忆都被整理完毕。',
+        '你要阅览并调用合适的工具整理自己的长期记忆，记忆会分批输入给你进行处理。每一批记忆整理完成后，下一批会自动输入，直到所有记忆都被整理完毕。',
         '你应基于本次会话已提供的记忆做判断，保持事实准确。',
         '</task>',
         '',

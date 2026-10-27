@@ -87,8 +87,7 @@ export async function runDreamSession(input: DreamSessionRunInput) {
     signal?.throwIfAborted()
     const systemPrompt = buildDreamSystemPrompt(
         input.assistantLabel,
-        input.presetPrompt,
-        state.mode
+        input.presetPrompt
     )
     const history = new DreamSessionHistory(
         systemPrompt,
