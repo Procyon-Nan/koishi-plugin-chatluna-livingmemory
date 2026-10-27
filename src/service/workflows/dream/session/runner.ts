@@ -65,23 +65,14 @@ export function createDreamCallOptions(
     model: ChatLunaChatModel,
     sessionId: string
 ) {
-    const defaults = model.invocationParams()
-    const requestedOutput = defaults.maxTokens
-    const maxTokens =
-        requestedOutput != null && requestedOutput > 0 ? requestedOutput : 4096
-    const maxTokenLimit = model.getModelMaxContextSize() - maxTokens
-    if (
-        !Number.isFinite(maxTokenLimit) ||
-        maxTokenLimit < dreamCompressionThreshold
-    ) {
-        throw new Error('Dream 模型须能容纳 200k 输入及输出预算。')
+    const maxTokenLimit = model.getModelMaxContextSize()
+    if (maxTokenLimit < dreamCompressionThreshold) {
+        throw new Error('Dream 模型最大上下文须至少为 200k tokens。')
     }
     return {
         id: sessionId,
         stream: false,
-        maxTokens,
-        maxTokenLimit,
-        overrideRequestParams: defaults.overrideRequestParams
+        maxTokenLimit
     } satisfies ChatLunaModelCallOptions
 }
 

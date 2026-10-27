@@ -514,10 +514,10 @@ it('rejects oversized input instead of letting the host drop current batch messa
 
 it('rejects models unable to support the fixed threshold before calling them', async () => {
     const { model, requests } = createModel(() => new AIMessage('unused'))
-    vi.spyOn(model, 'getModelMaxContextSize').mockReturnValue(200_000)
+    vi.spyOn(model, 'getModelMaxContextSize').mockReturnValue(199_999)
     assert.throws(
         () => createDreamCallOptions(model, 'dream-test'),
-        /200k 输入及输出预算/
+        /最大上下文须至少为 200k tokens/
     )
     assert.equal(requests.length, 0)
 })
