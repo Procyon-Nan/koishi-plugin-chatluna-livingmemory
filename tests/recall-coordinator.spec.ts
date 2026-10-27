@@ -272,7 +272,7 @@ it('retries immediately after a failed recall instead of waiting out the interva
     await waitFor(() => runCalls === 2, 'immediate retry')
 })
 
-it('continues recall with empty history without persisting a job', async () => {
+it('records history loading failure without invoking recall or updating the snapshot', async () => {
     const jobStore = createJobStore()
     let receivedHistory: LivingMemoryTranscriptMessage[] | undefined
     let snapshotWrites = 0
@@ -294,15 +294,11 @@ it('continues recall with empty history without persisting a job', async () => {
     await coordinator.queue(scope, currentMessage, async () => {
         throw new Error('private history failure detail')
     })
-    await waitFor(() => snapshotWrites === 1, 'recall after history failure')
+    await waitFor(() => jobStore.jobs.length === 1, 'failed history loading')
 
-    assert.deepEqual(receivedHistory, [])
-    assert.equal(jobStore.jobs.length, 0)
-    assert.ok(
-        captured.info.some((message) =>
-            message.startsWith('事件：recall.history.unavailable;')
-        )
-    )
+    assert.equal(receivedHistory, undefined)
+    assert.equal(snapshotWrites, 0)
+    assert.equal(jobStore.jobs[0]?.status, 'failed')
 })
 
 it('gates recall by message gap since the last executed recall', async () => {

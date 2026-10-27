@@ -275,19 +275,10 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                     }))
                     return
                 }
-                await ctx.chatluna_living_memory
-                    .recordPresetSpeaker(scope, currentMessage.speakerLabel)
-                    .catch((error) => {
-                        logger.warn(
-                            'chat.speaker.record.failed',
-                            {
-                                conversationId: scope.conversationId,
-                                presetId: scope.presetId,
-                                operation: 'record-preset-speaker'
-                            },
-                            error
-                        )
-                    })
+                await ctx.chatluna_living_memory.recordPresetSpeaker(
+                    scope,
+                    currentMessage.speakerLabel
+                )
             }
 
             let historyMessagesPromise: Promise<
@@ -314,68 +305,56 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
             const enableUserProfileInjection =
                 config.enableUserProfileInjection === true
             if (enableSnapshotInjection || enableUserProfileInjection) {
-                try {
-                    const historyMessages = enableUserProfileInjection
-                        ? await loadHistoryMessages()
-                        : []
-                    const speakerKeys = enableUserProfileInjection
-                        ? collectUserProfileSpeakerKeys([
-                              ...historyMessages,
-                              currentMessage!
-                          ])
-                        : []
-                    const sections =
-                        await ctx.chatluna_living_memory.hydratePromptSections(
-                            scope,
-                            {
-                                includeSnapshot: enableSnapshotInjection,
-                                speakerKeys
-                            }
-                        )
-                    const userProfileInjection = formatUserProfileInjection(
-                        sections.userProfiles
-                    )
-                    if (userProfileInjection != null) {
-                        activeUserProfileInjections.set(
-                            conversationId,
-                            userProfileInjection
-                        )
-                    }
-
-                    const snapshotInjection = formatSnapshotInjection(
-                        sections.snapshot
-                    )
-                    if (snapshotInjection != null) {
-                        activeSnapshotInjections.set(
-                            conversationId,
-                            snapshotInjection
-                        )
-                    }
-                    logger.diagnosticSummary(() => {
-                        const details = [formatLogScope(scope)]
-                        if (enableSnapshotInjection) {
-                            details.push(
-                                `记忆快照：${sections.snapshot.trim().length} 字符`
-                            )
-                        }
-                        if (enableUserProfileInjection) {
-                            details.push(
-                                `人物画像：${sections.userProfiles.trim().length} 字符`
-                            )
-                        }
-                        return { event: '记忆注入', detail: details.join('; ') }
-                    })
-                } catch (error) {
-                    logger.warn(
-                        'chat.injection.failed',
+                const historyMessages = enableUserProfileInjection
+                    ? await loadHistoryMessages()
+                    : []
+                const speakerKeys = enableUserProfileInjection
+                    ? collectUserProfileSpeakerKeys([
+                          ...historyMessages,
+                          currentMessage!
+                      ])
+                    : []
+                const sections =
+                    await ctx.chatluna_living_memory.hydratePromptSections(
+                        scope,
                         {
-                            conversationId: scope.conversationId,
-                            presetId: scope.presetId,
-                            operation: 'hydrate-prompt-sections'
-                        },
-                        error
+                            includeSnapshot: enableSnapshotInjection,
+                            speakerKeys
+                        }
+                    )
+                const userProfileInjection = formatUserProfileInjection(
+                    sections.userProfiles
+                )
+                if (userProfileInjection != null) {
+                    activeUserProfileInjections.set(
+                        conversationId,
+                        userProfileInjection
                     )
                 }
+
+                const snapshotInjection = formatSnapshotInjection(
+                    sections.snapshot
+                )
+                if (snapshotInjection != null) {
+                    activeSnapshotInjections.set(
+                        conversationId,
+                        snapshotInjection
+                    )
+                }
+                logger.diagnosticSummary(() => {
+                    const details = [formatLogScope(scope)]
+                    if (enableSnapshotInjection) {
+                        details.push(
+                            `记忆快照：${sections.snapshot.trim().length} 字符`
+                        )
+                    }
+                    if (enableUserProfileInjection) {
+                        details.push(
+                            `人物画像：${sections.userProfiles.trim().length} 字符`
+                        )
+                    }
+                    return { event: '记忆注入', detail: details.join('; ') }
+                })
             }
 
             if (config.recallIntervalMessages > 0) {

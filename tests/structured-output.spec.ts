@@ -38,7 +38,7 @@ const boundTools = (
 
 const invoke = (
     responses: Parameters<typeof createToolCallingModel>[0],
-    validate?: (value: { items: string[]; note?: string }) => void
+    validate?: (value: { items: string[]; note?: string }) => string | undefined
 ) => {
     const harness = createToolCallingModel(responses)
     return {
@@ -68,7 +68,7 @@ it('retries results rejected by contextual validation', async () => {
         ],
         ({ items }) => {
             if (items.includes('unknown')) {
-                throw new Error('unknown item')
+                return 'unknown item'
             }
         }
     )

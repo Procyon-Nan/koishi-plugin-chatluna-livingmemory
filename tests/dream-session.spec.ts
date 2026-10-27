@@ -1,3 +1,7 @@
+import {
+    ChatLunaError,
+    ChatLunaErrorCode
+} from 'koishi-plugin-chatluna/utils/error'
 import assert from 'node:assert/strict'
 import 'koishi-plugin-chatluna'
 import {
@@ -244,7 +248,12 @@ it('keeps successful work, retries ineffective rounds and moves on after three c
                 content: '',
                 tool_calls: [check(['a'], 'first')]
             })
-        if (index === 2 || index === 5) throw new Error('request failed')
+        if (index === 2 || index === 5)
+            throw new ChatLunaError(
+                ChatLunaErrorCode.API_REQUEST_FAILED,
+                new Error('request failed'),
+                true
+            )
         if (index === 3)
             return new AIMessage({
                 content: '',

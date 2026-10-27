@@ -26,28 +26,27 @@ const createLogger = (debug = false) => {
     }
 }
 
-it('formats stable event fields and escapes multiline content', () => {
+it('formats a Chinese summary using inherited context', () => {
     const captured = createLogger(true)
     captured.log
-        .with({ presetId: '克子（Character）', workflow: 'recall' })
-        .diagnostic('recall.snapshot.updated', {
-            content: '第一行\n第二行',
-            runId: 'run-1'
-        })
-
+        .with({ presetId: '克子（Character）' })
+        .summary(
+            '人物画像处理失败',
+            (fields) => `预设：${fields.presetId}; 原因：结果格式错误`,
+            'warn'
+        )
     assert.equal(
-        captured.info[0]?.[0],
-        '事件：recall.snapshot.updated; workflow：recall; runId：run-1; ' +
-            'presetId："克子（Character）"; content："第一行\\n第二行"'
+        captured.warnings[0]?.[0],
+        '事件：人物画像处理失败; 预设：克子（Character）; 原因：结果格式错误'
     )
 })
 
 it('does not build diagnostic fields when debug logging is disabled', () => {
     const captured = createLogger(false)
     let built = false
-    captured.log.diagnostic('test.diagnostic', () => {
+    captured.log.diagnosticSummary(() => {
         built = true
-        return { value: 1 }
+        return { event: '诊断', detail: '值：1' }
     })
     assert.equal(built, false)
     assert.equal(captured.info.length, 0)
@@ -57,10 +56,14 @@ it('redacts credential fields and handles circular values', () => {
     const captured = createLogger(true)
     const circular: Record<string, unknown> = { apiKey: 'secret' }
     circular['self'] = circular
-    captured.log.diagnostic('test.payload', { circular })
+    captured.log.diagnosticSummary(() => ({
+        event: '诊断',
+        detail: '内容',
+        blocks: [{ title: '数据', value: circular }]
+    }))
     const message = String(captured.info[0]?.[0])
-    assert.match(message, /"apiKey":"\[REDACTED\]"/u)
-    assert.match(message, /"self":"\[Circular\]"/u)
+    assert.match(message, /"apiKey": "\[REDACTED\]"/u)
+    assert.match(message, /"self": "\[Circular\]"/u)
     assert.doesNotMatch(message, /secret/u)
 })
 
@@ -77,8 +80,8 @@ it('isolates sink failures from callers', () => {
         () => true
     )
 
-    assert.doesNotThrow(() => log.diagnostic('test.failure'))
-    assert.doesNotThrow(() => log.diagnostic('test.failure-again'))
+    assert.doesNotThrow(() => log.summary('日志测试', '首次输出'))
+    assert.doesNotThrow(() => log.summary('日志测试', '再次输出'))
     assert.equal(warnings.length, 1)
 })
 

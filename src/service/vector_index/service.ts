@@ -94,10 +94,11 @@ export class LivingMemoryVectorIndexService
         this.workerFactory = options.workerFactory ?? createDefaultWorker
         this.directorySwitch = new VectorIndexDirectorySwitch({
             reportWarning: (warning) =>
-                this.logger.warn('vector-index.directory.warning', {
-                    workflow: 'vector-index',
-                    warning
-                })
+                this.logger.summary(
+                    '索引目录维护提示',
+                    `原因：${warning}`,
+                    'warn'
+                )
         })
 
         this.indexDirectory = resolve(
@@ -147,9 +148,10 @@ export class LivingMemoryVectorIndexService
         } catch (error) {
             const failure = toError(error)
             this.status.markUnavailable(failure.message)
-            this.logger.error(
-                'vector-index.start.failed',
-                { workflow: 'vector-index', state: 'unavailable' },
+            this.logger.summary(
+                '向量索引启动失败',
+                '状态：暂停检索',
+                'error',
                 failure
             )
             throw error
@@ -160,11 +162,10 @@ export class LivingMemoryVectorIndexService
             this.worker = this.workerFactory(
                 (error) => this.recordWorkerFailure(error),
                 (warning) =>
-                    this.logger.warn(
-                        'vector-index.worker.warning',
-                        {
-                            workflow: 'vector-index'
-                        },
+                    this.logger.summary(
+                        '索引工作线程警告',
+                        '操作：维护向量索引',
+                        'warn',
                         warning
                     )
             )
@@ -187,9 +188,10 @@ export class LivingMemoryVectorIndexService
         } catch (error) {
             const failure = toError(error)
             this.status.markUnavailable(failure.message)
-            this.logger.error(
-                'vector-index.start.failed',
-                { workflow: 'vector-index', state: 'unavailable' },
+            this.logger.summary(
+                '向量索引启动失败',
+                '状态：暂停检索',
+                'error',
                 failure
             )
             try {
@@ -454,12 +456,10 @@ export class LivingMemoryVectorIndexService
         try {
             await this.removeLegacyIndexFiles()
         } catch (error) {
-            this.logger.warn(
-                'vector-index.legacy-cleanup.failed',
-                {
-                    workflow: 'vector-index',
-                    operation: 'legacy-index-cleanup'
-                },
+            this.logger.summary(
+                '旧索引文件清理失败',
+                '操作：清理旧索引文件',
+                'warn',
                 error
             )
         }
@@ -679,12 +679,10 @@ export class LivingMemoryVectorIndexService
         try {
             await worker.dispose()
         } catch (error) {
-            this.logger.warn(
-                'vector-index.worker.dispose.failed',
-                {
-                    workflow: 'vector-index',
-                    operation: 'vector-index-worker-dispose'
-                },
+            this.logger.summary(
+                '索引工作线程关闭失败',
+                '操作：释放索引资源',
+                'warn',
                 error
             )
         }
@@ -724,17 +722,22 @@ export class LivingMemoryVectorIndexService
         }
         if (this.workerFailure === null) {
             if (state === 'unavailable') {
-                this.logger.error('vector-index.unavailable', {
-                    workflow: 'vector-index',
-                    state,
-                    reason: failure.message
-                })
+                this.logger.summary(
+                    '向量索引服务异常',
+                    `状态：暂停检索; 原因：${failure.message}`,
+                    'error'
+                )
             } else {
-                this.logger.warn('vector-index.state', {
-                    workflow: 'vector-index',
-                    state,
-                    reason: failure.message
-                })
+                const stateLabel = {
+                    building: '构建中',
+                    ready: '就绪',
+                    dirty: '待同步'
+                }[state]
+                this.logger.summary(
+                    '向量索引维护异常',
+                    `状态：${stateLabel}; 原因：${failure.message}`,
+                    'warn'
+                )
             }
         }
     }
@@ -747,19 +750,20 @@ export class LivingMemoryVectorIndexService
             const inspection = await this.worker.inspect()
             this.status.applyInspection(inspection)
         } catch (error) {
-            this.logger.diagnostic('vector-index.failure.inspection.failed', {
-                workflow: 'vector-index',
-                error: formatErrorDetails(error)
-            })
+            this.logger.diagnosticSummary(() => ({
+                event: '索引故障后状态读取失败',
+                detail: `原因：${formatErrorDetails(error)}`
+            }))
         }
     }
 
     private recordWorkerFailure(error: Error) {
         this.workerFailure = error
         this.status.markUnavailable(error.message)
-        this.logger.error(
-            'vector-index.worker.failed',
-            { workflow: 'vector-index', state: 'unavailable' },
+        this.logger.summary(
+            '索引工作线程故障',
+            '状态：暂停检索',
+            'error',
             error
         )
     }

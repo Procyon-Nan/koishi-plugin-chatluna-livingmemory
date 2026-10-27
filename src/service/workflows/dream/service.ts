@@ -185,35 +185,19 @@ export class LivingMemoryDreamService {
             event: 'Dream 人物画像处理开始',
             detail: `预设：${presetId}`
         }))
-        try {
-            const speakerKeys =
-                await this.repository.listActiveMemorySpeakerKeys(presetId)
-            const result = await this.userProfiles.regenerate(
-                presetId,
-                speakerKeys,
-                model,
-                logger,
-                signal
-            )
-            logger.diagnosticSummary(() => ({
-                event: 'Dream 人物画像处理结束',
-                detail: `预设：${presetId}; ${result.detail}; 耗时：${Math.round(performance.now() - startedAt)} 毫秒`
-            }))
-            return result.detail
-        } catch (error) {
-            signal?.throwIfAborted()
-            logger.warn(
-                'dream.user-profile.failed',
-                {
-                    elapsedMs: performance.now() - startedAt
-                },
-                error
-            )
-            const errorMessage =
-                error instanceof Error
-                    ? error.message
-                    : formatErrorDetails(error)
-            return `user profiles failed: ${errorMessage}`
-        }
+        const speakerKeys =
+            await this.repository.listActiveMemorySpeakerKeys(presetId)
+        const result = await this.userProfiles.regenerate(
+            presetId,
+            speakerKeys,
+            model,
+            logger,
+            signal
+        )
+        logger.diagnosticSummary(() => ({
+            event: 'Dream 人物画像处理结束',
+            detail: `预设：${presetId}; ${result.detail}; 耗时：${((performance.now() - startedAt) / 1000).toFixed(3)} 秒`
+        }))
+        return result.detail
     }
 }

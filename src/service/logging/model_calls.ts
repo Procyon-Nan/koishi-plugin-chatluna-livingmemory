@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto'
 import type { BaseLanguageModelInput } from '@langchain/core/language_models/base'
 import {
     coerceMessageLikeToMessage,
@@ -19,20 +18,9 @@ export interface LivingMemoryModelCallContext {
     logger: LivingMemoryLogger
     stage: string
     attempt: number | (() => number)
-    fields?: LivingMemoryLogFields | (() => LivingMemoryLogFields)
-    onCallId?: (modelCallId: string) => void
     onResponse?: (response: BaseMessage) => void
     promptLogging?: 'all' | 'first' | 'none'
     logResponseText?: boolean
-}
-
-const resolveFields = (
-    fields: LivingMemoryModelCallContext['fields']
-): LivingMemoryLogFields => {
-    if (fields == null) {
-        return {}
-    }
-    return typeof fields === 'function' ? fields() : fields
 }
 
 interface NormalizedMessage {
@@ -86,7 +74,7 @@ const messageRoleLabels: Record<string, string> = {
     text: '文本输入'
 }
 
-const modelStageLabels: Record<string, string> = {
+export const modelStageLabels: Record<string, string> = {
     'agentic-decision': '召回',
     'dream-decision': 'Dream',
     'dream-compression': 'Dream 上下文压缩',
@@ -183,15 +171,11 @@ const invokeLoggedRunnable = async (
     runConfig: Parameters<ChatLunaChatModel['invoke']>[1],
     context: LivingMemoryModelCallContext
 ) => {
-    const modelCallId = randomUUID()
-    context.onCallId?.(modelCallId)
     const attempt =
         typeof context.attempt === 'function'
             ? context.attempt()
             : context.attempt
     const logger = context.logger.with({
-        ...resolveFields(context.fields),
-        modelCallId,
         stage: context.stage,
         attempt,
         model: modelName
@@ -232,9 +216,9 @@ const invokeLoggedRunnable = async (
         })
         return response
     } catch (error) {
-        logger.diagnostic('model.failed', () => ({
-            elapsedMs: performance.now() - startedAt,
-            error: formatErrorDetails(error)
+        logger.diagnosticSummary((fields) => ({
+            event: `${stage}模型调用失败`,
+            detail: `${formatLogScope(fields)}; 模型：${fields.model}; 调用序号：${fields.attempt}; 耗时：${((performance.now() - startedAt) / 1000).toFixed(3)} 秒; 原因：${formatErrorDetails(error)}`
         }))
         throw error
     }

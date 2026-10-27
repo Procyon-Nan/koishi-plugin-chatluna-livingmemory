@@ -353,7 +353,6 @@ export class LivingMemoryAgenticRecallExecutor {
             logger: runLogger,
             stage: 'agentic-decision',
             attempt: () => modelCallCount,
-            fields: () => ({ modelCall: modelCallCount }),
             promptLogging: 'first',
             logResponseText: false
         })

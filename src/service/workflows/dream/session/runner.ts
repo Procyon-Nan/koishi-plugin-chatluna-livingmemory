@@ -8,7 +8,13 @@ import {
     ChatPromptTemplate,
     MessagesPlaceholder
 } from '@langchain/core/prompts'
-import type { StructuredTool } from '@langchain/core/tools'
+import {
+    ToolInputParsingException,
+    type StructuredTool
+} from '@langchain/core/tools'
+import { isRequestFailure } from 'koishi-plugin-chatluna/utils/error'
+import { MemoryInputError } from '../../../memory/errors'
+import { isOutputParserException } from '../../structured_output'
 import { createOpenAIAgent } from 'koishi-plugin-chatluna/llm-core/agent'
 import type { AgentAction } from 'koishi-plugin-chatluna/llm-core/agent'
 import type {
@@ -27,7 +33,6 @@ import {
     buildDreamSystemPrompt
 } from '../../../prompts/dream'
 import { formatErrorDetails } from '../../../shared/utils'
-import { LivingMemoryVectorIndexError } from '../../../vector_index/errors'
 import { DreamSessionHistory, dreamCompressionThreshold } from './history'
 import {
     advanceDreamBatch,
@@ -95,23 +100,18 @@ export async function runDreamSession(input: DreamSessionRunInput) {
     )
     logger.diagnosticSummary((fields) => ({
         event: 'Dream 会话开始',
-        detail: `${formatLogScope(fields)}; 工具：${tools.map((tool) => tool.name).join('、')}`,
+        detail: formatLogScope(fields),
         blocks: [{ title: '系统消息', value: systemPrompt }]
     }))
     let modelCalls = 0
     let round = 0
-    let modelCallId: string | undefined
     let response: BaseMessage | undefined
     const agent = createOpenAIAgent({
         llm: createLoggedModel(model, {
             logger,
             stage: 'dream-decision',
             attempt: () => modelCalls,
-            fields: () => ({ batch: state.currentBatch?.id, round }),
             promptLogging: 'none',
-            onCallId: (id) => {
-                modelCallId = id
-            },
             onResponse: (message) => {
                 response = message
                 history.recordUsage(message)
@@ -157,7 +157,6 @@ export async function runDreamSession(input: DreamSessionRunInput) {
                 signal
             )
             modelCalls++
-            modelCallId = undefined
             response = undefined
             let effective = false
             let feedback = '请继续处理当前批次。'
@@ -167,6 +166,8 @@ export async function runDreamSession(input: DreamSessionRunInput) {
                 decision = await agent.invoke(agentInput, config)
             } catch (error) {
                 signal?.throwIfAborted()
+                if (!isRequestFailure(error) && !isOutputParserException(error))
+                    throw error
                 feedback = `本轮模型请求或工具参数解析失败：${formatErrorDetails(error)}`
                 const rejected = response as BaseMessage | undefined
                 if (rejected !== undefined) {
@@ -174,12 +175,10 @@ export async function runDreamSession(input: DreamSessionRunInput) {
                     // 将原始响应作为转义后的纠错数据保留，不伪造已执行的工具结果。
                     feedback += `\n未执行的模型响应：${JSON.stringify(rejected.toDict())}`
                 }
-                logger.diagnostic('dream.round.failed', {
-                    batch: state.currentBatch!.id,
-                    round,
-                    modelCallId,
-                    error: formatErrorDetails(error)
-                })
+                logger.diagnosticSummary((fields) => ({
+                    event: 'Dream 本轮处理失败',
+                    detail: `${formatLogScope(fields)}; 批次：${state.currentBatch!.id}; 轮次：${round}; 原因：${formatErrorDetails(error)}`
+                }))
             }
             signal?.throwIfAborted()
             if (decision !== undefined) {
@@ -199,31 +198,24 @@ export async function runDreamSession(input: DreamSessionRunInput) {
                             )
                         }
                         let observation: string
-                        const toolLogger = batchLogger.with({
-                            round,
-                            modelCallId,
-                            tool: action.tool,
-                            toolCallId:
-                                'toolCallId' in action
-                                    ? action.toolCallId
-                                    : undefined
-                        })
                         const toolStartedAt = performance.now()
                         try {
                             const tool = tools.find(
                                 (candidate) => candidate.name === action.tool
                             )
                             if (tool === undefined) {
-                                throw new Error(`未知工具：${action.tool}`)
+                                throw new MemoryInputError(
+                                    `未知工具：${action.tool}`
+                                )
                             }
                             observation = await tool.invoke(
                                 action.toolInput,
                                 config
                             )
                             effective = true
-                            toolLogger.diagnosticSummary((fields) => ({
+                            batchLogger.diagnosticSummary((fields) => ({
                                 event: 'Dream 工具执行完成',
-                                detail: `${formatLogScope(fields)}; 批次：${batch.id}; 轮次：${round}; 耗时：${Math.round(performance.now() - toolStartedAt)} 毫秒`,
+                                detail: `${formatLogScope(fields)}; 批次：${batch.id}; 轮次：${round}; 耗时：${((performance.now() - toolStartedAt) / 1000).toFixed(3)} 秒`,
                                 blocks: [
                                     {
                                         title: '工具结果',
@@ -236,13 +228,16 @@ export async function runDreamSession(input: DreamSessionRunInput) {
                                 ]
                             }))
                         } catch (error) {
-                            toolLogger.diagnostic('dream.tool.failed', () => ({
-                                elapsedMs: performance.now() - toolStartedAt,
-                                error: formatErrorDetails(error)
-                            }))
                             signal?.throwIfAborted()
-                            if (error instanceof LivingMemoryVectorIndexError)
+                            if (
+                                !(error instanceof ToolInputParsingException) &&
+                                !(error instanceof MemoryInputError)
+                            )
                                 throw error
+                            batchLogger.diagnosticSummary((fields) => ({
+                                event: 'Dream 工具执行失败',
+                                detail: `${formatLogScope(fields)}; 批次：${fields.batch}; 轮次：${round}; 工具：${action.tool}; 耗时：${((performance.now() - toolStartedAt) / 1000).toFixed(3)} 秒; 原因：${formatErrorDetails(error)}`
+                            }))
                             observation = `工具执行失败：${formatErrorDetails(error)}。请修正后重试。`
                         }
                         history.append(toolResult(action, observation))
@@ -259,7 +254,7 @@ export async function runDreamSession(input: DreamSessionRunInput) {
             if (pending.length === 0) {
                 batchLogger.summary(
                     'Dream 批次完成',
-                    `${formatLogScope({ presetId: input.presetId })}; 批次：${batch.id}; 处理记忆：${batch.entries.length} 条; 轮次：${round}; 耗时：${Math.round(performance.now() - batchStartedAt)} 毫秒`
+                    `${formatLogScope({ presetId: input.presetId })}; 批次：${batch.id}; 处理记忆：${batch.entries.length} 条; 轮次：${round}; 耗时：${((performance.now() - batchStartedAt) / 1000).toFixed(3)} 秒`
                 )
                 break
             }

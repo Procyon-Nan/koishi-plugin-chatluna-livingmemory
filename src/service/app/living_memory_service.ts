@@ -112,9 +112,10 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         )
         this.dreamWorker = new LivingMemoryDreamWorkerClient({
             onFailure: (error) =>
-                this.memoryLogger.error(
-                    'dream.worker.failed',
-                    { workflow: 'dream', operation: 'dream-worker' },
+                this.memoryLogger.summary(
+                    'Dream 工作线程故障',
+                    '操作：执行分组任务',
+                    'error',
                     error
                 )
         })
@@ -130,11 +131,7 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             this.vectorIndex,
             this.memoryLogger
         )
-        this.presetCatalog = new LivingMemoryPresetCatalog(
-            ctx,
-            this.repository,
-            this.memoryLogger
-        )
+        this.presetCatalog = new LivingMemoryPresetCatalog(ctx, this.repository)
         this.presetPersona = new LivingMemoryPresetPersonaService(
             ctx,
             config,
@@ -221,13 +218,10 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     private scheduleDailyMaintenance() {
         this.ctx.setInterval(() => {
             this.cleanupStaleJobs().catch((error) => {
-                this.memoryLogger.warn(
-                    'maintenance.cleanup.failed',
-                    {
-                        workflow: 'maintenance',
-                        operation: 'cleanup-stale-jobs',
-                        trigger: 'scheduled'
-                    },
+                this.memoryLogger.summary(
+                    '过期任务清理失败',
+                    '触发方式：定时维护',
+                    'warn',
                     error
                 )
             })
@@ -287,23 +281,20 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
                 )
             }
         } catch (error) {
-            this.memoryLogger.warn(
-                'startup.recovery.failed',
-                {
-                    workflow: 'maintenance',
-                    operation: 'recover-stale-jobs',
-                    trigger: 'startup'
-                },
+            this.memoryLogger.summary(
+                '中断任务恢复失败',
+                '触发方式：启动维护',
+                'warn',
                 error
             )
         }
 
         for (const warning of this.validateConfig()) {
-            this.memoryLogger.warn('config.warning', {
-                workflow: 'startup',
-                code: warning.code,
-                message: warning.message
-            })
+            this.memoryLogger.summary(
+                '配置提示',
+                `原因：${warning.message}`,
+                'warn'
+            )
         }
 
         await this.vectorIndex.start()
@@ -737,13 +728,10 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
                 )
             }
         } catch (error) {
-            this.memoryLogger.warn(
-                'maintenance.cleanup.failed',
-                {
-                    workflow: 'maintenance',
-                    operation: 'cleanup-expired-archived-memories',
-                    trigger
-                },
+            this.memoryLogger.summary(
+                '过期归档记忆清理失败',
+                `触发方式：${trigger === 'startup' ? '启动维护' : '定时维护'}`,
+                'warn',
                 error
             )
         }

@@ -38,6 +38,7 @@ chatluna-livingmemory/
 │       │   ├── logger.ts                # 工作流日志与诊断事件
 │       │   └── model_calls.ts           # 模型请求、响应与用量记录
 │       ├── memory/
+│       │   ├── errors.ts                # 可由调用方修正的记忆输入错误
 │       │   ├── entry_fields.ts          # 记忆字段常量与归一化
 │       │   ├── speaker_identity.ts      # 用户身份键与昵称映射
 │       │   ├── preset_catalog.ts        # 预设目录

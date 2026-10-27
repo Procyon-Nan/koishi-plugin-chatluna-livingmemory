@@ -33,12 +33,14 @@
 - 一个运行中的索引目录由单个进程独占。
 - 停止服务时停止接收操作，排空在途操作并等待 Worker 退出；关闭失败时终止 Worker。
 - 新 HMR generation 等待旧 generation 的 Worker 结束后启动。
-- Worker 的目录隔离与清理警告通过消息协议传给主线程，由 `LivingMemoryLogger` 以 `vector-index.worker.warning` 输出。
+- 索引打开或检查失败时，停止启动并上报错误，保留索引内容。启动恢复依据明确的目录切换状态：正式目录缺失时恢复 previous 目录；正式目录可读且缺少 manifest、previous 目录存在时恢复 previous 目录。
+- Worker 的目录清理警告通过消息协议传给主线程，由 `LivingMemoryLogger` 以 “索引工作线程警告” 输出。
 
 ## 维护日志
 
 - 索引任务入口以中文 INFO 摘要记录开始与完成，展示预设和处理结果；任务失败采用 ERROR，携带预设、任务 ID 和完整错误。
-- 服务层记录维护失败后的索引状态及原因；ANN 维护失败时记录 `vector-index.dream-ann.unavailable`，精确检索继续沿用主体索引状态。
+- 对账分页进度仅更新任务记录，控制台按任务展示开始与最终结果。
+- 服务层记录维护失败后的索引状态及原因；ANN 维护失败时记录 “Dream 近邻索引维护失败”，精确检索继续沿用主体索引状态。
 
 ## 预设状态与读取门禁
 

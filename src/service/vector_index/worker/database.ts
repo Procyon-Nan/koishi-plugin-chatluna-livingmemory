@@ -120,30 +120,9 @@ export class LivingMemoryVectorIndexDatabase {
             renameSync(previousDatabaseDirectory, databaseDirectory)
         }
 
-        let inspection: VectorIndexInspection
-        try {
-            this.database = await this.openConnection(databaseDirectory)
-            this.mode = 'active'
-            inspection = await this.inspect()
-        } catch (error) {
-            if (existsSync(previousDatabaseDirectory)) {
-                inspection = await this.restorePreviousDatabase(
-                    databaseDirectory,
-                    previousDatabaseDirectory,
-                    error
-                )
-            } else {
-                await this.closeConnection()
-                this.quarantineDatabaseDirectory(
-                    databaseDirectory,
-                    'database open',
-                    error
-                )
-                this.database = await this.openConnection(databaseDirectory)
-                this.mode = 'active'
-                inspection = await this.inspect()
-            }
-        }
+        this.database = await this.openConnection(databaseDirectory)
+        this.mode = 'active'
+        let inspection = await this.inspect()
 
         if (
             existsSync(previousDatabaseDirectory) &&
@@ -151,8 +130,7 @@ export class LivingMemoryVectorIndexDatabase {
         ) {
             inspection = await this.restorePreviousDatabase(
                 databaseDirectory,
-                previousDatabaseDirectory,
-                null
+                previousDatabaseDirectory
             )
         }
         if (inspection.vectorExtensionVersion === '0.8.1') {
@@ -439,19 +417,10 @@ export class LivingMemoryVectorIndexDatabase {
 
     private async restorePreviousDatabase(
         databaseDirectory: string,
-        previousDatabaseDirectory: string,
-        currentDirectoryError: unknown
+        previousDatabaseDirectory: string
     ) {
         await this.closeConnection()
-        if (currentDirectoryError !== null) {
-            this.quarantineDatabaseDirectory(
-                databaseDirectory,
-                'database recovery',
-                currentDirectoryError
-            )
-        } else {
-            this.removeDatabaseDirectory(databaseDirectory)
-        }
+        this.removeDatabaseDirectory(databaseDirectory)
         renameSync(previousDatabaseDirectory, databaseDirectory)
         this.database = await this.openConnection(databaseDirectory)
         this.mode = 'active'
@@ -464,26 +433,6 @@ export class LivingMemoryVectorIndexDatabase {
             this.database = null
             await database.close()
         }
-    }
-
-    private quarantineDatabaseDirectory(
-        directory: string,
-        operation: string,
-        cause: unknown
-    ) {
-        if (!existsSync(directory)) {
-            return
-        }
-        const quarantineDirectory = `${directory}.failed-${randomUUID()}`
-        renameSync(directory, quarantineDirectory)
-        this.reportWarning(
-            new Error(
-                `vector index database quarantined: operation=${operation} ` +
-                    `source=${directory} quarantine=${quarantineDirectory}: ` +
-                    formatErrorDetails(cause),
-                { cause }
-            )
-        )
     }
 
     private cleanupDatabaseDirectory(directory: string, operation: string) {

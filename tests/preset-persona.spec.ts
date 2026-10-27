@@ -1,3 +1,7 @@
+import {
+    ChatLunaError,
+    ChatLunaErrorCode
+} from 'koishi-plugin-chatluna/utils/error'
 import assert from 'node:assert/strict'
 import {
     AIMessage,
@@ -194,7 +198,7 @@ it('falls back to the raw text when deletion exceeds the ratio guard', async () 
     assert.equal(card, presetText)
     assert.ok(
         harness.captured.info.some((message) =>
-            message.includes('事件：persona.prune.fallback')
+            message.includes('事件：人设卡片沿用原文')
         )
     )
     // 守卫回退是正常结果：照常落库，后续解析命中落库行不再调用模型
@@ -215,10 +219,9 @@ it('retries with a correction when line numbers fall out of range', async () => 
     assert.ok(
         harness.captured.info.some(
             (message) =>
-                message.includes('事件：model.parse.failed') &&
-                message.includes('workflow：persona') &&
-                message.includes('presetId：preset-1') &&
-                message.includes('runId：') &&
+                message.includes('事件：人设卡片结果解析失败') &&
+                message.includes('预设：preset-1') &&
+                message.includes('调用序号：1') &&
                 message.includes('超出范围的行号')
         )
     )
@@ -228,7 +231,12 @@ it('falls back to the raw text when every response is invalid', async () => {
     const harness = createHarness([
         new AIMessage('plain text one'),
         new AIMessage('plain text two'),
-        new AIMessage('plain text three')
+        new AIMessage('plain text three'),
+        new ChatLunaError(
+            ChatLunaErrorCode.API_REQUEST_FAILED,
+            new Error('request failed'),
+            true
+        )
     ])
 
     const card = await harness.service.resolveOrGenerateCardText('preset-1')
@@ -236,8 +244,7 @@ it('falls back to the raw text when every response is invalid', async () => {
     assert.equal(card, presetText)
     assert.equal(harness.model.invocations.length, 3)
     assert.equal(harness.upserts.length, 0)
-    // 模型失败回退不落库：下次解析重新调用模型（第 4 次因响应耗尽抛错，
-    // 同样走 invoke-failed 回退，仍不落库）
+    // 输出校验失败后下次重新调用；第四次供应商请求失败，仍保留原文。
     const retried = await harness.service.resolveOrGenerateCardText('preset-1')
     assert.equal(retried, presetText)
     assert.equal(harness.model.invocations.length, 4)
@@ -382,7 +389,7 @@ it('lists stored cards without rendering presets or calling the model', async ()
     assert.equal(harness.model.invocations.length, 0)
 })
 
-it('lists a manual card whose preset no longer exists as fresh', async () => {
+it('rejects a manual card query when its preset no longer exists', async () => {
     const harness = createHarness([], {
         stored: [
             storedCard({
@@ -395,10 +402,10 @@ it('lists a manual card whose preset no longer exists as fresh', async () => {
         missingPresetIds: ['gone-preset']
     })
 
-    const cards = await harness.service.listCards()
-
-    assert.equal(cards.length, 1)
-    assert.equal(cards[0].stale, false)
+    await assert.rejects(
+        harness.service.listCards(),
+        /No preset found for gone-preset/u
+    )
 })
 
 it('marks a manual card stale when the preset text has changed', async () => {
@@ -462,15 +469,24 @@ it('regenerates a card on reset and replaces the manual row', async () => {
 })
 
 it('keeps the stored card and reports an error when regeneration fails', async () => {
-    const harness = createHarness([new Error('model unavailable')], {
-        stored: [
-            storedCard({
-                card: 'manual card',
-                source: 'manual',
-                rawHash: 'hash-before-edit'
-            })
-        ]
-    })
+    const harness = createHarness(
+        [
+            new ChatLunaError(
+                ChatLunaErrorCode.API_REQUEST_FAILED,
+                new Error('model unavailable'),
+                true
+            )
+        ],
+        {
+            stored: [
+                storedCard({
+                    card: 'manual card',
+                    source: 'manual',
+                    rawHash: 'hash-before-edit'
+                })
+            ]
+        }
+    )
 
     await assert.rejects(
         () => harness.service.regenerateCard('preset-1'),

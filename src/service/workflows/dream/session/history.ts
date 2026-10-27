@@ -84,10 +84,6 @@ export class DreamSessionHistory {
             await this.summarizeEarlierBatches(this.inputTokens, signal)
         }
         signal?.throwIfAborted()
-        this.logger.diagnosticSummary((fields) => ({
-            event: 'Dream 上下文',
-            detail: `${formatLogScope(fields)}; 最近一次供应商输入量：${this.inputTokens ?? '供应商未返回'} tokens`
-        }))
         const messages = [...this.messages]
         // 仅检查宿主容量，防止静默裁剪当前批次；不参与 200k 压缩判断。
         const [, tokens] = await this.model.cropMessages(

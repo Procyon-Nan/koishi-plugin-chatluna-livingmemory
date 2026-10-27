@@ -1,3 +1,4 @@
+import { isRequestFailure } from 'koishi-plugin-chatluna/utils/error'
 import type { ChatLunaChatModel } from 'koishi-plugin-chatluna/llm-core/platform/model'
 import type {
     LivingMemoryTranscriptMessage,
@@ -346,13 +347,13 @@ export class LivingMemoryUserProfileService {
         logger: LivingMemoryLogger,
         signal?: AbortSignal
     ): Promise<'generated' | 'kept' | 'failed'> {
+        const prompt = buildUserProfilePrompts({
+            assistantLabel,
+            presetPrompt,
+            group
+        })
         let structuredResult
         try {
-            const prompt = buildUserProfilePrompts({
-                assistantLabel,
-                presetPrompt,
-                group
-            })
             structuredResult = await invokeStructuredOutput({
                 model,
                 signal,
@@ -366,9 +367,7 @@ export class LivingMemoryUserProfileService {
                         decision.action === 'keep' &&
                         group.existingProfile == null
                     ) {
-                        throw new Error(
-                            '当前尚无人物画像，不能使用 keep，必须使用 update 生成画像'
-                        )
+                        return '当前尚无人物画像，不能使用 keep，必须使用 update 生成画像'
                     }
                 },
                 context: {
@@ -383,19 +382,24 @@ export class LivingMemoryUserProfileService {
             })
         } catch (error) {
             signal?.throwIfAborted()
-            logger.warn(
-                'user-profile.failed',
-                { reason: 'invoke-failed' },
+            if (!isRequestFailure(error)) throw error
+            logger.summary(
+                '人物画像处理失败',
+                (fields) =>
+                    `${formatLogScope(fields)}; 人物：${group.speakerLabel}; 原因：模型调用失败`,
+                'warn',
                 error
             )
             return 'failed'
         }
 
         if (structuredResult.parseError !== null) {
-            logger.warn('user-profile.failed', {
-                reason: 'structured-output-failed',
-                error: structuredResult.parseError
-            })
+            logger.summary(
+                '人物画像处理失败',
+                (fields) =>
+                    `${formatLogScope(fields)}; 人物：${group.speakerLabel}; 原因：${structuredResult.parseError}`,
+                'warn'
+            )
             return 'failed'
         }
 

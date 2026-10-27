@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { isModelConfigured, formatErrorDetails } from '../../shared/utils'
+import { isModelConfigured } from '../../shared/utils'
 import { normalizeText, scopeKey } from '../../memory/helpers'
 import { formatLogScope, type LivingMemoryLogger } from '../../logging/logger'
 import { renderSnapshotText } from '../../memory/snapshot/snapshot_text'
@@ -98,7 +98,12 @@ export class LivingMemoryRecallCoordinator {
         this.run(scope, currentMessage, loadHistoryMessages, runLogger)
             .catch((error) => {
                 this.anchorSeqByScope.delete(lockKey)
-                runLogger.warn('recall.failed', { operation: 'run' }, error)
+                runLogger.summary(
+                    '记忆召回失败',
+                    (fields) => formatLogScope(fields),
+                    'warn',
+                    error
+                )
             })
             .finally(() => {
                 this.recallLockByConversation.delete(lockKey)
@@ -129,16 +134,8 @@ export class LivingMemoryRecallCoordinator {
             return
         }
 
-        let historyMessages: LivingMemoryTranscriptMessage[] = []
         try {
-            historyMessages = await loadHistoryMessages()
-        } catch (error) {
-            logger.diagnostic('recall.history.unavailable', {
-                error: formatErrorDetails(error)
-            })
-        }
-
-        try {
+            const historyMessages = await loadHistoryMessages()
             const trace = await this.agenticRecall.run(
                 scope,
                 currentMessage,

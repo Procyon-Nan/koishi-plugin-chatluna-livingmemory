@@ -1,3 +1,4 @@
+import { isRequestFailure } from 'koishi-plugin-chatluna/utils/error'
 import { createHash, randomUUID } from 'crypto'
 import type { Context } from 'koishi'
 import type { ChatLunaChatModel } from 'koishi-plugin-chatluna/llm-core/platform/model'
@@ -14,7 +15,7 @@ import {
 } from '../prompts/schema'
 import { buildPersonaCardPrompts } from '../prompts/persona_card'
 import { invokeStructuredOutput } from '../workflows/structured_output'
-import type { LivingMemoryLogger } from '../logging/logger'
+import { formatLogScope, type LivingMemoryLogger } from '../logging/logger'
 import { SerialTaskQueue } from '../shared/serial_task_queue'
 import { resolvePresetPrompt } from './helpers'
 
@@ -43,9 +44,7 @@ interface PresetPersonaRepository {
 
 /** 模型侧失败的原因；此类回退不落库，下次解析时重试。 */
 type PersonaPruneFailure =
-    | 'model-unavailable'
-    | 'invoke-failed'
-    | 'structured-output-failed'
+    'model-unavailable' | 'invoke-failed' | 'structured-output-failed'
 
 interface PersonaCardOutcome {
     card: string
@@ -140,23 +139,14 @@ export class LivingMemoryPresetPersonaService implements PresetPersonaResolver {
             : toCardInfo(record, await this.isStale(record))
     }
 
-    /**
-     * 卡片是否已落后于当前预设原文。自动卡片由 `resolveOrGenerateCardText` 按哈希懒更新、不存在
-     * 过期态，直接判定为新鲜；只有手工卡片需要重算原文比对——手改时刻意保留了
-     * 当时的哈希，预设此后变动即表现为不一致。预设已不存在或不可用时无从比对，
-     * 按新鲜处理，不让单张残留卡片拖垮整个列表。
-     */
+    /** 手工卡片保留编辑时的原文哈希，用于识别预设后续变动。 */
     private async isStale(record: PresetPersonaRecord): Promise<boolean> {
         if (record.source !== 'manual') {
             return false
         }
 
-        try {
-            const raw = await resolvePresetPrompt(this.ctx, record.presetId)
-            return hashPresetText(raw) !== record.rawHash
-        } catch {
-            return false
-        }
+        const raw = await resolvePresetPrompt(this.ctx, record.presetId)
+        return hashPresetText(raw) !== record.rawHash
     }
 
     /**
@@ -252,11 +242,7 @@ export class LivingMemoryPresetPersonaService implements PresetPersonaResolver {
             if (stored?.source === 'manual') {
                 return stored.card
             }
-            try {
-                await this.persistGenerated(presetId, rawHash, outcome)
-            } catch (error) {
-                logger.warn('persona.persist.failed', {}, error)
-            }
+            await this.persistGenerated(presetId, rawHash, outcome)
             return outcome.card
         })
     }
@@ -301,9 +287,10 @@ export class LivingMemoryPresetPersonaService implements PresetPersonaResolver {
         try {
             model = await this.createModel()
         } catch (error) {
-            logger.warn(
-                'persona.prune.failed',
-                { reason: 'model-unavailable' },
+            logger.summary(
+                '人设卡片生成失败',
+                (fields) => `${formatLogScope(fields)}; 原因：模型加载失败`,
+                'warn',
                 error
             )
             return fallback('model-unavailable')
@@ -325,10 +312,7 @@ export class LivingMemoryPresetPersonaService implements PresetPersonaResolver {
                             lineNumber < 1 || lineNumber > lines.length
                     )
                     if (invalid.length > 0) {
-                        throw new Error(
-                            `超出范围的行号：${invalid.join('、')}；` +
-                                `有效范围 1-${lines.length}`
-                        )
+                        return `超出范围的行号：${invalid.join('、')}；有效范围 1-${lines.length}`
                     }
                 },
                 context: {
@@ -341,19 +325,23 @@ export class LivingMemoryPresetPersonaService implements PresetPersonaResolver {
                 }
             })
         } catch (error) {
-            logger.warn(
-                'persona.prune.failed',
-                { reason: 'invoke-failed' },
+            if (!isRequestFailure(error)) throw error
+            logger.summary(
+                '人设卡片生成失败',
+                (fields) => `${formatLogScope(fields)}; 原因：模型调用失败`,
+                'warn',
                 error
             )
             return fallback('invoke-failed')
         }
 
         if (structuredResult.parseError !== null) {
-            logger.warn('persona.prune.failed', {
-                reason: 'structured-output-failed',
-                error: structuredResult.parseError
-            })
+            logger.summary(
+                '人设卡片生成失败',
+                (fields) =>
+                    `${formatLogScope(fields)}; 原因：${structuredResult.parseError}`,
+                'warn'
+            )
             return fallback('structured-output-failed')
         }
 
@@ -389,14 +377,10 @@ export class LivingMemoryPresetPersonaService implements PresetPersonaResolver {
         const ratio = deletedLines / lines.length
         const tooShort = card.trim().length < MIN_CARD_LENGTH
         if (ratio > MAX_DELETION_RATIO || tooShort) {
-            logger.diagnostic('persona.prune.fallback', {
-                reason:
-                    ratio > MAX_DELETION_RATIO
-                        ? 'deletion-ratio-exceeded'
-                        : 'card-too-short',
-                totalLines: lines.length,
-                deletedLines
-            })
+            logger.diagnosticSummary((fields) => ({
+                event: '人设卡片沿用原文',
+                detail: `${formatLogScope(fields)}; 原因：${ratio > MAX_DELETION_RATIO ? '删除比例超限' : '卡片长度过短'}; 原文：${lines.length} 行; 拟删除：${deletedLines} 行`
+            }))
             return {
                 card: raw,
                 totalLines: lines.length,

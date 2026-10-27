@@ -1,3 +1,4 @@
+import { MemoryInputError } from '../errors'
 import { StructuredTool, type ToolRunnableConfig } from '@langchain/core/tools'
 import type { z } from 'zod'
 import type { LivingMemoryArchiveProvider } from '../../../contracts/workflows'
@@ -39,7 +40,7 @@ export class LivingMemoryDeleteMemoryTool extends StructuredTool {
                 [input.memoryId]
             )
             if (result.archived === 0) {
-                throw new Error(
+                throw new MemoryInputError(
                     `不存在 ID 为 ${input.memoryId} 的记忆，请重新查明记忆 ID 后再调用。`
                 )
             }

@@ -1,3 +1,4 @@
+import { MemoryInputError } from '../memory/errors'
 import { randomUUID } from 'crypto'
 import { $, Context } from 'koishi'
 import type {
@@ -683,7 +684,7 @@ export class LivingMemoryEntryRepository
         isConsolidated = false
     ) {
         if (memories.length < 2) {
-            throw new Error('拆分结果至少需要两条记忆。')
+            throw new MemoryInputError('拆分结果至少需要两条记忆。')
         }
         return this.transact(async (database) => {
             const [row] = await database.get(
@@ -692,7 +693,7 @@ export class LivingMemoryEntryRepository
                 memoryEntryFields
             )
             if (row === undefined) {
-                throw new Error(
+                throw new MemoryInputError(
                     `不存在 ID 为 ${sourceMemoryId} 的记忆，请重新查明记忆 ID 后再调用。`
                 )
             }
@@ -740,7 +741,9 @@ export class LivingMemoryEntryRepository
     ) {
         const sourceIds = new Set(sourceMemoryIds)
         if (sourceIds.size < 2 || sourceIds.size !== sourceMemoryIds.length) {
-            throw new Error('合并来源至少需要两条记忆，ID 不得重复。')
+            throw new MemoryInputError(
+                '合并来源至少需要两条记忆，ID 不得重复。'
+            )
         }
         return this.transact(async (database) => {
             const entries = (
@@ -758,7 +761,7 @@ export class LivingMemoryEntryRepository
             const sources = sourceMemoryIds.map((id) => {
                 const entry = entryById.get(id)
                 if (entry === undefined) {
-                    throw new Error(
+                    throw new MemoryInputError(
                         `不存在 ID 为 ${id} 的记忆，请重新查明记忆 ID 后再调用。`
                     )
                 }

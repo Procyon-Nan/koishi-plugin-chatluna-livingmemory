@@ -1,3 +1,4 @@
+import { MemoryInputError } from './errors'
 import { createHash } from 'crypto'
 import type { MemoryScope } from '../../contracts/memory'
 
@@ -68,7 +69,7 @@ export const resolveSpeakerKeysByLabels = (
                 normalizeSpeakerAliasKey(label)
             )
             if (speakerKey == null) {
-                throw new Error(`unknown speaker label: ${label}`)
+                throw new MemoryInputError(`unknown speaker label: ${label}`)
             }
             return speakerKey
         })

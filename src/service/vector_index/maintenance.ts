@@ -4,7 +4,7 @@ import type { Context } from 'koishi'
 import { parseRawModelName } from 'koishi-plugin-chatluna/llm-core/utils/count_tokens'
 import type { MemoryJobRecord } from '../../contracts/memory'
 import type { MemoryVectorIndexManifest } from '../../contracts/vector_index'
-import { isModelConfigured, formatErrorDetails } from '../shared/utils'
+import { isModelConfigured } from '../shared/utils'
 import {
     type EmbeddingsLike,
     probeVectorIndexDimension,
@@ -126,10 +126,12 @@ export class LivingMemoryVectorIndexMaintenance {
                 }
             )
         } catch (error) {
-            this.options.logger.warn('vector-index.dream-ann.unavailable', {
-                workflow: 'vector-index',
-                reason: formatErrorDetails(error)
-            })
+            this.options.logger.summary(
+                'Dream 近邻索引维护失败',
+                '操作：维护 Dream 近邻索引',
+                'warn',
+                error
+            )
         }
     }
 
@@ -305,22 +307,10 @@ export class LivingMemoryVectorIndexMaintenance {
                             detail,
                             updatedAt: new Date()
                         })
-                        this.options.logger.diagnostic(
-                            'vector-index.rebuild.progress',
-                            {
-                                workflow: 'vector-index',
-                                jobId: job.id,
-                                presetId: job.presetId,
-                                completed: progress.completed,
-                                total: progress.total,
-                                batchElapsedMs: Number(
-                                    progress.batchDuration.toFixed(1)
-                                ),
-                                elapsedMs: Number(
-                                    progress.totalDuration.toFixed(1)
-                                )
-                            }
-                        )
+                        this.options.logger.diagnosticSummary(() => ({
+                            event: '索引重建进度',
+                            detail: `预设：${job.presetId}; 处理记忆：${progress.completed}/${progress.total} 条; 本批耗时：${(progress.batchDuration / 1000).toFixed(3)} 秒; 总耗时：${(progress.totalDuration / 1000).toFixed(3)} 秒`
+                        }))
                     },
                     finalize: (transferCleanupOwnership) =>
                         operationGate.runExclusive(async () => {
@@ -417,13 +407,6 @@ export class LivingMemoryVectorIndexMaintenance {
         await this.options.repository.updateJob(job.id, {
             detail,
             updatedAt: new Date()
-        })
-        this.options.logger.diagnostic('vector-index.reconcile.progress', {
-            workflow: 'vector-index',
-            jobId: job.id,
-            presetId: progress.presetId,
-            completed: progress.completed,
-            total: progress.total
         })
     }
 }

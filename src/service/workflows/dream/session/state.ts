@@ -1,3 +1,4 @@
+import { MemoryInputError } from '../../../memory/errors'
 import type { DreamCluster, DreamOperationStats } from '../types'
 
 export interface DreamSessionState {
@@ -64,7 +65,7 @@ export function assertDreamMemoriesAvailable(
 ) {
     const missing = ids.filter((id) => !state.availableMemoryIds.has(id))
     if (missing.length > 0) {
-        throw new Error(
+        throw new MemoryInputError(
             `请使用本次会话已提供的记忆 ID，以下 ID 需核对：${missing.join('、')}。`
         )
     }

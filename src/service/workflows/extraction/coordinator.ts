@@ -272,7 +272,12 @@ export class LivingMemoryExtractionCoordinator {
             presetId: scope.presetId
         })
         this.drain(key, state, scope, options, runLogger).catch((error) => {
-            runLogger.warn('extraction.failed', { operation: 'drain' }, error)
+            runLogger.summary(
+                '记忆提取失败',
+                (fields) => formatLogScope(fields),
+                'warn',
+                error
+            )
         })
     }
 
@@ -420,26 +425,21 @@ export class LivingMemoryExtractionCoordinator {
     ): Promise<boolean> {
         state.failStreak += 1
         if (state.failStreak < EXTRACTION_FAIL_STREAK_LIMIT) {
-            runLogger.warn(
-                'extraction.chunk.retry-deferred',
-                {
-                    operation: 'drain',
-                    failStreak: state.failStreak,
-                    cursorSeq: state.cursorSeq
-                },
+            runLogger.summary(
+                '记忆提取延期重试',
+                (fields) =>
+                    `${formatLogScope(fields)}; 连续失败：${state.failStreak} 次; 消息游标：${state.cursorSeq}`,
+                'warn',
                 error
             )
             return false
         }
 
-        runLogger.warn(
-            'extraction.chunk.abandoned',
-            {
-                operation: 'drain',
-                failStreak: state.failStreak,
-                cursorSeq: state.cursorSeq,
-                chunkEndSeq: chunk[chunk.length - 1].seq
-            },
+        runLogger.summary(
+            '记忆提取批次已跳过',
+            (fields) =>
+                `${formatLogScope(fields)}; 连续失败：${state.failStreak} 次; 消息范围：${state.cursorSeq + 1}—${chunk[chunk.length - 1].seq}`,
+            'warn',
             error
         )
         await this.recordFailedExtraction(
@@ -495,9 +495,11 @@ export class LivingMemoryExtractionCoordinator {
         // 使任务列表如实反映“结构化输出失败”而非“抽取 0 条”。
         if (result.parseError != null) {
             const parseError = result.parseError
-            logger.warn('extraction.parse.failed', {
-                error: parseError
-            })
+            logger.summary(
+                '记忆提取结果解析失败',
+                (fields) => `${formatLogScope(fields)}; 原因：${parseError}`,
+                'warn'
+            )
             await this.recordFailedExtraction(
                 scope,
                 input,
@@ -521,17 +523,10 @@ export class LivingMemoryExtractionCoordinator {
             )
         }
 
-        logger.diagnosticSummary(() => {
-            const details = [
-                formatLogScope(scope),
-                `提取记忆：${extracted.length} 条`
-            ]
-            if (result.reason) details.push(`原因：${result.reason}`)
-            return {
-                event: '记忆提取完成',
-                detail: details.join('; ')
-            }
-        })
+        logger.diagnosticSummary(() => ({
+            event: '记忆提取完成',
+            detail: `${formatLogScope(scope)}; 提取记忆：${extracted.length} 条`
+        }))
     }
 
     private async recordFailedExtraction(

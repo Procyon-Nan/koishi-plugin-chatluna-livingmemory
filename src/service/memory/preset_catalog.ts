@@ -1,12 +1,10 @@
 import { Context } from 'koishi'
-import { formatErrorDetails } from '../shared/utils'
 import {
     type CharacterPresetProvider,
     characterPresetSuffix,
     mergePresetIds,
     toPresetIdList
 } from './helpers'
-import type { LivingMemoryLogger } from '../logging/logger'
 
 interface StoredPresetCatalogRepository {
     listDistinctPresetIds(): Promise<string[]>
@@ -15,8 +13,7 @@ interface StoredPresetCatalogRepository {
 export class LivingMemoryPresetCatalog {
     constructor(
         private readonly ctx: Context,
-        private readonly repository: StoredPresetCatalogRepository,
-        private readonly logger: LivingMemoryLogger
+        private readonly repository: StoredPresetCatalogRepository
     ) {}
 
     async list(): Promise<string[]> {
@@ -35,18 +32,9 @@ export class LivingMemoryPresetCatalog {
     }
 
     private listChatLuna(): string[] {
-        try {
-            return toPresetIdList(
-                this.ctx.chatluna.preset.getAllPreset(false).value
-            )
-        } catch (error) {
-            this.logger.diagnostic('preset.catalog.skipped', {
-                workflow: 'webui',
-                source: 'chatluna',
-                error: formatErrorDetails(error)
-            })
-            return []
-        }
+        return toPresetIdList(
+            this.ctx.chatluna.preset.getAllPreset(false).value
+        )
     }
 
     private async listCharacter(): Promise<string[]> {
@@ -61,17 +49,8 @@ export class LivingMemoryPresetCatalog {
             return []
         }
 
-        try {
-            return toPresetIdList(await presetProvider.getAllPreset()).map(
-                (presetId) => `${presetId}${characterPresetSuffix}`
-            )
-        } catch (error) {
-            this.logger.diagnostic('preset.catalog.skipped', {
-                workflow: 'webui',
-                source: 'character',
-                error: formatErrorDetails(error)
-            })
-            return []
-        }
+        return toPresetIdList(await presetProvider.getAllPreset()).map(
+            (presetId) => `${presetId}${characterPresetSuffix}`
+        )
     }
 }

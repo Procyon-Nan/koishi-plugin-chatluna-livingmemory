@@ -16,9 +16,6 @@ export const formatLogScope = (scope: {
     }
     return details.join('; ')
 }
-export type LivingMemoryLogFieldsInput =
-    LivingMemoryLogFields | (() => LivingMemoryLogFields)
-
 export interface LivingMemoryLogBlock {
     title: string
     subtitle?: string
@@ -33,22 +30,6 @@ type LivingMemoryLogLevel = keyof LivingMemoryLogSink
 interface LivingMemoryLoggerState {
     failureReported: boolean
 }
-
-const preferredFieldOrder = [
-    'workflow',
-    'runId',
-    'jobId',
-    'modelCallId',
-    'stage',
-    'round',
-    'batch',
-    'batches',
-    'attempt',
-    'presetId',
-    'conversationId',
-    'trigger',
-    'operation'
-]
 
 const credentialKeyPattern =
     /(?:authorization|api[-_]?key|access[-_]?token|refresh[-_]?token|(?:^|[-_])token(?:$|[-_])|password|secret)/iu
@@ -142,20 +123,10 @@ const formatValue = (value: unknown, key: string) =>
 const formatBlockValue = (value: unknown, key: string) =>
     stringifyNormalized(value, key, { indent: 2, bareStringsOnly: false })
 
-const orderedFieldNames = (fields: LivingMemoryLogFields) => {
-    const names = Object.keys(fields).filter(
-        (key) => fields[key] !== undefined && !preferredFieldOrder.includes(key)
-    )
-    names.sort()
-    return [
-        ...preferredFieldOrder.filter((key) => fields[key] !== undefined),
-        ...names
-    ]
-}
-
 const formatFields = (fields: LivingMemoryLogFields) =>
-    orderedFieldNames(fields)
-        .map((key) => `${key}：${formatValue(fields[key], key)}`)
+    Object.entries(fields)
+        .filter(([, value]) => value !== undefined)
+        .map(([key, value]) => `${key}：${formatValue(value, key)}`)
         .join('; ')
 
 const formatBlock = (block: LivingMemoryLogBlock) => {
@@ -221,13 +192,6 @@ export class LivingMemoryLogger {
         )
     }
 
-    diagnostic(event: string, fields: LivingMemoryLogFieldsInput = {}) {
-        if (!this.isDebugEnabled()) {
-            return
-        }
-        this.emit('info', event, fields)
-    }
-
     diagnosticSummary(
         render: (context: LivingMemoryLogFields) =>
             | {
@@ -254,51 +218,22 @@ export class LivingMemoryLogger {
 
     summary(
         event: string,
-        detail: string | string[],
+        detail:
+            string | string[] | ((context: LivingMemoryLogFields) => string),
         level: LivingMemoryLogLevel = 'info',
         error?: unknown
     ) {
-        const content = Array.isArray(detail)
-            ? `\n${detail.join('\n')}`
-            : ` ${detail}`
         try {
+            const resolved =
+                typeof detail === 'function' ? detail(this.context) : detail
+            const content = Array.isArray(resolved)
+                ? `\n${resolved.join('\n')}`
+                : ` ${resolved}`
             emitCompleteMessage(this.sink, () => {
                 const message = `事件：${event};${content}`
                 if (error === undefined) this.sink[level](message)
-                else this.sink[level](message, toError(error))
+                else this.sink[level](`${message}\n%o`, toError(error))
             })
-        } catch (error) {
-            this.reportFailure(error)
-        }
-    }
-
-    warn(
-        event: string,
-        fields: LivingMemoryLogFieldsInput = {},
-        error?: unknown
-    ) {
-        this.emit('warn', event, fields, error)
-    }
-
-    error(
-        event: string,
-        fields: LivingMemoryLogFieldsInput = {},
-        error?: unknown
-    ) {
-        this.emit('error', event, fields, error)
-    }
-
-    private emit(
-        level: LivingMemoryLogLevel,
-        event: string,
-        fieldsInput: LivingMemoryLogFieldsInput,
-        error?: unknown
-    ) {
-        try {
-            const fields =
-                typeof fieldsInput === 'function' ? fieldsInput() : fieldsInput
-            const merged = { ...this.context, ...fields }
-            this.summary(event, formatFields(merged), level, error)
         } catch (error) {
             this.reportFailure(error)
         }
@@ -308,7 +243,10 @@ export class LivingMemoryLogger {
         if (this.state.failureReported) return
         this.state.failureReported = true
         try {
-            this.sink.warn('事件：日志输出失败; 操作：输出日志', toError(error))
+            this.sink.warn(
+                '事件：日志输出失败; 操作：输出日志\n%o',
+                toError(error)
+            )
         } catch {
             // 日志是旁路能力，底层 logger 故障不得影响业务流程。
         }

@@ -1,3 +1,4 @@
+import { MemoryInputError } from '../../memory/errors'
 import { Context } from 'koishi'
 import type { AttributedMemoryItem } from '../../../contracts/workflows'
 import { isModelConfigured } from '../../shared/utils'
@@ -14,12 +15,10 @@ import type { LivingMemoryLogger } from '../../logging/logger'
 import { resolveSpeakerKeysByLabels } from '../../memory/speaker_identity'
 
 export type LivingMemoryExtractionSkipReason =
-    | 'model-not-configured'
-    | 'model-unavailable'
+    'model-not-configured' | 'model-unavailable'
 
 export interface LivingMemoryExtractionResult {
     extracted: AttributedMemoryItem[]
-    reason?: string
     prompt: PromptMessages | null
     output: string | null
     skippedReason: LivingMemoryExtractionSkipReason | null
@@ -80,11 +79,16 @@ export class LivingMemoryExtractor {
                 '提交本次记录的长期记忆及理由。没有可记录的记忆时提交空 memories 数组，并说明原因。',
             schema: extractionResultSchema,
             validateResult: ({ memories }) => {
-                for (const memory of memories) {
-                    resolveSpeakerKeysByLabels(
-                        memory.speakerLabels,
-                        context.speakers
-                    )
+                try {
+                    for (const memory of memories) {
+                        resolveSpeakerKeysByLabels(
+                            memory.speakerLabels,
+                            context.speakers
+                        )
+                    }
+                } catch (error) {
+                    if (!(error instanceof MemoryInputError)) throw error
+                    return error.message
                 }
             },
             stringifiedArrayField: 'memories',
@@ -112,7 +116,6 @@ export class LivingMemoryExtractor {
 
         return {
             extracted,
-            reason: result.value?.reason,
             prompt,
             output: result.output,
             skippedReason: null,

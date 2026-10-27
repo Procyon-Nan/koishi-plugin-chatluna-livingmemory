@@ -1,6 +1,5 @@
 import { HumanMessage } from '@langchain/core/messages'
 import { OutputParserException } from '@langchain/core/output_parsers'
-import { type RunnableConfig, RunnableLambda } from '@langchain/core/runnables'
 import {
     ChatPromptTemplate,
     MessagesPlaceholder
@@ -17,12 +16,11 @@ import {
 import type { ChatLunaChatModel } from 'koishi-plugin-chatluna/llm-core/platform/model'
 import type { PromptMessages } from '../prompts/prompt_format'
 import { formatErrorDetails } from '../shared/utils'
-import type { LivingMemoryLogger } from '../logging/logger'
-import { createLoggedModel } from '../logging/model_calls'
+import { formatLogScope, type LivingMemoryLogger } from '../logging/logger'
+import { createLoggedModel, modelStageLabels } from '../logging/model_calls'
 
 const structuredOutputMaxModelCalls = 3
 const outputParsingFailureCode = 'OUTPUT_PARSING_FAILURE'
-const modelInvocationErrors = new WeakSet<object>()
 
 const structuredOutputPromptTemplate = ChatPromptTemplate.fromMessages([
     ['system', '{systemPrompt}'],
@@ -52,7 +50,7 @@ interface StructuredOutputOptions<Schema extends z.AnyZodObject> {
     toolName: string
     toolDescription: string
     schema: Schema
-    validateResult?: (value: z.output<Schema>) => void
+    validateResult?: (value: z.output<Schema>) => string | undefined
     stringifiedArrayField?: Extract<keyof z.input<Schema>, string>
     context: StructuredOutputContext
     logging?: {
@@ -226,7 +224,7 @@ const createRetryEntries = (
     ]
 }
 
-const isOutputParserException = (
+export const isOutputParserException = (
     error: unknown
 ): error is OutputParserException => {
     return (
@@ -235,57 +233,6 @@ const isOutputParserException = (
             'lc_error_code' in error &&
             error.lc_error_code === outputParsingFailureCode)
     )
-}
-
-const markModelInvocationError = (error: unknown): never => {
-    const markedError =
-        (typeof error === 'object' && error != null) ||
-        typeof error === 'function'
-            ? error
-            : new Error(String(error))
-    modelInvocationErrors.add(markedError)
-    throw markedError
-}
-
-export const isStructuredOutputModelInvocationError = (error: unknown) => {
-    return (
-        ((typeof error === 'object' && error != null) ||
-            typeof error === 'function') &&
-        modelInvocationErrors.has(error)
-    )
-}
-
-const guardModelInvocations = (
-    model: ChatLunaChatModel,
-    logging: StructuredOutputOptions<z.AnyZodObject>['logging'],
-    currentAttempt: () => number,
-    onCallId: (modelCallId: string) => void
-) => {
-    let loggedModel = model
-    if (logging != null) {
-        loggedModel = createLoggedModel(model, {
-            logger: logging.logger,
-            stage: logging.stage,
-            attempt: currentAttempt,
-            onCallId
-        })
-    }
-    return {
-        withConfig: (config: RunnableConfig) => {
-            const boundModel = loggedModel.withConfig(config)
-            type BoundModelInput = Parameters<typeof boundModel.invoke>[0]
-
-            return RunnableLambda.from(
-                async (input: BoundModelInput, runConfig?: RunnableConfig) => {
-                    try {
-                        return await boundModel.invoke(input, runConfig)
-                    } catch (error) {
-                        return markModelInvocationError(error)
-                    }
-                }
-            )
-        }
-    } as unknown as ChatLunaChatModel
 }
 
 export async function invokeStructuredOutput<Schema extends z.AnyZodObject>(
@@ -297,16 +244,14 @@ export async function invokeStructuredOutput<Schema extends z.AnyZodObject>(
         schema: options.schema
     })
     let activeAttempt = 0
-    let activeModelCallId: string | undefined
     const agent = createOpenAIAgent({
-        llm: guardModelInvocations(
-            options.model,
-            options.logging,
-            () => activeAttempt,
-            (modelCallId) => {
-                activeModelCallId = modelCallId
-            }
-        ),
+        llm: options.logging
+            ? createLoggedModel(options.model, {
+                  logger: options.logging.logger,
+                  stage: options.logging.stage,
+                  attempt: () => activeAttempt
+              })
+            : options.model,
         tools: [resultTool],
         prompt: structuredOutputPromptTemplate
     })
@@ -314,18 +259,23 @@ export async function invokeStructuredOutput<Schema extends z.AnyZodObject>(
     let scratchpadEntries: ScratchpadEntry[] = []
     let lastError = 'structured output failed'
     const logParseFailure = (attempt: number, error: string) => {
-        options.logging?.logger.diagnostic('model.parse.failed', {
-            modelCallId: activeModelCallId,
-            stage: options.logging?.stage,
-            attempt,
-            error
-        })
+        const logging = options.logging
+        logging?.logger.diagnosticSummary((fields) => ({
+            event: `${modelStageLabels[logging.stage] ?? logging.stage}结果解析失败`,
+            detail: [
+                formatLogScope(fields),
+                ...(fields.speaker == null ? [] : [`人物：${fields.speaker}`]),
+                `调用序号：${attempt}`,
+                `原因：${error}`
+            ]
+                .filter(Boolean)
+                .join('; ')
+        }))
     }
 
     for (let attempt = 1; attempt <= structuredOutputMaxModelCalls; attempt++) {
         options.signal?.throwIfAborted()
         activeAttempt = attempt
-        activeModelCallId = undefined
         let decision: StructuredOutputDecision | null = null
 
         try {
@@ -345,47 +295,49 @@ export async function invokeStructuredOutput<Schema extends z.AnyZodObject>(
                     }
                 }
             )
+        } catch (error) {
             options.signal?.throwIfAborted()
-            outputs.push(`[attempt ${attempt}]\n${formatDecision(decision)}`)
-
-            const validated = validateDecision(
-                decision,
+            if (!isOutputParserException(error)) throw error
+            lastError = formatErrorDetails(error)
+            outputs.push(
+                `[attempt ${attempt}]\n${error.llmOutput ?? lastError}`
+            )
+            logParseFailure(attempt, lastError)
+            scratchpadEntries = createRetryEntries(
+                null,
                 options.toolName,
-                options.schema,
+                lastError,
                 options.stringifiedArrayField
             )
-            if (validated.normalizedField != null) {
-                outputs.push(
-                    `[attempt ${attempt} normalization]\ndecoded stringified JSON array field: ${validated.normalizedField}`
-                )
-            }
-            if (validated.error == null) {
-                options.validateResult?.(validated.value)
+            continue
+        }
+        options.signal?.throwIfAborted()
+        outputs.push(`[attempt ${attempt}]\n${formatDecision(decision)}`)
+        const validated = validateDecision(
+            decision,
+            options.toolName,
+            options.schema,
+            options.stringifiedArrayField
+        )
+        if (validated.normalizedField != null) {
+            outputs.push(
+                `[attempt ${attempt} normalization]\ndecoded stringified JSON array field: ${validated.normalizedField}`
+            )
+        }
+        if (validated.error !== null) {
+            lastError = validated.error
+        } else {
+            const validationError = options.validateResult?.(validated.value)
+            if (validationError === undefined) {
                 return {
                     value: validated.value,
                     output: outputs.join('\n\n'),
                     parseError: null
                 }
             }
-
-            lastError = validated.error
-            logParseFailure(attempt, lastError)
-        } catch (error) {
-            options.signal?.throwIfAborted()
-            if (isStructuredOutputModelInvocationError(error)) {
-                throw error
-            }
-
-            lastError = formatErrorDetails(error)
-            const rawOutput =
-                isOutputParserException(error) &&
-                typeof error.llmOutput === 'string' &&
-                error.llmOutput.length > 0
-                    ? error.llmOutput
-                    : lastError
-            outputs.push(`[attempt ${attempt}]\n${rawOutput}`)
-            logParseFailure(attempt, lastError)
+            lastError = validationError
         }
+        logParseFailure(attempt, lastError)
 
         scratchpadEntries = createRetryEntries(
             decision,

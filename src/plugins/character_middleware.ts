@@ -313,60 +313,45 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
 
                 const round = prepareRound(promptContext)
                 round.prompt ??= (async () => {
-                    try {
-                        const { scope, currentMessage, history } =
-                            await round.context
-                        const userProfileInjectionEnabled =
-                            config.enableUserProfileInjection === true
-                        const messages =
-                            currentMessage == null
-                                ? history
-                                : [...history, currentMessage]
-                        const speakerKeys = userProfileInjectionEnabled
-                            ? collectUserProfileSpeakerKeys(messages)
-                            : []
-                        const sections =
-                            await ctx.chatluna_living_memory.hydratePromptSections(
-                                scope,
-                                {
-                                    speakerKeys
-                                }
-                            )
-                        sections.snapshot = sections.snapshot.trim()
-                        sections.userProfiles = sections.userProfiles.trim()
-                        const rendered = formatPromptVariable(sections)
-
-                        logger.diagnosticSummary(() => {
-                            const details = [
-                                formatLogScope(scope),
-                                `记忆快照：${sections.snapshot.length} 字符`
-                            ]
-                            if (userProfileInjectionEnabled) {
-                                details.push(
-                                    `人物画像：${sections.userProfiles.length} 字符`
-                                )
-                            }
-                            return {
-                                event: '记忆注入',
-                                detail: details.join('; ')
-                            }
-                        })
-
-                        return rendered
-                    } catch (error) {
-                        logger.warn(
-                            'character.injection.failed',
+                    const { scope, currentMessage, history } =
+                        await round.context
+                    const userProfileInjectionEnabled =
+                        config.enableUserProfileInjection === true
+                    const messages =
+                        currentMessage == null
+                            ? history
+                            : [...history, currentMessage]
+                    const speakerKeys = userProfileInjectionEnabled
+                        ? collectUserProfileSpeakerKeys(messages)
+                        : []
+                    const sections =
+                        await ctx.chatluna_living_memory.hydratePromptSections(
+                            scope,
                             {
-                                conversationId: promptContext.sessionKey,
-                                presetId: toCharacterMemoryPresetId(
-                                    promptContext.presetName
-                                ),
-                                operation: 'render-prompt-variable'
-                            },
-                            error
+                                speakerKeys
+                            }
                         )
-                        return ''
-                    }
+                    sections.snapshot = sections.snapshot.trim()
+                    sections.userProfiles = sections.userProfiles.trim()
+                    const rendered = formatPromptVariable(sections)
+
+                    logger.diagnosticSummary(() => {
+                        const details = [
+                            formatLogScope(scope),
+                            `记忆快照：${sections.snapshot.length} 字符`
+                        ]
+                        if (userProfileInjectionEnabled) {
+                            details.push(
+                                `人物画像：${sections.userProfiles.length} 字符`
+                            )
+                        }
+                        return {
+                            event: '记忆注入',
+                            detail: details.join('; ')
+                        }
+                    })
+
+                    return rendered
                 })()
                 return round.prompt
             }
@@ -387,19 +372,10 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 }))
                 return
             }
-            await ctx.chatluna_living_memory
-                .recordPresetSpeaker(scope, currentMessage.speakerLabel)
-                .catch((error) => {
-                    logger.warn(
-                        'character.speaker.record.failed',
-                        {
-                            conversationId: scope.conversationId,
-                            presetId: scope.presetId,
-                            operation: 'record-preset-speaker'
-                        },
-                        error
-                    )
-                })
+            await ctx.chatluna_living_memory.recordPresetSpeaker(
+                scope,
+                currentMessage.speakerLabel
+            )
 
             await ctx.chatluna_living_memory.queueRecall(
                 scope,

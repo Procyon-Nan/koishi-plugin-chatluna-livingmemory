@@ -1,3 +1,4 @@
+import { MemoryInputError } from '../memory/errors'
 import type {
     LivingMemoryPresetExport,
     LivingMemoryPresetImportResult,
@@ -28,7 +29,7 @@ import {
 import { SerialTaskQueue } from '../shared/serial_task_queue'
 import { formatErrorDetails } from '../shared/utils'
 import { LivingMemoryFactsCommittedError } from '../vector_index/errors'
-import type { LivingMemoryLogger } from '../logging/logger'
+import { formatLogScope, type LivingMemoryLogger } from '../logging/logger'
 
 type MemoryFactRepository = Pick<
     LivingMemoryRepository,
@@ -280,7 +281,7 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
             const active = new Set(records.map((entry) => entry.id))
             const missingIds = ids.filter((id) => !active.has(id))
             if (missingIds.length > 0) {
-                throw new Error(
+                throw new MemoryInputError(
                     `无法确认以下记忆的检查状态：${missingIds.join('、')}。请核对记忆 ID 后重试。`
                 )
             }
@@ -345,7 +346,7 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
         isConsolidated = false
     ) {
         if (memories.length < 2) {
-            throw new Error('拆分结果至少需要两条记忆。')
+            throw new MemoryInputError('拆分结果至少需要两条记忆。')
         }
         return this.runPresetMutation(presetId, async () => {
             const source = await this.repository.getEntryById(sourceMemoryId)
@@ -354,7 +355,7 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
                 source.presetId !== presetId ||
                 source.status !== 'active'
             ) {
-                throw new Error(
+                throw new MemoryInputError(
                     `不存在 ID 为 ${sourceMemoryId} 的记忆，请重新查明记忆 ID 后再调用。`
                 )
             }
@@ -386,7 +387,9 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
     ) {
         const sourceIds = new Set(sourceMemoryIds)
         if (sourceIds.size < 2 || sourceIds.size !== sourceMemoryIds.length) {
-            throw new Error('合并来源至少需要两条记忆，ID 不得重复。')
+            throw new MemoryInputError(
+                '合并来源至少需要两条记忆，ID 不得重复。'
+            )
         }
         return this.runPresetMutation(presetId, async () => {
             const entries = await this.repository.getEntriesByPresetAndIds(
@@ -397,7 +400,7 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
             for (const id of sourceMemoryIds) {
                 const entry = entryById.get(id)
                 if (entry === undefined || entry.status !== 'active') {
-                    throw new Error(
+                    throw new MemoryInputError(
                         `不存在 ID 为 ${id} 的记忆，请重新查明记忆 ID 后再调用。`
                     )
                 }
@@ -584,13 +587,10 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
         this.vectorIndex
             .reconcilePreset(presetId, 'mutation index sync failure')
             .catch((error: unknown) => {
-                this.logger.warn(
-                    'memory.index.reconcile.failed',
-                    {
-                        workflow: 'memory',
-                        operation: 'schedule-index-reconcile',
-                        presetId
-                    },
+                this.logger.summary(
+                    '索引对账调度失败',
+                    formatLogScope({ presetId }),
+                    'warn',
                     error
                 )
             })

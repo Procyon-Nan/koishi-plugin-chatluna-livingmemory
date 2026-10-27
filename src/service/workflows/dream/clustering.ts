@@ -145,12 +145,15 @@ export class DreamClusterer {
             writePage(page, offset)
         }
         const readVectorsMs = performance.now() - startedAt
-        logger?.summary('Dream 向量准备完成', [
-            `记忆数量：${entryCount} 条`,
-            `向量模型：${embeddingModelId}`,
-            `向量维度：${dimension}`,
-            `耗时：${Math.round(readVectorsMs)} 毫秒`
-        ])
+        logger?.summary(
+            'Dream 向量准备完成',
+            [
+                `记忆数量：${entryCount} 条`,
+                `向量模型：${embeddingModelId}`,
+                `向量维度：${dimension}`,
+                `耗时：${(readVectorsMs / 1000).toFixed(3)} 秒`
+            ].join('; ')
+        )
         const cancellation = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT)
         const cancel = () => Atomics.store(new Int32Array(cancellation), 0, 1)
         signal?.addEventListener('abort', cancel, { once: true })
@@ -162,7 +165,7 @@ export class DreamClusterer {
             validateDreamPlan(plan, entryCount)
             logger?.summary(
                 'Dream 初始分组完成',
-                `生成 ${plan.clusterCount} 批，每批最多 ${dreamBatchSize} 条，耗时 ${Math.round(initial.elapsedMs)} 毫秒`
+                `生成 ${plan.clusterCount} 批，每批最多 ${dreamBatchSize} 条，耗时 ${(initial.elapsedMs / 1000).toFixed(3)} 秒`
             )
             let stage = 'initial'
             let stopReason = 'single-group'
@@ -176,12 +179,15 @@ export class DreamClusterer {
                     initial: plan,
                     signal
                 })
-                logger?.summary('Dream 近邻查询结束', [
-                    `覆盖记忆：${stats.queriedRows}/${entryCount} 条`,
-                    `满足构图要求：${stats.fullCandidateRows}/${entryCount} 条`,
-                    `候选关系：${stats.directedCandidateCount} 条`,
-                    `耗时：${Math.round(stats.candidateMs)} 毫秒`
-                ])
+                logger?.summary(
+                    'Dream 近邻查询结束',
+                    [
+                        `覆盖记忆：${stats.queriedRows}/${entryCount} 条`,
+                        `满足构图要求：${stats.fullCandidateRows}/${entryCount} 条`,
+                        `候选关系：${stats.directedCandidateCount} 条`,
+                        `耗时：${(stats.candidateMs / 1000).toFixed(3)} 秒`
+                    ].join('; ')
+                )
                 stopReason = stats.stopReason
                 if (candidates) {
                     const refined = await this.worker.refine({
@@ -207,13 +213,16 @@ export class DreamClusterer {
                     if (initialObjective > 0) {
                         score += `（提升 ${((finalObjective / initialObjective - 1) * 100).toFixed(1)}%）`
                     }
-                    logger?.summary('Dream 分组优化结束', [
-                        `近邻图：${diagnostics.graphEdgeCount} 条边`,
-                        `调整操作：移动 ${diagnostics.acceptedMoves} 次，交换 ${diagnostics.acceptedSwaps} 次`,
-                        score,
-                        `停止原因：${stopReasonLabels[stopReason]}`,
-                        `耗时：${Math.round(diagnostics.refineMs)} 毫秒`
-                    ])
+                    logger?.summary(
+                        'Dream 分组优化结束',
+                        [
+                            `近邻图：${diagnostics.graphEdgeCount} 条边`,
+                            `调整操作：移动 ${diagnostics.acceptedMoves} 次，交换 ${diagnostics.acceptedSwaps} 次`,
+                            score,
+                            `停止原因：${stopReasonLabels[stopReason]}`,
+                            `耗时：${(diagnostics.refineMs / 1000).toFixed(3)} 秒`
+                        ].join('; ')
+                    )
                 }
             }
             const clusters: DreamCluster[] = Array.from(
@@ -226,12 +235,12 @@ export class DreamClusterer {
             const summary = [
                 `共 ${plan.clusterCount} 批，覆盖 ${entryCount} 条记忆`,
                 `每批条数：${[...plan.sizes].join('、')}`,
-                `分组总耗时：${Math.round(performance.now() - startedAt)} 毫秒`
+                `分组总耗时：${((performance.now() - startedAt) / 1000).toFixed(3)} 秒`
             ]
             if (stage === 'initial') {
                 summary.push(`采用初始分组：${stopReasonLabels[stopReason]}`)
             }
-            logger?.summary('Dream 分组完成', summary)
+            logger?.summary('Dream 分组完成', summary.join('; '))
             return clusters
         } finally {
             signal?.removeEventListener('abort', cancel)

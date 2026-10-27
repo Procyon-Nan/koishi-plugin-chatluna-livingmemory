@@ -560,7 +560,7 @@ it('warns without failing initialization when legacy cleanup fails', async () =>
         assert.equal(captured.warnings.length, 1)
         assert.equal(
             captured.warnings[0][0],
-            '事件：vector-index.legacy-cleanup.failed; workflow：vector-index; operation：legacy-index-cleanup'
+            '事件：旧索引文件清理失败; 操作：清理旧索引文件\n%o'
         )
         await access(legacyDirectory)
         await service.stop()
@@ -998,10 +998,7 @@ it('keeps index jobs running until work completes and records failures', async (
         assert.match(failureLog, /事件：索引重建失败/u)
         assert.ok(failureLog.includes(`任务：${repository.jobs[0].id}`))
         assert.match(failureLog, /预设：\*/u)
-        assert.match(
-            String(captured.warnings[1][0]),
-            /事件：vector-index.unavailable/u
-        )
+        assert.match(String(captured.warnings[1][0]), /事件：向量索引服务异常/u)
         await service.stop()
     })
 }, 120_000)

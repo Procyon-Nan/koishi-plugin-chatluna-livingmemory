@@ -477,34 +477,25 @@ it('recovers files left by an interrupted rebuild switch', async () => {
     await cleaned.dispose()
 })
 
-it('quarantines an unreadable recovered index before rebuilding', async () => {
-    const formalPath = resolve(temporaryDirectory, 'quarantine-recovery')
+it('rejects an unreadable recovered index and preserves its contents', async () => {
+    const formalPath = resolve(temporaryDirectory, 'unreadable-recovery')
     const previousPath = resolve(
         temporaryDirectory,
-        'quarantine-recovery-previous'
+        'unreadable-recovery-previous'
     )
     const originalContent = 'unreadable recovered index'
     await writeFile(previousPath, originalContent)
 
-    const warnings: Error[] = []
-    const client = new LivingMemoryVectorIndexWorkerClient(
-        workerPath,
-        undefined,
-        (warning) => warnings.push(warning)
-    )
-    const inspection = await client.open(formalPath, previousPath)
-    assert.equal(inspection.manifest, null)
+    const client = new LivingMemoryVectorIndexWorkerClient(workerPath)
+    await assert.rejects(client.open(formalPath, previousPath))
     await client.dispose()
 
-    assert.equal(warnings.length, 1)
-    assert.ok(warnings[0].message.includes(formalPath))
-    const quarantineName = (await readdir(temporaryDirectory)).find((name) =>
-        name.startsWith('quarantine-recovery.failed-')
-    )
-    assert.notEqual(quarantineName, undefined)
+    assert.equal(await readFile(formalPath, 'utf8'), originalContent)
     assert.equal(
-        await readFile(resolve(temporaryDirectory, quarantineName!), 'utf8'),
-        originalContent
+        (await readdir(temporaryDirectory)).some((name) =>
+            name.startsWith('unreadable-recovery.failed-')
+        ),
+        false
     )
 })
 
