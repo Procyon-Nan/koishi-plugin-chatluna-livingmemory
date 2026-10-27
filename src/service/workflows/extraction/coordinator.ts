@@ -397,11 +397,6 @@ export class LivingMemoryExtractionCoordinator {
             return false
         }
 
-        runLogger.diagnostic('extraction.started', {
-            backlog: entries.length,
-            chunkMessages: chunk.length
-        })
-
         const messages = await toLogTranscriptMessages(
             scope,
             scope.platform ?? 'unknown',
@@ -489,9 +484,14 @@ export class LivingMemoryExtractionCoordinator {
         const origin = await options.resolveTranscriptOrigin()
         const input = `${origin.header}\n\n${payload.input}`
 
-        logger.diagnostic('extraction.input.prepared', {
-            sourceOriginMessages: payload.sourceOriginMessages.length,
-            inputLength: input.length
+        logger.diagnosticSummary(() => {
+            const conversation = scope.conversationId
+                .replace(/^group:/, '群聊 ')
+                .replace(/^private:/, '私聊 ')
+            return {
+                event: '开始记忆提取',
+                detail: `预设：${scope.presetId}; 会话：${conversation}; 本批消息：${payload.sourceOriginMessages.length} 条; 输入内容：${input.length} 字符`
+            }
         })
 
         const presetPrompt = await this.presetPersona.resolveOrGenerateCardText(
@@ -512,6 +512,7 @@ export class LivingMemoryExtractionCoordinator {
             logger.diagnostic('extraction.skipped', {
                 reason: result.skippedReason
             })
+            return
         }
 
         // 结果工具在一次纠正重试后仍无法通过校验：持久化失败记录，
@@ -544,8 +545,20 @@ export class LivingMemoryExtractionCoordinator {
             )
         }
 
-        logger.diagnostic('extraction.completed', {
-            extracted: extracted.length
+        logger.diagnosticSummary(() => {
+            const conversation = scope.conversationId
+                .replace(/^group:/, '群聊 ')
+                .replace(/^private:/, '私聊 ')
+            const details = [
+                `预设：${scope.presetId}`,
+                `会话：${conversation}`,
+                `提取记忆：${extracted.length} 条`
+            ]
+            if (result.reason) details.push(`原因：${result.reason}`)
+            return {
+                event: '记忆提取完成',
+                detail: details.join('; ')
+            }
         })
     }
 

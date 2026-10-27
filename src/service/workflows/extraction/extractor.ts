@@ -19,6 +19,7 @@ export type LivingMemoryExtractionSkipReason =
 
 export interface LivingMemoryExtractionResult {
     extracted: AttributedMemoryItem[]
+    reason?: string
     prompt: PromptMessages | null
     output: string | null
     skippedReason: LivingMemoryExtractionSkipReason | null
@@ -93,12 +94,6 @@ export class LivingMemoryExtractor {
             },
             logging: { logger, stage: 'memory-extraction' }
         })
-        if (result.value != null) {
-            logger.diagnostic('extraction.result', {
-                extracted: result.value.memories.length,
-                reason: result.value.reason
-            })
-        }
         const extracted =
             result.value?.memories.map((item): AttributedMemoryItem => {
                 return {
@@ -117,6 +112,7 @@ export class LivingMemoryExtractor {
 
         return {
             extracted,
+            reason: result.value?.reason,
             prompt,
             output: result.output,
             skippedReason: null,

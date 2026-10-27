@@ -248,6 +248,7 @@ export class LivingMemoryLogger {
         if (!this.isDebugEnabled()) return
         try {
             const { event, detail, blocks } = render(this.context)
+            if (blocks?.length === 0) return
             let content = detail
             if (blocks?.length) {
                 content +=

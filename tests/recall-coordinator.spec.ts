@@ -78,7 +78,7 @@ it('persists the agentic snapshot without persisting a successful job', async ()
     await waitFor(
         () =>
             captured.info.some((message) =>
-                message.includes('event=recall.snapshot.updated')
+                message.includes('事件：召回快照已更新;')
             ),
         'agentic recall snapshot update'
     )

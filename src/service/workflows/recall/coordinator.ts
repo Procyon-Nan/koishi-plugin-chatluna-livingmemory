@@ -158,10 +158,10 @@ export class LivingMemoryRecallCoordinator {
                 historyMessages,
                 logger
             )
+            const conversation = scope.conversationId
+                .replace(/^group:/, '群聊 ')
+                .replace(/^private:/, '私聊 ')
             if (trace == null) {
-                const conversation = scope.conversationId
-                    .replace(/^group:/, '群聊 ')
-                    .replace(/^private:/, '私聊 ')
                 logger.summary(
                     '召回结束',
                     `预设：${scope.presetId}; 会话：${conversation}; 结果：沿用当前快照`
@@ -174,16 +174,14 @@ export class LivingMemoryRecallCoordinator {
                 JSON.stringify(trace.item.toolCallSummary),
                 [trace.item]
             )
-            logger.info('recall.snapshot.updated', {
-                matched: trace.item.matchedMemories.length
-            })
-            logger.diagnostic('recall.snapshot.content', {}, () => [
-                {
-                    title: 'snapshot.content',
-                    key: 'content',
-                    value: renderSnapshotText([trace.item])
-                }
-            ])
+            logger.summary(
+                '召回快照已更新',
+                [
+                    `预设：${scope.presetId}; 会话：${conversation}; 命中记忆：${trace.item.matchedMemories.length} 条`,
+                    '========召回快照========',
+                    renderSnapshotText([trace.item])
+                ].join('\n')
+            )
         } catch (error) {
             await this.repository.createFailedJob(
                 scope,
