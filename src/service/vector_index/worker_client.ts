@@ -4,7 +4,6 @@ import { toError } from '../shared/utils'
 import { LivingMemoryVectorIndexError } from './errors'
 import type {
     VectorIndexHybridQuery,
-    VectorIndexKnnQuery,
     VectorIndexMutation,
     VectorIndexPresetStateMark,
     VectorIndexReplaceUpsert,
@@ -49,7 +48,6 @@ const commandTransferList = (
     command: VectorIndexWorkerCommand
 ): ArrayBuffer[] => {
     switch (command.type) {
-        case 'queryKnn':
         case 'queryHybrid':
             return [command.vector.buffer]
         case 'queryDreamNeighbors':
@@ -138,10 +136,6 @@ export class LivingMemoryVectorIndexWorkerClient {
 
     upgradeSchema() {
         return this.request({ type: 'upgradeSchema' })
-    }
-
-    queryKnn(query: VectorIndexKnnQuery) {
-        return this.request({ type: 'queryKnn', ...query })
     }
 
     queryHybrid(query: VectorIndexHybridQuery) {

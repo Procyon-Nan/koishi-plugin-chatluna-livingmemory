@@ -52,7 +52,7 @@ const createSession = (
         presetId,
         state,
         mutations,
-        speakers: repository
+        repository
     })
     const invoke = (name: string, input: Record<string, unknown>) => {
         const tool = tools.find((tool) => tool.name === `living_memory_${name}`)
@@ -142,7 +142,7 @@ class MemoryIndexSinkStub implements MemoryIndexMutationSink {
 }
 
 it.each([false, true])(
-    'splits Dream memories with provenance and consolidation (index failure: %s)',
+    'splits Dream memories with provenance (index failure: %s)',
     async (indexFailure) => {
         await withLivingMemoryRepository(async (ctx, repository) => {
             const sink = new MemoryIndexSinkStub()
@@ -219,7 +219,6 @@ it.each([false, true])(
             )
             for (const child of children) {
                 assert.equal(child.status, 'active')
-                assert.equal(child.isConsolidated, true)
                 assert.deepEqual(child.sourceOrigins, source.sourceOrigins)
                 assert.equal(child.sourceConversationId, scope.conversationId)
                 assert.equal(child.sourceLabel, source.sourceLabel)
@@ -295,8 +294,7 @@ it('rolls back split entries, source archival and speaker links together', async
                             speakerKeys: ['alice']
                         },
                         { ...sessionMemory, type: 'fact', speakerKeys: [] }
-                    ],
-                    true
+                    ]
                 ),
                 /injected transaction failure/
             )
@@ -349,10 +347,6 @@ it('tracks Dream coverage across batches and reuses merged memories', async () =
                 memory: sessionMemory
             })
         )
-        assert.equal(
-            (await repository.getEntryById(merged.memoryId))?.isConsolidated,
-            true
-        )
         assert.deepEqual(pendingDreamMemoryIds(state), [c.id])
         recordSkippedDreamBatch(state, 'round-limit')
         assert.deepEqual(
@@ -377,17 +371,6 @@ it('tracks Dream coverage across batches and reuses merged memories', async () =
         assert.deepEqual(state.skippedBatches[0].memoryIds, [c.id])
         assert.equal(state.stats.merged, 1)
         assert.equal(state.stats.archived, 3)
-        assert.equal(
-            (await repository.getEntryById(outside.id))?.isConsolidated,
-            false
-        )
-        assert.ok(
-            sink.mutations.every((batch) =>
-                batch.upserts
-                    .filter((item) => item.document.status === 'active')
-                    .every((item) => item.document.isConsolidated)
-            )
-        )
     })
 })
 
@@ -435,7 +418,7 @@ it('retains successful Dream coverage when only index synchronization fails', as
             ),
             JSON.parse(await invoke('delete_memory', { memoryId: archived.id }))
         ]
-        assert.ok(outputs.every((output) => output.warnings.length === 1))
+        assert.deepEqual(outputs.map((output) => output.warnings.length), [1, 1, 0, 1])
         assert.equal(getDreamCoverage(state).processedCount, 5)
         const stored = await repository.listEntriesByPreset(presetId)
         assert.equal(stored.length, 6)
@@ -443,14 +426,9 @@ it('retains successful Dream coverage when only index synchronization fails', as
             stored.filter((entry) => entry.status === 'archived').length,
             3
         )
-        assert.ok(
-            stored
-                .filter((entry) => entry.status === 'active')
-                .every((entry) => entry.isConsolidated)
-        )
         assert.equal(state.availableMemoryIds.has(outputs[1].memoryId), true)
         await flushBackgroundTasks()
-        assert.equal(sink.reconciledPresets.length, 4)
+        assert.equal(sink.reconciledPresets.length, 3)
     })
 })
 
@@ -480,10 +458,6 @@ it('rejects unavailable or stale Dream targets before recording successful cover
                 memoryIds: [active.id, stale.id],
                 reason: '内容完整'
             })
-        )
-        assert.equal(
-            (await repository.getEntryById(active.id))?.isConsolidated,
-            false
         )
         await assert.rejects(
             invoke('merge_memories', {
@@ -591,7 +565,7 @@ it('reports committed facts when vector synchronization fails', async () => {
     })
 })
 
-it('preserves vectors for consolidation and clears the preset index', async () => {
+it('preserves vectors for metadata updates and clears the preset index', async () => {
     await withLivingMemoryRepository(async (_ctx, repository) => {
         const sink = new MemoryIndexSinkStub()
         const mutations = new LivingMemoryMutationService(
@@ -601,10 +575,10 @@ it('preserves vectors for consolidation and clears the preset index', async () =
         )
         const memory = await mutations.createMemory(scope, {
             type: 'fact',
-            content: 'memory to consolidate'
+            content: 'memory to update'
         })
 
-        await mutations.setMemoryConsolidation(presetId, [memory.id], true)
+        await mutations.updateMemory(memory.id, { importance: 0.9 })
         await mutations.clearPresetData(presetId)
 
         assert.equal(sink.mutations[1].upserts[0].vectorAction, 'preserve')
@@ -641,8 +615,7 @@ it('synchronizes a Dream merge as one vector index mutation', async () => {
                 summary: 'merged summary',
                 sentiment: 'neutral',
                 importance: 0.8
-            },
-            true
+            }
         )
 
         assert.equal(sink.mutations.length, 1)

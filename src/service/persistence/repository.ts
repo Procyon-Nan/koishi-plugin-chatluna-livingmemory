@@ -165,10 +165,6 @@ export class LivingMemoryRepository
         return this.snapshots.removeLegacyReferenceSnapshots()
     }
 
-    dropLegacyPendingIndexes(): Promise<string[]> {
-        return this.entries.dropLegacyPendingIndexes()
-    }
-
     hasMigratedLegacyEmbeddings(): Promise<boolean> {
         return this.entries.hasMigratedLegacyEmbeddings()
     }
@@ -280,22 +276,9 @@ export class LivingMemoryRepository
 
     updateMemory(
         id: string,
-        patch: MemoryUpdatePatch,
-        isConsolidated?: boolean
+        patch: MemoryUpdatePatch
     ) {
-        return this.entries.updateMemory(id, patch, isConsolidated)
-    }
-
-    setMemoryConsolidation(
-        presetId: string,
-        ids: string[],
-        isConsolidated: boolean
-    ) {
-        return this.entries.setMemoryConsolidation(
-            presetId,
-            ids,
-            isConsolidated
-        )
+        return this.entries.updateMemory(id, patch)
     }
 
     archiveActiveEntries(presetId: string, ids: string[]) {
@@ -305,28 +288,24 @@ export class LivingMemoryRepository
     splitMemory(
         presetId: string,
         sourceMemoryId: string,
-        memories: AttributedMemoryItem[],
-        isConsolidated = false
+        memories: AttributedMemoryItem[]
     ) {
         return this.entries.splitMemory(
             presetId,
             sourceMemoryId,
-            memories,
-            isConsolidated
+            memories
         )
     }
 
     mergeMemories(
         presetId: string,
         sourceMemoryIds: string[],
-        memory: AttributedMemoryItem,
-        isConsolidated = false
+        memory: AttributedMemoryItem
     ) {
         return this.entries.mergeMemories(
             presetId,
             sourceMemoryIds,
-            memory,
-            isConsolidated
+            memory
         )
     }
 
@@ -500,7 +479,7 @@ export class LivingMemoryRepository
         ])
 
         return {
-            version: 4,
+            version: 5,
             exportedAt: new Date().toISOString(),
             sourcePresetId: presetId,
             entries: entries.map((entry) => ({
@@ -516,7 +495,6 @@ export class LivingMemoryRepository
                 sourceConversationId: entry.sourceConversationId,
                 sourceLabel: entry.sourceLabel,
                 sourceOrigins: entry.sourceOrigins,
-                isConsolidated: entry.isConsolidated,
                 createdAt: entry.createdAt.toISOString(),
                 updatedAt: entry.updatedAt.toISOString()
             })),
@@ -662,7 +640,6 @@ export class LivingMemoryRepository
         }
         const createEntryRow = (
             entry: LivingMemoryPresetExportEntry,
-            isConsolidated: boolean,
             speakerKeys: string[],
             sourceLabel: string | null
         ) => ({
@@ -679,41 +656,21 @@ export class LivingMemoryRepository
             sourceConversationId: entry.sourceConversationId,
             sourceLabel,
             sourceOrigins: normalizeMemorySourceOrigins(entry.sourceOrigins),
-            isConsolidated,
             createdAt: new Date(entry.createdAt),
             updatedAt: new Date(entry.updatedAt)
         })
         let entryRows: MemoryEntryRecord[]
-        if (data.version === 1) {
+        if (data.version === 1 || data.version === 2) {
             entryRows = data.entries.map((entry) =>
-                createEntryRow(entry, false, [], null)
-            )
-        } else if (data.version === 2) {
-            entryRows = data.entries.map((entry) =>
-                createEntryRow(
-                    entry,
-                    isCrossPresetImport ? false : entry.isConsolidated,
-                    [],
-                    null
-                )
+                createEntryRow(entry, [], null)
             )
         } else if (data.version === 3) {
             entryRows = data.entries.map((entry) =>
-                createEntryRow(
-                    entry,
-                    isCrossPresetImport ? false : entry.isConsolidated,
-                    entry.speakerKeys,
-                    null
-                )
+                createEntryRow(entry, entry.speakerKeys, null)
             )
         } else {
             entryRows = data.entries.map((entry) =>
-                createEntryRow(
-                    entry,
-                    isCrossPresetImport ? false : entry.isConsolidated,
-                    entry.speakerKeys,
-                    entry.sourceLabel
-                )
+                createEntryRow(entry, entry.speakerKeys, entry.sourceLabel)
             )
         }
         const speakerKeys = [

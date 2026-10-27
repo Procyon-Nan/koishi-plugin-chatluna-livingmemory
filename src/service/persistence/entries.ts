@@ -34,7 +34,6 @@ import {
     normalizeSourceConversationId
 } from './normalizers'
 import type { LivingMemoryTransact, LivingMemoryTransaction } from './types'
-import { dreamPendingIndex } from './tables'
 import {
     normalizeSpeakerKeys,
     resolveScopeSpeakerKeys
@@ -67,7 +66,6 @@ const memoryEntryFields: (keyof MemoryEntryRecord)[] = [
     'sourceConversationId',
     'sourceLabel',
     'sourceOrigins',
-    'isConsolidated',
     'createdAt',
     'updatedAt'
 ]
@@ -77,7 +75,6 @@ const indexSourceFields: (keyof MemoryEntryRecord)[] = [
     'sourceConversationId',
     'status',
     'type',
-    'isConsolidated',
     'content',
     'keywords',
     'updatedAt'
@@ -184,32 +181,6 @@ export class LivingMemoryEntryRepository
             .orderBy('id', 'asc')
             .limit(limit)
             .execute(['id', 'presetId', 'speakerKeys', 'status'])
-    }
-
-    /**
-     * 删除与待处理记忆索引同列但名字不同的历史索引。0.20.3 之前该索引使用
-     * minato 按列名拼接的默认名，SQLite 保留原名、PostgreSQL 截断至 63 字符，
-     * 而 minato 只按名字匹配既有索引、不清理未声明的索引，因此改名后旧索引会
-     * 与新索引并存。索引现状本身即幂等判据，无需迁移标记；DROP INDEX 为单条
-     * DDL，不纳入事务入口。
-     */
-    async dropLegacyPendingIndexes(): Promise<string[]> {
-        const table = 'living_memory_entry'
-        const { driver } = this.ctx.database.select(table)
-        const pendingIndexKeys = Object.keys(dreamPendingIndex.keys).join()
-        const legacyNames = (await driver.getIndexes(table))
-            .filter(
-                (index) =>
-                    index.name !== dreamPendingIndex.name &&
-                    Object.keys(index.keys).join() === pendingIndexKeys
-            )
-            .flatMap((index) => index.name ?? [])
-
-        for (const name of legacyNames) {
-            await driver.dropIndex(table, name)
-        }
-
-        return legacyNames
     }
 
     async migrateMemorySourceOriginsArray(): Promise<number> {
@@ -585,7 +556,6 @@ export class LivingMemoryEntryRepository
             sourceConversationId: scope.conversationId.trim() || null,
             sourceLabel,
             sourceOrigins,
-            isConsolidated: false,
             createdAt,
             updatedAt: createdAt
         }
@@ -593,8 +563,7 @@ export class LivingMemoryEntryRepository
 
     async updateMemory(
         id: string,
-        patch: MemoryUpdatePatch,
-        isConsolidated?: boolean
+        patch: MemoryUpdatePatch
     ) {
         const current = await this.getEntryById(id)
         if (current == null) {
@@ -610,7 +579,6 @@ export class LivingMemoryEntryRepository
         return await this.transact(async (database) => {
             const update = {
                 ...fields,
-                ...(isConsolidated === undefined ? {} : { isConsolidated }),
                 updatedAt: new Date()
             }
             const record = { ...current, ...update }
@@ -627,22 +595,6 @@ export class LivingMemoryEntryRepository
                 contentChanged: record.content !== current.content
             }
         })
-    }
-
-    /** 固化状态通过单条原子更新写入，索引同步复用应用层已读取的记忆。 */
-    async setMemoryConsolidation(
-        presetId: string,
-        ids: string[],
-        isConsolidated: boolean
-    ) {
-        if (ids.length === 0) {
-            return
-        }
-        await this.ctx.database.set(
-            'living_memory_entry',
-            { presetId, id: { $in: ids } },
-            { isConsolidated }
-        )
     }
 
     async archiveActiveEntries(presetId: string, ids: string[]) {
@@ -680,8 +632,7 @@ export class LivingMemoryEntryRepository
     async splitMemory(
         presetId: string,
         sourceMemoryId: string,
-        memories: AttributedMemoryItem[],
-        isConsolidated = false
+        memories: AttributedMemoryItem[]
     ) {
         if (memories.length < 2) {
             throw new MemoryInputError('拆分结果至少需要两条记忆。')
@@ -711,7 +662,6 @@ export class LivingMemoryEntryRepository
                     now,
                     memory.speakerKeys
                 )
-                record.isConsolidated = isConsolidated
                 return record
             })
             await database.upsert('living_memory_entry', records)
@@ -736,8 +686,7 @@ export class LivingMemoryEntryRepository
     async mergeMemories(
         presetId: string,
         sourceMemoryIds: string[],
-        memory: AttributedMemoryItem,
-        isConsolidated = false
+        memory: AttributedMemoryItem
     ) {
         const sourceIds = new Set(sourceMemoryIds)
         if (sourceIds.size < 2 || sourceIds.size !== sourceMemoryIds.length) {
@@ -789,7 +738,6 @@ export class LivingMemoryEntryRepository
                 now,
                 memory.speakerKeys
             )
-            record.isConsolidated = isConsolidated
             await database.create('living_memory_entry', record)
             await database.set(
                 'living_memory_entry',

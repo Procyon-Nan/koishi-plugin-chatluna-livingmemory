@@ -1,5 +1,6 @@
 import type { StructuredTool } from '@langchain/core/tools'
-import type { LivingMemoryUpdateProvider } from '../../../../contracts/workflows'
+import type { LivingMemoryRepository } from '../../../persistence/repository'
+import { MemoryInputError } from '../../../memory/errors'
 import type { LivingMemoryMutationService } from '../../../app/memory_mutation_service'
 import { createMemoryTool } from '../../../memory/tools'
 import { LivingMemoryFactsCommittedError } from '../../../vector_index/errors'
@@ -12,24 +13,26 @@ import {
 interface DreamSessionToolDependencies {
     presetId: string
     state: DreamSessionState
-    speakers: Pick<LivingMemoryUpdateProvider, 'listPresetSpeakers'>
+    repository: Pick<
+        LivingMemoryRepository,
+        'listPresetSpeakers' | 'getEntriesByPresetAndIds'
+    >
     mutations: Pick<
         LivingMemoryMutationService,
         | 'updateActiveMemory'
         | 'mergeActiveMemories'
         | 'splitActiveMemory'
         | 'archiveActiveMemories'
-        | 'setMemoryConsolidation'
     >
 }
 
 export function createDreamSessionTools({
     presetId,
     state,
-    speakers,
+    repository,
     mutations
 }: DreamSessionToolDependencies): StructuredTool[] {
-    const listPresetSpeakers = () => speakers.listPresetSpeakers(presetId)
+    const listPresetSpeakers = () => repository.listPresetSpeakers(presetId)
 
     return [
         createMemoryTool.split({
@@ -39,8 +42,7 @@ export function createDreamSessionTools({
                 const result = await mutations.splitActiveMemory(
                     presetId,
                     sourceMemoryId,
-                    memories,
-                    true
+                    memories
                 )
                 recordDreamOperation(state, [sourceMemoryId], 'split')
                 for (const memory of result.memories) {
@@ -57,8 +59,7 @@ export function createDreamSessionTools({
                     const record = await mutations.updateActiveMemory(
                         presetId,
                         memoryId,
-                        patch,
-                        true
+                        patch
                     )
                     if (record !== null) {
                         recordDreamOperation(state, [memoryId], 'updated')
@@ -79,8 +80,7 @@ export function createDreamSessionTools({
                 const result = await mutations.mergeActiveMemories(
                     presetId,
                     sourceMemoryIds,
-                    memory,
-                    true
+                    memory
                 )
                 recordDreamOperation(state, sourceMemoryIds, 'merged')
                 state.availableMemoryIds.add(result.memory.id)
@@ -109,24 +109,21 @@ export function createDreamSessionTools({
         }),
         createMemoryTool.checked(async ({ memoryIds }) => {
             assertDreamMemoriesAvailable(state, memoryIds)
-            const warnings: string[] = []
-            try {
-                await mutations.setMemoryConsolidation(
-                    presetId,
-                    memoryIds,
-                    true
-                )
-            } catch (error) {
-                if (!(error instanceof LivingMemoryFactsCommittedError)) {
-                    throw error
-                }
-                warnings.push(
-                    '记忆已固化，但向量索引同步失败，已调度后台自动对账：' +
-                        error.message
+            const entries = await repository.getEntriesByPresetAndIds(
+                presetId,
+                memoryIds
+            )
+            const activeIds = new Set(
+                entries.filter((entry) => entry.status === 'active').map((entry) => entry.id)
+            )
+            const missing = memoryIds.filter((id) => !activeIds.has(id))
+            if (missing.length > 0) {
+                throw new MemoryInputError(
+                    `请核对以下记忆的活跃状态：${missing.join('、')}。`
                 )
             }
             recordDreamOperation(state, memoryIds, 'kept')
-            return { warnings }
+            return { warnings: [] }
         })
     ]
 }

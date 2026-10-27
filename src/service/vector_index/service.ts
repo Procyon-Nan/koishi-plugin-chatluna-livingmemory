@@ -286,7 +286,6 @@ export class LivingMemoryVectorIndexService
                     presetId: input.presetId,
                     conversationId: input.conversationId,
                     types: input.memoryTypes,
-                    isConsolidated: null,
                     memoryStatus: input.memoryStatus,
                     limit: input.maxCandidates,
                     vector,

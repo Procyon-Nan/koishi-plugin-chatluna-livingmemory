@@ -20,7 +20,6 @@ const createQuery = (
 ): VectorIndexHybridQuery => ({
     presetId: 'preset-a',
     types: null,
-    isConsolidated: null,
     memoryStatus: 'active',
     limit: 2,
     vector: new Float32Array([1, 0, 0]),

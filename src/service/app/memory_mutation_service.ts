@@ -42,7 +42,6 @@ type MemoryFactRepository = Pick<
     | 'listArchivedEntriesBefore'
     | 'createMemory'
     | 'updateMemory'
-    | 'setMemoryConsolidation'
     | 'archiveActiveEntries'
     | 'mergeMemories'
     | 'splitMemory'
@@ -193,8 +192,7 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
     async updateActiveMemory(
         presetId: string,
         id: string,
-        patch: Omit<MemoryUpdatePatch, 'status'>,
-        isConsolidated?: boolean
+        patch: Omit<MemoryUpdatePatch, 'status'>
     ): Promise<MemoryEntryRecord | null> {
         return this.runPresetMutation(presetId, async () => {
             const current = await this.repository.getEntryById(id)
@@ -207,8 +205,7 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
             }
             const result = await this.persistMemoryUpdate(
                 current,
-                patch,
-                isConsolidated
+                patch
             )
             return result?.record ?? null
         })
@@ -217,8 +214,7 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
     // 调用方已持有预设队列并重读目标，此处只复用写入步骤，不再次入队。
     private async persistMemoryUpdate(
         current: MemoryEntryRecord,
-        patch: MemoryUpdatePatch,
-        isConsolidated?: boolean
+        patch: MemoryUpdatePatch
     ) {
         await this.registerCallerSpeakerKeys(
             current.presetId,
@@ -226,8 +222,7 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
         )
         const result = await this.repository.updateMemory(
             current.id,
-            patch,
-            isConsolidated
+            patch
         )
         if (result === null) {
             return null
@@ -265,43 +260,6 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
                 speakerLabel: createSyntheticSpeakerLabel(speakerKey)
             }))
         )
-    }
-
-    async setMemoryConsolidation(
-        presetId: string,
-        ids: string[],
-        isConsolidated: boolean
-    ) {
-        return this.runPresetMutation(presetId, async () => {
-            const records = (
-                await this.repository.getEntriesByPresetAndIds(presetId, ids)
-            )
-                .filter((entry) => entry.status === 'active')
-                .map((entry) => ({ ...entry, isConsolidated }))
-            const active = new Set(records.map((entry) => entry.id))
-            const missingIds = ids.filter((id) => !active.has(id))
-            if (missingIds.length > 0) {
-                throw new MemoryInputError(
-                    `无法确认以下记忆的检查状态：${missingIds.join('、')}。请核对记忆 ID 后重试。`
-                )
-            }
-            if (records.length === 0) {
-                return records
-            }
-            await this.repository.setMemoryConsolidation(
-                presetId,
-                ids,
-                isConsolidated
-            )
-            await this.syncCommittedMutationToIndex({
-                presetId,
-                upserts: records.map((record) =>
-                    this.buildIndexUpsert(record, 'preserve')
-                ),
-                deletes: []
-            })
-            return records
-        })
     }
 
     async archiveActiveMemories(presetId: string, ids: string[]) {
@@ -342,8 +300,7 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
     async splitActiveMemory(
         presetId: string,
         sourceMemoryId: string,
-        memories: AttributedMemoryItem[],
-        isConsolidated = false
+        memories: AttributedMemoryItem[]
     ) {
         if (memories.length < 2) {
             throw new MemoryInputError('拆分结果至少需要两条记忆。')
@@ -366,8 +323,7 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
             const result = await this.repository.splitMemory(
                 presetId,
                 sourceMemoryId,
-                memories,
-                isConsolidated
+                memories
             )
             const warnings = await this.syncReplacementMemoriesToIndex(
                 presetId,
@@ -382,8 +338,7 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
     async mergeActiveMemories(
         presetId: string,
         sourceMemoryIds: string[],
-        memory: AttributedMemoryItem,
-        isConsolidated = false
+        memory: AttributedMemoryItem
     ) {
         const sourceIds = new Set(sourceMemoryIds)
         if (sourceIds.size < 2 || sourceIds.size !== sourceMemoryIds.length) {
@@ -409,8 +364,7 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
             const result = await this.repository.mergeMemories(
                 presetId,
                 sourceMemoryIds,
-                memory,
-                isConsolidated
+                memory
             )
             const warnings = await this.syncReplacementMemoriesToIndex(
                 presetId,
@@ -636,7 +590,6 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
                 sourceConversationId: record.sourceConversationId,
                 status: record.status,
                 type: record.type,
-                isConsolidated: record.isConsolidated,
                 content: record.content,
                 keywords: record.keywords,
                 updatedAt: record.updatedAt

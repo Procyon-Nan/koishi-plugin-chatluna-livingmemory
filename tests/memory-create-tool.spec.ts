@@ -94,7 +94,6 @@ const createRecordingProvider = (
                 sourceConversationId: scope.conversationId,
                 sourceLabel: null,
                 sourceOrigins: [],
-                isConsolidated: false,
                 createdAt: new Date(),
                 updatedAt: new Date()
             }

@@ -35,7 +35,6 @@ const memory: MemoryEntryRecord = {
     sourceConversationId: 'conversation-1',
     sourceLabel: null,
     sourceOrigins: [],
-    isConsolidated: true,
     createdAt: now,
     updatedAt: now
 }

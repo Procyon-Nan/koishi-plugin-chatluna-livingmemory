@@ -12,7 +12,6 @@ import { formatErrorDetails } from '../../shared/utils'
 import type {
     VectorIndexHybridQuery,
     VectorIndexInspection,
-    VectorIndexKnnQuery,
     VectorIndexMutation,
     VectorIndexPresetStateMark,
     VectorIndexReplaceUpsert
@@ -25,7 +24,6 @@ import {
 } from './mutations'
 import {
     queryVectorIndexHybrid,
-    queryVectorIndexKnn,
     readVectorSnapshot,
     readVectorIndexInventoryPage
 } from './queries'
@@ -235,10 +233,6 @@ export class LivingMemoryVectorIndexDatabase {
             this.mode = null
             throw error
         }
-    }
-
-    queryKnn(query: VectorIndexKnnQuery) {
-        return queryVectorIndexKnn(this.requireActiveDatabase(), query)
     }
 
     queryHybrid(query: VectorIndexHybridQuery) {

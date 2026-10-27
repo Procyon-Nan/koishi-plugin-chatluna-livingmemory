@@ -140,7 +140,6 @@ export interface MemoryEntryRecord {
     sourceConversationId: string | null
     sourceLabel: string | null
     sourceOrigins: MemorySourceOrigin[]
-    isConsolidated: boolean
     createdAt: Date
     updatedAt: Date
 }
@@ -286,11 +285,7 @@ export interface LivingMemoryPresetExportEntry {
     updatedAt: string
 }
 
-export interface LivingMemoryPresetExportEntryV2 extends LivingMemoryPresetExportEntry {
-    isConsolidated: boolean
-}
-
-export interface LivingMemoryPresetExportEntryV3 extends LivingMemoryPresetExportEntryV2 {
+export interface LivingMemoryPresetExportEntryV3 extends LivingMemoryPresetExportEntry {
     speakerKeys: string[]
 }
 
@@ -332,7 +327,7 @@ export interface LivingMemoryPresetExportV1 extends LivingMemoryPresetExportBase
 
 export interface LivingMemoryPresetExportV2 extends LivingMemoryPresetExportBase {
     version: 2
-    entries: LivingMemoryPresetExportEntryV2[]
+    entries: LivingMemoryPresetExportEntry[]
 }
 
 export interface LivingMemoryPresetExportV3 extends LivingMemoryPresetExportBase {
@@ -345,11 +340,17 @@ export interface LivingMemoryPresetExportV4 extends LivingMemoryPresetExportBase
     entries: LivingMemoryPresetExportEntryV4[]
 }
 
+export interface LivingMemoryPresetExportV5 extends LivingMemoryPresetExportBase {
+    version: 5
+    entries: LivingMemoryPresetExportEntryV4[]
+}
+
 export type LivingMemoryPresetExport =
     | LivingMemoryPresetExportV1
     | LivingMemoryPresetExportV2
     | LivingMemoryPresetExportV3
     | LivingMemoryPresetExportV4
+    | LivingMemoryPresetExportV5
 
 export interface LivingMemoryPresetImportSummary {
     entries: number

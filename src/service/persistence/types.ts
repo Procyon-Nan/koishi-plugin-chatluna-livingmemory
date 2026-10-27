@@ -15,6 +15,8 @@ export type LivingMemoryTransact = <T>(
 ) => Promise<T>
 
 export interface LivingMemoryEntryTableRecord extends MemoryEntryRecord {
+    /** 仅用于旧库字段退役迁移。 */
+    isConsolidated?: boolean
     embedding: number[] | null
     embeddingModelId: string | null
 }

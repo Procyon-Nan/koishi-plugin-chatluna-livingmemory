@@ -143,7 +143,6 @@ export const createMemoryEntry = (
         sourceConversationId: scope.conversationId,
         sourceLabel: null,
         sourceOrigins: [],
-        isConsolidated: false,
         createdAt: now,
         updatedAt: now
     }

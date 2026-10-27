@@ -26,7 +26,6 @@ const createMemory = (
         sourceConversationId: null,
         sourceLabel: null,
         sourceOrigins: [],
-        isConsolidated: false,
         createdAt,
         updatedAt: createdAt
     }

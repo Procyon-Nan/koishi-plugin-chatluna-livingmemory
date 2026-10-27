@@ -54,12 +54,6 @@ const runService = async (
                 )
             )
         )
-        // 全量包含已固化记忆，固定目标不受后续新建记忆影响。
-        await repository.setMemoryConsolidation(
-            scope.presetId,
-            [entries[0].id],
-            true
-        )
         let rounds = 0
         const model = new ChatLunaChatModel({
             model: 'test',
@@ -180,9 +174,9 @@ const checked = (ids: string[]) =>
         ]
     })
 
-it('runs the production Dream service through real tools across batches and persists consolidation', async () => {
+it('runs the production Dream service through real tools across batches and records coverage', async () => {
     const batchSizes: number[] = []
-    const { result, stored } = await runService((params) => {
+    const { result } = await runService((params) => {
         const ids = currentIds(params)
         batchSizes.push(ids.length)
         assert.equal(params.id, 'job-test')
@@ -193,13 +187,12 @@ it('runs the production Dream service through real tools across batches and pers
     assert.equal(result.processedCount, 31)
     assert.equal(batchSizes.length, 2)
     assert.ok(batchSizes.every((size) => size <= 30))
-    assert.ok(stored.every((entry) => entry.isConsolidated))
     assert.doesNotMatch(result.detail, /人物画像/)
 })
 
 it('keeps successful operations and proceeds past an ineffective batch as partial', async () => {
     let firstId = ''
-    const { result, stored } = await runService((params, round) => {
+    const { result } = await runService((params, round) => {
         if (round === 1) {
             firstId = currentIds(params)[0]
             return checked([firstId])
@@ -210,10 +203,6 @@ it('keeps successful operations and proceeds past an ineffective batch as partia
     assert.equal(result.processedCount, 1)
     assert.equal(result.unprocessedMemoryIds.length, 30)
     assert.equal(result.skippedBatches.length, 2)
-    assert.equal(
-        stored.find((entry) => entry.id === firstId)?.isConsolidated,
-        true
-    )
     assert.match(result.detail, /连续 3 轮/)
     assert.doesNotMatch(result.detail, /人物画像/)
 })

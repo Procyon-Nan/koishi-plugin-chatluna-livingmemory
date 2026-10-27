@@ -61,6 +61,7 @@ const defineLegacyEntryTable = (ctx: Context) => {
             sentiment: 'text',
             importance: 'double',
             sourceConversationId: 'string(255)',
+            isConsolidated: { type: 'boolean', initial: false },
             embedding: 'json',
             embeddingModelId: 'string(255)',
             createdAt: 'timestamp',
@@ -165,11 +166,6 @@ it('repairs the legacy SQLite json default after applying current tables', async
             assert.deepEqual(
                 (await repository.getEntryById('legacy-schema'))?.sourceOrigins,
                 []
-            )
-            assert.equal(
-                (await repository.getEntryById('legacy-schema'))
-                    ?.isConsolidated,
-                false
             )
 
             const { sourceOrigins: _sourceOrigins, ...currentEntry } =

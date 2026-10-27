@@ -49,7 +49,6 @@ export type MemoryIndexSourceRecord = Pick<
     | 'sourceConversationId'
     | 'status'
     | 'type'
-    | 'isConsolidated'
     | 'content'
     | 'keywords'
     | 'updatedAt'
@@ -67,7 +66,6 @@ export interface MemoryIndexDocument {
     sourceConversationId: string | null
     status: MemoryEntryStatus
     type: MemoryEntryType
-    isConsolidated: boolean
     content: string
     keywords: string[]
     updatedAt: Date

@@ -1,21 +1,5 @@
 import type { Context } from 'koishi'
 
-/**
- * 待处理记忆查询索引。minato 由列名拼接的默认名为
- * `index:living_memory_entry:presetId+status+isConsolidated+createdAt+id`，
- * 长 69 字符，超出 MySQL 64 字符的标识符上限，故显式指定短名。
- */
-export const dreamPendingIndex = {
-    name: 'index:living_memory_entry:dream_pending',
-    keys: {
-        presetId: 'asc',
-        status: 'asc',
-        isConsolidated: 'asc',
-        createdAt: 'asc',
-        id: 'asc'
-    }
-} as const
-
 export const defineLivingMemoryTables = (ctx: Context) => {
     ctx.model.extend(
         'living_memory_entry',
@@ -73,17 +57,29 @@ export const defineLivingMemoryTables = (ctx: Context) => {
                 nullable: true,
                 initial: null
             },
-            isConsolidated: {
-                type: 'boolean',
-                initial: false
-            },
             createdAt: 'timestamp',
             updatedAt: 'timestamp'
         },
         {
             autoInc: false,
             primary: 'id',
-            indexes: [dreamPendingIndex, ['presetId', 'status', 'updatedAt']]
+            indexes: [['presetId', 'status', 'updatedAt']]
+        }
+    )
+
+    // 字段退役时先删除依赖它的旧索引，再由数据库驱动移除列。
+    ctx.model.migrate(
+        'living_memory_entry',
+        { isConsolidated: 'boolean' },
+        async (database) => {
+            const table = 'living_memory_entry'
+            const { driver } = database.select(table)
+            const indexes = await driver.getIndexes(table)
+            for (const index of indexes) {
+                if (index.name && 'isConsolidated' in index.keys) {
+                    await driver.dropIndex(table, index.name)
+                }
+            }
         }
     )
 

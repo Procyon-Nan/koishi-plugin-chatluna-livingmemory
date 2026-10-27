@@ -46,7 +46,6 @@ const requiresMetadataUpdate = (
         inventory.sourceConversationId !== document.sourceConversationId ||
         inventory.status !== document.status ||
         inventory.type !== document.type ||
-        inventory.isConsolidated !== document.isConsolidated ||
         inventory.updatedAt !== document.updatedAt
     )
 }

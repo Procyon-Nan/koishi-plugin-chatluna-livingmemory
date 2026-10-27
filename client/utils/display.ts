@@ -27,7 +27,7 @@ const memoryTagTypes: Record<
 const jobKindLabels: Record<string, string> = {
     recall: '记忆召回',
     extract: '记忆提取',
-    dream: 'Dream 固化',
+    dream: 'Dream 整理',
     clear: '数据清理'
 }
 

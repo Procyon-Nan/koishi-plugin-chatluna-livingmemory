@@ -43,7 +43,6 @@ export interface VectorIndexInventoryItem {
     sourceConversationId: string | null
     status: MemoryEntryStatus
     type: MemoryEntryType
-    isConsolidated: boolean
     contentHash: string
     keywordsHash: string
     updatedAt: number
@@ -78,7 +77,6 @@ export interface VectorIndexFilter {
     presetId: string
     conversationId?: string
     types: MemoryEntryType[] | null
-    isConsolidated: boolean | null
     memoryStatus: MemorySearchStatus
 }
 
@@ -126,10 +124,6 @@ export interface VectorIndexWorkerCommandMap {
     upgradeSchema: {
         input: Record<never, never>
         result: { schemaVersion: number }
-    }
-    queryKnn: {
-        input: VectorIndexKnnQuery
-        result: VectorIndexKnnHit[]
     }
     queryHybrid: {
         input: VectorIndexHybridQuery

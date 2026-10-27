@@ -53,10 +53,6 @@ const appendFilters = (query: VectorIndexKnnQuery, alias = '') => {
         )
         parameters.push(query.types)
     }
-    if (query.isConsolidated !== null) {
-        conditions.push(`${prefix}is_consolidated = $${parameters.length + 1}`)
-        parameters.push(query.isConsolidated)
-    }
     return { conditions, parameters }
 }
 
@@ -258,7 +254,6 @@ export const readVectorIndexInventoryPage = async (
                 source_conversation_id AS "sourceConversationId",
                 status,
                 type,
-                is_consolidated AS "isConsolidated",
                 content_hash AS "contentHash",
                 keywords_hash AS "keywordsHash",
                 updated_at AS "updatedAt"
@@ -271,7 +266,6 @@ export const readVectorIndexInventoryPage = async (
     ).rows
     const items = rows.slice(0, limit).map((row) => ({
         ...row,
-        isConsolidated: Boolean(row.isConsolidated),
         updatedAt: Number(row.updatedAt)
     }))
     return {

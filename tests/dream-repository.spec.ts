@@ -54,7 +54,7 @@ const createMemory = (
         [`${label}-speaker`]
     )
 
-it('atomically creates a consolidated memory and archives all merge sources', async () => {
+it('atomically creates a memory and archives all merge sources', async () => {
     await withRepository(async (ctx, repository) => {
         const target = await createMemory(repository, 'target', 'active')
         const source1 = await createMemory(repository, 'source-1', 'active')
@@ -79,8 +79,7 @@ it('atomically creates a consolidated memory and archives all merge sources', as
         const merged = await repository.mergeMemories(
             scope.presetId,
             [target.id, source1.id, source2.id],
-            createMergePatch(),
-            true
+            createMergePatch()
         )
 
         const entries = await repository.getEntriesByPresetAndIds(
@@ -95,10 +94,7 @@ it('atomically creates a consolidated memory and archives all merge sources', as
         assert.deepEqual(storedTarget?.sourceOrigins, sourceOrigins)
         assert.equal(entryById.get(source1.id)?.status, 'archived')
         assert.equal(entryById.get(source2.id)?.status, 'archived')
-        assert.equal(storedTarget?.isConsolidated, true)
         assert.equal(entryById.get(target.id)?.status, 'archived')
-        assert.equal(entryById.get(source1.id)?.isConsolidated, false)
-        assert.equal(entryById.get(source2.id)?.isConsolidated, false)
         assert.deepEqual(
             await repository.listActiveMemorySpeakerLinks(scope.presetId, [
                 'target-speaker',
@@ -226,87 +222,14 @@ it('backfills active memory speaker links once', async () => {
     })
 })
 
-it('defines the pending Dream query index', () => {
+it('defines active memory indexes', () => {
     const ctx = createTestContext()
     const repository = new LivingMemoryRepository(ctx)
     repository.defineTables()
-
     assert.deepEqual(
         ctx.model.tables.living_memory_entry.indexes.map((index) => index.keys),
-        [
-            {
-                presetId: 'asc',
-                status: 'asc',
-                isConsolidated: 'asc',
-                createdAt: 'asc',
-                id: 'asc'
-            },
-            {
-                presetId: 'asc',
-                status: 'asc',
-                updatedAt: 'asc'
-            }
-        ]
+        [{ presetId: 'asc', status: 'asc', updatedAt: 'asc' }]
     )
-    assert.deepEqual(
-        ctx.model.tables.living_memory_entry_speaker.indexes.map(
-            (index) => index.keys
-        ),
-        [
-            { presetId: 'asc', speakerKey: 'asc' },
-            { presetId: 'asc', memoryId: 'asc' }
-        ]
-    )
-    // MySQL 标识符上限为 64 字符，索引名超限会中断整个数据库的准备流程
-    assert.deepEqual(
-        Object.entries(ctx.model.tables)
-            .filter(([table]) => table.startsWith('living_memory'))
-            .flatMap(([, model]) => model.indexes)
-            .map((index) => index.name)
-            .filter((name) => (name?.length ?? 0) > 64),
-        []
-    )
-})
-
-it('drops legacy pending Dream query indexes', async () => {
-    await withRepository(async (ctx, repository) => {
-        await ctx.database.prepared()
-        const { driver } = ctx.database.select('living_memory_entry')
-        // 旧默认名在 SQLite 上原样保留，在 PostgreSQL 上被截断至 63 字符
-        const legacyNames = [
-            'index:living_memory_entry:presetId+status+isConsolidated+createdAt+id',
-            'index:living_memory_entry:presetId+status+isConsolidated+created'
-        ]
-        for (const name of legacyNames) {
-            await driver.createIndex('living_memory_entry', {
-                name,
-                unique: false,
-                keys: {
-                    presetId: 'asc',
-                    status: 'asc',
-                    isConsolidated: 'asc',
-                    createdAt: 'asc',
-                    id: 'asc'
-                }
-            })
-        }
-
-        assert.deepEqual(
-            await repository.dropLegacyPendingIndexes(),
-            legacyNames
-        )
-        assert.deepEqual(
-            (await driver.getIndexes('living_memory_entry')).map(
-                (index) => index.name
-            ),
-            [
-                'sqlite_autoindex_living_memory_entry_1',
-                'index:living_memory_entry:dream_pending',
-                'index:living_memory_entry:presetId+status+updatedAt'
-            ]
-        )
-        assert.deepEqual(await repository.dropLegacyPendingIndexes(), [])
-    })
 })
 
 it('reads Dream entries without legacy vectors or source payloads', async () => {
@@ -325,7 +248,6 @@ it('reads Dream entries without legacy vectors or source payloads', async () => 
         assert.equal(Object.hasOwn(records[0], 'sourceOrigins'), false)
         assert.equal(Object.hasOwn(records[0], 'sourceConversationId'), false)
         assert.equal(Object.hasOwn(records[0], 'status'), false)
-        assert.equal(Object.hasOwn(records[0], 'isConsolidated'), false)
     })
 })
 
@@ -338,8 +260,7 @@ it('rejects a Dream merge when a source no longer exists', async () => {
             repository.mergeMemories(
                 scope.presetId,
                 [target.id, 'missing-source'],
-                createMergePatch(),
-                true
+                createMergePatch()
             ),
             /missing-source/u
         )

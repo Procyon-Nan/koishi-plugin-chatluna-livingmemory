@@ -1,4 +1,4 @@
-const workloadNames = ['semantic', 'hybrid', 'incremental']
+const workloadNames = ['semantic', 'hybrid']
 const memoryTypes = ['fact', 'preference', 'context', 'plan']
 const defaultOptions = {
     memoryCount: 5_000,
@@ -6,7 +6,6 @@ const defaultOptions = {
     queryCount: 100,
     presetCount: 8,
     activeRatio: 0.8,
-    consolidatedRatio: 0.7,
     memoryTypeDistribution: 'fact:1,preference:1,context:1,plan:1',
     keywordVocabularySize: 100,
     keywordHotRatio: 0.8,
@@ -21,7 +20,6 @@ const optionNames = {
     'query-count': 'queryCount',
     'preset-count': 'presetCount',
     'active-ratio': 'activeRatio',
-    'consolidated-ratio': 'consolidatedRatio',
     'memory-type-distribution': 'memoryTypeDistribution',
     'keyword-vocabulary-size': 'keywordVocabularySize',
     'keyword-hot-ratio': 'keywordHotRatio',
@@ -139,7 +137,6 @@ const validateOptions = (options) => {
     assertInteger(options.searchTextCount, 'searchTextCount', 1, 3)
     assertInteger(options.seed, 'seed', 0, 0xffffffff)
     assertRatio(options.activeRatio, 'activeRatio')
-    assertRatio(options.consolidatedRatio, 'consolidatedRatio')
     assertRatio(options.keywordHotRatio, 'keywordHotRatio')
     parseMemoryTypeDistribution(options.memoryTypeDistribution)
     if (

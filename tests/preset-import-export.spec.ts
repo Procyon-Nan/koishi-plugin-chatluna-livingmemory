@@ -52,15 +52,10 @@ it('copies preset data without moving source records', async () => {
             speakerKey: 'speaker-key',
             speakerLabel: 'Speaker'
         })
-        await repository.setMemoryConsolidation(
-            sourcePresetId,
-            [sourceMemory.id],
-            true
-        )
 
         const exported = await repository.exportPresetData(sourcePresetId)
-        if (exported.version !== 4) {
-            throw new Error('expected version 4 preset export')
+        if (exported.version !== 5) {
+            throw new Error('expected version 5 preset export')
         }
         const sourceProfile = exported.userProfiles[0]
 
@@ -81,7 +76,6 @@ it('copies preset data without moving source records', async () => {
             importedTargetMemories[0].speakerKeys,
             sourceMemory.speakerKeys
         )
-        assert.equal(importedTargetMemories[0].isConsolidated, false)
         assert.deepEqual(
             await repository.listActiveMemorySpeakerLinks(targetPresetId, [
                 sourceMemory.speakerKeys[0]
@@ -139,49 +133,24 @@ it('copies preset data without moving source records', async () => {
     })
 })
 
-it('preserves consolidation when restoring an export into its own preset', async () => {
+it('exports v5 and imports historical entries with obsolete metadata', async () => {
     await withLivingMemoryRepository(async (_ctx, repository) => {
-        const presetId = 'preset-consolidation'
-        const memory = await repository.createMemory(
-            { conversationId: 'conversation-1', presetId },
-            { type: 'fact', content: 'consolidated memory' }
-        )
-        await repository.setMemoryConsolidation(presetId, [memory.id], true)
-        const exported = await repository.exportPresetData(presetId)
-        if (exported.version !== 4) {
-            throw new Error('expected version 4 preset export')
-        }
-
-        assert.equal(exported.entries[0].isConsolidated, true)
-        await repository.setMemoryConsolidation(presetId, [memory.id], false)
-        await repository.importPresetData(presetId, exported)
-
-        assert.equal(
-            (await repository.getEntryById(memory.id))?.isConsolidated,
-            true
-        )
-    })
-})
-
-it('normalizes missing version 1 consolidation state to pending', async () => {
-    await withLivingMemoryRepository(async (_ctx, repository) => {
-        const targetPresetId = 'version-1-target'
-        const data: LivingMemoryPresetExport = {
-            version: 1,
-            exportedAt: '2026-08-06T00:00:00.000Z',
-            sourcePresetId: targetPresetId,
-            entries: [createExportEntry('version-1-entry', 1)],
+        const presetId = 'preset-import'
+        const data = {
+            version: 2 as const,
+            exportedAt: '2026-10-28T00:00:00.000Z',
+            sourcePresetId: presetId,
+            entries: [{ ...createExportEntry('legacy', 1), isConsolidated: true }],
             userProfiles: [],
             presetSpeakers: []
         }
-
-        await repository.importPresetData(targetPresetId, data)
-
-        assert.equal(
-            (await repository.listEntriesByPreset(targetPresetId))[0]
-                .isConsolidated,
-            false
-        )
+        await repository.importPresetData(presetId, data)
+        const exported = await repository.exportPresetData(presetId)
+        assert.equal(exported.version, 5)
+        assert.equal(exported.entries[0].content, 'memory-1')
+        assert.equal(Object.hasOwn(exported.entries[0], 'isConsolidated'), false)
+        await repository.importPresetData(presetId, exported)
+        assert.equal((await repository.listEntriesByPreset(presetId)).length, 1)
     })
 })
 
@@ -203,7 +172,6 @@ it('synthesizes registry rows for keys missing from version 3 imports', async ()
             entries: [
                 {
                     ...createExportEntry('version-3-entry', 1),
-                    isConsolidated: false,
                     speakerKeys: ['known-key', 'unknown-key']
                 }
             ],
@@ -227,7 +195,7 @@ it('synthesizes registry rows for keys missing from version 3 imports', async ()
     })
 })
 
-it('round-trips memory source labels through version 4 exports', async () => {
+it('round-trips memory source labels through version 5 exports', async () => {
     await withLivingMemoryRepository(async (_ctx, repository) => {
         const sourcePresetId = 'preset-source-label'
         const targetPresetId = 'preset-target-label'
@@ -257,8 +225,8 @@ it('round-trips memory source labels through version 4 exports', async () => {
         assert.equal(memory.sourceLabel, sourceLabel)
 
         const exported = await repository.exportPresetData(sourcePresetId)
-        if (exported.version !== 4) {
-            throw new Error('expected version 4 preset export')
+        if (exported.version !== 5) {
+            throw new Error('expected version 5 preset export')
         }
         assert.equal(exported.entries[0].sourceLabel, sourceLabel)
 

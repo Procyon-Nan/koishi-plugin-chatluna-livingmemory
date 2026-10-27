@@ -10,7 +10,6 @@ export const createVectorIndexDocument = (
     sourceConversationId: source.sourceConversationId,
     status: source.status,
     type: source.type,
-    isConsolidated: source.isConsolidated,
     ...createMemoryIndexHashes(source),
     keywords: source.keywords,
     updatedAt: +source.updatedAt

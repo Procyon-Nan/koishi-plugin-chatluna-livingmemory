@@ -59,7 +59,6 @@ export const createMemory = (index, options, typeDistribution, random) => {
         presetId: `benchmark-preset-${index % options.presetCount}`,
         status: random() < options.activeRatio ? 'active' : 'archived',
         type: typeDistribution.find(({ maximum }) => typeRoll < maximum).type,
-        isConsolidated: random() < options.consolidatedRatio,
         contentHash: `content-${index}`,
         keywordsHash: keywords.join('|'),
         updatedAt: 1_700_000_000_000 + index,
@@ -197,10 +196,6 @@ const appendFilters = (input, alias = '') => {
         )
         parameters.push(input.types)
     }
-    if (input.isConsolidated !== null) {
-        conditions.push(`${prefix}is_consolidated = $${parameters.length + 1}`)
-        parameters.push(input.isConsolidated)
-    }
     return { conditions, parameters }
 }
 
@@ -234,7 +229,6 @@ const createWorkloadInput = (name, options, limit) => {
         presetId: 'benchmark-preset-0',
         memoryStatus: 'active',
         types: null,
-        isConsolidated: null,
         limit
     }
     if (name === 'hybrid') {
@@ -247,9 +241,6 @@ const createWorkloadInput = (name, options, limit) => {
             ],
             minSimilarity: 0.4
         }
-    }
-    if (name === 'incremental') {
-        return { ...baseInput, isConsolidated: true }
     }
     return baseInput
 }

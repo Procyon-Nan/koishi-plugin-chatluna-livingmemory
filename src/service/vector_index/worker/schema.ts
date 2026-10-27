@@ -1,7 +1,7 @@
 import type { PGlite } from '@electric-sql/pglite'
 import type { MemoryVectorIndexManifest } from '../../../contracts/vector_index'
 
-export const VECTOR_INDEX_SCHEMA_VERSION = 4
+export const VECTOR_INDEX_SCHEMA_VERSION = 5
 
 const assertDimension = (dimension: number) => {
     if (!Number.isInteger(dimension) || dimension < 1) {
@@ -42,7 +42,6 @@ export const createVectorIndexSchema = async (
             source_conversation_id text,
             status text NOT NULL,
             type text NOT NULL,
-            is_consolidated boolean NOT NULL,
             content_hash text NOT NULL,
             keywords_hash text NOT NULL,
             updated_at bigint NOT NULL,
@@ -50,11 +49,7 @@ export const createVectorIndexSchema = async (
         );
 
         CREATE INDEX lm_index_memory_preset_filter
-        ON lm_index_memory (preset_id, status, type, is_consolidated);
-
-        CREATE INDEX lm_index_memory_consolidated_filter
-        ON lm_index_memory (preset_id, status)
-        WHERE is_consolidated = true;
+        ON lm_index_memory (preset_id, status, type);
 
         CREATE INDEX lm_index_memory_conversation_filter
         ON lm_index_memory (preset_id, source_conversation_id)
@@ -107,17 +102,25 @@ export const upgradeVectorIndexSchema = async (database: PGlite) => {
         const { rows } = await transaction.query<{ schemaVersion: number }>(
             'SELECT schema_version AS "schemaVersion" FROM lm_index_manifest WHERE singleton = 1'
         )
-        if (rows[0]?.schemaVersion !== 3) {
-            throw new Error(
-                'source conversation migration requires index schema v3'
-            )
+        const version = rows[0].schemaVersion
+        if (version !== 3 && version !== 4) {
+            throw new Error(`index schema migration requires v3 or v4: ${version}`)
+        }
+        if (version === 3) {
+            await transaction.exec(`
+                ALTER TABLE lm_index_memory ADD COLUMN source_conversation_id text;
+                CREATE INDEX lm_index_memory_conversation_filter
+                ON lm_index_memory (preset_id, source_conversation_id)
+                WHERE status = 'active';
+            `)
         }
         await transaction.exec(`
-            ALTER TABLE lm_index_memory ADD COLUMN source_conversation_id text;
-            CREATE INDEX lm_index_memory_conversation_filter
-            ON lm_index_memory (preset_id, source_conversation_id)
-            WHERE status = 'active';
-            UPDATE lm_index_manifest SET schema_version = 4 WHERE singleton = 1;
+            DROP INDEX lm_index_memory_consolidated_filter;
+            DROP INDEX lm_index_memory_preset_filter;
+            ALTER TABLE lm_index_memory DROP COLUMN is_consolidated;
+            CREATE INDEX lm_index_memory_preset_filter
+            ON lm_index_memory (preset_id, status, type);
+            UPDATE lm_index_manifest SET schema_version = 5 WHERE singleton = 1;
         `)
     })
     return { schemaVersion: VECTOR_INDEX_SCHEMA_VERSION }

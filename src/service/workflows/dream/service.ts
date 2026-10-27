@@ -1,3 +1,4 @@
+import type { LivingMemoryRepository } from '../../persistence/repository'
 import { Context } from 'koishi'
 import type { ChatLunaChatModel } from 'koishi-plugin-chatluna/llm-core/platform/model'
 import type { DreamVectorProvider } from '../../../contracts/vector_index'
@@ -32,6 +33,7 @@ export interface DreamRepository extends Pick<
         presetId: string
     ): Promise<DreamMemoryEntryRecord[]>
     listActiveMemorySpeakerKeys(presetId: string): Promise<string[]>
+    getEntriesByPresetAndIds: LivingMemoryRepository['getEntriesByPresetAndIds']
 }
 
 export class LivingMemoryDreamService {
@@ -49,7 +51,6 @@ export class LivingMemoryDreamService {
             | 'mergeActiveMemories'
             | 'splitActiveMemory'
             | 'archiveActiveMemories'
-            | 'setMemoryConsolidation'
         >,
         vectors: DreamVectorProvider,
         worker: DreamWorkerRunner,
@@ -110,7 +111,7 @@ export class LivingMemoryDreamService {
             const tools = createDreamSessionTools({
                 presetId,
                 state,
-                speakers: this.repository,
+                repository: this.repository,
                 mutations: this.mutations
             })
             await runDreamSession({

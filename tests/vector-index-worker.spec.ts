@@ -21,7 +21,7 @@ import type {
 import type { MemoryVectorIndexManifest } from '../src/contracts/vector_index'
 import { LivingMemoryVectorIndexDatabase } from '../src/service/vector_index/worker/database'
 import { startVectorIndexWorker } from '../src/service/vector_index/worker/runtime'
-import { createVectorIndexSchema } from '../src/service/vector_index/worker/schema'
+import { createVectorIndexSchema, upgradeVectorIndexSchema } from '../src/service/vector_index/worker/schema'
 import { LivingMemoryVectorIndexWorkerClient } from '../src/service/vector_index/worker_client'
 import type {
     VectorIndexDocument,
@@ -46,7 +46,7 @@ afterAll(async () => {
 })
 
 const createManifest = (): MemoryVectorIndexManifest => ({
-    schemaVersion: 4,
+    schemaVersion: 5,
     embeddingModelId: 'test-embedding-model',
     dimension: 3,
     storageEngine: 'pglite-pgvector',
@@ -61,7 +61,6 @@ const createDocument = (
         presetId?: string
         status?: MemoryEntryStatus
         type?: MemoryEntryType
-        isConsolidated?: boolean
         keywords?: string[]
         contentHash?: string
     } = {}
@@ -71,7 +70,6 @@ const createDocument = (
     sourceConversationId: null,
     status: options.status ?? 'active',
     type: options.type ?? 'fact',
-    isConsolidated: options.isConsolidated ?? true,
     contentHash: options.contentHash ?? `content-${memoryId}`,
     keywordsHash: `keywords-${memoryId}`,
     keywords: options.keywords ?? [],
@@ -92,17 +90,17 @@ const query = (
     options: {
         presetId?: string
         types?: MemoryEntryType[] | null
-        isConsolidated?: boolean | null
         memoryStatus?: MemorySearchStatus
         limit?: number
     } = {}
 ) => ({
     presetId: options.presetId ?? 'preset-a',
     types: options.types ?? null,
-    isConsolidated: options.isConsolidated ?? null,
     memoryStatus: options.memoryStatus ?? 'active',
     limit: options.limit ?? 30,
-    vector: new Float32Array(vector)
+    vector: new Float32Array(vector),
+    keywords: [],
+    minSimilarity: 0
 })
 
 class TestVectorIndexWorkerPort {
@@ -160,7 +158,6 @@ it('runs typed vector index worker mutations and filtered searches', async () =>
         replace(
             createDocument('memory-b', {
                 type: 'preference',
-                isConsolidated: false,
                 keywords: ['Beta', 'Shared']
             }),
             [0, 1, 0]
@@ -219,17 +216,16 @@ it('runs typed vector index worker mutations and filtered searches', async () =>
         /generation changed/u
     )
 
-    const factHits = await client.queryKnn(
+    const factHits = await client.queryHybrid(
         query([1, 0, 0], {
             types: ['fact'],
-            isConsolidated: true
         })
     )
     assert.deepEqual(
         factHits.map((hit) => hit.memoryId),
         ['memory-a']
     )
-    const presetBHits = await client.queryKnn(
+    const presetBHits = await client.queryHybrid(
         query([1, 0, 0], { presetId: 'preset-b' })
     )
     assert.deepEqual(
@@ -262,14 +258,14 @@ it('runs typed vector index worker mutations and filtered searches', async () =>
         ]
     )
 
-    const archivedHits = await client.queryKnn(
+    const archivedHits = await client.queryHybrid(
         query([1, 0, 0], { memoryStatus: 'archived' })
     )
     assert.deepEqual(
         archivedHits.map((hit) => hit.memoryId),
         ['memory-c']
     )
-    const allHits = await client.queryKnn(
+    const allHits = await client.queryHybrid(
         query([1, 0, 0], { memoryStatus: 'all' })
     )
     assert.deepEqual(
@@ -291,12 +287,12 @@ it('runs typed vector index worker mutations and filtered searches', async () =>
         ],
         deletes: []
     })
-    const activeAfterArchive = await client.queryKnn(query([1, 0, 0]))
+    const activeAfterArchive = await client.queryHybrid(query([1, 0, 0]))
     assert.deepEqual(
         activeAfterArchive.map((hit) => hit.memoryId),
         ['memory-b']
     )
-    const archivedAfterArchive = await client.queryKnn(
+    const archivedAfterArchive = await client.queryHybrid(
         query([1, 0, 0], { memoryStatus: 'archived' })
     )
     assert.deepEqual(
@@ -362,13 +358,13 @@ it('runs typed vector index worker mutations and filtered searches', async () =>
                AND tablename = 'lm_index_memory'
              ORDER BY indexname ASC`
         )
-        const consolidatedIndex = indexes.rows.find(
-            (row) => row.indexName === 'lm_index_memory_consolidated_filter'
+        assert.equal(
+            indexes.rows.some((row) => row.indexName === 'lm_index_memory_consolidated_filter'),
+            false
         )
-        assert.notEqual(consolidatedIndex, undefined)
         assert.match(
-            consolidatedIndex!.indexDefinition,
-            /\(preset_id, status\) WHERE \(is_consolidated = true\)$/u
+            indexes.rows.find((row) => row.indexName === 'lm_index_memory_preset_filter')!.indexDefinition,
+            /\(preset_id, status, type\)/u
         )
     } finally {
         await finalizedDatabase.close()
@@ -656,4 +652,43 @@ it('rejects pending requests when the worker cannot start', async () => {
         ),
         /Cannot find module|cannot find module/
     )
+})
+
+it.each([3, 4])('upgrades index schema v%s without replacing vectors or HNSW', async (version) => {
+    const database = await PGlite.create({ extensions: { vector } })
+    try {
+        await database.exec('CREATE EXTENSION vector')
+        await createVectorIndexSchema(database, createManifest())
+        await database.exec(`
+            ALTER TABLE lm_index_memory ADD COLUMN is_consolidated boolean NOT NULL DEFAULT false;
+            DROP INDEX lm_index_memory_preset_filter;
+            CREATE INDEX lm_index_memory_preset_filter
+            ON lm_index_memory (preset_id, status, type, is_consolidated);
+            CREATE INDEX lm_index_memory_consolidated_filter
+            ON lm_index_memory (preset_id, status) WHERE is_consolidated = true;
+            CREATE INDEX upgrade_hnsw ON lm_index_memory USING hnsw (embedding vector_cosine_ops);
+            INSERT INTO lm_index_memory (
+                memory_id, preset_id, status, type, content_hash, keywords_hash, updated_at, embedding
+            ) VALUES ('memory', 'preset', 'active', 'fact', 'content', 'keywords', 1, '[1,0,0]');
+        `)
+        if (version === 3) {
+            await database.exec(`
+                DROP INDEX lm_index_memory_conversation_filter;
+                ALTER TABLE lm_index_memory DROP COLUMN source_conversation_id;
+            `)
+        }
+        await database.query('UPDATE lm_index_manifest SET schema_version = $1', [version])
+        const before = await database.query("SELECT oid FROM pg_class WHERE relname = 'upgrade_hnsw'")
+        assert.deepEqual(await upgradeVectorIndexSchema(database), { schemaVersion: 5 })
+        const after = await database.query("SELECT oid FROM pg_class WHERE relname = 'upgrade_hnsw'")
+        assert.deepEqual(after.rows, before.rows)
+        const entries = await database.query('SELECT embedding::text AS embedding, source_conversation_id FROM lm_index_memory')
+        assert.deepEqual(entries.rows, [{ embedding: '[1,0,0]', source_conversation_id: null }])
+        const columns = await database.query<{ column_name: string }>(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'lm_index_memory'"
+        )
+        assert.equal(columns.rows.some((column) => column.column_name === 'is_consolidated'), false)
+    } finally {
+        await database.close()
+    }
 })

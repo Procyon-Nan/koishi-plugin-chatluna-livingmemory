@@ -83,8 +83,9 @@ export class LivingMemoryVectorIndexMaintenance {
             !(await this.options.repository.hasMigratedLegacyEmbeddings())
         const { embeddings, dimension } = await this.createEmbeddingContext()
         const upgradeSchema =
-            inspection.manifest?.schemaVersion === 3 &&
-            this.options.schemaVersion === 4
+            (inspection.manifest?.schemaVersion === 3 ||
+                inspection.manifest?.schemaVersion === 4) &&
+            this.options.schemaVersion === 5
         const rebuildReason = this.resolveRebuildReason(
             inspection,
             dimension,

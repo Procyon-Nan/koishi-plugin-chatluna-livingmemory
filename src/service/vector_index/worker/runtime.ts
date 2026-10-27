@@ -62,9 +62,6 @@ const execute = async (
             case 'upgradeSchema':
                 result = await database.upgradeSchema()
                 break
-            case 'queryKnn':
-                result = await database.queryKnn(command)
-                break
             case 'queryHybrid':
                 result = await database.queryHybrid(command)
                 break

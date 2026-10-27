@@ -41,7 +41,6 @@ const createSource = (
     sourceConversationId: null,
     status: 'active',
     type: 'fact',
-    isConsolidated: false,
     content: `content ${id}`,
     keywords: [id],
     updatedAt: new Date('2026-08-08T00:00:00.000Z'),
@@ -324,7 +323,6 @@ it('builds the index once and reuses its manifest after restart', async () => {
             createSource('memory-a'),
             createSource('memory-b', {
                 type: 'preference',
-                isConsolidated: true
             })
         ])
         const firstCalls: string[][] = []

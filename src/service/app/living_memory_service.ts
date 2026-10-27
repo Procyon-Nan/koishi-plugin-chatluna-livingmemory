@@ -260,13 +260,6 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
                 `清理快照：${removedSnapshots} 条`
             )
         }
-        const droppedIndexes = await this.repository.dropLegacyPendingIndexes()
-        if (droppedIndexes.length > 0) {
-            this.memoryLogger.summary(
-                '旧数据库索引清理完成',
-                `清理索引：${droppedIndexes.length} 条`
-            )
-        }
 
         try {
             const recovered =

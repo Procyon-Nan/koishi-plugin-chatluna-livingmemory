@@ -7,7 +7,7 @@ import { VectorIndexStatusStore } from '../src/service/vector_index/status_store
 import type { VectorIndexInspection } from '../src/service/vector_index/worker_protocol'
 
 const createManifest = (): MemoryVectorIndexManifest => ({
-    schemaVersion: 4,
+    schemaVersion: 5,
     embeddingModelId: 'model-a',
     dimension: 3,
     storageEngine: 'pglite-pgvector',

@@ -16,7 +16,7 @@ it('keeps exact recall and accepts indexed and exact candidate queries with tran
     try {
         await database.exec('CREATE EXTENSION vector')
         await createVectorIndexSchema(database, {
-            schemaVersion: 4,
+            schemaVersion: 5,
             embeddingModelId: 'test',
             dimension: 3,
             storageEngine: 'pglite-pgvector',
@@ -36,7 +36,6 @@ it('keeps exact recall and accepts indexed and exact candidate queries with tran
             presetId: 'preset',
             conversationId: 'conversation',
             types: null,
-            isConsolidated: null,
             memoryStatus: 'all' as const,
             vector: new Float32Array([1, 0, 0]),
             limit: 20

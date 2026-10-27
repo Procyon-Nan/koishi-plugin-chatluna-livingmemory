@@ -24,7 +24,6 @@ const createSource = (
     sourceConversationId: null,
     status: 'active',
     type: 'fact',
-    isConsolidated: false,
     content: `content ${id}`,
     keywords: [id],
     updatedAt: new Date('2026-08-08T00:00:00.000Z'),
@@ -103,7 +102,7 @@ const createManifest = (
     generation: string,
     dimension = 3
 ): MemoryVectorIndexManifest => ({
-    schemaVersion: 4,
+    schemaVersion: 5,
     embeddingModelId: 'model-a',
     dimension,
     storageEngine: 'pglite-pgvector',
@@ -398,7 +397,6 @@ it('reconciles additions, metadata updates, content changes, and orphans', async
             createSource('memory-a', {
                 status: 'archived',
                 type: 'preference',
-                isConsolidated: true,
                 keywords: ['updated'],
                 updatedAt: new Date('2026-08-08T01:00:00.000Z')
             }),
@@ -429,7 +427,6 @@ it('reconciles additions, metadata updates, content changes, and orphans', async
         )
         assert.equal(inventory.items[0].status, 'archived')
         assert.equal(inventory.items[0].type, 'preference')
-        assert.equal(inventory.items[0].isConsolidated, true)
         assert.equal(
             inventory.items[0].updatedAt,
             +repository.sources[0].updatedAt
