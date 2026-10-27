@@ -1,3 +1,4 @@
+import { formatLogScope } from '../service/logging/logger'
 import { Context, type Session } from 'koishi'
 import {
     AIMessage,
@@ -137,8 +138,6 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
     // 说话人解析跨轮复用：昵称变更需重启插件后生效，换取不在每轮重复
     // 调用平台 getUser。
     const speakerCache: UserSpeakerCache = new Map()
-    const diagnostic = (event: string, fields: Record<string, unknown>) =>
-        logger.diagnostic(event, fields)
 
     ctx.on('dispose', () => {
         livingMemory.clearRecallState()
@@ -152,8 +151,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
         conversationId: string,
         message: HumanMessage,
         chatInterface: ChatPresetSource,
-        session: Session,
-        events: { skipped: string; resolved: string }
+        session: Session
     ): MemoryScope | null => {
         const fallbackPresetId = chatInterface.preset.value?.triggerKeyword?.[0]
         const presetId = ctx.chatluna_living_memory.resolvePresetId(
@@ -161,18 +159,12 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
             fallbackPresetId
         )
         if (presetId == null) {
-            diagnostic(events.skipped, {
-                conversationId,
-                fallbackPresetId,
-                reason: 'preset-unresolved'
-            })
+            logger.diagnosticSummary(() => ({
+                event: '跳过对话记忆处理',
+                detail: `${formatLogScope({ conversationId })}; 原因：预设解析失败`
+            }))
             return null
         }
-        diagnostic(events.resolved, {
-            conversationId,
-            presetId,
-            fallbackPresetId
-        })
         return ctx.chatluna_living_memory.createScope(
             conversationId,
             presetId,
@@ -243,20 +235,12 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
             session
         ) => {
             clearActiveInjections(conversationId)
-            diagnostic('chat.before.received', {
-                conversationId,
-                isDirect: session.isDirect
-            })
 
             const scope = resolveChatScope(
                 conversationId,
                 message,
                 chatInterface,
-                session,
-                {
-                    skipped: 'chat.before.skipped',
-                    resolved: 'chat.before.resolved'
-                }
+                session
             )
             if (scope == null) {
                 return
@@ -271,39 +255,40 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
             }
             writeRawUserContent(message, promptVariables)
 
-            const currentTranscript = await toChatLunaTranscriptMessageResult(
-                scope,
-                session,
-                message,
-                {
-                    fallbackCreatedAt: new Date(),
-                    speakerCache
-                }
-            )
-            if (currentTranscript.message == null) {
-                diagnostic('chat.recall.skipped', {
-                    conversationId,
-                    presetId: scope.presetId,
-                    reason: currentTranscript.reason
-                })
-                return
-            }
-            await ctx.chatluna_living_memory
-                .recordPresetSpeaker(
-                    scope,
-                    currentTranscript.message.speakerLabel
-                )
-                .catch((error) => {
-                    logger.warn(
-                        'chat.speaker.record.failed',
-                        {
-                            conversationId: scope.conversationId,
-                            presetId: scope.presetId,
-                            operation: 'record-preset-speaker'
-                        },
-                        error
+            let currentMessage: LivingMemoryTranscriptMessage | undefined
+            if (
+                config.recallIntervalMessages > 0 ||
+                config.enableUserProfileInjection
+            ) {
+                const currentTranscript =
+                    await toChatLunaTranscriptMessageResult(
+                        scope,
+                        session,
+                        message,
+                        { fallbackCreatedAt: new Date(), speakerCache }
                     )
-                })
+                currentMessage = currentTranscript.message ?? undefined
+                if (currentMessage == null) {
+                    logger.diagnosticSummary(() => ({
+                        event: '当前消息转写跳过',
+                        detail: `${formatLogScope(scope)}; 原因：${currentTranscript.reason}`
+                    }))
+                    return
+                }
+                await ctx.chatluna_living_memory
+                    .recordPresetSpeaker(scope, currentMessage.speakerLabel)
+                    .catch((error) => {
+                        logger.warn(
+                            'chat.speaker.record.failed',
+                            {
+                                conversationId: scope.conversationId,
+                                presetId: scope.presetId,
+                                operation: 'record-preset-speaker'
+                            },
+                            error
+                        )
+                    })
+            }
 
             let historyMessagesPromise: Promise<
                 LivingMemoryTranscriptMessage[]
@@ -328,20 +313,18 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 config.enableSnapshotInjection !== false
             const enableUserProfileInjection =
                 config.enableUserProfileInjection === true
-            let sections = {
-                snapshot: '',
-                userProfiles: ''
-            }
             if (enableSnapshotInjection || enableUserProfileInjection) {
                 try {
                     const historyMessages = enableUserProfileInjection
                         ? await loadHistoryMessages()
                         : []
-                    const speakerKeys = collectUserProfileSpeakerKeys([
-                        ...historyMessages,
-                        currentTranscript.message
-                    ])
-                    sections =
+                    const speakerKeys = enableUserProfileInjection
+                        ? collectUserProfileSpeakerKeys([
+                              ...historyMessages,
+                              currentMessage!
+                          ])
+                        : []
+                    const sections =
                         await ctx.chatluna_living_memory.hydratePromptSections(
                             scope,
                             {
@@ -357,14 +340,6 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                             conversationId,
                             userProfileInjection
                         )
-                        diagnostic('chat.injection.activated', {
-                            conversationId,
-                            presetId: scope.presetId,
-                            stage: 'after_system_prompts',
-                            role: 'system',
-                            type: 'user-profile',
-                            injectionLength: userProfileInjection.length
-                        })
                     }
 
                     const snapshotInjection = formatSnapshotInjection(
@@ -375,15 +350,21 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                             conversationId,
                             snapshotInjection
                         )
-                        diagnostic('chat.injection.activated', {
-                            conversationId,
-                            presetId: scope.presetId,
-                            stage: 'injections',
-                            role: 'assistant',
-                            type: 'snapshot',
-                            injectionLength: snapshotInjection.length
-                        })
                     }
+                    logger.diagnosticSummary(() => {
+                        const details = [formatLogScope(scope)]
+                        if (enableSnapshotInjection) {
+                            details.push(
+                                `记忆快照：${sections.snapshot.trim().length} 字符`
+                            )
+                        }
+                        if (enableUserProfileInjection) {
+                            details.push(
+                                `人物画像：${sections.userProfiles.trim().length} 字符`
+                            )
+                        }
+                        return { event: '记忆注入', detail: details.join('; ') }
+                    })
                 } catch (error) {
                     logger.warn(
                         'chat.injection.failed',
@@ -397,27 +378,13 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 }
             }
 
-            const snapshotInjectionStatus = enableSnapshotInjection
-                ? 'enabled'
-                : 'disabled'
-            const userProfileInjectionStatus = enableUserProfileInjection
-                ? 'enabled'
-                : 'disabled'
-
-            diagnostic('chat.recall.queued', {
-                conversationId,
-                presetId: scope.presetId,
-                snapshotInjection: snapshotInjectionStatus,
-                snapshotLength: sections.snapshot.length,
-                userProfileInjection: userProfileInjectionStatus,
-                userProfilesLength: sections.userProfiles.length
-            })
-
-            await ctx.chatluna_living_memory.queueRecall(
-                scope,
-                currentTranscript.message,
-                loadHistoryMessages
-            )
+            if (config.recallIntervalMessages > 0) {
+                await ctx.chatluna_living_memory.queueRecall(
+                    scope,
+                    currentMessage!,
+                    loadHistoryMessages
+                )
+            }
         }
     )
 
@@ -432,20 +399,12 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
             session
         ) => {
             clearActiveInjections(conversationId)
-            diagnostic('chat.after.received', {
-                conversationId,
-                isDirect: session.isDirect
-            })
 
             const scope = resolveChatScope(
                 conversationId,
                 sourceMessage,
                 chatInterface,
-                session,
-                {
-                    skipped: 'chat.after.skipped',
-                    resolved: 'chat.after.resolved'
-                }
+                session
             )
             if (scope == null) {
                 return
@@ -460,10 +419,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 )
             )
 
-            diagnostic('chat.extraction.queued', {
-                conversationId,
-                presetId: scope.presetId
-            })
+            if (config.extractionWindowMessages === 0) return
             const sourceLabel =
                 toNonEmptyString(session.event?.user?.name) ??
                 session.userId ??

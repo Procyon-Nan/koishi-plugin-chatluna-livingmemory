@@ -243,7 +243,7 @@ it('falls back to hybrid order when the reranker fails', async () => {
     )
     assert.match(
         String(captured.warnings[0]?.[0]),
-        /event=search.rerank.failed/u
+        /事件：记忆重排序降级/u
     )
     assert.equal(captured.warnings[0]?.[1], rerankError)
 })

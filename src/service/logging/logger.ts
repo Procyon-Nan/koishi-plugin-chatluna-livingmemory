@@ -1,9 +1,23 @@
 import { Logger } from 'koishi'
 
 export type LivingMemoryLogFields = Record<string, unknown>
+
+export const formatLogScope = (scope: {
+    presetId?: unknown
+    conversationId?: unknown
+}) => {
+    const details: string[] = []
+    if (scope.presetId != null) details.push(`预设：${scope.presetId}`)
+    if (scope.conversationId != null) {
+        const conversation = String(scope.conversationId)
+            .replace(/^group:/, '群聊 ')
+            .replace(/^private:/, '私聊 ')
+        details.push(`会话：${conversation}`)
+    }
+    return details.join('; ')
+}
 export type LivingMemoryLogFieldsInput =
-    | LivingMemoryLogFields
-    | (() => LivingMemoryLogFields)
+    LivingMemoryLogFields | (() => LivingMemoryLogFields)
 
 export interface LivingMemoryLogBlock {
     title: string
@@ -13,15 +27,10 @@ export interface LivingMemoryLogBlock {
     fields?: LivingMemoryLogFields
 }
 
-export type LivingMemoryLogBlocksInput =
-    | LivingMemoryLogBlock[]
-    | (() => LivingMemoryLogBlock[])
-
 type LivingMemoryLogSink = Pick<Logger, 'info' | 'warn' | 'error'>
 type LivingMemoryLogLevel = keyof LivingMemoryLogSink
 
 interface LivingMemoryLoggerState {
-    reportingFailure: boolean
     failureReported: boolean
 }
 
@@ -137,37 +146,23 @@ const orderedFieldNames = (fields: LivingMemoryLogFields) => {
     const names = Object.keys(fields).filter(
         (key) => fields[key] !== undefined && !preferredFieldOrder.includes(key)
     )
-    names.sort((left, right) => {
-        const leftCluster = /^clusters-(\d+)$/u.exec(left)
-        const rightCluster = /^clusters-(\d+)$/u.exec(right)
-        if (leftCluster && rightCluster) {
-            return Number(leftCluster[1]) - Number(rightCluster[1])
-        }
-        return left < right ? -1 : left > right ? 1 : 0
-    })
+    names.sort()
     return [
         ...preferredFieldOrder.filter((key) => fields[key] !== undefined),
         ...names
     ]
 }
 
-const formatBlock = (
-    block: LivingMemoryLogBlock,
-    style: 'structured' | 'summary' = 'structured'
-) => {
+const formatFields = (fields: LivingMemoryLogFields) =>
+    orderedFieldNames(fields)
+        .map((key) => `${key}：${formatValue(fields[key], key)}`)
+        .join('; ')
+
+const formatBlock = (block: LivingMemoryLogBlock) => {
     const title = block.title.replace(/\r?\n/gu, ' ')
-    const fields = block.fields ?? {}
-    const detail = orderedFieldNames(fields)
-        .map((key) =>
-            style === 'summary'
-                ? `${key}：${formatValue(fields[key], key)}`
-                : `${key}=${formatValue(fields[key], key)}`
-        )
-        .join(style === 'summary' ? '; ' : ' ')
+    const detail = formatFields(block.fields ?? {})
     const heading = detail.length > 0 ? `${title} ${detail}` : title
-    const label =
-        style === 'summary' ? `========${heading}========` : `--- ${heading} ---`
-    const lines = [label]
+    const lines = [`========${heading}========`]
     if (block.subtitle != null) {
         lines.push(block.subtitle.replace(/\r?\n/gu, ' '))
     }
@@ -213,7 +208,6 @@ export class LivingMemoryLogger {
         private readonly isDebugEnabled: () => boolean,
         private readonly context: LivingMemoryLogFields = {},
         private readonly state: LivingMemoryLoggerState = {
-            reportingFailure: false,
             failureReported: false
         }
     ) {}
@@ -227,35 +221,30 @@ export class LivingMemoryLogger {
         )
     }
 
-    diagnostic(
-        event: string,
-        fields: LivingMemoryLogFieldsInput = {},
-        blocks?: LivingMemoryLogBlocksInput
-    ) {
+    diagnostic(event: string, fields: LivingMemoryLogFieldsInput = {}) {
         if (!this.isDebugEnabled()) {
             return
         }
-        this.emit('info', event, fields, undefined, blocks)
+        this.emit('info', event, fields)
     }
 
     diagnosticSummary(
-        render: (context: LivingMemoryLogFields) => {
-            event: string
-            detail: string
-            blocks?: LivingMemoryLogBlock[]
-        }
+        render: (context: LivingMemoryLogFields) =>
+            | {
+                  event: string
+                  detail: string
+                  blocks?: LivingMemoryLogBlock[]
+              }
+            | undefined
     ) {
         if (!this.isDebugEnabled()) return
         try {
-            const { event, detail, blocks } = render(this.context)
-            if (blocks?.length === 0) return
+            const rendered = render(this.context)
+            if (rendered === undefined) return
+            const { event, detail, blocks } = rendered
             let content = detail
             if (blocks?.length) {
-                content +=
-                    '\n' +
-                    blocks
-                        .map((block) => formatBlock(block, 'summary'))
-                        .join('\n\n')
+                content += '\n' + blocks.map(formatBlock).join('\n\n')
             }
             this.summary(event, content)
         } catch (error) {
@@ -263,21 +252,20 @@ export class LivingMemoryLogger {
         }
     }
 
-    info(
+    summary(
         event: string,
-        fields: LivingMemoryLogFieldsInput = {},
-        blocks?: LivingMemoryLogBlocksInput
+        detail: string | string[],
+        level: LivingMemoryLogLevel = 'info',
+        error?: unknown
     ) {
-        this.emit('info', event, fields, undefined, blocks)
-    }
-
-    summary(event: string, detail: string | string[]) {
         const content = Array.isArray(detail)
             ? `\n${detail.join('\n')}`
             : ` ${detail}`
         try {
             emitCompleteMessage(this.sink, () => {
-                this.sink.info(`事件：${event};${content}`)
+                const message = `事件：${event};${content}`
+                if (error === undefined) this.sink[level](message)
+                else this.sink[level](message, toError(error))
             })
         } catch (error) {
             this.reportFailure(error)
@@ -304,60 +292,25 @@ export class LivingMemoryLogger {
         level: LivingMemoryLogLevel,
         event: string,
         fieldsInput: LivingMemoryLogFieldsInput,
-        error?: unknown,
-        blocksInput?: LivingMemoryLogBlocksInput
+        error?: unknown
     ) {
         try {
             const fields =
                 typeof fieldsInput === 'function' ? fieldsInput() : fieldsInput
             const merged = { ...this.context, ...fields }
-            const detail = orderedFieldNames(merged)
-                .map((key) => `${key}=${formatValue(merged[key], key)}`)
-                .join(' ')
-            const message =
-                detail.length > 0
-                    ? `event=${event} ${detail}`
-                    : `event=${event}`
-            const blocks =
-                typeof blocksInput === 'function' ? blocksInput() : blocksInput
-            if (blocks?.length === 0) {
-                return
-            }
-            let completeMessage = message
-            if (blocks !== undefined) {
-                completeMessage = [
-                    message,
-                    ...blocks.map((block) => formatBlock(block)),
-                    `--- end ${event} ---`
-                ].join('\n')
-            }
-            emitCompleteMessage(this.sink, () => {
-                if (error === undefined) {
-                    this.sink[level](completeMessage)
-                } else {
-                    this.sink[level](completeMessage, toError(error))
-                }
-            })
+            this.summary(event, formatFields(merged), level, error)
         } catch (error) {
             this.reportFailure(error)
         }
     }
 
     private reportFailure(error: unknown) {
-        if (this.state.reportingFailure || this.state.failureReported) {
-            return
-        }
-        this.state.reportingFailure = true
+        if (this.state.failureReported) return
         this.state.failureReported = true
         try {
-            this.sink.warn(
-                'event=logging.failure operation=emit',
-                toError(error)
-            )
+            this.sink.warn('事件：日志输出失败; 操作：输出日志', toError(error))
         } catch {
             // 日志是旁路能力，底层 logger 故障不得影响业务流程。
-        } finally {
-            this.state.reportingFailure = false
         }
     }
 }

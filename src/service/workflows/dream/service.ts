@@ -126,12 +126,14 @@ export class LivingMemoryDreamService {
                 signal
             })
             signal?.throwIfAborted()
-            profileDetail = await this.regenerateUserProfilesAfterDream(
-                presetId,
-                model,
-                logger,
-                signal
-            )
+            if (this.userProfiles.enabled) {
+                profileDetail = await this.regenerateUserProfilesAfterDream(
+                    presetId,
+                    model,
+                    logger,
+                    signal
+                )
+            }
             signal?.throwIfAborted()
         } catch (cause) {
             // 捕获目标之前的失败交由任务入口记录，之后的失败保留覆盖明细。
@@ -179,13 +181,13 @@ export class LivingMemoryDreamService {
         signal?: AbortSignal
     ) {
         const startedAt = performance.now()
-        logger.diagnostic('dream.user-profile.started')
+        logger.diagnosticSummary(() => ({
+            event: 'Dream 人物画像处理开始',
+            detail: `预设：${presetId}`
+        }))
         try {
-            // 画像阶段不会执行时无需查询候选用户；此时 regenerate 在读取
-            // speakerKeys 之前即返回 disabled，由它统一给出跳过说明。
-            const speakerKeys = this.userProfiles.enabled
-                ? await this.repository.listActiveMemorySpeakerKeys(presetId)
-                : []
+            const speakerKeys =
+                await this.repository.listActiveMemorySpeakerKeys(presetId)
             const result = await this.userProfiles.regenerate(
                 presetId,
                 speakerKeys,
@@ -193,10 +195,10 @@ export class LivingMemoryDreamService {
                 logger,
                 signal
             )
-            logger.diagnostic('dream.user-profile.completed', {
-                ...result,
-                elapsedMs: performance.now() - startedAt
-            })
+            logger.diagnosticSummary(() => ({
+                event: 'Dream 人物画像处理结束',
+                detail: `预设：${presetId}; ${result.detail}; 耗时：${Math.round(performance.now() - startedAt)} 毫秒`
+            }))
             return result.detail
         } catch (error) {
             signal?.throwIfAborted()

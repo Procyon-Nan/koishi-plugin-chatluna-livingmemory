@@ -11,7 +11,7 @@ import type {
     LivingMemorySearchProvider,
     RecallRepository
 } from '../../../contracts/workflows'
-import type { LivingMemoryLogger } from '../../logging/logger'
+import { formatLogScope, type LivingMemoryLogger } from '../../logging/logger'
 import { isModelConfigured } from '../../shared/utils'
 import { loadIndexedMemoryEntries } from './indexed_entries'
 
@@ -115,9 +115,10 @@ export class LivingMemorySearchEngine implements LivingMemorySearchProvider {
         try {
             return await this.rerank(input.searchTexts, results, limit)
         } catch (error) {
-            this.logger.warn(
-                'search.rerank.failed',
-                { operation: 'rerank', model: this.config.rerankModel },
+            this.logger.summary(
+                '记忆重排序降级',
+                `${formatLogScope({ presetId, conversationId })}; 模型：${this.config.rerankModel}; 结果：重排序失败，沿用混合检索排序`,
+                'warn',
                 error
             )
             return results.slice(0, limit)

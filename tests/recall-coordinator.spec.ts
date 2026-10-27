@@ -166,8 +166,8 @@ it('skips recall without persisting a job when subModel is not configured', asyn
     assert.ok(
         captured.info.some(
             (message) =>
-                message.startsWith('event=recall.skipped ') &&
-                message.includes('reason=model-not-configured')
+                message.startsWith('事件：跳过记忆召回;') &&
+                message.includes('原因：召回模型未配置')
         )
     )
 })
@@ -300,7 +300,7 @@ it('continues recall with empty history without persisting a job', async () => {
     assert.equal(jobStore.jobs.length, 0)
     assert.ok(
         captured.info.some((message) =>
-            message.startsWith('event=recall.history.unavailable ')
+            message.startsWith('事件：recall.history.unavailable;')
         )
     )
 })

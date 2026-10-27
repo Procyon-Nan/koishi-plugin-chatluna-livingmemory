@@ -194,7 +194,7 @@ it('falls back to the raw text when deletion exceeds the ratio guard', async () 
     assert.equal(card, presetText)
     assert.ok(
         harness.captured.info.some((message) =>
-            message.includes('event=persona.prune.fallback')
+            message.includes('事件：persona.prune.fallback')
         )
     )
     // 守卫回退是正常结果：照常落库，后续解析命中落库行不再调用模型
@@ -215,10 +215,10 @@ it('retries with a correction when line numbers fall out of range', async () => 
     assert.ok(
         harness.captured.info.some(
             (message) =>
-                message.includes('event=model.parse.failed') &&
-                message.includes('workflow=persona') &&
-                message.includes('presetId=preset-1') &&
-                message.includes('runId=') &&
+                message.includes('事件：model.parse.failed') &&
+                message.includes('workflow：persona') &&
+                message.includes('presetId：preset-1') &&
+                message.includes('runId：') &&
                 message.includes('超出范围的行号')
         )
     )

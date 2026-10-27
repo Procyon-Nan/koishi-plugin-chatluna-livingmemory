@@ -32,18 +32,6 @@ import type { LivingMemoryLogger } from '../logging/logger'
 const VECTOR_STORAGE_ENGINE = 'pglite-pgvector' as const
 const GLOBAL_INDEX_JOB_PRESET = '*'
 
-const formatJobCompletedDetail = (
-    kind: 'rebuild' | 'reconcile',
-    job: Pick<MemoryJobRecord, 'id' | 'presetId'>,
-    indexedCount: number
-) =>
-    [
-        `vector index ${kind} completed:`,
-        `jobId=${job.id}`,
-        `presetId=${job.presetId}`,
-        `indexed=${indexedCount}`
-    ].join(' ')
-
 export interface LivingMemoryVectorIndexRepository
     extends
         VectorIndexRebuildRepository,
@@ -134,7 +122,7 @@ export class LivingMemoryVectorIndexMaintenance {
                         await this.options.operationGate.runExclusive(() =>
                             this.options.worker().buildDreamAnnIndex()
                         )
-                    return `Dream HNSW index ${built ? 'built' : 'reused'}`
+                    return `近邻索引：${built ? '已构建' : '复用已有索引'}`
                 }
             )
         } catch (error) {
@@ -170,7 +158,7 @@ export class LivingMemoryVectorIndexMaintenance {
             )
             const inspection = await this.options.worker().inspect()
             this.options.onInspection(inspection)
-            return formatJobCompletedDetail('reconcile', job, indexedCount)
+            return `处理记忆：${indexedCount} 条`
         })
     }
 
@@ -354,11 +342,7 @@ export class LivingMemoryVectorIndexMaintenance {
                         })
                 })
                 this.options.onInspection(inspection)
-                return formatJobCompletedDetail(
-                    'rebuild',
-                    job,
-                    inspection.indexedCount
-                )
+                return `处理记忆：${inspection.indexedCount} 条`
             }
         )
     }
@@ -381,11 +365,7 @@ export class LivingMemoryVectorIndexMaintenance {
                 })
                 const inspection = await this.options.worker().inspect()
                 this.options.onInspection(inspection)
-                return formatJobCompletedDetail(
-                    'reconcile',
-                    job,
-                    inspection.indexedCount
-                )
+                return `处理记忆：${inspection.indexedCount} 条`
             }
         )
     }

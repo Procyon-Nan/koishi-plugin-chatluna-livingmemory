@@ -238,45 +238,40 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     protected async start() {
         const repaired = await this.repository.migrateMemorySourceOriginsArray()
         if (repaired > 0) {
-            this.memoryLogger.info('startup.migration.completed', {
-                workflow: 'maintenance',
-                operation: 'repair-source-origins',
-                repaired
-            })
+            this.memoryLogger.summary(
+                '记忆来源迁移完成',
+                `修复来源：${repaired} 条`
+            )
         }
         const clearedWebuiKeys =
             await this.repository.migrateWebuiSourceConversationKeys()
         if (clearedWebuiKeys > 0) {
-            this.memoryLogger.info('startup.migration.completed', {
-                workflow: 'maintenance',
-                operation: 'clear-webui-source-conversation',
-                cleared: clearedWebuiKeys
-            })
+            this.memoryLogger.summary(
+                '管理界面来源迁移完成',
+                `清理会话关联：${clearedWebuiKeys} 条`
+            )
         }
         const indexed = await this.repository.migrateActiveMemorySpeakers()
         if (indexed > 0) {
-            this.memoryLogger.info('startup.migration.completed', {
-                workflow: 'maintenance',
-                operation: 'index-active-memory-speakers',
-                indexed
-            })
+            this.memoryLogger.summary(
+                '记忆用户关联迁移完成',
+                `关联记忆：${indexed} 条`
+            )
         }
         const removedSnapshots =
             await this.repository.removeLegacyReferenceSnapshots()
         if (removedSnapshots > 0) {
-            this.memoryLogger.info('startup.migration.completed', {
-                workflow: 'maintenance',
-                operation: 'remove-legacy-reference-snapshots',
-                removed: removedSnapshots
-            })
+            this.memoryLogger.summary(
+                '旧召回快照清理完成',
+                `清理快照：${removedSnapshots} 条`
+            )
         }
         const droppedIndexes = await this.repository.dropLegacyPendingIndexes()
         if (droppedIndexes.length > 0) {
-            this.memoryLogger.info('startup.migration.completed', {
-                workflow: 'maintenance',
-                operation: 'drop-legacy-pending-index',
-                dropped: droppedIndexes
-            })
+            this.memoryLogger.summary(
+                '旧数据库索引清理完成',
+                `清理索引：${droppedIndexes.length} 条`
+            )
         }
 
         try {
@@ -286,11 +281,10 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
                     'recovered: service restarted while job was running'
                 )
             if (recovered.length > 0) {
-                this.memoryLogger.info('startup.recovery.completed', {
-                    workflow: 'maintenance',
-                    operation: 'recover-stale-jobs',
-                    recovered: recovered.length
-                })
+                this.memoryLogger.summary(
+                    '中断任务状态恢复完成',
+                    `标记失败：${recovered.length} 个任务`
+                )
             }
         } catch (error) {
             this.memoryLogger.warn(
@@ -737,14 +731,9 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
                 deleted += result.deleted
             }
             if (deleted > 0) {
-                this.memoryLogger.info(
-                    'maintenance.archive-cleanup.completed',
-                    {
-                        workflow: 'maintenance',
-                        operation: 'cleanup-expired-archived-memories',
-                        trigger,
-                        deleted
-                    }
+                this.memoryLogger.summary(
+                    '过期归档记忆清理完成',
+                    `删除记忆：${deleted} 条`
                 )
             }
         } catch (error) {

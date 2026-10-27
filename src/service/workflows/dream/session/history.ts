@@ -12,7 +12,10 @@ import type {
 } from 'koishi-plugin-chatluna/llm-core/platform/model'
 import { invokeLoggedModel } from '../../../logging/model_calls'
 import { stringifyModelContent } from '../../../shared/utils'
-import type { LivingMemoryLogger } from '../../../logging/logger'
+import {
+    formatLogScope,
+    type LivingMemoryLogger
+} from '../../../logging/logger'
 import { buildDreamHistorySummaryPrompts } from '../../../prompts/dream'
 import { formatXmlBlock } from '../../../prompts/prompt_format'
 
@@ -81,9 +84,10 @@ export class DreamSessionHistory {
             await this.summarizeEarlierBatches(this.inputTokens, signal)
         }
         signal?.throwIfAborted()
-        this.logger.diagnostic('dream.context', {
-            lastReportedInputTokens: this.inputTokens
-        })
+        this.logger.diagnosticSummary((fields) => ({
+            event: 'Dream 上下文',
+            detail: `${formatLogScope(fields)}; 最近一次供应商输入量：${this.inputTokens ?? '供应商未返回'} tokens`
+        }))
         const messages = [...this.messages]
         // 仅检查宿主容量，防止静默裁剪当前批次；不参与 200k 压缩判断。
         const [, tokens] = await this.model.cropMessages(
@@ -114,11 +118,10 @@ export class DreamSessionHistory {
                 .map((message) => message.toDict())
         )
         const attempt = ++this.compressions
-        this.logger.diagnostic('dream.compression.started', {
-            stage: 'dream-compression',
-            attempt,
-            inputTokens: tokensBefore
-        })
+        this.logger.diagnosticSummary((fields) => ({
+            event: 'Dream 上下文压缩开始',
+            detail: `${formatLogScope(fields)}; 压缩序号：${attempt}; 压缩前输入量：${tokensBefore} tokens`
+        }))
         const prompt = buildDreamHistorySummaryPrompts(transcript)
         const messages = [
             new SystemMessage(prompt.systemPrompt),
@@ -165,10 +168,9 @@ export class DreamSessionHistory {
         this.batchStart = 2
         // 摘要请求的 usage 和保留下来的旧响应均不代表新上下文大小。
         this.inputTokens = undefined
-        this.logger.diagnostic('dream.compression.completed', {
-            stage: 'dream-compression',
-            attempt,
-            inputTokens: tokensBefore
-        })
+        this.logger.diagnosticSummary((fields) => ({
+            event: 'Dream 上下文压缩完成',
+            detail: `${formatLogScope(fields)}; 压缩序号：${attempt}; 压缩前输入量：${tokensBefore} tokens`
+        }))
     }
 }

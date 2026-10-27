@@ -8,10 +8,11 @@ import {
 import { type RunnableConfig, RunnableLambda } from '@langchain/core/runnables'
 import type { ChatLunaChatModel } from 'koishi-plugin-chatluna/llm-core/platform/model'
 import { stringifyModelContent, formatErrorDetails } from '../shared/utils'
-import type {
-    LivingMemoryLogBlock,
-    LivingMemoryLogFields,
-    LivingMemoryLogger
+import {
+    formatLogScope,
+    type LivingMemoryLogBlock,
+    type LivingMemoryLogFields,
+    type LivingMemoryLogger
 } from './logger'
 
 export interface LivingMemoryModelCallContext {
@@ -102,15 +103,8 @@ const formatModelLogDetails = (
     if (callNumber !== undefined) {
         details.push(`调用序号：${callNumber}`)
     }
-    if (fields.presetId != null) {
-        details.push(`预设：${fields.presetId}`)
-    }
-    if (fields.conversationId != null) {
-        const conversation = String(fields.conversationId)
-            .replace(/^group:/, '群聊 ')
-            .replace(/^private:/, '私聊 ')
-        details.push(`会话：${conversation}`)
-    }
+    const scope = formatLogScope(fields)
+    if (scope) details.push(scope)
     return details.join('; ')
 }
 
@@ -146,20 +140,19 @@ const toPromptBlocks = (input: BaseLanguageModelInput) => {
 }
 
 const toResponseBlocks = (response: BaseMessage, logResponseText: boolean) => {
-    const text = stringifyModelContent(response.content)
     const blocks: LivingMemoryLogBlock[] = []
-    if (logResponseText && text.length > 0) {
-        blocks.push({
-            title: '模型文本',
-            key: 'text',
-            value: text
-        })
+    if (logResponseText) {
+        const text = stringifyModelContent(response.content)
+        if (text.length > 0) {
+            blocks.push({ title: '模型文本', key: 'text', value: text })
+        }
     }
     if (isAIMessage(response)) {
         for (const call of response.tool_calls ?? []) {
             blocks.push({
                 title: '工具调用',
-                subtitle: call.id == null ? call.name : `${call.name}:${call.id}`,
+                subtitle:
+                    call.id == null ? call.name : `${call.name}:${call.id}`,
                 key: 'args',
                 value: call.args
             })
@@ -225,11 +218,18 @@ const invokeLoggedRunnable = async (
     try {
         const response = await runnable.invoke(input, runConfig)
         context.onResponse?.(response)
-        logger.diagnosticSummary((fields) => ({
-            event: `${stage}模型响应`,
-            detail: formatModelLogDetails(fields),
-            blocks: toResponseBlocks(response, context.logResponseText ?? true)
-        }))
+        logger.diagnosticSummary((fields) => {
+            const blocks = toResponseBlocks(
+                response,
+                context.logResponseText ?? true
+            )
+            if (blocks.length === 0) return
+            return {
+                event: `${stage}模型响应`,
+                detail: formatModelLogDetails(fields),
+                blocks
+            }
+        })
         return response
     } catch (error) {
         logger.diagnostic('model.failed', () => ({

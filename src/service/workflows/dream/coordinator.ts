@@ -79,11 +79,10 @@ export class LivingMemoryDreamCoordinator {
                     'dream recovered: stale running job'
                 )
             if (recovered.length > 0) {
-                this.logger.diagnostic('dream.stale-jobs.recovered', {
-                    workflow: 'dream',
-                    presetId,
-                    count: recovered.length
-                })
+                this.logger.diagnosticSummary(() => ({
+                    event: 'Dream 中断任务状态恢复完成',
+                    detail: `预设：${presetId}; 标记失败：${recovered.length} 个任务`
+                }))
             }
             this.controller.signal.throwIfAborted()
             const scope: MemoryScope = {

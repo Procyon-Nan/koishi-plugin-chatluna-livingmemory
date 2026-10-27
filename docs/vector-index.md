@@ -37,7 +37,7 @@
 
 ## 维护日志
 
-- 索引任务入口统一记录开始、完成与失败，携带 `workflow=vector-index`、`jobId` 和 `presetId`；失败事件保留完整错误。
+- 索引任务入口以中文 INFO 摘要记录开始与完成，展示预设和处理结果；任务失败采用 ERROR，携带预设、任务 ID 和完整错误。
 - 服务层记录维护失败后的索引状态及原因；ANN 维护失败时记录 `vector-index.dream-ann.unavailable`，精确检索继续沿用主体索引状态。
 
 ## 预设状态与读取门禁

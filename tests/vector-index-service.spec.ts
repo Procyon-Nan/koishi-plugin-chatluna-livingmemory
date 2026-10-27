@@ -345,10 +345,7 @@ it('builds the index once and reuses its manifest after restart', async () => {
         assert.equal(firstStatus.presets[0].indexedCount, 2)
         assert.doesNotThrow(() => first.assertPresetReady('preset-a'))
         assert.equal(repository.jobs[0].status, 'completed')
-        assert.equal(
-            repository.jobs[0].detail,
-            'vector index rebuild completed: jobId=job-1 presetId=* indexed=2'
-        )
+        assert.equal(repository.jobs[0].detail, '处理记忆：2 条')
         assert.equal(repository.legacyEmbeddingsMigrated, true)
         assert.equal(repository.jobs[1].status, 'completed')
         assert.equal(repository.jobs[1].detail, 'Dream HNSW index built')
@@ -411,10 +408,7 @@ it('builds the index once and reuses its manifest after restart', async () => {
             firstStatus.manifest?.generation
         )
         assert.equal(repository.jobs[2].status, 'completed')
-        assert.equal(
-            repository.jobs[2].detail,
-            'vector index reconcile completed: jobId=job-3 presetId=* indexed=2'
-        )
+        assert.equal(repository.jobs[2].detail, '处理记忆：2 条')
         assert.equal(repository.jobs[3].detail, 'Dream HNSW index reused')
         assert.equal(secondCalls.length, 1)
         await second.stop()
@@ -566,7 +560,7 @@ it('warns without failing initialization when legacy cleanup fails', async () =>
         assert.equal(captured.warnings.length, 1)
         assert.equal(
             captured.warnings[0][0],
-            'event=vector-index.legacy-cleanup.failed workflow=vector-index operation=legacy-index-cleanup'
+            '事件：vector-index.legacy-cleanup.failed; workflow：vector-index; operation：legacy-index-cleanup'
         )
         await access(legacyDirectory)
         await service.stop()
@@ -1001,12 +995,12 @@ it('keeps index jobs running until work completes and records failures', async (
         assert.equal(repository.legacyEmbeddingsMigrated, false)
         assert.equal(captured.warnings.length, 2)
         const failureLog = String(captured.warnings[0][0])
-        assert.match(failureLog, /event=vector-index.rebuild.failed/u)
-        assert.ok(failureLog.includes(`jobId=${repository.jobs[0].id}`))
-        assert.match(failureLog, /presetId=\*/u)
+        assert.match(failureLog, /事件：索引重建失败/u)
+        assert.ok(failureLog.includes(`任务：${repository.jobs[0].id}`))
+        assert.match(failureLog, /预设：\*/u)
         assert.match(
             String(captured.warnings[1][0]),
-            /event=vector-index.unavailable/u
+            /事件：vector-index.unavailable/u
         )
         await service.stop()
     })

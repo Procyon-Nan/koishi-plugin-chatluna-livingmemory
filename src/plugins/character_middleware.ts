@@ -1,3 +1,4 @@
+import { formatLogScope } from '../service/logging/logger'
 import { Context, type Session } from 'koishi'
 import type {
     LivingMemoryTranscriptMessage,
@@ -253,6 +254,21 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                     )
                 }
 
+                if (
+                    config.recallIntervalMessages === 0 &&
+                    !config.enableUserProfileInjection
+                ) {
+                    return {
+                        scope: createCharacterScope(
+                            ctx,
+                            context,
+                            session.userId
+                        ),
+                        currentMessage: undefined,
+                        history: []
+                    }
+                }
+
                 // 回填完成后一次读取末条及前 N 条，画像与召回共用这份窗口。
                 await livingMemory.messageLog.warmup(sessionKey)
                 const entries = livingMemory.messageLog.lastN(
@@ -320,13 +336,9 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                         sections.userProfiles = sections.userProfiles.trim()
                         const rendered = formatPromptVariable(sections)
 
-                        if (config.debug) {
-                            const conversation = scope.conversationId
-                                .replace(/^group:/, '群聊 ')
-                                .replace(/^private:/, '私聊 ')
+                        logger.diagnosticSummary(() => {
                             const details = [
-                                `预设：${scope.presetId}`,
-                                `会话：${conversation}`,
+                                formatLogScope(scope),
                                 `记忆快照：${sections.snapshot.length} 字符`
                             ]
                             if (userProfileInjectionEnabled) {
@@ -334,8 +346,11 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                                     `人物画像：${sections.userProfiles.length} 字符`
                                 )
                             }
-                            logger.summary('记忆注入', details.join('; '))
-                        }
+                            return {
+                                event: '记忆注入',
+                                detail: details.join('; ')
+                            }
+                        })
 
                         return rendered
                     } catch (error) {
@@ -361,15 +376,15 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
     events.on(
         'chatluna_character/before-chat',
         async (payload: CharacterChatContext) => {
+            if (config.recallIntervalMessages === 0) return
             const round = prepareRound(payload)
             const { scope, currentMessage, history } = await round.context
 
             if (currentMessage == null || currentMessage.role !== 'user') {
-                logger.diagnostic('character.before.skipped', {
-                    conversationId: scope.conversationId,
-                    presetId: scope.presetId,
-                    reason: 'current-user-message-unavailable'
-                })
+                logger.diagnosticSummary(() => ({
+                    event: '跳过记忆召回',
+                    detail: `${formatLogScope(scope)}; 原因：当前用户消息暂不可用`
+                }))
                 return
             }
             await ctx.chatluna_living_memory
@@ -413,6 +428,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                     payload.focusMessage
                 )
             )
+            if (config.extractionWindowMessages === 0) return
             await ctx.chatluna_living_memory.queueExtraction(scope, {
                 resolveTranscriptOrigin: async () => {
                     if (payload.session.isDirect) {
@@ -452,14 +468,13 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
     events.on(
         'chatluna_character/clear-chat-history',
         async (payload: CharacterClearChatHistoryEventPayload) => {
-            logger.diagnostic('character.history.cleared', {
-                conversationId: payload.sessionKey,
-                isDirect: payload.isDirect
-            })
-
             await ctx.chatluna_living_memory.cleanupConversation(
                 payload.sessionKey
             )
+            logger.diagnosticSummary(() => ({
+                event: '会话记忆状态已清除',
+                detail: formatLogScope({ conversationId: payload.sessionKey })
+            }))
         }
     )
 }

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { isModelConfigured, formatErrorDetails } from '../../shared/utils'
 import { normalizeText, scopeKey } from '../../memory/helpers'
-import type { LivingMemoryLogger } from '../../logging/logger'
+import { formatLogScope, type LivingMemoryLogger } from '../../logging/logger'
 import { renderSnapshotText } from '../../memory/snapshot/snapshot_text'
 import type { LivingMemoryAgenticRecallExecutor } from './agentic_recall'
 import type {
@@ -49,19 +49,12 @@ export class LivingMemoryRecallCoordinator {
         currentMessage: LivingMemoryTranscriptMessage,
         loadHistoryMessages: () => Promise<LivingMemoryTranscriptMessage[]>
     ) {
-        let disabledReason: string | null = null
-        if (this.config.recallIntervalMessages === 0) {
-            disabledReason = 'disabled'
-        } else if (!isModelConfigured(this.config.subModel)) {
-            disabledReason = 'model-not-configured'
-        }
-        if (disabledReason != null) {
-            this.logger.diagnostic('recall.skipped', {
-                workflow: 'recall',
-                conversationId: scope.conversationId,
-                presetId: scope.presetId,
-                reason: disabledReason
-            })
+        if (this.config.recallIntervalMessages === 0) return
+        if (!isModelConfigured(this.config.subModel)) {
+            this.logger.diagnosticSummary(() => ({
+                event: '跳过记忆召回',
+                detail: `${formatLogScope(scope)}; 原因：召回模型未配置`
+            }))
             return
         }
 
@@ -72,14 +65,10 @@ export class LivingMemoryRecallCoordinator {
             const messagesSinceRecall =
                 tailSeq == null ? 0 : tailSeq - anchorSeq
             if (messagesSinceRecall < this.config.recallIntervalMessages) {
-                this.logger.diagnostic('recall.skipped', {
-                    workflow: 'recall',
-                    conversationId: scope.conversationId,
-                    presetId: scope.presetId,
-                    reason: 'recall-interval',
-                    messagesRemaining:
-                        this.config.recallIntervalMessages - messagesSinceRecall
-                })
+                this.logger.diagnosticSummary(() => ({
+                    event: '跳过记忆召回',
+                    detail: `${formatLogScope(scope)}; 召回消息阈值：${messagesSinceRecall}/${this.config.recallIntervalMessages} 条`
+                }))
                 return
             }
         }
@@ -87,12 +76,10 @@ export class LivingMemoryRecallCoordinator {
         if (this.recallLockByConversation.has(lockKey)) {
             // 同一会话同一预设已有召回在跑，本次请求直接丢弃，不做 coalescing。
             // snapshot 由后续请求基于最新历史消息重新触发追上，最多滞后一轮。
-            this.logger.diagnostic('recall.skipped', {
-                workflow: 'recall',
-                conversationId: scope.conversationId,
-                presetId: scope.presetId,
-                reason: 'recall-in-progress'
-            })
+            this.logger.diagnosticSummary(() => ({
+                event: '跳过记忆召回',
+                detail: `${formatLogScope(scope)}; 原因：当前召回任务运行中`
+            }))
             return
         }
 
@@ -158,13 +145,10 @@ export class LivingMemoryRecallCoordinator {
                 historyMessages,
                 logger
             )
-            const conversation = scope.conversationId
-                .replace(/^group:/, '群聊 ')
-                .replace(/^private:/, '私聊 ')
             if (trace == null) {
                 logger.summary(
                     '召回结束',
-                    `预设：${scope.presetId}; 会话：${conversation}; 结果：沿用当前快照`
+                    `${formatLogScope(scope)}; 结果：沿用当前快照`
                 )
                 return
             }
@@ -177,7 +161,7 @@ export class LivingMemoryRecallCoordinator {
             logger.summary(
                 '召回快照已更新',
                 [
-                    `预设：${scope.presetId}; 会话：${conversation}; 命中记忆：${trace.item.matchedMemories.length} 条`,
+                    `${formatLogScope(scope)}; 命中记忆：${trace.item.matchedMemories.length} 条`,
                     '========召回快照========',
                     renderSnapshotText([trace.item])
                 ].join('\n')

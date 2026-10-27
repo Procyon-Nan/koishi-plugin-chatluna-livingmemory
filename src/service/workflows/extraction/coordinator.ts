@@ -12,7 +12,7 @@ import type {
     MemoryScope,
     PresetPersonaResolver
 } from '../../../contracts/memory'
-import type { LivingMemoryLogger } from '../../logging/logger'
+import { formatLogScope, type LivingMemoryLogger } from '../../logging/logger'
 import type { MessageLogRegistry } from '../../transcript/message_log/message_log_registry'
 import type { ConversationLogMessage } from '../../transcript/message_log/types'
 import { toLogTranscriptMessages } from '../../transcript/message_log/converter'
@@ -216,16 +216,7 @@ export class LivingMemoryExtractionCoordinator {
 
     async queue(scope: MemoryScope, options: QueueExtractionOptions) {
         const window = this.config.extractionWindowMessages
-        if (window === 0) {
-            this.logger.diagnostic('extraction.skipped', {
-                workflow: 'extraction',
-                conversationId: scope.conversationId,
-                presetId: scope.presetId,
-                window,
-                reason: 'disabled'
-            })
-            return
-        }
+        if (window === 0) return
 
         // 白名单只挡提取，不挡日志（召回依赖日志）。未命中时游标不初始化，
         // 后续加入白名单从当时刻重新起算，不倾泻积压。
@@ -238,12 +229,10 @@ export class LivingMemoryExtractionCoordinator {
         // 游标初始化的前提是日志已含全部回填内容；回填失败待重试时跳过，
         // 否则重试落地的平台历史会追加在游标之后被整段重复提取。
         if (!this.messageLog.isWarm(scope.conversationId)) {
-            this.logger.diagnostic('extraction.skipped', {
-                workflow: 'extraction',
-                conversationId: scope.conversationId,
-                presetId: scope.presetId,
-                reason: 'backfill-pending'
-            })
+            this.logger.diagnosticSummary(() => ({
+                event: '跳过记忆提取',
+                detail: `${formatLogScope(scope)}; 原因：等待历史消息回填`
+            }))
             return
         }
 
@@ -261,26 +250,18 @@ export class LivingMemoryExtractionCoordinator {
             state.cursorSeq
         )
         if (backlog < window) {
-            this.logger.diagnosticSummary(() => {
-                const conversation = scope.conversationId
-                    .replace(/^group:/, '群聊 ')
-                    .replace(/^private:/, '私聊 ')
-                return {
-                    event: '等待记忆提取',
-                    detail: `预设：${scope.presetId}; 会话：${conversation}; 消息提取阈值：${backlog}/${window} 条`
-                }
-            })
+            this.logger.diagnosticSummary(() => ({
+                event: '等待记忆提取',
+                detail: `${formatLogScope(scope)}; 消息提取阈值：${backlog}/${window} 条`
+            }))
             return
         }
 
         if (this.runningScopeKeys.has(key)) {
-            this.logger.diagnostic('extraction.pending', {
-                workflow: 'extraction',
-                conversationId: scope.conversationId,
-                presetId: scope.presetId,
-                backlog,
-                reason: 'running'
-            })
+            this.logger.diagnosticSummary(() => ({
+                event: '等待记忆提取',
+                detail: `${formatLogScope(scope)}; 当前任务运行中; 待处理消息：${backlog} 条`
+            }))
             return
         }
 
@@ -327,13 +308,10 @@ export class LivingMemoryExtractionCoordinator {
         ) {
             return true
         }
-        this.logger.diagnostic('extraction.skipped', {
-            workflow: 'extraction',
-            conversationId: scope.conversationId,
-            presetId: scope.presetId,
-            sessionId,
-            reason: 'not-whitelisted'
-        })
+        this.logger.diagnosticSummary(() => ({
+            event: '跳过记忆提取',
+            detail: `${formatLogScope(scope)}; 原因：会话未列入提取白名单`
+        }))
         return false
     }
 
@@ -352,9 +330,10 @@ export class LivingMemoryExtractionCoordinator {
                 // 正在执行的单次模型调用照常完成，后续消息由新状态的
                 // 下一次触发接管。
                 if (this.stateByScope.get(key) !== state) {
-                    runLogger.diagnostic('extraction.drain.stopped', {
-                        reason: 'state-cleared'
-                    })
+                    runLogger.diagnosticSummary(() => ({
+                        event: '记忆提取停止',
+                        detail: `${formatLogScope(scope)}; 原因：会话状态已清除`
+                    }))
                     return
                 }
                 const drainedMore = await this.drainNextChunk(
@@ -406,9 +385,10 @@ export class LivingMemoryExtractionCoordinator {
             if (messages.length > 0) {
                 await this.run(scope, messages, options, runLogger)
             } else {
-                runLogger.diagnostic('extraction.skipped', {
-                    reason: 'empty-transcript'
-                })
+                runLogger.diagnosticSummary(() => ({
+                    event: '跳过记忆提取',
+                    detail: `${formatLogScope(scope)}; 原因：本批消息转写为空`
+                }))
             }
             state.cursorSeq = chunk[chunk.length - 1].seq
             state.failStreak = 0
@@ -484,15 +464,10 @@ export class LivingMemoryExtractionCoordinator {
         const origin = await options.resolveTranscriptOrigin()
         const input = `${origin.header}\n\n${payload.input}`
 
-        logger.diagnosticSummary(() => {
-            const conversation = scope.conversationId
-                .replace(/^group:/, '群聊 ')
-                .replace(/^private:/, '私聊 ')
-            return {
-                event: '开始记忆提取',
-                detail: `预设：${scope.presetId}; 会话：${conversation}; 本批消息：${payload.sourceOriginMessages.length} 条; 输入内容：${input.length} 字符`
-            }
-        })
+        logger.diagnosticSummary(() => ({
+            event: '开始记忆提取',
+            detail: `${formatLogScope(scope)}; 本批消息：${payload.sourceOriginMessages.length} 条; 输入内容：${input.length} 字符`
+        }))
 
         const presetPrompt = await this.presetPersona.resolveOrGenerateCardText(
             scope.presetId
@@ -509,9 +484,10 @@ export class LivingMemoryExtractionCoordinator {
             logger
         )
         if (result.skippedReason != null) {
-            logger.diagnostic('extraction.skipped', {
-                reason: result.skippedReason
-            })
+            logger.diagnosticSummary(() => ({
+                event: '跳过记忆提取',
+                detail: `${formatLogScope(scope)}; 原因：${result.skippedReason === 'model-not-configured' ? '提取模型未配置' : '提取模型暂不可用'}`
+            }))
             return
         }
 
@@ -546,12 +522,8 @@ export class LivingMemoryExtractionCoordinator {
         }
 
         logger.diagnosticSummary(() => {
-            const conversation = scope.conversationId
-                .replace(/^group:/, '群聊 ')
-                .replace(/^private:/, '私聊 ')
             const details = [
-                `预设：${scope.presetId}`,
-                `会话：${conversation}`,
+                formatLogScope(scope),
                 `提取记忆：${extracted.length} 条`
             ]
             if (result.reason) details.push(`原因：${result.reason}`)

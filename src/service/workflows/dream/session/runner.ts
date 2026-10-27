@@ -16,7 +16,10 @@ import type {
     ChatLunaModelCallOptions
 } from 'koishi-plugin-chatluna/llm-core/platform/model'
 import type { PresetSpeakerRecord } from '../../../../contracts/memory'
-import type { LivingMemoryLogger } from '../../../logging/logger'
+import {
+    formatLogScope,
+    type LivingMemoryLogger
+} from '../../../logging/logger'
 import { createLoggedModel } from '../../../logging/model_calls'
 import {
     buildDreamMemoryBatchPrompt,
@@ -90,11 +93,11 @@ export async function runDreamSession(input: DreamSessionRunInput) {
         callOptions,
         logger
     )
-    logger.diagnostic(
-        'dream.session.started',
-        () => ({ tools: tools.map((tool) => tool.name) }),
-        () => [{ title: 'system', value: systemPrompt }]
-    )
+    logger.diagnosticSummary((fields) => ({
+        event: 'Dream 会话开始',
+        detail: `${formatLogScope(fields)}; 工具：${tools.map((tool) => tool.name).join('、')}`,
+        blocks: [{ title: '系统消息', value: systemPrompt }]
+    }))
     let modelCalls = 0
     let round = 0
     let modelCallId: string | undefined
@@ -128,11 +131,11 @@ export async function runDreamSession(input: DreamSessionRunInput) {
             feedback
         )
         history.append(new HumanMessage(content))
-        logger.diagnostic(
-            'dream.feedback',
-            { batch: state.currentBatch!.id, round, modelCallId },
-            () => [{ title: 'feedback', value: content }]
-        )
+        logger.diagnosticSummary((fields) => ({
+            event: 'Dream 处理反馈',
+            detail: `${formatLogScope(fields)}; 批次：${state.currentBatch!.id}; 轮次：${round}`,
+            blocks: [{ title: '用户消息', value: content }]
+        }))
     }
 
     while (advanceDreamBatch(state) !== undefined) {
@@ -142,11 +145,11 @@ export async function runDreamSession(input: DreamSessionRunInput) {
         const batchStartedAt = performance.now()
         const batchPrompt = buildDreamMemoryBatchPrompt(batch, input.speakers)
         history.startBatch(batchPrompt)
-        batchLogger.diagnostic(
-            'dream.batch.started',
-            { entries: batch.entries.length, batches: state.clusters.length },
-            () => [{ title: 'input', value: batchPrompt }]
-        )
+        batchLogger.diagnosticSummary((fields) => ({
+            event: 'Dream 批次开始',
+            detail: `${formatLogScope(fields)}; 批次：${batch.id}; 总批次：${state.clusters.length}; 记忆：${batch.entries.length} 条`,
+            blocks: [{ title: '用户消息', value: batchPrompt }]
+        }))
         let ineffectiveRounds = 0
         for (round = 1; round <= maxBatchRounds; round++) {
             const messages = await history.prepareDecisionMessages(
@@ -206,7 +209,6 @@ export async function runDreamSession(input: DreamSessionRunInput) {
                                     : undefined
                         })
                         const toolStartedAt = performance.now()
-                        toolLogger.diagnostic('dream.tool.started')
                         try {
                             const tool = tools.find(
                                 (candidate) => candidate.name === action.tool
@@ -219,13 +221,20 @@ export async function runDreamSession(input: DreamSessionRunInput) {
                                 config
                             )
                             effective = true
-                            toolLogger.diagnostic(
-                                'dream.tool.completed',
-                                {
-                                    elapsedMs: performance.now() - toolStartedAt
-                                },
-                                () => [{ title: 'result', value: observation }]
-                            )
+                            toolLogger.diagnosticSummary((fields) => ({
+                                event: 'Dream 工具执行完成',
+                                detail: `${formatLogScope(fields)}; 批次：${batch.id}; 轮次：${round}; 耗时：${Math.round(performance.now() - toolStartedAt)} 毫秒`,
+                                blocks: [
+                                    {
+                                        title: '工具结果',
+                                        subtitle:
+                                            'toolCallId' in action
+                                                ? `${action.tool}:${action.toolCallId}`
+                                                : action.tool,
+                                        value: observation
+                                    }
+                                ]
+                            }))
                         } catch (error) {
                             toolLogger.diagnostic('dream.tool.failed', () => ({
                                 elapsedMs: performance.now() - toolStartedAt,
@@ -243,20 +252,15 @@ export async function runDreamSession(input: DreamSessionRunInput) {
             signal?.throwIfAborted()
             const pending = pendingDreamMemoryIds(state)
             ineffectiveRounds = effective ? 0 : ineffectiveRounds + 1
-            batchLogger.diagnostic('dream.round.completed', {
-                round,
-                modelCallId,
-                effective,
-                ineffectiveRounds,
-                processed: batch.entries.length - pending.length,
-                remaining: pending.length
-            })
+            batchLogger.diagnosticSummary((fields) => ({
+                event: 'Dream 本轮处理完成',
+                detail: `${formatLogScope(fields)}; 批次：${batch.id}; 轮次：${round}; 已处理：${batch.entries.length - pending.length}/${batch.entries.length} 条; 连续无有效操作：${ineffectiveRounds} 轮`
+            }))
             if (pending.length === 0) {
-                batchLogger.diagnostic('dream.batch.completed', {
-                    round,
-                    processed: batch.entries.length,
-                    elapsedMs: performance.now() - batchStartedAt
-                })
+                batchLogger.summary(
+                    'Dream 批次完成',
+                    `${formatLogScope({ presetId: input.presetId })}; 批次：${batch.id}; 处理记忆：${batch.entries.length} 条; 轮次：${round}; 耗时：${Math.round(performance.now() - batchStartedAt)} 毫秒`
+                )
                 break
             }
             if (
@@ -271,14 +275,11 @@ export async function runDreamSession(input: DreamSessionRunInput) {
                 progress(
                     `${feedback}\n${reason}，跳过本批剩余记忆并进入下一批。`
                 )
-                logger.diagnostic('dream.batch.skipped', {
-                    batch: state.currentBatch!.id,
-                    round,
-                    reason,
-                    memoryIds: pending,
-                    processed: batch.entries.length - pending.length,
-                    elapsedMs: performance.now() - batchStartedAt
-                })
+                logger.summary(
+                    'Dream 跳过批次剩余记忆',
+                    `预设：${input.presetId}; 批次：${batch.id}; 原因：${reason}; 已处理：${batch.entries.length - pending.length}/${batch.entries.length} 条; 跳过：${pending.length} 条`,
+                    'warn'
+                )
                 break
             }
             progress(feedback)

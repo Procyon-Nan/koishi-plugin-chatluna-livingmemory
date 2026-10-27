@@ -48,6 +48,12 @@ export class LivingMemoryVectorIndexJobRunner {
     ) {
         this.onCurrentJobChanged(job.id)
         const operationName = input.split(':', 1)[0]
+        const operationLabels: Record<string, string> = {
+            reconcile: '索引对账',
+            rebuild: '索引重建',
+            'dream-ann': 'Dream 近邻索引维护'
+        }
+        const label = operationLabels[operationName] ?? operationName
         const logger = this.logger.with({
             workflow: 'vector-index',
             jobId: job.id,
@@ -57,12 +63,17 @@ export class LivingMemoryVectorIndexJobRunner {
         try {
             await this.tracker.markRunning(job.id)
             running = true
-            logger.info(`vector-index.${operationName}.started`)
+            logger.summary(`${label}开始`, `预设：${job.presetId}`)
             const detail = await operation(job)
             await this.tracker.markCompleted(job.id, detail)
-            logger.info(`vector-index.${operationName}.completed`, { detail })
+            logger.summary(`${label}完成`, `预设：${job.presetId}; ${detail}`)
         } catch (error) {
-            logger.warn(`vector-index.${operationName}.failed`, {}, error)
+            logger.summary(
+                `${label}失败`,
+                `预设：${job.presetId}; 任务：${job.id}`,
+                'error',
+                error
+            )
             if (running) {
                 await this.tracker.markFailed(
                     job.id,

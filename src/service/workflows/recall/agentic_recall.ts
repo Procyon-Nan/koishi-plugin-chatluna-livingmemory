@@ -30,7 +30,7 @@ import type { LivingMemoryConfig } from '../../../contracts/workflows'
 import { LivingMemoryMessageFormatter } from '../../transcript/message_formatter'
 import { buildAgenticRecallPrompts } from '../../prompts/agentic_recall'
 import type { PromptMessages } from '../../prompts/prompt_format'
-import type { LivingMemoryLogger } from '../../logging/logger'
+import { formatLogScope, type LivingMemoryLogger } from '../../logging/logger'
 import { createLoggedModel } from '../../logging/model_calls'
 import { memorySearchTool } from '../../prompts/memory_tools'
 import { createMemoryTool } from '../../memory/tools'
@@ -210,27 +210,14 @@ class RecordingLivingMemorySearchTool extends StructuredTool {
             input: { ...input },
             results
         })
-        this.logger.diagnosticSummary((fields) => {
-            const details: string[] = []
-            if (fields.presetId != null) {
-                details.push(`预设：${fields.presetId}`)
-            }
-            if (fields.conversationId != null) {
-                const conversation = String(fields.conversationId)
-                    .replace(/^group:/, '群聊 ')
-                    .replace(/^private:/, '私聊 ')
-                details.push(`会话：${conversation}`)
-            }
-            details.push(`结果：当前检索条件下匹配 ${results.length} 条记忆`)
-            return {
-                event: '记忆搜索完成',
-                detail: details.join('; '),
-                blocks:
-                    results.length > 0
-                        ? [{ title: '搜索结果', key: 'memories', value: output }]
-                        : []
-            }
-        })
+        this.logger.diagnosticSummary((fields) => ({
+            event: '记忆搜索完成',
+            detail: `${formatLogScope(fields)}; 结果：当前检索条件下匹配 ${results.length} 条记忆`,
+            blocks:
+                results.length > 0
+                    ? [{ title: '搜索结果', key: 'memories', value: output }]
+                    : []
+        }))
         return output
     }
 }

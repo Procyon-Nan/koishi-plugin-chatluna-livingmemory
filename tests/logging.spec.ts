@@ -27,18 +27,18 @@ const createLogger = (debug = false) => {
 }
 
 it('formats stable event fields and escapes multiline content', () => {
-    const captured = createLogger()
+    const captured = createLogger(true)
     captured.log
         .with({ presetId: '克子（Character）', workflow: 'recall' })
-        .info('recall.snapshot.updated', {
+        .diagnostic('recall.snapshot.updated', {
             content: '第一行\n第二行',
             runId: 'run-1'
         })
 
     assert.equal(
         captured.info[0]?.[0],
-        'event=recall.snapshot.updated workflow=recall runId=run-1 ' +
-            'presetId="克子（Character）" content="第一行\\n第二行"'
+        '事件：recall.snapshot.updated; workflow：recall; runId：run-1; ' +
+            'presetId："克子（Character）"; content："第一行\\n第二行"'
     )
 })
 

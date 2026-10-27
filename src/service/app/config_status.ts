@@ -11,7 +11,10 @@ export const validateLivingMemoryConfig = (
 ): MemoryConfigWarning[] => {
     const warnings: MemoryConfigWarning[] = []
 
-    if (!isModelConfigured(config.subModel)) {
+    if (
+        config.recallIntervalMessages > 0 &&
+        !isModelConfigured(config.subModel)
+    ) {
         warnings.push({
             code: 'recall-model-missing',
             field: 'subModel',

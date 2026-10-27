@@ -44,19 +44,19 @@ export class LivingMemoryDreamJobRunner {
                     result.status
                 )
             }
-            const level = result.status === 'failed' ? 'warn' : 'info'
-            logger[level](`dream.${result.status}`, {
-                entries: result.entryCount,
-                processed: result.processedCount,
-                clusters: result.clusterCount,
-                kept: result.kept,
-                merged: result.merged,
-                split: result.split,
-                updated: result.updated,
-                archived: result.archived,
-                skipped: result.skipped,
-                error: result.error
-            })
+            const outcomes = {
+                completed: { event: 'Dream 完成', level: 'info' },
+                partial: { event: 'Dream 部分完成', level: 'warn' },
+                failed: { event: 'Dream 失败', level: 'error' }
+            } as const
+            const outcome = outcomes[result.status]
+            const lines = [
+                `预设：${scope.presetId}`,
+                `处理记忆：${result.processedCount}/${result.entryCount} 条; 批次：${result.clusterCount} 批; 跳过：${result.skipped} 批`,
+                `操作统计：检查 ${result.kept} 条; 合并 ${result.merged} 次; 拆分 ${result.split} 次; 更新 ${result.updated} 条; 归档 ${result.archived} 条（含合并、拆分来源）`
+            ]
+            if (result.error) lines.push(`原因：${result.error}`)
+            logger.summary(outcome.event, lines, outcome.level)
         } catch (error) {
             let jobStateUpdateError: string | undefined
             try {
@@ -64,7 +64,15 @@ export class LivingMemoryDreamJobRunner {
             } catch (updateError) {
                 jobStateUpdateError = formatErrorDetails(updateError)
             }
-            logger.warn('dream.failed', { detail, jobStateUpdateError }, error)
+            logger.summary(
+                'Dream 失败',
+                `预设：${scope.presetId}; 任务：${jobId}` +
+                    (jobStateUpdateError
+                        ? `; 任务状态保存失败：${jobStateUpdateError}`
+                        : ''),
+                'error',
+                error
+            )
             throw error
         }
     }

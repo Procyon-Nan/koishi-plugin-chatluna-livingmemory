@@ -194,7 +194,7 @@ it('runs the production Dream service through real tools across batches and pers
     assert.equal(batchSizes.length, 2)
     assert.ok(batchSizes.every((size) => size <= 30))
     assert.ok(stored.every((entry) => entry.isConsolidated))
-    assert.match(result.detail, /user profiles skipped: disabled/)
+    assert.doesNotMatch(result.detail, /人物画像/)
 })
 
 it('keeps successful operations and proceeds past an ineffective batch as partial', async () => {
@@ -215,7 +215,7 @@ it('keeps successful operations and proceeds past an ineffective batch as partia
         true
     )
     assert.match(result.detail, /连续 3 轮/)
-    assert.match(result.detail, /user profiles skipped: disabled/)
+    assert.doesNotMatch(result.detail, /人物画像/)
 })
 
 it('retains completed operations and missing IDs when the session fatally fails', async () => {

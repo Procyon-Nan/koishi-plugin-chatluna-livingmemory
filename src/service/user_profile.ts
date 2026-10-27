@@ -17,7 +17,7 @@ import {
 } from './prompts/schema'
 import { buildUserProfilePrompts } from './prompts/user_profile'
 import { invokeStructuredOutput } from './workflows/structured_output'
-import type { LivingMemoryLogger } from './logging/logger'
+import { formatLogScope, type LivingMemoryLogger } from './logging/logger'
 import { normalizeSpeakerKeys } from './memory/speaker_identity'
 
 export const normalizeManualUserProfileContent = (content: string) => {
@@ -114,7 +114,7 @@ export class LivingMemoryUserProfileService {
             return {
                 generated: 0,
                 skippedReason: 'disabled',
-                detail: 'user profiles skipped: disabled'
+                detail: '人物画像功能已关闭'
             }
         }
 
@@ -126,9 +126,7 @@ export class LivingMemoryUserProfileService {
             return {
                 generated: 0,
                 skippedReason: 'insufficient-related-memories',
-                detail:
-                    'user profiles skipped: insufficient-related-memories ' +
-                    `minimum=${this.config.userProfileMinMemoryCount}`
+                detail: `关联记忆尚未达到门槛：每人 ${this.config.userProfileMinMemoryCount} 条`
             }
         }
 
@@ -137,7 +135,7 @@ export class LivingMemoryUserProfileService {
             return {
                 generated: 0,
                 skippedReason: 'no-user-speakers',
-                detail: 'user profiles skipped: no-user-speakers'
+                detail: '符合条件的用户：0 人'
             }
         }
 
@@ -163,7 +161,7 @@ export class LivingMemoryUserProfileService {
             return {
                 generated: 0,
                 skippedReason: 'no-user-speakers',
-                detail: 'user profiles skipped: no-user-speakers'
+                detail: '符合条件的用户：0 人'
             }
         }
 
@@ -190,9 +188,7 @@ export class LivingMemoryUserProfileService {
             return {
                 generated: 0,
                 skippedReason: 'unchanged',
-                detail:
-                    'user profiles skipped: unchanged ' +
-                    `matched=${profileGroups.length}`
+                detail: `画像已是最新：${profileGroups.length} 人`
             }
         }
 
@@ -239,15 +235,15 @@ export class LivingMemoryUserProfileService {
             generated,
             skippedReason: generated === 0 ? 'no-valid-profiles' : undefined,
             detail: [
-                `user profiles generated: ${generated}`,
-                `speakers=${speakers.length}`,
-                `matched=${profileGroups.length}`,
-                `matchedMemories=${matchedEntryCount}`,
-                `selectedMemories=${selectedEntryCount}`,
-                `minimumMemories=${this.config.userProfileMinMemoryCount}`,
-                `unchanged=${profileGroups.length - pendingGroups.length}`,
-                `kept=${kept}`,
-                `failed=${failed}`
+                `更新画像：${generated} 人`,
+                `预设用户：${speakers.length} 人`,
+                `符合条件：${profileGroups.length} 人`,
+                `关联记忆：${matchedEntryCount} 条`,
+                `选用记忆：${selectedEntryCount} 条`,
+                `每人最低记忆数：${this.config.userProfileMinMemoryCount} 条`,
+                `已是最新：${profileGroups.length - pendingGroups.length} 人`,
+                `保持原样：${kept} 人`,
+                `失败：${failed} 人`
             ].join(' ')
         }
     }
@@ -413,7 +409,10 @@ export class LivingMemoryUserProfileService {
                 group.existingProfile!.id,
                 sourceMemoryIds
             )
-            logger.diagnostic('user-profile.kept')
+            logger.diagnosticSummary((fields) => ({
+                event: '人物画像保持原样',
+                detail: `${formatLogScope(fields)}; 用户：${group.speakerLabel}; 原因：${decision.reason}`
+            }))
             return 'kept'
         }
 
@@ -423,7 +422,10 @@ export class LivingMemoryUserProfileService {
             content: decision.content.replace(/\s+/gu, ' '),
             sourceMemoryIds
         })
-        logger.diagnostic('user-profile.updated')
+        logger.diagnosticSummary((fields) => ({
+            event: '人物画像已更新',
+            detail: `${formatLogScope(fields)}; 用户：${group.speakerLabel}; 原因：${decision.reason}`
+        }))
         return 'generated'
     }
 
