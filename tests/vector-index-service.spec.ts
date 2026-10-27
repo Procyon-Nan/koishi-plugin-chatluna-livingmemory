@@ -3,6 +3,7 @@ import {
     access,
     mkdir,
     mkdtemp,
+    readFile,
     readdir,
     rm,
     writeFile
@@ -348,7 +349,7 @@ it('builds the index once and reuses its manifest after restart', async () => {
         assert.equal(repository.jobs[0].detail, '处理记忆：2 条')
         assert.equal(repository.legacyEmbeddingsMigrated, true)
         assert.equal(repository.jobs[1].status, 'completed')
-        assert.equal(repository.jobs[1].detail, 'Dream HNSW index built')
+        assert.equal(repository.jobs[1].detail, '近邻索引：已构建')
         assert.ok(
             firstCalls.some((texts) => texts.includes('content memory-a'))
         )
@@ -409,7 +410,7 @@ it('builds the index once and reuses its manifest after restart', async () => {
         )
         assert.equal(repository.jobs[2].status, 'completed')
         assert.equal(repository.jobs[2].detail, '处理记忆：2 条')
-        assert.equal(repository.jobs[3].detail, 'Dream HNSW index reused')
+        assert.equal(repository.jobs[3].detail, '近邻索引：复用已有索引')
         assert.equal(secondCalls.length, 1)
         await second.stop()
     })
@@ -676,7 +677,7 @@ it('starts a full rebuild without blocking the caller', async () => {
         assert.equal(service.getStatus().state, 'ready')
         assert.equal(repository.legacyPageCalls, legacyPageCalls)
         assert.match(repository.jobs.at(-2)?.input ?? '', /manual rebuild/u)
-        assert.equal(repository.jobs.at(-1)?.detail, 'Dream HNSW index built')
+        assert.equal(repository.jobs.at(-1)?.detail, '近邻索引：已构建')
         await service.stop()
     })
 }, 120_000)
@@ -877,7 +878,7 @@ it('rebuilds when the model, dimension, or schema version changes', async () => 
     })
 }, 180_000)
 
-it('replaces a corrupt formal database through the rebuild path', async () => {
+it('fails startup and preserves an unreadable formal database', async () => {
     await withTemporaryDirectory(async (baseDir) => {
         const indexDirectory = resolve(
             baseDir,
@@ -900,12 +901,16 @@ it('replaces a corrupt formal database through the rebuild path', async () => {
             dimension: 3
         })
 
-        await service.start()
-        await service.waitForInitialization()
-        const status = service.getStatus()
-        assert.equal(status.state, 'ready')
-        assert.equal(status.presets[0].indexedCount, 1)
-        assert.match(repository.jobs[0].input, /index manifest is missing/u)
+        await assert.rejects(service.start())
+        assert.equal(service.getStatus().state, 'unavailable')
+        assert.equal(repository.jobs.length, 0)
+        assert.equal(
+            await readFile(
+                resolve(indexDirectory, 'vector-index.pglite'),
+                'utf8'
+            ),
+            'not a PGlite data directory'
+        )
         await service.stop()
     })
 })

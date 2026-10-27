@@ -21,8 +21,10 @@ export function apply(ctx: Context) {
                     ['profile', options?.profile]
                 ].filter(([, value]) => value != null)
                 const resolvedOperation = options?.delete ? 'delete' : operation
-                const [resolvedFilter, resolvedValue] =
-                    selectedFilters[0] ?? [filter, value]
+                const [resolvedFilter, resolvedValue] = selectedFilters[0] ?? [
+                    filter,
+                    value
+                ]
 
                 if (
                     resolvedOperation !== 'delete' ||

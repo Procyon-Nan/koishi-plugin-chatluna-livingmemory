@@ -89,9 +89,7 @@ it('persists the agentic snapshot without persisting a successful job', async ()
     assert.equal(snapshots[0].query, JSON.stringify(trace.item.toolCallSummary))
     assert.deepEqual(snapshots[0].items, [trace.item])
     assert.ok(
-        captured.info.every(
-            (message) => !message.includes('remembered context')
-        )
+        captured.info.some((message) => message.includes('remembered context'))
     )
 })
 

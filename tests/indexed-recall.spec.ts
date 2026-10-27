@@ -241,9 +241,6 @@ it('falls back to hybrid order when the reranker fails', async () => {
         results.map((result) => [result.id, result.rerankScore]),
         [['memory-a', null]]
     )
-    assert.match(
-        String(captured.warnings[0]?.[0]),
-        /事件：记忆重排序降级/u
-    )
+    assert.match(String(captured.warnings[0]?.[0]), /事件：记忆重排序降级/u)
     assert.equal(captured.warnings[0]?.[1], rerankError)
 })

@@ -15,7 +15,8 @@ import type { LivingMemoryLogger } from '../../logging/logger'
 import { resolveSpeakerKeysByLabels } from '../../memory/speaker_identity'
 
 export type LivingMemoryExtractionSkipReason =
-    'model-not-configured' | 'model-unavailable'
+    | 'model-not-configured'
+    | 'model-unavailable'
 
 export interface LivingMemoryExtractionResult {
     extracted: AttributedMemoryItem[]

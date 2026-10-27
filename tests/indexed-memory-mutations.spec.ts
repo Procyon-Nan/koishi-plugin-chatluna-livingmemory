@@ -75,7 +75,7 @@ const sessionMemory = {
 const createLoggerStub = () => {
     const warns: string[] = []
     const logger = {
-        warn: (event: string) => {
+        summary: (event: string) => {
             warns.push(event)
         }
     } as unknown as LivingMemoryLogger
@@ -760,7 +760,7 @@ it('keeps the committed-facts failure when the scheduled reconciliation rejects'
         )
         await flushBackgroundTasks()
 
-        assert.deepEqual(warns, ['memory.index.reconcile.failed'])
+        assert.deepEqual(warns, ['索引对账调度失败'])
         assert.equal((await repository.listEntriesByPreset(presetId)).length, 1)
     })
 })

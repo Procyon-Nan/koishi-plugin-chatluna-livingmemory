@@ -190,7 +190,7 @@ it('regenerates when the profile is not newer than its memories', async () => {
 
     assert.equal(result.generated, 1)
     assert.equal(model.invocations.length, 1)
-    assert.match(result.detail, /unchanged=0/u)
+    assert.match(result.detail, /已是最新：0 人/u)
 })
 
 const profileContent = '我知道张三正在准备考试。'
@@ -299,8 +299,8 @@ it('records the reviewed input when the model chooses keep', async () => {
     assert.deepEqual(harness.reviewedProfiles, [
         { profileId: 'profile-1', sourceMemoryIds: ['memory-1'] }
     ])
-    assert.match(result.detail, /kept=1/u)
-    assert.match(result.detail, /failed=0/u)
+    assert.match(result.detail, /保持原样：1 人/u)
+    assert.match(result.detail, /失败：0 人/u)
 })
 
 it('rejects keep without an existing profile and retries for an update', async () => {

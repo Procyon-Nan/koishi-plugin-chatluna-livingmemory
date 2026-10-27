@@ -44,7 +44,9 @@ interface PresetPersonaRepository {
 
 /** 模型侧失败的原因；此类回退不落库，下次解析时重试。 */
 type PersonaPruneFailure =
-    'model-unavailable' | 'invoke-failed' | 'structured-output-failed'
+    | 'model-unavailable'
+    | 'invoke-failed'
+    | 'structured-output-failed'
 
 interface PersonaCardOutcome {
     card: string

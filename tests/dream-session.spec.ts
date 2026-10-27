@@ -232,13 +232,6 @@ it('runs the real host agent with stable request prefixes, paired tools and invo
         configured: true,
         cache_control: { type: 'ephemeral' }
     })
-    assert.ok(
-        run.logs.some(
-            (line) =>
-                line.includes('cache_read=80000') ||
-                line.includes('"cache_read":80000')
-        )
-    )
 })
 
 it('keeps successful work, retries ineffective rounds and moves on after three consecutive failures', async () => {

@@ -1,15 +1,22 @@
 import { Logger } from 'koishi'
 
-export type LivingMemoryLogFields = Record<string, unknown>
+export interface LivingMemoryLogFields extends Record<string, unknown> {
+    presetId?: string
+    conversationId?: string
+    model?: string
+    attempt?: number
+    speaker?: string
+    batch?: string
+}
 
 export const formatLogScope = (scope: {
-    presetId?: unknown
-    conversationId?: unknown
+    presetId?: string
+    conversationId?: string
 }) => {
     const details: string[] = []
     if (scope.presetId != null) details.push(`预设：${scope.presetId}`)
     if (scope.conversationId != null) {
-        const conversation = String(scope.conversationId)
+        const conversation = scope.conversationId
             .replace(/^group:/, '群聊 ')
             .replace(/^private:/, '私聊 ')
         details.push(`会话：${conversation}`)
@@ -219,7 +226,9 @@ export class LivingMemoryLogger {
     summary(
         event: string,
         detail:
-            string | string[] | ((context: LivingMemoryLogFields) => string),
+            | string
+            | string[]
+            | ((context: LivingMemoryLogFields) => string),
         level: LivingMemoryLogLevel = 'info',
         error?: unknown
     ) {
