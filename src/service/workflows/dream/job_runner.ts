@@ -1,3 +1,4 @@
+import type { DreamRunInput } from './types'
 import type { MemoryScope } from '../../../contracts/memory'
 import type { LivingMemoryLogger } from '../../logging/logger'
 import { formatErrorDetails } from '../../shared/utils'
@@ -14,7 +15,12 @@ export class LivingMemoryDreamJobRunner {
         private readonly logger: LivingMemoryLogger
     ) {}
 
-    async run(scope: MemoryScope, jobId: string, signal?: AbortSignal) {
+    async run(
+        scope: MemoryScope,
+        jobId: string,
+        signal?: AbortSignal,
+        input: DreamRunInput = { mode: 'full' }
+    ) {
         const logger = this.logger.with({
             workflow: 'dream',
             jobId,
@@ -23,12 +29,16 @@ export class LivingMemoryDreamJobRunner {
         let detail: string | null = null
         try {
             await this.jobTracker.markRunning(jobId)
-            logger.summary('Dream 开始', `预设：${scope.presetId}`)
+            logger.summary(
+                'Dream 开始',
+                `预设：${scope.presetId}; 模式：${input.mode === 'full' ? '全量' : '增量'}`
+            )
             const result = await this.dream.run(
                 scope.presetId,
                 jobId,
                 logger,
-                signal
+                signal,
+                input
             )
             detail = result.detail
             if (result.status === 'failed') {
@@ -52,7 +62,9 @@ export class LivingMemoryDreamJobRunner {
             const outcome = outcomes[result.status]
             const lines = [
                 `预设：${scope.presetId}`,
-                `处理记忆：${result.processedCount}/${result.entryCount} 条; 批次：${result.clusterCount} 批; 跳过：${result.skipped} 批`,
+                input.mode === 'full'
+                    ? `处理记忆：${result.processedCount}/${result.entryCount} 条; 批次：${result.batchCount} 批; 跳过：${result.skipped} 批`
+                    : `新记忆：${input.memoryIds.length} 条; 处理项次：${result.processedCount}/${result.entryCount}; 分组：${result.batchCount} 组; 未整理种子：${result.untouchedSeedIds.length} 条; 跳过：${result.skipped} 组`,
                 `操作统计：检查 ${result.kept} 条; 合并 ${result.merged} 次; 拆分 ${result.split} 次; 更新 ${result.updated} 条; 归档 ${result.archived} 条（含合并、拆分来源）`
             ]
             if (result.error) lines.push(`原因：${result.error}`)
@@ -73,7 +85,6 @@ export class LivingMemoryDreamJobRunner {
                 'error',
                 error
             )
-            throw error
         }
     }
 }

@@ -1,9 +1,14 @@
 import type { DreamMemoryEntryRecord } from '../../../contracts/workflows'
 
-export interface DreamCluster {
+export interface DreamBatch {
     id: string
+    seedMemoryId?: string
     entries: DreamMemoryEntryRecord[]
 }
+
+export type DreamRunInput =
+    | { mode: 'full' }
+    | { mode: 'incremental'; memoryIds: string[] }
 
 export interface DreamOperationStats {
     kept: number
@@ -14,9 +19,10 @@ export interface DreamOperationStats {
 }
 
 export interface DreamRunResult extends DreamOperationStats {
+    untouchedSeedIds: string[]
     skipped: number
     entryCount: number
-    clusterCount: number
+    batchCount: number
     status: 'completed' | 'partial' | 'failed'
     processedCount: number
     unprocessedMemoryIds: string[]

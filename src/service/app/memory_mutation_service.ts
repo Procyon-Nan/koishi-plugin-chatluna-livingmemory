@@ -126,17 +126,13 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
                 extracted,
                 sourceLabel
             )
-            if (records.length === 0) {
-                return records
-            }
-            await this.syncCommittedMutationToIndex({
-                presetId: scope.presetId,
-                upserts: records.map((record) =>
-                    this.buildIndexUpsert(record, 'replace')
-                ),
-                deletes: []
-            })
-            return records
+            const warnings = await this.syncCommittedMemoriesToIndex(
+                scope.presetId,
+                records,
+                [],
+                '提取'
+            )
+            return { memories: records, warnings }
         })
     }
 
@@ -203,10 +199,7 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
             ) {
                 return null
             }
-            const result = await this.persistMemoryUpdate(
-                current,
-                patch
-            )
+            const result = await this.persistMemoryUpdate(current, patch)
             return result?.record ?? null
         })
     }
@@ -220,10 +213,7 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
             current.presetId,
             patch.speakerKeys
         )
-        const result = await this.repository.updateMemory(
-            current.id,
-            patch
-        )
+        const result = await this.repository.updateMemory(current.id, patch)
         if (result === null) {
             return null
         }
@@ -325,7 +315,7 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
                 sourceMemoryId,
                 memories
             )
-            const warnings = await this.syncReplacementMemoriesToIndex(
+            const warnings = await this.syncCommittedMemoriesToIndex(
                 presetId,
                 result.memories,
                 [result.archivedSource],
@@ -366,7 +356,7 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
                 sourceMemoryIds,
                 memory
             )
-            const warnings = await this.syncReplacementMemoriesToIndex(
+            const warnings = await this.syncCommittedMemoriesToIndex(
                 presetId,
                 [result.memory],
                 result.archivedSources,
@@ -376,11 +366,11 @@ export class LivingMemoryMutationService implements ExtractionMemoryWriter {
         })
     }
 
-    private async syncReplacementMemoriesToIndex(
+    private async syncCommittedMemoriesToIndex(
         presetId: string,
         created: MemoryEntryRecord[],
         archived: MemoryEntryRecord[],
-        operation: '合并' | '拆分'
+        operation: '合并' | '拆分' | '提取'
     ): Promise<string[]> {
         try {
             await this.syncCommittedMutationToIndex({

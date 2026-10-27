@@ -140,7 +140,9 @@ it('exports v5 and imports historical entries with obsolete metadata', async () 
             version: 2 as const,
             exportedAt: '2026-10-28T00:00:00.000Z',
             sourcePresetId: presetId,
-            entries: [{ ...createExportEntry('legacy', 1), isConsolidated: true }],
+            entries: [
+                { ...createExportEntry('legacy', 1), isConsolidated: true }
+            ],
             userProfiles: [],
             presetSpeakers: []
         }
@@ -148,7 +150,10 @@ it('exports v5 and imports historical entries with obsolete metadata', async () 
         const exported = await repository.exportPresetData(presetId)
         assert.equal(exported.version, 5)
         assert.equal(exported.entries[0].content, 'memory-1')
-        assert.equal(Object.hasOwn(exported.entries[0], 'isConsolidated'), false)
+        assert.equal(
+            Object.hasOwn(exported.entries[0], 'isConsolidated'),
+            false
+        )
         await repository.importPresetData(presetId, exported)
         assert.equal((await repository.listEntriesByPreset(presetId)).length, 1)
     })

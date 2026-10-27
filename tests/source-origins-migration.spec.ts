@@ -69,7 +69,8 @@ const defineLegacyEntryTable = (ctx: Context) => {
         },
         {
             autoInc: false,
-            primary: 'id'
+            primary: 'id',
+            indexes: [['presetId', 'isConsolidated']]
         }
     )
 }
@@ -163,6 +164,13 @@ it('repairs the legacy SQLite json default after applying current tables', async
 
         try {
             assert.equal(await repository.migrateMemorySourceOriginsArray(), 0)
+            const { driver } = currentCtx.database.select('living_memory_entry')
+            assert.equal(
+                (await driver.getIndexes('living_memory_entry')).some(
+                    (index) => 'isConsolidated' in index.keys
+                ),
+                false
+            )
             assert.deepEqual(
                 (await repository.getEntryById('legacy-schema'))?.sourceOrigins,
                 []

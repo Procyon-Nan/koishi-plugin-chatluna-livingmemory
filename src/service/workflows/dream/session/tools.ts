@@ -7,6 +7,7 @@ import { LivingMemoryFactsCommittedError } from '../../../vector_index/errors'
 import {
     assertDreamMemoriesAvailable,
     recordDreamOperation,
+    recordDreamProfileSpeakers,
     type DreamSessionState
 } from './state'
 
@@ -46,6 +47,7 @@ export function createDreamSessionTools({
                 )
                 recordDreamOperation(state, [sourceMemoryId], 'split')
                 for (const memory of result.memories) {
+                    recordDreamProfileSpeakers(state, memory.speakerKeys)
                     state.availableMemoryIds.add(memory.id)
                 }
                 return result
@@ -63,11 +65,13 @@ export function createDreamSessionTools({
                     )
                     if (record !== null) {
                         recordDreamOperation(state, [memoryId], 'updated')
+                        recordDreamProfileSpeakers(state, record.speakerKeys)
                     }
                     return record
                 } catch (error) {
                     if (error instanceof LivingMemoryFactsCommittedError) {
                         recordDreamOperation(state, [memoryId], 'updated')
+                        recordDreamProfileSpeakers(state, patch.speakerKeys!)
                     }
                     throw error
                 }
@@ -83,6 +87,7 @@ export function createDreamSessionTools({
                     memory
                 )
                 recordDreamOperation(state, sourceMemoryIds, 'merged')
+                recordDreamProfileSpeakers(state, result.memory.speakerKeys)
                 state.availableMemoryIds.add(result.memory.id)
                 return result
             }
@@ -114,7 +119,9 @@ export function createDreamSessionTools({
                 memoryIds
             )
             const activeIds = new Set(
-                entries.filter((entry) => entry.status === 'active').map((entry) => entry.id)
+                entries
+                    .filter((entry) => entry.status === 'active')
+                    .map((entry) => entry.id)
             )
             const missing = memoryIds.filter((id) => !activeIds.has(id))
             if (missing.length > 0) {

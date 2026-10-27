@@ -8,7 +8,6 @@ import type {
     ModelRequestParams
 } from 'koishi-plugin-chatluna/llm-core/platform/api'
 import type { Context } from 'koishi'
-import type { MemoryEntryRecord } from '../src/contracts/memory'
 import type { DreamRunResult } from '../src/service/workflows/dream/types'
 import { LivingMemoryDreamService } from '../src/service/workflows/dream/service'
 import { LivingMemoryDreamCoordinator } from '../src/service/workflows/dream/coordinator'
@@ -30,12 +29,17 @@ import {
 
 const runService = async (
     respond: (params: ModelRequestParams, round: number) => AIMessage,
-    options: { mainModel?: string; signal?: AbortSignal } = {}
+    options: {
+        mainModel?: string
+        signal?: AbortSignal
+        incremental?: boolean
+        profileUsers?: string[]
+    } = {}
 ) => {
     let outcome!: {
         result: DreamRunResult
-        stored: MemoryEntryRecord[]
         rounds: number
+        profileCalls: string[][]
     }
     await withLivingMemoryRepository(async (_ctx, repository) => {
         const entries = await Promise.all(
@@ -54,6 +58,12 @@ const runService = async (
                 )
             )
         )
+        const profileCalls: string[][] = []
+        if (options.profileUsers) {
+            await repository.updateMemory(entries[0].id, {
+                speakerKeys: options.profileUsers
+            })
+        }
         let rounds = 0
         const model = new ChatLunaChatModel({
             model: 'test',
@@ -89,7 +99,7 @@ const runService = async (
         const persona = { resolveOrGenerateCardText: async () => '测试人设' }
         const profiles = new LivingMemoryUserProfileService(
             {
-                enableUserProfileInjection: false,
+                enableUserProfileInjection: options.profileUsers !== undefined,
                 userProfileMinMemoryCount: 1,
                 userProfileMemoryLimit: 10
             },
@@ -97,6 +107,12 @@ const runService = async (
             logger,
             persona
         )
+        if (options.profileUsers) {
+            profiles.regenerate = async (_preset, keys) => {
+                profileCalls.push(keys)
+                return { generated: keys.length, detail: '人物画像检查完成' }
+            }
+        }
         const service = new LivingMemoryDreamService(
             {
                 chatluna: { createChatModel: async () => ({ value: model }) }
@@ -136,16 +152,19 @@ const runService = async (
                 bisect: async (input) => bisectDreamMemories(input)
             },
             profiles,
-            persona
+            persona,
+            { searchMemoriesDetailed: async () => [] }
         )
         const result = await service.run(
             scope.presetId,
             'job-test',
             logger,
-            options.signal
+            options.signal,
+            options.incremental
+                ? { mode: 'incremental', memoryIds: [entries[0].id] }
+                : { mode: 'full' }
         )
-        const stored = await repository.listEntriesByPreset(scope.presetId)
-        outcome = { result, stored, rounds }
+        outcome = { result, rounds, profileCalls }
     })
     return outcome
 }
@@ -324,4 +343,29 @@ it('does not start below 30 active memories and releases the starting lock after
     count = 30
     assert.equal((await coordinator.start(scope.presetId)).started, true)
     await coordinator.stop()
+})
+
+it('skips the model session for a singleton incremental group', async () => {
+    const outcome = await runService(
+        () => {
+            throw new Error('singleton should not request a decision')
+        },
+        { incremental: true }
+    )
+    assert.equal(outcome.rounds, 0)
+    assert.equal(outcome.result.status, 'completed')
+    assert.equal(outcome.result.batchCount, 0)
+    assert.equal(outcome.result.untouchedSeedIds.length, 1)
+})
+
+it('updates singleton seed profiles while skipping the Dream decision session', async () => {
+    const outcome = await runService(
+        () => {
+            throw new Error('singleton should not request a decision')
+        },
+        { incremental: true, profileUsers: ['seed-user'] }
+    )
+    assert.equal(outcome.rounds, 0)
+    assert.equal(outcome.result.status, 'completed')
+    assert.deepEqual(outcome.profileCalls, [['seed-user']])
 })

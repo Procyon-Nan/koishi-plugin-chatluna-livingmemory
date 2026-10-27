@@ -274,10 +274,7 @@ export class LivingMemoryRepository
         return this.entries.createMemory(scope, input, speakerKeys)
     }
 
-    updateMemory(
-        id: string,
-        patch: MemoryUpdatePatch
-    ) {
+    updateMemory(id: string, patch: MemoryUpdatePatch) {
         return this.entries.updateMemory(id, patch)
     }
 
@@ -290,11 +287,7 @@ export class LivingMemoryRepository
         sourceMemoryId: string,
         memories: AttributedMemoryItem[]
     ) {
-        return this.entries.splitMemory(
-            presetId,
-            sourceMemoryId,
-            memories
-        )
+        return this.entries.splitMemory(presetId, sourceMemoryId, memories)
     }
 
     mergeMemories(
@@ -302,11 +295,7 @@ export class LivingMemoryRepository
         sourceMemoryIds: string[],
         memory: AttributedMemoryItem
     ) {
-        return this.entries.mergeMemories(
-            presetId,
-            sourceMemoryIds,
-            memory
-        )
+        return this.entries.mergeMemories(presetId, sourceMemoryIds, memory)
     }
 
     deleteMemory(id: string) {

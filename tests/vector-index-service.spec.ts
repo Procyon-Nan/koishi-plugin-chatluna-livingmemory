@@ -322,7 +322,7 @@ it('builds the index once and reuses its manifest after restart', async () => {
         const repository = new TestVectorIndexRepository([
             createSource('memory-a'),
             createSource('memory-b', {
-                type: 'preference',
+                type: 'preference'
             })
         ])
         const firstCalls: string[][] = []

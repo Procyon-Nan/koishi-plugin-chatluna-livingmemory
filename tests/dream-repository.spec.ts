@@ -230,6 +230,24 @@ it('defines active memory indexes', () => {
         ctx.model.tables.living_memory_entry.indexes.map((index) => index.keys),
         [{ presetId: 'asc', status: 'asc', updatedAt: 'asc' }]
     )
+    assert.deepEqual(
+        ctx.model.tables.living_memory_entry_speaker.indexes.map(
+            (index) => index.keys
+        ),
+        [
+            { presetId: 'asc', speakerKey: 'asc' },
+            { presetId: 'asc', memoryId: 'asc' }
+        ]
+    )
+    // MySQL 标识符上限为 64 字符，索引名超限会中断整个数据库的准备流程
+    assert.deepEqual(
+        Object.entries(ctx.model.tables)
+            .filter(([table]) => table.startsWith('living_memory'))
+            .flatMap(([, model]) => model.indexes)
+            .map((index) => index.name)
+            .filter((name) => (name?.length ?? 0) > 64),
+        []
+    )
 })
 
 it('reads Dream entries without legacy vectors or source payloads', async () => {

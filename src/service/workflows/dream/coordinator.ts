@@ -5,10 +5,11 @@ import type {
     JobRepository
 } from '../../../contracts/workflows'
 import type { MemoryScope } from '../../../contracts/memory'
+import { SerialTaskQueue } from '../../shared/serial_task_queue'
+import type { DreamRunInput } from './types'
 
 const DREAM_MIN_ACTIVE_MEMORY_COUNT = 30
 
-type DreamRunLock = { phase: 'starting' } | { phase: 'running'; jobId: string }
 export type DreamCoordinatorRepository = Pick<
     JobRepository,
     'createJob' | 'markStaleRunningJobsAsFailed'
@@ -17,9 +18,11 @@ export type DreamCoordinatorRepository = Pick<
 }
 
 export class LivingMemoryDreamCoordinator {
-    private readonly lockByPreset = new Map<string, DreamRunLock>()
+    private readonly queue = new SerialTaskQueue()
+    private readonly pendingByPreset = new Map<string, number>()
+    private readonly runningJobs = new Map<string, string>()
     private readonly controller = new AbortController()
-    private readonly tasks = new Set<Promise<unknown>>()
+    private readonly tasks = new Set<Promise<void>>()
 
     constructor(
         private readonly jobRunner: Pick<LivingMemoryDreamJobRunner, 'run'>,
@@ -29,83 +32,122 @@ export class LivingMemoryDreamCoordinator {
 
     start(presetId: string): Promise<DreamTriggerResult> {
         this.controller.signal.throwIfAborted()
-        return this.track(this.startJob(presetId))
+        if (this.pendingByPreset.has(presetId)) {
+            return Promise.resolve({
+                success: true,
+                started: false,
+                reason: 'preset-locked',
+                runningJobId: this.runningJobs.get(presetId)
+            })
+        }
+        let task!: Promise<void>
+        const started = new Promise<DreamTriggerResult>((resolve, reject) => {
+            task = this.enqueue(presetId, async () => {
+                try {
+                    this.controller.signal.throwIfAborted()
+                    const count =
+                        await this.repository.countActiveEntries(presetId)
+                    if (count < DREAM_MIN_ACTIVE_MEMORY_COUNT) {
+                        resolve({
+                            success: true,
+                            started: false,
+                            reason: 'insufficient-memories'
+                        })
+                        return
+                    }
+                    await this.runJob(presetId, { mode: 'full' }, () =>
+                        resolve({ success: true, started: true })
+                    )
+                } catch (error) {
+                    reject(error)
+                    throw error
+                }
+            })
+        })
+        return started.then(
+            async (result) => {
+                if (!result.started) await task
+                return result
+            },
+            async (error) => {
+                await task
+                throw error
+            }
+        )
+    }
+
+    queueIncremental(presetId: string, memoryIds: string[]) {
+        if (this.controller.signal.aborted) return
+        this.enqueue(presetId, async () => {
+            if (this.controller.signal.aborted) return
+            await this.runJob(presetId, { mode: 'incremental', memoryIds })
+        })
+    }
+
+    private enqueue(presetId: string, run: () => Promise<void>) {
+        this.pendingByPreset.set(
+            presetId,
+            (this.pendingByPreset.get(presetId) ?? 0) + 1
+        )
+        const task = this.queue
+            .run(presetId, run)
+            .catch((error) => {
+                this.logger.summary(
+                    'Dream 任务执行失败',
+                    `预设：${presetId}`,
+                    'error',
+                    error
+                )
+            })
+            .finally(() => {
+                const remaining = this.pendingByPreset.get(presetId)! - 1
+                if (remaining === 0) this.pendingByPreset.delete(presetId)
+                else this.pendingByPreset.set(presetId, remaining)
+                this.tasks.delete(task)
+            })
+        this.tasks.add(task)
+        return task
+    }
+
+    private async runJob(
+        presetId: string,
+        input: DreamRunInput,
+        onStarted?: () => void
+    ) {
+        const signal = this.controller.signal
+        signal.throwIfAborted()
+        const recovered = await this.repository.markStaleRunningJobsAsFailed(
+            { presetId, kind: 'dream' },
+            'dream recovered: stale running job'
+        )
+        if (recovered.length > 0) {
+            this.logger.diagnosticSummary(() => ({
+                event: 'Dream 中断任务状态恢复完成',
+                detail: `预设：${presetId}; 标记失败：${recovered.length} 个任务`
+            }))
+        }
+        signal.throwIfAborted()
+        const trigger = input.mode === 'full' ? 'manual' : 'incremental'
+        const scope: MemoryScope = {
+            conversationId: `dream:${trigger}:${presetId}`,
+            presetId
+        }
+        const job = await this.repository.createJob(
+            scope,
+            'dream',
+            `${trigger}:${presetId}`
+        )
+        this.runningJobs.set(presetId, job.id)
+        onStarted?.()
+        try {
+            await this.jobRunner.run(scope, job.id, signal, input)
+        } finally {
+            this.runningJobs.delete(presetId)
+        }
     }
 
     async stop() {
         this.controller.abort(new Error('Dream 服务正在停止。'))
-        // 启动中的任务可能刚创建任务记录；一并等待它落下终态后再关闭 Worker。
-        while (this.tasks.size > 0) {
-            await Promise.allSettled([...this.tasks])
-        }
-    }
-
-    private track<T>(task: Promise<T>) {
-        this.tasks.add(task)
-        const remove = () => {
-            this.tasks.delete(task)
-        }
-        void task.then(remove, remove)
-        return task
-    }
-
-    private async startJob(presetId: string): Promise<DreamTriggerResult> {
-        const current = this.lockByPreset.get(presetId)
-        if (current !== undefined) {
-            return {
-                success: true,
-                started: false,
-                reason: 'preset-locked',
-                runningJobId:
-                    current.phase === 'running' ? current.jobId : undefined
-            }
-        }
-        this.lockByPreset.set(presetId, { phase: 'starting' })
-        let running = false
-        try {
-            const activeCount =
-                await this.repository.countActiveEntries(presetId)
-            this.controller.signal.throwIfAborted()
-            if (activeCount < DREAM_MIN_ACTIVE_MEMORY_COUNT) {
-                return {
-                    success: true,
-                    started: false,
-                    reason: 'insufficient-memories'
-                }
-            }
-            const recovered =
-                await this.repository.markStaleRunningJobsAsFailed(
-                    { presetId, kind: 'dream' },
-                    'dream recovered: stale running job'
-                )
-            if (recovered.length > 0) {
-                this.logger.diagnosticSummary(() => ({
-                    event: 'Dream 中断任务状态恢复完成',
-                    detail: `预设：${presetId}; 标记失败：${recovered.length} 个任务`
-                }))
-            }
-            this.controller.signal.throwIfAborted()
-            const scope: MemoryScope = {
-                conversationId: `dream:manual:${presetId}`,
-                presetId
-            }
-            const job = await this.repository.createJob(
-                scope,
-                'dream',
-                `manual:${presetId}`
-            )
-            this.lockByPreset.set(presetId, { phase: 'running', jobId: job.id })
-            running = true
-            void this.track(
-                this.jobRunner
-                    .run(scope, job.id, this.controller.signal)
-                    .finally(() => {
-                        this.lockByPreset.delete(presetId)
-                    })
-            )
-            return { success: true, started: true }
-        } finally {
-            if (!running) this.lockByPreset.delete(presetId)
-        }
+        await Promise.allSettled([...this.tasks])
     }
 }

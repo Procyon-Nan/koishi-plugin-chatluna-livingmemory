@@ -1,10 +1,21 @@
 import { MemoryInputError } from '../../../memory/errors'
-import type { DreamCluster, DreamOperationStats } from '../types'
+import type { DreamBatch, DreamOperationStats } from '../types'
+
+interface DreamBatchCoverage {
+    batchId: string
+    targetCount: number
+    processedCount: number
+    unprocessedMemoryIds: string[]
+}
 
 export interface DreamSessionState {
-    clusters: readonly DreamCluster[]
+    mode: 'full' | 'incremental'
+    completedBatches: DreamBatchCoverage[]
+    untouchedSeedIds: string[]
+    profileSpeakerKeys?: Set<string>
+    batches: readonly DreamBatch[]
     nextBatchIndex: number
-    currentBatch: DreamCluster | undefined
+    currentBatch: DreamBatch | undefined
     readonly targetMemoryIds: ReadonlySet<string>
     availableMemoryIds: Set<string>
     processedMemoryIds: Set<string>
@@ -13,10 +24,14 @@ export interface DreamSessionState {
 }
 
 export function createDreamSessionState(
-    targetMemoryIds: readonly string[]
+    targetMemoryIds: readonly string[],
+    mode: DreamSessionState['mode'] = 'full'
 ): DreamSessionState {
     return {
-        clusters: [],
+        mode,
+        completedBatches: [],
+        untouchedSeedIds: [],
+        batches: [],
         nextBatchIndex: 0,
         currentBatch: undefined,
         targetMemoryIds: new Set(targetMemoryIds),
@@ -34,19 +49,29 @@ export function createDreamSessionState(
 }
 
 export function advanceDreamBatch(state: DreamSessionState) {
+    if (state.mode === 'incremental' && state.currentBatch !== undefined) {
+        state.completedBatches.push(currentBatchCoverage(state))
+    }
     state.currentBatch = undefined
-    while (state.nextBatchIndex < state.clusters.length) {
-        const cluster = state.clusters[state.nextBatchIndex++]
-        const entries = cluster.entries.filter(
-            (entry) => !state.processedMemoryIds.has(entry.id)
-        )
+    while (state.nextBatchIndex < state.batches.length) {
+        const batch = state.batches[state.nextBatchIndex++]
+        const entries =
+            state.mode === 'full'
+                ? batch.entries.filter(
+                      (entry) => !state.processedMemoryIds.has(entry.id)
+                  )
+                : batch.entries
+        if (state.mode === 'incremental') {
+            state.processedMemoryIds.clear()
+            state.availableMemoryIds.clear()
+        }
         if (entries.length === 0) {
             continue
         }
         for (const entry of entries) {
             state.availableMemoryIds.add(entry.id)
         }
-        state.currentBatch = { ...cluster, entries }
+        state.currentBatch = { ...batch, entries }
         break
     }
     return state.currentBatch
@@ -66,7 +91,7 @@ export function assertDreamMemoriesAvailable(
     const missing = ids.filter((id) => !state.availableMemoryIds.has(id))
     if (missing.length > 0) {
         throw new MemoryInputError(
-            `请使用本次会话已提供的记忆 ID，以下 ID 需核对：${missing.join('、')}。`
+            `请使用${state.mode === 'incremental' ? '当前组' : '本次会话'}已提供的记忆 ID，以下 ID 需核对：${missing.join('、')}。`
         )
     }
 }
@@ -98,7 +123,44 @@ export function recordSkippedDreamBatch(
     })
 }
 
+function currentBatchCoverage(state: DreamSessionState): DreamBatchCoverage {
+    const pending = pendingDreamMemoryIds(state)
+    return {
+        batchId: state.currentBatch!.id,
+        targetCount: state.currentBatch!.entries.length,
+        processedCount: state.currentBatch!.entries.length - pending.length,
+        unprocessedMemoryIds: pending
+    }
+}
+
 export function getDreamCoverage(state: DreamSessionState) {
+    if (state.mode === 'incremental') {
+        const coverage = [...state.completedBatches]
+        if (state.currentBatch !== undefined)
+            coverage.push(currentBatchCoverage(state))
+        // 提前终止时，尚未进入会话的组仍属于本次计划中的未完成项。
+        for (const batch of state.batches.slice(state.nextBatchIndex)) {
+            coverage.push({
+                batchId: batch.id,
+                targetCount: batch.entries.length,
+                processedCount: 0,
+                unprocessedMemoryIds: batch.entries.map((entry) => entry.id)
+            })
+        }
+        return {
+            targetCount: coverage.reduce(
+                (sum, batch) => sum + batch.targetCount,
+                0
+            ),
+            processedCount: coverage.reduce(
+                (sum, batch) => sum + batch.processedCount,
+                0
+            ),
+            unprocessedMemoryIds: coverage.flatMap(
+                (batch) => batch.unprocessedMemoryIds
+            )
+        }
+    }
     const unprocessedMemoryIds = [...state.targetMemoryIds].filter(
         (id) => !state.processedMemoryIds.has(id)
     )
@@ -108,4 +170,12 @@ export function getDreamCoverage(state: DreamSessionState) {
             state.targetMemoryIds.size - unprocessedMemoryIds.length,
         unprocessedMemoryIds
     }
+}
+
+export function recordDreamProfileSpeakers(
+    state: DreamSessionState,
+    speakerKeys: readonly string[]
+) {
+    if (state.profileSpeakerKeys === undefined) return
+    for (const key of speakerKeys) state.profileSpeakerKeys.add(key)
 }

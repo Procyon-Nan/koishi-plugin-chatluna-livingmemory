@@ -5,7 +5,7 @@ import type {
 import type { DreamMemoryEntryRecord } from '../../../contracts/workflows'
 import type { LivingMemoryLogger } from '../../logging/logger'
 import { createMemoryContentHash } from '../../vector_index/hashes'
-import type { DreamCluster } from './types'
+import type { DreamBatch } from './types'
 import type { DreamWorkerRunner } from './worker/protocol'
 import {
     dreamBatchSize,
@@ -42,7 +42,7 @@ export class DreamClusterer {
         entries: DreamMemoryEntryRecord[],
         logger?: LivingMemoryLogger,
         signal?: AbortSignal
-    ): Promise<DreamCluster[]> {
+    ): Promise<DreamBatch[]> {
         if (entries.length === 0) return []
         const startedAt = performance.now()
         const sorted = [...entries].sort((a, b) =>
@@ -225,7 +225,7 @@ export class DreamClusterer {
                     )
                 }
             }
-            const clusters: DreamCluster[] = Array.from(
+            const clusters: DreamBatch[] = Array.from(
                 { length: plan.clusterCount },
                 (_, index) => ({ id: `cluster-${index + 1}`, entries: [] })
             )

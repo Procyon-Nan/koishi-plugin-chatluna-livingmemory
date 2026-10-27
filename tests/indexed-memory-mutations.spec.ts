@@ -44,7 +44,7 @@ const createSession = (
     const state = createDreamSessionState(
         batches.flatMap((entries) => entries.map((entry) => entry.id))
     )
-    state.clusters = batches.map((entries, index) => ({
+    state.batches = batches.map((entries, index) => ({
         id: `batch-${index}`,
         entries
     }))
@@ -284,18 +284,14 @@ it('rolls back split entries, source archival and speaker links together', async
             )
         try {
             await assert.rejects(
-                repository.splitMemory(
-                    presetId,
-                    source.id,
-                    [
-                        {
-                            ...sessionMemory,
-                            type: 'fact',
-                            speakerKeys: ['alice']
-                        },
-                        { ...sessionMemory, type: 'fact', speakerKeys: [] }
-                    ]
-                ),
+                repository.splitMemory(presetId, source.id, [
+                    {
+                        ...sessionMemory,
+                        type: 'fact',
+                        speakerKeys: ['alice']
+                    },
+                    { ...sessionMemory, type: 'fact', speakerKeys: [] }
+                ]),
                 /injected transaction failure/
             )
         } finally {
@@ -418,7 +414,10 @@ it('retains successful Dream coverage when only index synchronization fails', as
             ),
             JSON.parse(await invoke('delete_memory', { memoryId: archived.id }))
         ]
-        assert.deepEqual(outputs.map((output) => output.warnings.length), [1, 1, 0, 1])
+        assert.deepEqual(
+            outputs.map((output) => output.warnings.length),
+            [1, 1, 0, 1]
+        )
         assert.equal(getDreamCoverage(state).processedCount, 5)
         const stored = await repository.listEntriesByPreset(presetId)
         assert.equal(stored.length, 6)
@@ -953,5 +952,45 @@ it('backfills registry rows for active memory keys missing rows on Dream coverag
             ).length,
             1
         )
+    })
+})
+
+it('returns extracted memories after index failure so extraction can advance once', async () => {
+    await withLivingMemoryRepository(async (_ctx, repository) => {
+        const sink = new MemoryIndexSinkStub()
+        sink.applyError = new Error('embedding unavailable')
+        const { logger } = createLoggerStub()
+        const mutations = new LivingMemoryMutationService(
+            repository,
+            sink,
+            logger
+        )
+        const saved = await mutations.appendExtractedMemories(
+            scope,
+            [
+                {
+                    role: 'user',
+                    content: 'new fact',
+                    transcriptLines: ['Alice说：new fact']
+                }
+            ],
+            [
+                {
+                    type: 'fact',
+                    content: 'new fact',
+                    keywords: ['fact'],
+                    summary: 'new fact',
+                    sentiment: 'neutral',
+                    importance: 0.5,
+                    speakerKeys: []
+                }
+            ],
+            'source',
+            []
+        )
+        assert.equal(saved.memories.length, 1)
+        assert.equal(saved.warnings.length, 1)
+        assert.equal((await repository.listEntriesByPreset(presetId)).length, 1)
+        assert.equal(sink.reconciledPresets.length, 1)
     })
 })

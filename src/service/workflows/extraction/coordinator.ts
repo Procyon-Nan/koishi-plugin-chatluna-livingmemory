@@ -211,7 +211,11 @@ export class LivingMemoryExtractionCoordinator {
         private readonly formatter: ExtractionFormatter,
         private readonly extractor: ExtractionModel,
         private readonly presetPersona: PresetPersonaResolver,
-        private readonly logger: LivingMemoryLogger
+        private readonly logger: LivingMemoryLogger,
+        private readonly queueIncrementalDream: (
+            presetId: string,
+            memoryIds: string[]
+        ) => void
     ) {}
 
     async queue(scope: MemoryScope, options: QueueExtractionOptions) {
@@ -514,12 +518,23 @@ export class LivingMemoryExtractionCoordinator {
             // 铸键不变量：窗口说话人随记忆一并提交，注册与追加在变更服务
             // 的同一预设级队列操作内完成（注册先行、两事务，依据见
             // appendExtractedMemories），否则 Dream 按 key 反查标签时会缺行。
-            await this.memoryWriter.appendExtractedMemories(
+            const saved = await this.memoryWriter.appendExtractedMemories(
                 scope,
                 payload.sourceOriginMessages,
                 extracted,
                 origin.sourceLabel,
                 payload.speakers
+            )
+            for (const warning of saved.warnings) {
+                logger.summary(
+                    '记忆提取索引同步延期',
+                    `${formatLogScope(scope)}; 原因：${warning}`,
+                    'warn'
+                )
+            }
+            this.queueIncrementalDream(
+                scope.presetId,
+                saved.memories.map((entry) => entry.id)
             )
         }
 

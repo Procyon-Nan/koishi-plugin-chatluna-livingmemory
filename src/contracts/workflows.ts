@@ -225,7 +225,7 @@ export interface ExtractionMemoryWriter {
         extracted: AttributedMemoryItem[],
         sourceLabel: string,
         windowSpeakers: ExtractionPayload['speakers']
-    ): Promise<MemoryEntryRecord[]>
+    ): Promise<{ memories: MemoryEntryRecord[]; warnings: string[] }>
 }
 
 /** 按消费方命名：画像生成需要的记忆查询，实现在记忆仓储。 */

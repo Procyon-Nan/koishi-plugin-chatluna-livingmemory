@@ -17,6 +17,7 @@ import type { LivingMemoryExtractionResult } from '../src/service/workflows/extr
 import {
     createCapturedLogger,
     createJobStore,
+    createMemoryEntry,
     scope as baseScope,
     waitFor
 } from './workflow-test-utils'
@@ -68,6 +69,7 @@ interface CoordinatorHarness {
     }[]
     getExtractorCalls: () => number
     getExtractorInputs: () => string[]
+    queued: string[][]
     warnings: unknown[][]
 }
 
@@ -77,6 +79,7 @@ const createHarness = (
     const extract = options.extract
     const jobStore = createJobStore()
     const appended: CoordinatorHarness['appended'] = []
+    const queued: string[][] = []
     const captured = createCapturedLogger(false)
     let extractorCalls = 0
     const extractorInputs: string[] = []
@@ -152,7 +155,12 @@ const createHarness = (
                     sourceLabel,
                     windowSpeakers
                 })
-                return []
+                return {
+                    memories: extracted.map((_entry, index) =>
+                        createMemoryEntry(`extracted-${index}`)
+                    ),
+                    warnings: []
+                }
             })
     }
     const messageLog = new MessageLogRegistry()
@@ -180,13 +188,17 @@ const createHarness = (
         formatter,
         extractor,
         { resolveOrGenerateCardText: async () => '你是测试助手。' },
-        captured.logger
+        captured.logger,
+        (_preset, ids) => {
+            queued.push(ids)
+        }
     )
     return {
         coordinator,
         messageLog,
         jobStore,
         appended,
+        queued,
         getExtractorCalls: () => extractorCalls,
         getExtractorInputs: () => extractorInputs,
         warnings: captured.warnings
@@ -648,6 +660,11 @@ describe('LivingMemoryExtractionCoordinator', () => {
 
         await waitFor(() => harness.appended.length === 1, 'memory written')
         expect(harness.appended[0].extracted).toHaveLength(1)
+        await waitFor(
+            () => harness.queued.length === 1,
+            'incremental task queued'
+        )
+        expect(harness.queued).toEqual([['extracted-0']])
         expect(harness.jobStore.jobs).toHaveLength(0)
     })
 

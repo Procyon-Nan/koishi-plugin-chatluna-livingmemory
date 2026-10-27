@@ -104,7 +104,9 @@ export const upgradeVectorIndexSchema = async (database: PGlite) => {
         )
         const version = rows[0].schemaVersion
         if (version !== 3 && version !== 4) {
-            throw new Error(`index schema migration requires v3 or v4: ${version}`)
+            throw new Error(
+                `index schema migration requires v3 or v4: ${version}`
+            )
         }
         if (version === 3) {
             await transaction.exec(`

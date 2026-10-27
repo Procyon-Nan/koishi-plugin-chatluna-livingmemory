@@ -15,7 +15,12 @@ import { resolveAssistantLabel } from '../../memory/helpers'
 import { DreamClusterer } from './clustering'
 import type { DreamWorkerRunner } from './worker/protocol'
 import type { LivingMemoryUserProfileService } from '../../user_profile'
-import type { DreamRunResult } from './types'
+import {
+    buildIncrementalDreamBatches,
+    refreshIncrementalDreamBatch
+} from './incremental'
+import type { LivingMemorySearchEngine } from '../recall/memory_search_engine'
+import type { DreamRunInput, DreamRunResult } from './types'
 import type { LivingMemoryLogger } from '../../logging/logger'
 import {
     createDreamSessionState,
@@ -55,7 +60,11 @@ export class LivingMemoryDreamService {
         vectors: DreamVectorProvider,
         worker: DreamWorkerRunner,
         private readonly userProfiles: LivingMemoryUserProfileService,
-        private readonly presetPersona: PresetPersonaResolver
+        private readonly presetPersona: PresetPersonaResolver,
+        private readonly search: Pick<
+            LivingMemorySearchEngine,
+            'searchMemoriesDetailed'
+        >
     ) {
         this.clusterer = new DreamClusterer(vectors, worker)
     }
@@ -64,76 +73,116 @@ export class LivingMemoryDreamService {
         presetId: string,
         sessionId: string,
         logger: LivingMemoryLogger,
-        signal?: AbortSignal
+        signal?: AbortSignal,
+        input: DreamRunInput = { mode: 'full' }
     ): Promise<DreamRunResult> {
         signal?.throwIfAborted()
         let state!: DreamSessionState
         let error: string | undefined
         let profileDetail = ''
         try {
-            const { model, callOptions } = await this.planningQueue.run(
-                'dream-planning',
-                async () => {
+            if (input.mode === 'incremental') {
+                state = createDreamSessionState(input.memoryIds, 'incremental')
+                const plan = await buildIncrementalDreamBatches(
+                    presetId,
+                    input.memoryIds,
+                    this.repository,
+                    this.search,
+                    logger,
+                    signal
+                )
+                if (this.userProfiles.enabled)
+                    state.profileSpeakerKeys = new Set(plan.speakerKeys)
+                state.batches = plan.batches
+                state.untouchedSeedIds = plan.untouchedSeedIds
+            } else {
+                await this.planningQueue.run('dream-planning', async () => {
                     signal?.throwIfAborted()
                     const entries =
                         await this.repository.listDreamEntriesByPreset(presetId)
                     state = createDreamSessionState(
                         entries.map((entry) => entry.id)
                     )
-                    signal?.throwIfAborted()
-                    if (!isModelConfigured(this.config.mainModel)) {
-                        throw new Error('Dream mainModel 未配置。')
-                    }
-                    const model = (
-                        await this.ctx.chatluna.createChatModel(
-                            this.config.mainModel
-                        )
-                    ).value
-                    if (model === undefined)
-                        throw new Error('Dream mainModel 不可用。')
-                    const callOptions = createDreamCallOptions(model, sessionId)
-                    state.clusters = await this.clusterer.buildClusters(
+                    state.batches = await this.clusterer.buildClusters(
                         presetId,
                         entries,
                         logger,
                         signal
                     )
-                    return { model, callOptions }
+                })
+            }
+            if (
+                state.batches.length > 0 ||
+                (this.userProfiles.enabled &&
+                    (state.profileSpeakerKeys?.size ?? 0) > 0)
+            ) {
+                if (!isModelConfigured(this.config.mainModel)) {
+                    throw new Error('Dream mainModel 未配置。')
                 }
-            )
-            signal?.throwIfAborted()
-            const presetPrompt =
-                await this.presetPersona.resolveOrGenerateCardText(presetId)
-            signal?.throwIfAborted()
-            const speakers =
-                await this.mutations.ensurePresetSpeakersCoverage(presetId)
-            signal?.throwIfAborted()
-            const tools = createDreamSessionTools({
-                presetId,
-                state,
-                repository: this.repository,
-                mutations: this.mutations
-            })
-            await runDreamSession({
-                presetId,
-                callOptions,
-                assistantLabel: resolveAssistantLabel(presetId),
-                presetPrompt,
-                speakers,
-                state,
-                tools,
-                model,
-                logger,
-                signal
-            })
-            signal?.throwIfAborted()
-            if (this.userProfiles.enabled) {
-                profileDetail = await this.regenerateUserProfilesAfterDream(
-                    presetId,
-                    model,
-                    logger,
-                    signal
-                )
+                const model = (
+                    await this.ctx.chatluna.createChatModel(
+                        this.config.mainModel
+                    )
+                ).value
+                if (model === undefined)
+                    throw new Error('Dream mainModel 不可用。')
+                if (state.batches.length > 0) {
+                    const callOptions = createDreamCallOptions(model, sessionId)
+                    signal?.throwIfAborted()
+                    const presetPrompt =
+                        await this.presetPersona.resolveOrGenerateCardText(
+                            presetId
+                        )
+                    signal?.throwIfAborted()
+                    const speakers =
+                        await this.mutations.ensurePresetSpeakersCoverage(
+                            presetId
+                        )
+                    signal?.throwIfAborted()
+                    const tools = createDreamSessionTools({
+                        presetId,
+                        state,
+                        repository: this.repository,
+                        mutations: this.mutations
+                    })
+                    await runDreamSession({
+                        presetId,
+                        callOptions,
+                        assistantLabel: resolveAssistantLabel(presetId),
+                        presetPrompt,
+                        speakers,
+                        state,
+                        tools,
+                        model,
+                        logger,
+                        signal,
+                        loadBatch:
+                            input.mode === 'incremental'
+                                ? (batch) =>
+                                      refreshIncrementalDreamBatch(
+                                          presetId,
+                                          batch,
+                                          this.repository
+                                      )
+                                : undefined
+                    })
+                    signal?.throwIfAborted()
+                }
+                if (
+                    this.userProfiles.enabled &&
+                    (state.profileSpeakerKeys === undefined ||
+                        state.profileSpeakerKeys.size > 0)
+                ) {
+                    profileDetail = await this.regenerateUserProfilesAfterDream(
+                        presetId,
+                        model,
+                        logger,
+                        signal,
+                        state.profileSpeakerKeys === undefined
+                            ? undefined
+                            : [...state.profileSpeakerKeys]
+                    )
+                }
             }
             signal?.throwIfAborted()
         } catch (cause) {
@@ -143,18 +192,27 @@ export class LivingMemoryDreamService {
         }
         const coverage = getDreamCoverage(state)
         let status: DreamRunResult['status'] = 'completed'
-        if (error !== undefined || coverage.processedCount === 0) {
+        if (
+            error !== undefined ||
+            (coverage.processedCount === 0 &&
+                (input.mode === 'full' || coverage.targetCount > 0))
+        ) {
             status = 'failed'
         } else if (coverage.unprocessedMemoryIds.length > 0) {
             status = 'partial'
         }
         const detail = [
-            `dream: ${status}, processed ${coverage.processedCount}/${coverage.targetCount}, batches ${state.clusters.length}`,
+            `dream: ${status}, processed ${coverage.processedCount}/${coverage.targetCount}, batches ${state.batches.length}`,
             `checked ${state.stats.kept}, merged ${state.stats.merged}, split ${state.stats.split}, updated ${state.stats.updated}, archived ${state.stats.archived}`,
             ...state.skippedBatches.map(
                 (batch) =>
                     `skipped ${batch.batchId}: ${batch.reason}; memoryIds=${batch.memoryIds.join(', ')}`
             ),
+            ...state.completedBatches.map(
+                (batch) =>
+                    `batch ${batch.batchId}: processed ${batch.processedCount}/${batch.targetCount}; unprocessed=${batch.unprocessedMemoryIds.join(', ') || 'none'}`
+            ),
+            `untouched seeds: ${state.untouchedSeedIds.join(', ') || 'none'}`,
             `unprocessed: ${coverage.unprocessedMemoryIds.join(', ') || 'none'}`,
             error === undefined ? '' : `error: ${error}`,
             profileDetail
@@ -162,9 +220,10 @@ export class LivingMemoryDreamService {
             .filter(Boolean)
             .join('\n')
         return {
+            untouchedSeedIds: state.untouchedSeedIds,
             status,
             entryCount: coverage.targetCount,
-            clusterCount: state.clusters.length,
+            batchCount: state.batches.length,
             processedCount: coverage.processedCount,
             unprocessedMemoryIds: coverage.unprocessedMemoryIds,
             skippedBatches: state.skippedBatches,
@@ -179,7 +238,8 @@ export class LivingMemoryDreamService {
         presetId: string,
         model: ChatLunaChatModel,
         logger: LivingMemoryLogger,
-        signal?: AbortSignal
+        signal?: AbortSignal,
+        involvedSpeakerKeys?: string[]
     ) {
         const startedAt = performance.now()
         logger.diagnosticSummary(() => ({
@@ -187,7 +247,8 @@ export class LivingMemoryDreamService {
             detail: `预设：${presetId}`
         }))
         const speakerKeys =
-            await this.repository.listActiveMemorySpeakerKeys(presetId)
+            involvedSpeakerKeys ??
+            (await this.repository.listActiveMemorySpeakerKeys(presetId))
         const result = await this.userProfiles.regenerate(
             presetId,
             speakerKeys,

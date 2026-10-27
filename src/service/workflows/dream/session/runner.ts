@@ -13,6 +13,8 @@ import {
     type StructuredTool
 } from '@langchain/core/tools'
 import { isRequestFailure } from 'koishi-plugin-chatluna/utils/error'
+import type { DreamBatch } from '../types'
+import type { refreshIncrementalDreamBatch } from '../incremental'
 import { MemoryInputError } from '../../../memory/errors'
 import { isOutputParserException } from '../../structured_output'
 import { createOpenAIAgent } from 'koishi-plugin-chatluna/llm-core/agent'
@@ -38,6 +40,7 @@ import {
     advanceDreamBatch,
     pendingDreamMemoryIds,
     recordSkippedDreamBatch,
+    recordDreamProfileSpeakers,
     type DreamSessionState
 } from './state'
 
@@ -59,6 +62,9 @@ interface DreamSessionRunInput {
     model: ChatLunaChatModel
     logger: LivingMemoryLogger
     signal?: AbortSignal
+    loadBatch?: (
+        batch: DreamBatch
+    ) => ReturnType<typeof refreshIncrementalDreamBatch>
 }
 
 export function createDreamCallOptions(
@@ -81,7 +87,8 @@ export async function runDreamSession(input: DreamSessionRunInput) {
     signal?.throwIfAborted()
     const systemPrompt = buildDreamSystemPrompt(
         input.assistantLabel,
-        input.presetPrompt
+        input.presetPrompt,
+        state.mode
     )
     const history = new DreamSessionHistory(
         systemPrompt,
@@ -131,14 +138,36 @@ export async function runDreamSession(input: DreamSessionRunInput) {
 
     while (advanceDreamBatch(state) !== undefined) {
         signal?.throwIfAborted()
+        let speakers = input.speakers
+        if (input.loadBatch) {
+            const refreshed = await input.loadBatch(state.currentBatch!)
+            signal?.throwIfAborted()
+            if (refreshed === undefined) {
+                state.untouchedSeedIds.push(state.currentBatch!.seedMemoryId!)
+                state.currentBatch = undefined
+                continue
+            }
+            state.currentBatch = {
+                ...state.currentBatch!,
+                entries: refreshed.entries
+            }
+            state.availableMemoryIds = new Set(
+                refreshed.entries.map((entry) => entry.id)
+            )
+            speakers = refreshed.speakers
+        }
         const batch = state.currentBatch!
+        recordDreamProfileSpeakers(
+            state,
+            batch.entries.flatMap((entry) => entry.speakerKeys)
+        )
         const batchLogger = logger.with({ batch: batch.id })
         const batchStartedAt = performance.now()
-        const batchPrompt = buildDreamMemoryBatchPrompt(batch, input.speakers)
+        const batchPrompt = buildDreamMemoryBatchPrompt(batch, speakers)
         history.startBatch(batchPrompt)
         batchLogger.diagnosticSummary((fields) => ({
             event: 'Dream 批次开始',
-            detail: `${formatLogScope(fields)}; 批次：${batch.id}; 总批次：${state.clusters.length}; 记忆：${batch.entries.length} 条`,
+            detail: `${formatLogScope(fields)}; 批次：${batch.id}; 总批次：${state.batches.length}; 记忆：${batch.entries.length} 条`,
             blocks: [{ title: '用户消息', value: batchPrompt }]
         }))
         let ineffectiveRounds = 0

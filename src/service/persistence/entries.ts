@@ -561,10 +561,7 @@ export class LivingMemoryEntryRepository
         }
     }
 
-    async updateMemory(
-        id: string,
-        patch: MemoryUpdatePatch
-    ) {
+    async updateMemory(id: string, patch: MemoryUpdatePatch) {
         const current = await this.getEntryById(id)
         if (current == null) {
             return null

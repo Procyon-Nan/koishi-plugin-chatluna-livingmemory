@@ -182,7 +182,8 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             this.vectorIndex,
             this.dreamWorker,
             this.userProfiles,
-            this.presetPersona
+            this.presetPersona,
+            this.searchEngine
         )
         const jobTracker = new LivingMemoryJobTracker(this.repository)
         const dreamJobRunner = new LivingMemoryDreamJobRunner(
@@ -210,7 +211,9 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             formatter,
             extractor,
             this.presetPersona,
-            this.memoryLogger
+            this.memoryLogger,
+            (presetId, memoryIds) =>
+                this.dreamCoordinator.queueIncremental(presetId, memoryIds)
         )
     }
 

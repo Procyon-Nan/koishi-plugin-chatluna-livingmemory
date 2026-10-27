@@ -31,9 +31,9 @@ import {
     getDreamCoverage,
     recordDreamOperation
 } from '../src/service/workflows/dream/session/state'
-import type { DreamCluster } from '../src/service/workflows/dream/types'
+import type { DreamBatch } from '../src/service/workflows/dream/types'
 
-const cluster = (id: string): DreamCluster => ({
+const cluster = (id: string): DreamBatch => ({
     id,
     entries: [
         {
@@ -119,7 +119,7 @@ const createRun = (
     batches: (string | string[])[] = ['a', 'b']
 ) => {
     const state = createDreamSessionState(batches.flatMap((batch) => batch))
-    state.clusters = batches.map((batch, index) => {
+    state.batches = batches.map((batch, index) => {
         if (typeof batch === 'string') return cluster(batch)
         return {
             id: `batch-${index}`,
