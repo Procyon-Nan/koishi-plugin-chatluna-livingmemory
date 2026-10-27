@@ -28,7 +28,7 @@ it('keeps exact recall and accepts indexed and exact candidate queries with tran
             INSERT INTO lm_index_memory
             SELECT i::text, CASE WHEN i % 10 = 0 THEN 'other' ELSE 'preset' END,
                    'conversation', CASE WHEN i % 7 = 0 THEN 'archived' ELSE 'active' END,
-                   'fact', true, 'hash-' || i, 'keywords', 0,
+                   'fact', 'hash-' || i, 'keywords', 0,
                    ('[1,' || i * 0.001 || ',0]')::vector
             FROM generate_series(1, 500) i;
         `)
@@ -110,7 +110,7 @@ it('keeps exact recall and accepts indexed and exact candidate queries with tran
             UPDATE lm_index_memory SET content_hash = 'changed', embedding = '[1,0.0015,0]'
             WHERE memory_id = '3';
             INSERT INTO lm_index_memory VALUES (
-                'new', 'preset', 'conversation', 'active', 'fact', true,
+                'new', 'preset', 'conversation', 'active', 'fact',
                 'hash-new', 'keywords', 0, '[1,0,0]'
             );
         `)

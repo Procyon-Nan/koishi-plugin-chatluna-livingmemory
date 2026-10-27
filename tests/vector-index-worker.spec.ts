@@ -574,7 +574,7 @@ it.each([false, true])(
             await seed.exec(`
             UPDATE pg_extension SET extversion = '0.8.1' WHERE extname = 'vector';
             INSERT INTO lm_index_memory VALUES (
-                'retained', 'preset-a', NULL, 'active', 'fact', true,
+                'retained', 'preset-a', NULL, 'active', 'fact',
                 'content-retained', 'keywords', 0, '[1,2,3]'
             );
         `)

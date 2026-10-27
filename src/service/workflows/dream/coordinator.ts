@@ -78,7 +78,7 @@ export class LivingMemoryDreamCoordinator {
 
     queueIncremental(presetId: string, memoryIds: string[]) {
         if (this.controller.signal.aborted) return
-        this.enqueue(presetId, async () => {
+        void this.enqueue(presetId, async () => {
             if (this.controller.signal.aborted) return
             await this.runJob(presetId, { mode: 'incremental', memoryIds })
         })
