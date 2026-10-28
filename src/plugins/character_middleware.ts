@@ -332,7 +332,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
         ctx,
         (session, entry) => {
             const settings = character._config
-            const id = session.isDirect ? session.userId : session.guildId
+            const id = session.isDirect ? session.userId! : session.guildId!
             const configured = Object.assign(
                 {},
                 settings,
@@ -359,9 +359,9 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
             const settings = character._config
             return session.isDirect
                 ? !settings.privateWhitelistMode ||
-                      settings.applyPrivate.includes(session.userId)
+                      settings.applyPrivate.includes(session.userId!)
                 : !settings.groupWhitelistMode ||
-                      settings.applyGroup.includes(session.guildId)
+                      settings.applyGroup.includes(session.guildId!)
         }
     )
 
