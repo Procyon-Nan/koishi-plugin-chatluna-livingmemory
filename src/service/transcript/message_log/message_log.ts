@@ -9,7 +9,7 @@ const toNonEmpty = (value: string | undefined) => {
  * 三元组——对齐 Character mergeMessages 的既有模式，使同一消息经监听与
  * 回填双通道到达时只落一条。
  */
-const messageKey = (message: ConversationLogEntryInput) => {
+export const messageKey = (message: ConversationLogEntryInput) => {
     const messageId = toNonEmpty(message.messageId)
     if (messageId != null) {
         return `id:${messageId}`
@@ -73,12 +73,6 @@ export class ConversationMessageLog {
         return this.entries.length > 0
             ? this.entries[this.entries.length - 1].seq
             : null
-    }
-
-    /** 自某序号以来新写入的条数；日志为空时为 0。滚出不影响单调性。 */
-    countSince(seq: number): number {
-        const tail = this.tailSeq()
-        return tail == null ? 0 : tail - seq
     }
 
     private acceptedByEpoch(item: ConversationLogEntryInput) {

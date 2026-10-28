@@ -38,7 +38,7 @@ const historyMessage = (
 })
 
 describe('MessageLogRegistry', () => {
-    it('dispatches live appends to every conversation bound to the channel', async () => {
+    it('keeps live appends within the specified conversation', async () => {
         const registry = new MessageLogRegistry()
         const { bot, resolve } = createDeferredBackfillBot()
         registry.register('conv-1', channelBinding(), bot)
@@ -47,14 +47,12 @@ describe('MessageLogRegistry', () => {
         await registry.warmup('conv-1')
         await registry.warmup('conv-2')
 
-        registry.appendLive(['conv-1', 'conv-2'], liveEntry('m-1', 'hello'))
+        registry.appendLive('conv-1', liveEntry('m-1', 'hello'))
 
         expect(registry.lastN('conv-1', 10).map((e) => e.content)).toEqual([
             'hello'
         ])
-        expect(registry.lastN('conv-2', 10).map((e) => e.content)).toEqual([
-            'hello'
-        ])
+        expect(registry.lastN('conv-2', 10)).toEqual([])
     })
 
     it('is idempotent on repeated registration', async () => {
@@ -76,16 +74,23 @@ describe('MessageLogRegistry', () => {
         const deferred = createDeferredBackfillBot()
         registry.register('conv-1', channelBinding(), deferred.bot)
 
-        registry.appendLive(['conv-1'], liveEntry('live-1', 'live'))
+        const cursor = registry.captureCursor('conv-1')
+        registry.appendLive('conv-1', liveEntry('live-1', 'live'))
         expect(registry.lastN('conv-1', 10)).toEqual([])
 
-        deferred.resolve([historyMessage('h-1', 'user-1', 'old')])
+        deferred.resolve([
+            historyMessage('h-1', 'user-1', 'old'),
+            historyMessage('live-1', 'user-1', 'live')
+        ])
         await registry.warmup('conv-1')
 
         expect(registry.lastN('conv-1', 10).map((e) => e.messageId)).toEqual([
             'h-1',
             'live-1'
         ])
+        expect(
+            registry.afterSeq('conv-1', cursor()).map((e) => e.messageId)
+        ).toEqual(['live-1'])
     })
 
     it('warmup never rejects and retries backfill after a failure', async () => {
@@ -113,17 +118,15 @@ describe('MessageLogRegistry', () => {
         await expect(registry.warmup('conv-1')).resolves.toBeUndefined()
         expect(attempts).toBe(1)
 
-        // 失败后写入直通，下一次 warmup 重新尝试回填
-        registry.appendLive(['conv-1'], liveEntry('live-1', 'live'))
-        expect(registry.lastN('conv-1', 10).map((e) => e.content)).toEqual([
-            'live'
-        ])
+        // 失败期间保留实时缓冲，下一次 warmup 重新尝试回填
+        registry.appendLive('conv-1', liveEntry('live-1', 'live'))
+        expect(registry.lastN('conv-1', 10)).toEqual([])
         await registry.warmup('conv-1')
         expect(attempts).toBe(2)
-        // 重试回填晚于失败期间的直写到达：seq 按到达序，不按时间重排
+        // 历史先入账，实时缓冲按到达顺序接在历史之后
         expect(registry.lastN('conv-1', 10).map((e) => e.content)).toEqual([
-            'live',
-            'old'
+            'old',
+            'live'
         ])
     })
 
@@ -134,12 +137,12 @@ describe('MessageLogRegistry', () => {
         deferred.resolve([])
         await registry.warmup('conv-1')
 
-        registry.appendLive(['conv-1'], liveEntry('live-1', 'a'))
+        registry.appendLive('conv-1', liveEntry('live-1', 'a'))
         registry.clear('conv-1')
         expect(registry.lastN('conv-1', 10)).toEqual([])
 
         registry.appendLive(
-            ['conv-1'],
+            'conv-1',
             liveEntry('live-2', 'b', Date.now() + 10_000)
         )
         expect(registry.lastN('conv-1', 10).map((e) => e.messageId)).toEqual([
@@ -149,10 +152,9 @@ describe('MessageLogRegistry', () => {
 
     it('ignores appends and reads for unregistered conversations', () => {
         const registry = new MessageLogRegistry()
-        registry.appendLive(['conv-x'], liveEntry('m-1', 'a'))
+        registry.appendLive('conv-x', liveEntry('m-1', 'a'))
         expect(registry.lastN('conv-x', 10)).toEqual([])
         expect(registry.tailSeq('conv-x')).toBeNull()
-        expect(registry.countSince('conv-x', 0)).toBe(0)
     })
 
     it('backfill skips messages without timestamps and paginates by prev cursor', async () => {
@@ -403,9 +405,9 @@ describe('MessageLogRegistry', () => {
         deferred.resolve([])
         await registry.warmup('conv-1')
 
-        registry.appendLive(['conv-1'], liveEntry('h-1', '旧消息', 1_000))
-        registry.appendLive(['conv-1'], liveEntry('cur-1', '当前消息', 2_000))
-        registry.appendLive(['conv-1'], liveEntry('later-1', '后续闲聊', 3_000))
+        registry.appendLive('conv-1', liveEntry('h-1', '旧消息', 1_000))
+        registry.appendLive('conv-1', liveEntry('cur-1', '当前消息', 2_000))
+        registry.appendLive('conv-1', liveEntry('later-1', '后续闲聊', 3_000))
 
         const history = await registry.loadRecallHistory('conv-1', 5, {
             messageId: 'cur-1',
@@ -423,10 +425,10 @@ describe('MessageLogRegistry', () => {
         deferred.resolve([])
         await registry.warmup('conv-1')
 
-        registry.appendLive(['conv-1'], liveEntry('h-1', '一', 1_000))
-        registry.appendLive(['conv-1'], liveEntry('h-2', '二', 2_000))
-        registry.appendLive(['conv-1'], liveEntry('h-3', '三', 3_000))
-        registry.appendLive(['conv-1'], liveEntry('cur-1', '当前消息', 4_000))
+        registry.appendLive('conv-1', liveEntry('h-1', '一', 1_000))
+        registry.appendLive('conv-1', liveEntry('h-2', '二', 2_000))
+        registry.appendLive('conv-1', liveEntry('h-3', '三', 3_000))
+        registry.appendLive('conv-1', liveEntry('cur-1', '当前消息', 4_000))
 
         const history = await registry.loadRecallHistory('conv-1', 2, {
             messageId: 'cur-1',
@@ -454,8 +456,8 @@ describe('MessageLogRegistry', () => {
             role: 'user' as const,
             origin: 'live' as const
         }
-        registry.appendLive(['conv-1'], { ...shared, messageId: 'a' })
-        registry.appendLive(['conv-1'], { ...shared, messageId: 'b' })
+        registry.appendLive('conv-1', { ...shared, messageId: 'a' })
+        registry.appendLive('conv-1', { ...shared, messageId: 'b' })
 
         const history = await registry.loadRecallHistory('conv-1', 5, {
             messageId: 'a',
@@ -473,8 +475,8 @@ describe('MessageLogRegistry', () => {
         deferred.resolve([])
         await registry.warmup('conv-1')
 
-        registry.appendLive(['conv-1'], liveEntry('h-1', '一', 1_000))
-        registry.appendLive(['conv-1'], liveEntry('h-2', '二', 2_000))
+        registry.appendLive('conv-1', liveEntry('h-1', '一', 1_000))
+        registry.appendLive('conv-1', liveEntry('h-2', '二', 2_000))
 
         const history = await registry.loadRecallHistory('conv-1', 5, {
             messageId: 'missing',

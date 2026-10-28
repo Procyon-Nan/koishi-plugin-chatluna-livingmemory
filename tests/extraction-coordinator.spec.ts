@@ -57,6 +57,7 @@ interface CoordinatorHarnessOptions {
 }
 
 interface CoordinatorHarness {
+    includeOverheard: boolean
     coordinator: LivingMemoryExtractionCoordinator
     messageLog: MessageLogRegistry
     jobStore: ReturnType<typeof createJobStore>
@@ -177,7 +178,6 @@ const createHarness = (
     const coordinator = new LivingMemoryExtractionCoordinator(
         {
             extractionWindowMessages: options.window ?? 4,
-            extractionIncludeOverheard: options.includeOverheard ?? false,
             enableExtractionWhitelist:
                 options.enableExtractionWhitelist ?? false,
             extractionWhitelist: options.extractionWhitelist ?? []
@@ -194,6 +194,7 @@ const createHarness = (
         }
     )
     return {
+        includeOverheard: options.includeOverheard ?? false,
         coordinator,
         messageLog,
         jobStore,
@@ -227,6 +228,7 @@ const entry = (
 const queueExtraction = async (harness: CoordinatorHarness) => {
     await harness.messageLog.warmup(scope.conversationId)
     await harness.coordinator.queue(scope, {
+        includeOverheard: harness.includeOverheard,
         resolveTranscriptOrigin: async () => ({
             header: '以下是聊天记录：',
             sourceLabel: '来源于「测试群」（群聊 ID：guild-1）的群聊'
@@ -441,27 +443,42 @@ describe('planExtractionChunks', () => {
 })
 
 describe('LivingMemoryExtractionCoordinator', () => {
-    it('extracts once the backlog reaches the window', async () => {
-        const harness = createHarness({ window: 4 })
-        // 首个 after-chat 初始化游标（空日志末尾）
-        await queueExtraction(harness)
+    it.each([false, true])(
+        'extracts at the threshold with overheard=%s',
+        async (includeOverheard) => {
+            const harness = createHarness({ window: 4, includeOverheard })
+            if (includeOverheard) {
+                harness.coordinator.initializeOverheard(scope, {
+                    includeOverheard,
+                    resolveTranscriptOrigin: async () => ({
+                        header: 'h',
+                        sourceLabel: 's'
+                    })
+                })
+            } else {
+                await queueExtraction(harness)
+            }
+            const role = includeOverheard ? 'user' : 'assistant'
+            harness.messageLog.appendReply(scope.conversationId, [
+                entry('user', '问题'),
+                entry(role, '回答')
+            ])
+            await queueExtraction(harness)
+            expect(harness.getExtractorCalls()).toBe(0)
 
-        harness.messageLog.appendReply(scope.conversationId, [
-            entry('user', '问题'),
-            entry('assistant', '回答')
-        ])
-        await queueExtraction(harness)
-        expect(harness.getExtractorCalls()).toBe(0)
-
-        harness.messageLog.appendReply(scope.conversationId, [
-            entry('user', '追问'),
-            entry('assistant', '补充')
-        ])
-        await queueExtraction(harness)
-        await waitFor(() => harness.getExtractorCalls() === 1, 'drain settle')
-        expect(harness.getExtractorInputs()[0]).toContain('问题')
-        expect(harness.getExtractorInputs()[0]).toContain('补充')
-    })
+            harness.messageLog.appendReply(scope.conversationId, [
+                entry('user', '追问'),
+                entry(role, '补充')
+            ])
+            await queueExtraction(harness)
+            await waitFor(
+                () => harness.getExtractorCalls() === 1,
+                'drain settle'
+            )
+            expect(harness.getExtractorInputs()[0]).toContain('问题')
+            expect(harness.getExtractorInputs()[0]).toContain('补充')
+        }
+    )
 
     it('skips extraction entirely when the window is zero', async () => {
         const harness = createHarness({ window: 0 })
@@ -619,6 +636,7 @@ describe('LivingMemoryExtractionCoordinator', () => {
         ])
         await harness.messageLog.warmup(whitelistedScope.conversationId)
         await harness.coordinator.queue(whitelistedScope, {
+            includeOverheard: harness.includeOverheard,
             resolveTranscriptOrigin: async () => ({
                 header: 'h',
                 sourceLabel: 's'
@@ -631,6 +649,7 @@ describe('LivingMemoryExtractionCoordinator', () => {
             entry('assistant', 'a3')
         ])
         await harness.coordinator.queue(whitelistedScope, {
+            includeOverheard: harness.includeOverheard,
             resolveTranscriptOrigin: async () => ({
                 header: 'h',
                 sourceLabel: 's'

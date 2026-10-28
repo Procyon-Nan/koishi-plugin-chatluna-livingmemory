@@ -2,7 +2,7 @@ import {
     pullConversationBackfill,
     type ConversationBackfillBot
 } from './backfill'
-import { ConversationMessageLog } from './message_log'
+import { ConversationMessageLog, messageKey } from './message_log'
 import type {
     ConversationLogBinding,
     ConversationLogEntryInput,
@@ -20,18 +20,15 @@ type RecallMessageIdentity = Pick<
 
 interface ConversationLogEntry {
     binding: ConversationLogBinding
-    bot: ConversationBackfillBot
+    bot?: ConversationBackfillBot
     log: ConversationMessageLog
     /** 回填进行中：实时与回复消息先入缓冲，回填结束后按序冲刷。 */
     backfilling: boolean
     /** 回填已完成（含适配器不支持而立即结束），此后写入直通。 */
     warm: boolean
     warmupPromise: Promise<void> | null
+    historyEndSeq: number
     pendingAppends: ConversationLogEntryInput[]
-}
-
-export const toChannelKey = (platform: string, channelId: string) => {
-    return `${platform}:${channelId}`
 }
 
 export const toBackfillChannelId = (binding: ConversationLogBinding) => {
@@ -69,19 +66,14 @@ const matchesCurrentMessage = (
     )
 }
 
-/**
- * 会话消息日志注册表：conversationId → 滚动日志，外加
- * (platform, channelId) → 会话集合的渠道索引供平台监听分发。
- * 同 channel 多会话各自入账（重复收集，已知限制）。
- */
+/** 按会话管理滚动消息日志与历史预热。 */
 export class MessageLogRegistry {
     private readonly conversations = new Map<string, ConversationLogEntry>()
-    private readonly channelIndex = new Map<string, Set<string>>()
 
     register(
         conversationId: string,
         binding: ConversationLogBinding,
-        bot: ConversationBackfillBot
+        bot?: ConversationBackfillBot
     ) {
         const existing = this.conversations.get(conversationId)
         if (existing != null) {
@@ -92,22 +84,15 @@ export class MessageLogRegistry {
             binding,
             bot,
             log: new ConversationMessageLog(LOG_CAPACITY),
-            backfilling: true,
-            warm: false,
+            backfilling: bot != null,
+            warm: bot == null,
             warmupPromise: null,
+            historyEndSeq: 0,
             pendingAppends: []
         }
         this.conversations.set(conversationId, entry)
 
-        const channelKey = toChannelKey(binding.platform, binding.channelId)
-        let conversations = this.channelIndex.get(channelKey)
-        if (conversations == null) {
-            conversations = new Set()
-            this.channelIndex.set(channelKey, conversations)
-        }
-        conversations.add(conversationId)
-
-        this.startBackfill(entry)
+        if (bot != null) this.startBackfill(entry)
     }
 
     /**
@@ -133,19 +118,27 @@ export class MessageLogRegistry {
         return this.conversations.get(conversationId)?.warm ?? false
     }
 
-    conversationIdsByChannel(platform: string, channelId: string) {
-        return [
-            ...(this.channelIndex.get(toChannelKey(platform, channelId)) ?? [])
-        ]
+    /** 捕获下一条实时消息之前的边界，回填完成后读取最终序号。 */
+    captureCursor(conversationId: string): () => number {
+        const entry = this.conversations.get(conversationId)!
+        if (entry.warm) {
+            const seq = entry.log.tailSeq() ?? entry.historyEndSeq
+            return () => seq
+        }
+        const preceding = new Set(entry.pendingAppends.map(messageKey))
+        return () => {
+            const messages = entry.log.afterSeq(entry.historyEndSeq)
+            for (let index = messages.length - 1; index >= 0; index--) {
+                if (preceding.has(messageKey(messages[index]))) {
+                    return messages[index].seq
+                }
+            }
+            return (messages[0]?.seq ?? entry.historyEndSeq + 1) - 1
+        }
     }
 
-    appendLive(
-        conversationIds: readonly string[],
-        item: ConversationLogEntryInput
-    ) {
-        for (const conversationId of conversationIds) {
-            this.appendTo(conversationId, [item])
-        }
+    appendLive(conversationId: string, item: ConversationLogEntryInput) {
+        return this.appendTo(conversationId, [item])
     }
 
     appendReply(conversationId: string, items: ConversationLogEntryInput[]) {
@@ -162,10 +155,6 @@ export class MessageLogRegistry {
 
     tailSeq(conversationId: string): number | null {
         return this.conversations.get(conversationId)?.log.tailSeq() ?? null
-    }
-
-    countSince(conversationId: string, seq: number): number {
-        return this.conversations.get(conversationId)?.log.countSince(seq) ?? 0
     }
 
     /**
@@ -202,13 +191,13 @@ export class MessageLogRegistry {
         if (entry == null) {
             return
         }
+        entry.historyEndSeq = entry.log.tailSeq() ?? entry.historyEndSeq
         entry.log.clear()
         entry.pendingAppends = []
     }
 
     dispose() {
         this.conversations.clear()
-        this.channelIndex.clear()
     }
 
     private appendTo(
@@ -216,45 +205,43 @@ export class MessageLogRegistry {
         items: ConversationLogEntryInput[]
     ) {
         const entry = this.conversations.get(conversationId)
-        if (entry == null) {
-            return
-        }
+        if (entry == null) return false
         if (entry.backfilling) {
-            entry.pendingAppends.push(...items)
-            return
+            const knownKeys = new Set(entry.pendingAppends.map(messageKey))
+            const added = items.filter((item) => {
+                const key = messageKey(item)
+                if (knownKeys.has(key)) return false
+                knownKeys.add(key)
+                return true
+            })
+            entry.pendingAppends.push(...added)
+            return added.length > 0
         }
+        const previousSeq = entry.log.tailSeq()
         entry.log.append(items)
+        return entry.log.tailSeq() !== previousSeq
     }
 
     private startBackfill(entry: ConversationLogEntry) {
-        const bot = entry.bot
         entry.backfilling = true
         entry.warmupPromise = (async () => {
-            const items = await pullConversationBackfill(bot, {
+            const items = await pullConversationBackfill(entry.bot!, {
                 channelId: toBackfillChannelId(entry.binding),
                 warmupCount: BACKFILL_WARMUP_COUNT
             })
-            entry.log.append(items)
+            const liveKeys = new Set(entry.pendingAppends.map(messageKey))
+            entry.log.append(
+                items.filter((item) => !liveKeys.has(messageKey(item)))
+            )
+            entry.historyEndSeq = entry.log.tailSeq() ?? entry.historyEndSeq
+            entry.log.append(entry.pendingAppends)
+            entry.pendingAppends = []
+            entry.backfilling = false
+            entry.warm = true
         })()
-
-        entry.warmupPromise.then(
-            () => {
-                entry.backfilling = false
-                entry.warm = true
-                this.flushPending(entry)
-            },
-            () => {
-                // 失败不保留结果：下次 warmup 重新尝试，缓冲照常冲刷。
-                entry.warmupPromise = null
-                entry.backfilling = false
-                this.flushPending(entry)
-            }
-        )
-    }
-
-    private flushPending(entry: ConversationLogEntry) {
-        const buffered = entry.pendingAppends
-        entry.pendingAppends = []
-        entry.log.append(buffered)
+        void entry.warmupPromise.catch(() => {
+            // 保留实时缓冲，后续 warmup 重试时统一按历史、实时顺序入账。
+            entry.warmupPromise = null
+        })
     }
 }

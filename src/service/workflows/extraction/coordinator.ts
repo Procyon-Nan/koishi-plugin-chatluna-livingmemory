@@ -20,7 +20,6 @@ import { toLogTranscriptMessages } from '../../transcript/message_log/converter'
 type LivingMemoryExtractionConfig = Pick<
     LivingMemoryConfig,
     | 'extractionWindowMessages'
-    | 'extractionIncludeOverheard'
     | 'enableExtractionWhitelist'
     | 'extractionWhitelist'
 >
@@ -34,12 +33,14 @@ type ExtractionModel = Pick<LivingMemoryExtractor, 'extract'>
 /** 提取排干所需的消息日志读取面。 */
 export type ExtractionMessageLog = Pick<
     MessageLogRegistry,
-    'warmup' | 'isWarm' | 'afterSeq' | 'tailSeq' | 'countSince'
+    'warmup' | 'isWarm' | 'afterSeq' | 'tailSeq' | 'captureCursor'
 >
 
 interface ExtractionScopeState {
-    conversationId: string
-    /** 上次成功（或放弃）块末条的日志序号；首个合规 after-chat 时初始化为当时末序号。 */
+    scope: MemoryScope
+    options: QueueExtractionOptions
+    /** 上次处理块的末序号；旁听起点在回填完成后解析。 */
+    resolveInitialCursor?: () => number
     cursorSeq: number
     /** 当前块连续失败次数；达到上限后放弃该块（记任务、推进游标、续排后续块）。 */
     failStreak: number
@@ -161,8 +162,8 @@ const splitOverheardUnits = (
 }
 
 /**
- * 段锚定切块：以「连续 assistant 段的末条 assistant」闭合段——末尾无
- * assistant 收尾的尾巴留在积压等下次。两种模式共用 packChunksFromLatest
+ * 段锚定切块：以连续 assistant 段的末条闭合交流段，旁听模式同时接收
+ * 末尾用户消息段。两种模式共用 packChunksFromLatest
  * 从尾向旧模糊装包；锚定模式先经 selectAnchoredUnits 丢弃核心窗口之外
  * 的闲聊，旁听模式先经 splitOverheardUnits 把超预算段切成预算内子块。
  */
@@ -196,6 +197,7 @@ export const planExtractionChunks = (
             window
         )
     }
+    if (current.length > 0) segments.push(current)
     return packChunksFromLatest(splitOverheardUnits(segments, window), window)
 }
 
@@ -218,41 +220,57 @@ export class LivingMemoryExtractionCoordinator {
         ) => void
     ) {}
 
+    initializeOverheard(scope: MemoryScope, options: QueueExtractionOptions) {
+        if (this.config.extractionWindowMessages === 0) return
+        if (!this.isExtractionWhitelisted(scope)) return
+        const key = scopeKey(scope)
+        if (this.stateByScope.has(key)) return
+        this.clearByConversation(scope.conversationId)
+        this.stateByScope.set(key, {
+            scope,
+            options,
+            cursorSeq: 0,
+            resolveInitialCursor: this.messageLog.captureCursor(
+                scope.conversationId
+            ),
+            failStreak: 0
+        })
+    }
+
     async queue(scope: MemoryScope, options: QueueExtractionOptions) {
-        const window = this.config.extractionWindowMessages
-        if (window === 0) return
-
-        // 白名单只挡提取，不挡日志（召回依赖日志）。未命中时游标不初始化，
-        // 后续加入白名单从当时刻重新起算，不倾泻积压。
-        if (!this.isExtractionWhitelisted(scope)) {
-            return
-        }
-
-        await this.messageLog.warmup(scope.conversationId)
-
-        // 游标初始化的前提是日志已含全部回填内容；回填失败待重试时跳过，
-        // 否则重试落地的平台历史会追加在游标之后被整段重复提取。
-        if (!this.messageLog.isWarm(scope.conversationId)) {
-            this.logger.diagnosticSummary(() => ({
-                event: '跳过记忆提取',
-                detail: `${formatLogScope(scope)}; 原因：等待历史消息回填`
-            }))
-            return
-        }
+        if (this.config.extractionWindowMessages === 0) return
+        if (!this.isExtractionWhitelisted(scope)) return
 
         const key = scopeKey(scope)
-        const state = this.stateByScope.get(key) ?? {
-            // 冷启动游标：首个合规 after-chat 时点的末序号，不回溯平台历史
-            conversationId: scope.conversationId,
+        const pendingState = this.stateByScope.get(key)
+        await this.messageLog.warmup(scope.conversationId)
+        if (!this.messageLog.isWarm(scope.conversationId)) return
+        if (pendingState && this.stateByScope.get(key) !== pendingState) return
+
+        const state: ExtractionScopeState = this.stateByScope.get(key) ?? {
+            scope,
+            options,
             cursorSeq: this.messageLog.tailSeq(scope.conversationId) ?? 0,
             failStreak: 0
         }
+        if (state.resolveInitialCursor) {
+            state.cursorSeq = state.resolveInitialCursor()
+            delete state.resolveInitialCursor
+        }
+        state.scope = scope
+        state.options = options
         this.stateByScope.set(key, state)
+        this.schedule(key, state)
+    }
 
-        const backlog = this.messageLog.countSince(
+    private schedule(key: string, state: ExtractionScopeState) {
+        const { scope, options } = state
+        const window = this.config.extractionWindowMessages
+
+        const backlog = this.messageLog.afterSeq(
             scope.conversationId,
             state.cursorSeq
-        )
+        ).length
         if (backlog < window) {
             this.logger.diagnosticSummary(() => ({
                 event: '等待记忆提取',
@@ -357,6 +375,10 @@ export class LivingMemoryExtractionCoordinator {
             }
         } finally {
             this.runningScopeKeys.delete(key)
+            const pending = this.stateByScope.get(key)
+            if (pending && pending !== state && !pending.resolveInitialCursor) {
+                this.schedule(key, pending)
+            }
         }
     }
 
@@ -375,10 +397,16 @@ export class LivingMemoryExtractionCoordinator {
             scope.conversationId,
             state.cursorSeq
         )
+        if (
+            options.includeOverheard &&
+            entries.length < this.config.extractionWindowMessages
+        ) {
+            return false
+        }
         const chunks = planExtractionChunks(
             entries,
             this.config.extractionWindowMessages,
-            this.config.extractionIncludeOverheard
+            options.includeOverheard
         )
         const chunk = chunks[0]
         if (chunk == null) {

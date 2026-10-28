@@ -417,6 +417,13 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         await this.extractionCoordinator.queue(scope, options)
     }
 
+    initializeOverheardExtraction(
+        scope: MemoryScope,
+        options: QueueExtractionOptions
+    ) {
+        this.extractionCoordinator.initializeOverheard(scope, options)
+    }
+
     clearExtractionState() {
         this.extractionCoordinator.clearAll()
     }

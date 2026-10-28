@@ -71,7 +71,6 @@ describe('ConversationMessageLog', () => {
             'd'
         ])
         expect(log.tailSeq()).toBe(4)
-        expect(log.countSince(1)).toBe(3)
     })
 
     it('re-admits an evicted message id as a fresh entry', () => {
@@ -102,10 +101,5 @@ describe('ConversationMessageLog', () => {
         ])
 
         expect(log.lastN(10).map((item) => item.content)).toEqual(['new'])
-    })
-
-    it('countSince is zero on an empty log', () => {
-        const log = new ConversationMessageLog(10)
-        expect(log.countSince(17)).toBe(0)
     })
 })

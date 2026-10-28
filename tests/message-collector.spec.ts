@@ -17,12 +17,21 @@ const createHarness = () => {
     let middleware: ((session: never, next: () => void) => unknown) | null =
         null
     const ctx = {
-        chatluna_living_memory: { messageLog: registry },
+        chatluna_living_memory: {
+            messageLog: registry
+        },
         middleware: (fn: (session: never, next: () => void) => unknown) => {
             middleware = fn
         }
     }
-    apply(ctx as never)
+    apply(
+        ctx as never,
+        (_session, entry) => {
+            registry.appendLive('conv-1', entry)
+        },
+        (session) =>
+            session.platform === 'onebot' && session.channelId === 'group-1'
+    )
     const ready = registry.warmup('conv-1')
     return {
         registry,

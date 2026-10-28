@@ -145,7 +145,7 @@ it('loads recall history from the conversation log excluding the current message
         { selfId: 'bot-self' }
     )
     await messageLog.warmup('group:guild-1')
-    messageLog.appendLive(['group:guild-1'], {
+    messageLog.appendLive('group:guild-1', {
         messageId: 'm-1',
         userId: 'user-1',
         name: '用户A',

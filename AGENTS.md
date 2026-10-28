@@ -20,7 +20,7 @@ chatluna-livingmemory/
 │   │   ├── vector_index.ts              # 索引文档、查询、变更与状态接口
 │   │   └── rpc.ts                       # Console RPC 契约
 │   ├── plugins/
-│   │   ├── message_collector.ts         # 消息采集入口
+│   │   ├── message_collector.ts         # Character 平台消息采集
 │   │   ├── chat_middleware.ts           # ChatLuna 对话生命周期接入
 │   │   ├── character_middleware.ts      # Character 对话生命周期接入
 │   │   ├── commands.ts                  # 管理指令

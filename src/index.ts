@@ -5,7 +5,6 @@ import { apply as characterMiddlewarePlugin } from './plugins/character_middlewa
 import { apply as chatMiddlewarePlugin } from './plugins/chat_middleware'
 import { apply as livingMemoryToolsPlugin } from './plugins/living_memory_tools'
 import { apply as livingMemoryCommandsPlugin } from './plugins/commands'
-import { apply as messageCollectorPlugin } from './plugins/message_collector'
 import {
     registerEntry as registerWebUIEntry,
     apply as webuiPlugin
@@ -28,7 +27,6 @@ export function apply(ctx: Context, config: Config) {
 
     ctx.inject(['chatluna_living_memory'], (ctx) => {
         livingMemoryCommandsPlugin(ctx)
-        messageCollectorPlugin(ctx)
         void chatMiddlewarePlugin(ctx, config)
         livingMemoryToolsPlugin(ctx, config)
 
@@ -151,7 +149,7 @@ export const Config: Schema<Config> = Schema.intersect([
             .default(30),
         extractionIncludeOverheard: Schema.boolean()
             .description(
-                '同时提取 bot 未参与的闲聊。关闭时，闲聊只在每次对话前方的提取窗口内提取。'
+                'Character 开启时，从首条普通消息开始累计，达到阈值即提取；关闭时，在 bot 回复后围绕完整交流提取。'
             )
             .default(false),
         enableExtractionWhitelist: Schema.boolean()

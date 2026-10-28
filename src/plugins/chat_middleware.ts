@@ -29,22 +29,16 @@ const registerConversationLog = (
     session: Session,
     conversationId: string
 ) => {
-    ctx.chatluna_living_memory.messageLog.register(
-        conversationId,
-        {
-            platform: session.platform,
-            channelId: session.channelId ?? session.userId ?? '',
-            guildId: session.guildId ?? undefined,
-            isDirect: session.isDirect
-        },
-        session.bot
-    )
+    ctx.chatluna_living_memory.messageLog.register(conversationId, {
+        platform: session.platform,
+        channelId: session.channelId ?? session.userId ?? '',
+        guildId: session.guildId ?? undefined,
+        isDirect: session.isDirect
+    })
 }
 
 /**
- * 触发消息条目：先于读取显式补写，消除与平台监听的执行顺序耦合。
- * 透传平台 messageId，使 before-chat 补写、after-chat 交换对与平台监听
- * 三处写入共享同一去重键、只落一条。
+ * 用户请求先于读取入账；before-chat 与 after-chat 使用同一消息身份去重。
  */
 export const buildChatLunaSourceEntry = (
     session: Session,
@@ -72,9 +66,7 @@ export const buildChatLunaSourceEntry = (
 }
 
 /**
- * 通道 2：本次交换的 source + response 两条。ChatLuna 虚拟房间没有平台
- * channel 可供监听，这两条是那里唯一的日志来源；平台绑定的房间则与监听
- * 经去重合一。
+ * 本次实际交流：source 与 response，用户请求与 before-chat 的记录去重。
  */
 const buildChatLunaExchangeEntries = (
     session: Session,
@@ -248,10 +240,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
             registerConversationLog(ctx, session, conversationId)
             const sourceEntry = buildChatLunaSourceEntry(session, message)
             if (sourceEntry != null) {
-                livingMemory.messageLog.appendLive(
-                    [conversationId],
-                    sourceEntry
-                )
+                livingMemory.messageLog.appendLive(conversationId, sourceEntry)
             }
             writeRawUserContent(message, promptVariables)
 
@@ -405,6 +394,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 ''
 
             await ctx.chatluna_living_memory.queueExtraction(scope, {
+                includeOverheard: false,
                 resolveTranscriptOrigin: async () => {
                     if (session.isDirect) {
                         return buildMemoryTranscriptOrigin({

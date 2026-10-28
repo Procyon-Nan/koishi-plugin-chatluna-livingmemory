@@ -43,14 +43,12 @@ export const buildSessionLogEntry = (
     }
 }
 
-/**
- * 平台消息采集（通道 1）：appended middleware，只对已注册会话绑定的
- * channel 生效，未注册渠道零成本。刻意不复刻 Character 的关键词/白名单/
- * 静音过滤——那些只决定 Character 何时应答，不应决定记忆能看到什么。
- * 自身 bot 消息一律跳过（回复经通道 2 写入，保住交换语义关联）。
- */
-export function apply(ctx: Context) {
-    const registry = ctx.chatluna_living_memory.messageLog
+/** Character 平台采集：作用域由接入层解析，正文与入账保持同步。 */
+export function apply(
+    ctx: Context,
+    collect: (session: Session, entry: ConversationLogEntryInput) => void,
+    accepts: (session: Session) => boolean
+) {
     // at 目标昵称缓存：命中才渲染昵称，未命中先记 @id 并后台预热。采集
     // 与渲染保持同步——任何微任务让出都会让后到的消息越序入账（seq 按
     // 到达分配，召回边界与提取段归属都依赖它）。缓存键含平台，与说话人
@@ -59,11 +57,7 @@ export function apply(ctx: Context) {
     const atLabelInflight = new Set<string>()
 
     ctx.middleware((session, next) => {
-        const conversationIds = registry.conversationIdsByChannel(
-            session.platform,
-            session.channelId ?? ''
-        )
-        if (conversationIds.length > 0) {
+        if (accepts(session)) {
             const entry = buildSessionLogEntry(session, (targetId) => {
                 const key = `${session.platform}\u0000${targetId}`
                 const cached = atLabels.get(key)
@@ -86,10 +80,10 @@ export function apply(ctx: Context) {
                 return null
             })
             if (entry != null) {
-                registry.appendLive(conversationIds, entry)
+                collect(session, entry)
             }
         }
 
         return next()
-    })
+    }, true)
 }

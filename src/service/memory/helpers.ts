@@ -4,6 +4,7 @@ import type { MemoryTranscriptOrigin } from '../transcript/origin_context'
 import { toNonEmptyString } from '../shared/utils'
 
 export interface QueueExtractionOptions {
+    includeOverheard: boolean
     resolveTranscriptOrigin: () => Promise<MemoryTranscriptOrigin>
 }
 

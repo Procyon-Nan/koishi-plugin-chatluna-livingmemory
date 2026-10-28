@@ -20,10 +20,32 @@ import {
 import { buildMemoryTranscriptOrigin } from '../service/transcript/origin_context'
 import {
     toCharacterMemoryConversationId,
-    toCharacterMemoryPresetId
+    toCharacterMemoryPresetId,
+    type QueueExtractionOptions
 } from '../service/memory/helpers'
 import { toNonEmptyString } from '../service/shared/utils'
-import { buildSessionLogEntry } from './message_collector'
+import {
+    apply as applyMessageCollector,
+    buildSessionLogEntry
+} from './message_collector'
+
+interface CharacterReceptionConfig {
+    preset: string
+    privateWhitelistMode: boolean
+    groupWhitelistMode: boolean
+    applyPrivate: string[]
+    applyGroup: string[]
+    globalPrivateConfig: { preset?: string }
+    globalGroupConfig: { preset?: string }
+    privateConfigs: Record<string, { preset?: string }>
+    configs: Record<string, { preset?: string }>
+}
+
+interface CharacterReceptionService {
+    ctx: Context
+    _config: CharacterReceptionConfig
+    preset: { getPresetForCache(name: string): { name: string } }
+}
 
 type PromptSections = {
     snapshot: string
@@ -221,6 +243,11 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
     })
     const events = ctx as unknown as CharacterEventRegistrar
     const livingMemory = ctx.chatluna_living_memory
+    const character = (
+        ctx as unknown as {
+            chatluna_character: CharacterReceptionService
+        }
+    ).chatluna_character
     const rounds = new WeakMap<Session, CharacterRound>()
     // 说话人解析跨轮复用：昵称变更需重启插件后生效，换取不在每轮重复
     // 调用平台 getUser。
@@ -238,6 +265,102 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
         true
     )
 
+    const extractionOptions = (
+        session: Session,
+        scope: MemoryScope
+    ): QueueExtractionOptions => ({
+        includeOverheard: config.extractionIncludeOverheard,
+        resolveTranscriptOrigin: async () => {
+            if (session.isDirect) {
+                const speakerLabel = await resolveUserSpeaker(
+                    session,
+                    scope.speakerId!,
+                    speakerCache
+                )
+                    .then((speaker) => speaker.speakerLabel)
+                    .catch(() => '')
+                return buildMemoryTranscriptOrigin({
+                    isDirect: true,
+                    speakerLabel,
+                    speakerId: scope.speakerId
+                })
+            }
+            const guild = await session.bot.getGuild(scope.guildId!)
+            return buildMemoryTranscriptOrigin({
+                isDirect: false,
+                guildName: guild.name,
+                guildId: scope.guildId!
+            })
+        }
+    })
+
+    const collectMessage = (
+        context: CharacterChatContext,
+        entry: ConversationLogEntryInput
+    ) => {
+        const scope = createCharacterScope(ctx, context, entry.userId)
+        registerConversationLog(ctx, context.session, context.sessionKey)
+        const options = extractionOptions(context.session, scope)
+        if (options.includeOverheard && config.extractionWindowMessages > 0) {
+            livingMemory.initializeOverheardExtraction(scope, options)
+        }
+        const appended = livingMemory.messageLog.appendLive(
+            context.sessionKey,
+            entry
+        )
+        if (
+            appended &&
+            options.includeOverheard &&
+            config.extractionWindowMessages > 0
+        ) {
+            void livingMemory.queueExtraction(scope, options).catch((error) => {
+                logger.summary(
+                    '记忆提取调度失败',
+                    formatLogScope(scope),
+                    'warn',
+                    error
+                )
+            })
+        }
+    }
+
+    applyMessageCollector(
+        ctx,
+        (session, entry) => {
+            const settings = character._config
+            const id = session.isDirect ? session.userId : session.guildId
+            const configured = Object.assign(
+                {},
+                settings,
+                session.isDirect
+                    ? settings.globalPrivateConfig
+                    : settings.globalGroupConfig,
+                session.isDirect
+                    ? settings.privateConfigs[id]
+                    : settings.configs[id]
+            )
+            const preset = character.preset.getPresetForCache(configured.preset)
+            collectMessage(
+                {
+                    session,
+                    sessionKey: toCharacterMemoryConversationId(session)!,
+                    presetName: preset.name
+                },
+                entry
+            )
+        },
+        (session) => {
+            if (!character.ctx.filter(session) || ctx.bots[session.uid])
+                return false
+            const settings = character._config
+            return session.isDirect
+                ? !settings.privateWhitelistMode ||
+                      settings.applyPrivate.includes(session.userId)
+                : !settings.groupWhitelistMode ||
+                      settings.applyGroup.includes(session.guildId)
+        }
+    )
+
     const prepareRound = (context: CharacterChatContext): CharacterRound => {
         const { session, sessionKey } = context
         const existing = rounds.get(session)
@@ -248,10 +371,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 registerConversationLog(ctx, session, sessionKey)
                 const sessionEntry = buildSessionLogEntry(session)
                 if (sessionEntry != null) {
-                    livingMemory.messageLog.appendLive(
-                        [sessionKey],
-                        sessionEntry
-                    )
+                    collectMessage(context, sessionEntry)
                 }
 
                 if (
@@ -405,39 +525,10 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 )
             )
             if (config.extractionWindowMessages === 0) return
-            await ctx.chatluna_living_memory.queueExtraction(scope, {
-                resolveTranscriptOrigin: async () => {
-                    if (payload.session.isDirect) {
-                        const focusUserId = toNonEmptyString(
-                            payload.focusMessage?.id
-                        )
-                        let focusLabel = ''
-                        if (focusUserId != null) {
-                            focusLabel = await resolveUserSpeaker(
-                                payload.session,
-                                focusUserId,
-                                speakerCache
-                            )
-                                .then((speaker) => speaker.speakerLabel)
-                                .catch(() => '')
-                        }
-                        return buildMemoryTranscriptOrigin({
-                            isDirect: true,
-                            speakerLabel: focusLabel,
-                            speakerId: scope.speakerId
-                        })
-                    }
-
-                    const guild = await payload.session.bot.getGuild(
-                        scope.guildId!
-                    )
-                    return buildMemoryTranscriptOrigin({
-                        isDirect: false,
-                        guildName: guild.name,
-                        guildId: scope.guildId!
-                    })
-                }
-            })
+            await livingMemory.queueExtraction(
+                scope,
+                extractionOptions(payload.session, scope)
+            )
         }
     )
 
