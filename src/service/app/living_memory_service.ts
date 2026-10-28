@@ -413,15 +413,12 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
         )
     }
 
-    async queueExtraction(scope: MemoryScope, options: QueueExtractionOptions) {
-        await this.extractionCoordinator.queue(scope, options)
-    }
-
-    initializeOverheardExtraction(
+    async queueExtraction(
         scope: MemoryScope,
-        options: QueueExtractionOptions
+        options: QueueExtractionOptions,
+        initialCursor?: () => number
     ) {
-        this.extractionCoordinator.initializeOverheard(scope, options)
+        await this.extractionCoordinator.queue(scope, options, initialCursor)
     }
 
     clearExtractionState() {

@@ -225,15 +225,22 @@ const entry = (
     origin: 'live'
 })
 
-const queueExtraction = async (harness: CoordinatorHarness) => {
+const queueExtraction = async (
+    harness: CoordinatorHarness,
+    initialCursor?: () => number
+) => {
     await harness.messageLog.warmup(scope.conversationId)
-    await harness.coordinator.queue(scope, {
-        includeOverheard: harness.includeOverheard,
-        resolveTranscriptOrigin: async () => ({
-            header: '以下是聊天记录：',
-            sourceLabel: '来源于「测试群」（群聊 ID：guild-1）的群聊'
-        })
-    })
+    await harness.coordinator.queue(
+        scope,
+        {
+            includeOverheard: harness.includeOverheard,
+            resolveTranscriptOrigin: async () => ({
+                header: '以下是聊天记录：',
+                sourceLabel: '来源于「测试群」（群聊 ID：guild-1）的群聊'
+            })
+        },
+        initialCursor
+    )
 }
 
 /**
@@ -447,30 +454,23 @@ describe('LivingMemoryExtractionCoordinator', () => {
         'extracts at the threshold with overheard=%s',
         async (includeOverheard) => {
             const harness = createHarness({ window: 4, includeOverheard })
-            if (includeOverheard) {
-                harness.coordinator.initializeOverheard(scope, {
-                    includeOverheard,
-                    resolveTranscriptOrigin: async () => ({
-                        header: 'h',
-                        sourceLabel: 's'
-                    })
-                })
-            } else {
-                await queueExtraction(harness)
-            }
+            const initialCursor = includeOverheard
+                ? harness.messageLog.captureCursor(scope.conversationId)
+                : undefined
+            if (!includeOverheard) await queueExtraction(harness, initialCursor)
             const role = includeOverheard ? 'user' : 'assistant'
             harness.messageLog.appendReply(scope.conversationId, [
                 entry('user', '问题'),
                 entry(role, '回答')
             ])
-            await queueExtraction(harness)
+            await queueExtraction(harness, initialCursor)
             expect(harness.getExtractorCalls()).toBe(0)
 
             harness.messageLog.appendReply(scope.conversationId, [
                 entry('user', '追问'),
                 entry(role, '补充')
             ])
-            await queueExtraction(harness)
+            await queueExtraction(harness, initialCursor)
             await waitFor(
                 () => harness.getExtractorCalls() === 1,
                 'drain settle'

@@ -33,7 +33,7 @@ type ExtractionModel = Pick<LivingMemoryExtractor, 'extract'>
 /** 提取排干所需的消息日志读取面。 */
 export type ExtractionMessageLog = Pick<
     MessageLogRegistry,
-    'warmup' | 'isWarm' | 'afterSeq' | 'tailSeq' | 'captureCursor'
+    'warmup' | 'isWarm' | 'afterSeq' | 'tailSeq'
 >
 
 interface ExtractionScopeState {
@@ -220,46 +220,38 @@ export class LivingMemoryExtractionCoordinator {
         ) => void
     ) {}
 
-    initializeOverheard(scope: MemoryScope, options: QueueExtractionOptions) {
-        if (this.config.extractionWindowMessages === 0) return
-        if (!this.isExtractionWhitelisted(scope)) return
-        const key = scopeKey(scope)
-        if (this.stateByScope.has(key)) return
-        this.clearByConversation(scope.conversationId)
-        this.stateByScope.set(key, {
-            scope,
-            options,
-            cursorSeq: 0,
-            resolveInitialCursor: this.messageLog.captureCursor(
-                scope.conversationId
-            ),
-            failStreak: 0
-        })
-    }
-
-    async queue(scope: MemoryScope, options: QueueExtractionOptions) {
+    async queue(
+        scope: MemoryScope,
+        options: QueueExtractionOptions,
+        initialCursor?: () => number
+    ) {
         if (this.config.extractionWindowMessages === 0) return
         if (!this.isExtractionWhitelisted(scope)) return
 
         const key = scopeKey(scope)
-        const pendingState = this.stateByScope.get(key)
-        await this.messageLog.warmup(scope.conversationId)
-        if (!this.messageLog.isWarm(scope.conversationId)) return
-        if (pendingState && this.stateByScope.get(key) !== pendingState) return
-
+        if (initialCursor && !this.stateByScope.has(key)) {
+            this.clearByConversation(scope.conversationId)
+        }
         const state: ExtractionScopeState = this.stateByScope.get(key) ?? {
             scope,
             options,
-            cursorSeq: this.messageLog.tailSeq(scope.conversationId) ?? 0,
+            cursorSeq: 0,
+            resolveInitialCursor:
+                initialCursor ??
+                (() => this.messageLog.tailSeq(scope.conversationId) ?? 0),
             failStreak: 0
         }
+        this.stateByScope.set(key, state)
+        await this.messageLog.warmup(scope.conversationId)
+        if (!this.messageLog.isWarm(scope.conversationId)) return
+        if (this.stateByScope.get(key) !== state) return
+
         if (state.resolveInitialCursor) {
             state.cursorSeq = state.resolveInitialCursor()
             delete state.resolveInitialCursor
         }
         state.scope = scope
         state.options = options
-        this.stateByScope.set(key, state)
         this.schedule(key, state)
     }
 

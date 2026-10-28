@@ -296,31 +296,35 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
 
     const collectMessage = (
         context: CharacterChatContext,
-        entry: ConversationLogEntryInput
+        entry: ConversationLogEntryInput | null
     ) => {
-        const scope = createCharacterScope(ctx, context, entry.userId)
         registerConversationLog(ctx, context.session, context.sessionKey)
-        const options = extractionOptions(context.session, scope)
-        if (options.includeOverheard && config.extractionWindowMessages > 0) {
-            livingMemory.initializeOverheardExtraction(scope, options)
-        }
+        if (entry == null) return
+        const cursor =
+            config.extractionIncludeOverheard &&
+            config.extractionWindowMessages > 0
+                ? livingMemory.messageLog.captureCursor(context.sessionKey)
+                : undefined
         const appended = livingMemory.messageLog.appendLive(
             context.sessionKey,
             entry
         )
-        if (
-            appended &&
-            options.includeOverheard &&
-            config.extractionWindowMessages > 0
-        ) {
-            void livingMemory.queueExtraction(scope, options).catch((error) => {
-                logger.summary(
-                    '记忆提取调度失败',
-                    formatLogScope(scope),
-                    'warn',
-                    error
+        if (appended && cursor) {
+            const scope = createCharacterScope(ctx, context, entry.userId)
+            void livingMemory
+                .queueExtraction(
+                    scope,
+                    extractionOptions(context.session, scope),
+                    cursor
                 )
-            })
+                .catch((error) => {
+                    logger.summary(
+                        '记忆提取调度失败',
+                        formatLogScope(scope),
+                        'warn',
+                        error
+                    )
+                })
         }
     }
 
@@ -368,11 +372,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
 
         const round: CharacterRound = {
             context: (async () => {
-                registerConversationLog(ctx, session, sessionKey)
-                const sessionEntry = buildSessionLogEntry(session)
-                if (sessionEntry != null) {
-                    collectMessage(context, sessionEntry)
-                }
+                collectMessage(context, buildSessionLogEntry(session))
 
                 if (
                     config.recallIntervalMessages === 0 &&

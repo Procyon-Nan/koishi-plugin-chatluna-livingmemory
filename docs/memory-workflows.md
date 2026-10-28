@@ -11,11 +11,12 @@
 
 ## 对话接入与消息日志
 
-- ChatLuna 在 `before-chat` 注入当前会话最近一次快照和用户画像；在 `after-chat` 追加实际回复并触发提取。
-- Character 经专用生命周期事件维护上下文，通过预设中的 `{living_memory}` 变量注入。
-- Character 每次 `message_collect` 开始新一轮。首次求值 `{living_memory}` 时注册会话、补写 session 平台消息并等待回填，从本插件消息池一次读取末条消息及前 `recallHistoryMessages` 条历史，固定为本轮上下文。请求模板与历史模板复用本轮生成的变量文本。
+- ChatLuna 在 `before-chat` 注入当前会话最近一次快照和用户画像，写入实际用户请求；在 `after-chat` 追加实际回复并触发提取。其消息池只接收实际对话，注册即就绪。
+- Character 从插件就绪后的首条合规平台消息注册消息池并采集。接收范围复用 Character 上下文过滤及群聊／私聊白名单，预设按基础、全局与会话配置依次覆盖确定。生命周期事件维护模型轮次，通过 `{living_memory}` 变量注入。
+- Character 每次 `message_collect` 开始新一轮。首次求值 `{living_memory}` 时复用会话、补写 session 平台消息并等待回填，从本插件消息池一次读取末条消息及前 `recallHistoryMessages` 条历史，固定为本轮上下文。请求模板与历史模板复用本轮生成的变量文本。
 - Character 的 `before-chat` 消费这份上下文并启动异步召回；预设未使用 `{living_memory}` 时，在 `before-chat` 准备同样的上下文。`focusMessage` 继续用于实际回复识别和提取来源描述。
 - 会话清空时同步清除快照、召回锚点、提取游标和消息日志，并推进日志纪元。回填只接受当前纪元的消息。
+- Character 回填先写纯历史，记录历史末序号，再按到达顺序冲刷实时缓冲。回填与实时身份重复的消息以实时缓冲为准；回填失败保留缓冲，后续访问重试。
 - 消息角色在入账时确定。采集与回填共用同步的消息元素文本化过程，非文本元素转为占位文本；文本化与入账连续执行。
 - 说话人与 at 目标使用用户昵称，取 `event.user.name` 或 `resolveUserSpeaker`，缺失时使用 userId。群名片字段为 `author.nick`、`member`、`session.username`。
 - 来源消息通过持久化来源关系查询，独立于记忆正文。
@@ -25,7 +26,7 @@
 入口：`src/service/workflows/recall/coordinator.ts`。
 
 - Recall 异步运行，当前对话注入已有快照，新生成快照供后续对话使用。
-- `recallIntervalMessages` 为 0 时关闭。会话首次触发立即召回，此后按日志消息数计算间隔，闲聊计入。锚点保存在内存中，重启或召回失败后重新计数，下次触发立即召回。
+- `recallIntervalMessages` 为 0 时关闭。会话首次触发立即召回，此后按日志消息数计算间隔，Character 闲聊计入。锚点保存在内存中，重启或召回失败后重新计数，下次触发立即召回。
 - ChatLuna 输入历史为当前触发消息之前最近 `recallHistoryMessages` 条日志。Character 当前消息取本轮准备时消息池的末条，历史取其前面最近 `recallHistoryMessages` 条；末条为用户消息时启动召回。
 - `subModel` 通过内部 `living_memory_search` 检索活跃记忆，快照保存模型整理后的文本与搜索轨迹。
 - 重排序失败时使用混合检索排序。用户关联信息用于说明归属。
@@ -38,8 +39,9 @@
 入口：`src/service/workflows/extraction/coordinator.ts`。
 
 - 按会话日志游标消费，同会话串行，跨会话并行。积压达到 `extractionWindowMessages` 时打包提取，为 0 时关闭。
-- 分块以完整交流（触发消息及其回复）为单位；旁听模式下超出预算的超长段可以拆分。
-- 冷启动游标从当时日志末尾开始。
+- Character 开启旁听提取时，从首条实时消息之前捕获游标边界，回填就绪后解析最终序号并检查阈值。纯用户消息可组成提取块；超预算段可以拆分。每块结束后按剩余可读取消息检查阈值，达到阈值继续，否则保留积压。
+- Character 关闭旁听时和 ChatLuna 接入均在 `after-chat` 检查阈值，首次合规检查从当时池末尾起算。分块以完整交流为单位；Character 保留最新交流前一个窗口内的闲聊。旁听开关仅作用于 Character。
+- Character 旁听与 `after-chat` 共用作用域游标、来源解析器和运行锁。清空会话后从下一条实时消息重新起算；预设切换建立新作用域边界，旧作用域已开始的批次完成后结束排干。重启后各接入按上述初始化规则重新建立内存池与游标。
 - 单块失败后中断本次提取并保留游标；连续失败 3 次后记录失败任务，跳过该块。
 - `enableExtractionWhitelist` 按原始平台 ID 匹配，群聊使用 `scope.guildId`，私聊使用 `scope.userId`；未命中时跳过游标初始化和自动提取。
 - 模型结果通过结构化校验后写入。结果必须包含 `reason`；`memories` 为空时正常推进游标。
