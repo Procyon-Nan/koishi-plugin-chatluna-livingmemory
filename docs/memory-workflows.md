@@ -38,7 +38,9 @@
 
 - `createMemoryTool.pass()` 创建 `living_memory_pass`，返回保持快照的结束结果。
 - `createMemoryTool.updateSnapshot(lines, maxLines, saveSnapshot)` 创建 `living_memory_update_snapshot`。调用方提供本轮旧快照行数组、行数上限和保存回调，工具完成行编辑后等待保存成功，再返回结束结果。
-- `snapshotMaxLines` 默认 5 行，可配置 5～50 行；每行最多 100 个字符。工具描述向模型说明容量，保存前检查最终快照，超限由模型调整后重新提交。召回系统提示词将在流程接入时同步说明容量。
+- `snapshotMaxLines` 默认 5 行，可配置 5～50 行；每行最多 100 个字符。工具描述向模型说明容量，保存前检查最终快照，超限由模型调整后重新提交。
+- `buildSnapshotRecallPrompts` 已定义新版提示词，接收历史、当前消息、旧快照行数组及行数上限，呈现从 0 开始的行号并说明容量、按需检索和工具结束规则。当前执行器继续使用 `buildAgenticRecallPrompts`，切换时同步接入工具及保存回调。
+- 新版提示词要求旧快照足够时调用 `pass`；需要补充时先检索，依据相关结果编辑。检索结果为空或与话题无关时调用 `pass`，保持现有快照。
 - 操作包括 `append`（末尾追加）、`replace`（替换原行）和 `delete`（删除原行）。行号从 0 开始，统一对应输入的旧快照；同一原行最多操作一次，文本为非空单行。
 - 每次调用先处理全部编辑，再执行一次保存。空快照通过追加创建，删除全部行保存空文本。行号错误和重复操作通过 `MemoryInputError` 交给调用方处理，保存异常直接传播。
 - 成功结果使用宿主识别的 `lc_direct_tool_output` 结束标记。当前仅提供工具定义及创建入口，召回执行器仍使用现有生成流程。
