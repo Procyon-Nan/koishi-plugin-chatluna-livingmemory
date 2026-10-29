@@ -3,14 +3,13 @@ import type {
     AgenticMemorySnapshotItem,
     LivingMemoryTranscriptMessage
 } from '../src/contracts/memory'
-import type { LivingMemoryAgenticRecallTrace } from '../src/service/workflows/recall/agentic_recall'
 import {
     LivingMemoryRecallCoordinator,
     type RecallWorkflowRepository
 } from '../src/service/workflows/recall/coordinator'
 import type { LivingMemoryLogger } from '../src/service/logging/logger'
 import {
-    createAgenticTrace,
+    createSnapshotItem,
     createCapturedLogger,
     createJobStore,
     currentMessage,
@@ -22,9 +21,9 @@ import {
 type AgenticRun = (
     historyMessages: LivingMemoryTranscriptMessage[],
     runLogger: LivingMemoryLogger
-) => Promise<LivingMemoryAgenticRecallTrace | null>
+) => Promise<AgenticMemorySnapshotItem | null>
 
-const defaultRun: AgenticRun = async () => createAgenticTrace('记得')
+const defaultRun: AgenticRun = async () => createSnapshotItem('记得')
 
 const createCoordinator = (options: {
     repository?: Partial<RecallWorkflowRepository>
@@ -44,6 +43,7 @@ const createCoordinator = (options: {
         {
             createFailedJob: createJobStore().createFailedJob,
             upsertSnapshot: async () => {},
+            getLatestSnapshotByScope: async () => undefined,
             ...options.repository
         },
         {
@@ -51,8 +51,14 @@ const createCoordinator = (options: {
                 _scope,
                 _message,
                 historyMessages,
+                _snapshotLines,
+                saveSnapshot,
                 runLogger: LivingMemoryLogger
-            ) => await run(historyMessages, runLogger)
+            ) => {
+                const snapshot = await run(historyMessages, runLogger)
+                if (snapshot !== null) await saveSnapshot(snapshot)
+                return snapshot
+            }
         },
         options.logger ?? logger
     )
@@ -70,7 +76,7 @@ it('persists the agentic snapshot without persisting a successful job', async ()
                 snapshots.push({ query, items })
             }
         },
-        run: async () => createAgenticTrace('  remembered context  '),
+        run: async () => createSnapshotItem('  remembered context  '),
         logger: captured.logger
     })
 
@@ -85,15 +91,15 @@ it('persists the agentic snapshot without persisting a successful job', async ()
 
     assert.equal(jobStore.jobs.length, 0)
     assert.equal(snapshots.length, 1)
-    const trace = createAgenticTrace('  remembered context  ')!
-    assert.equal(snapshots[0].query, JSON.stringify(trace.item.toolCallSummary))
-    assert.deepEqual(snapshots[0].items, [trace.item])
+    const snapshot = createSnapshotItem('  remembered context  ')
+    assert.equal(snapshots[0].query, JSON.stringify(snapshot.toolCallSummary))
+    assert.deepEqual(snapshots[0].items, [snapshot])
     assert.ok(
         captured.info.some((message) => message.includes('remembered context'))
     )
 })
 
-it('keeps the previous snapshot without persisting a job for <NO_MEMORY>', async () => {
+it('keeps the previous snapshot without persisting a job when the agent passes', async () => {
     const jobStore = createJobStore()
     let snapshotWrites = 0
     const captured = createCapturedLogger()
@@ -104,7 +110,7 @@ it('keeps the previous snapshot without persisting a job for <NO_MEMORY>', async
                 snapshotWrites += 1
             }
         },
-        run: async () => createAgenticTrace(''),
+        run: async () => null,
         logger: captured.logger
     })
 
@@ -128,7 +134,7 @@ it('skips recall without persisting a job when the current message is empty', as
         repository: { createFailedJob: jobStore.createFailedJob },
         run: async () => {
             runCalls += 1
-            return createAgenticTrace('unused')
+            return createSnapshotItem('unused')
         }
     })
 
@@ -151,7 +157,7 @@ it('skips recall without persisting a job when subModel is not configured', asyn
         repository: { createFailedJob: jobStore.createFailedJob },
         run: async () => {
             runCalls += 1
-            return createAgenticTrace('unused')
+            return createSnapshotItem('unused')
         },
         subModel: '无',
         logger: captured.logger
@@ -172,7 +178,7 @@ it('skips recall without persisting a job when subModel is not configured', asyn
 
 it('serializes recall runs for the same scope without persisted running state', async () => {
     const jobStore = createJobStore()
-    let resolveRun: ((trace: null) => void) | undefined
+    let resolveRun: ((snapshot: null) => void) | undefined
     let runCalls = 0
     let tail = 100
     const captured = createCapturedLogger()
@@ -256,7 +262,7 @@ it('retries immediately after a failed recall instead of waiting out the interva
             if (runCalls === 1) {
                 throw new Error('agentic failure')
             }
-            return createAgenticTrace('记得')
+            return createSnapshotItem('记得')
         },
         recallIntervalMessages: 10
     })
@@ -284,7 +290,7 @@ it('records history loading failure without invoking recall or updating the snap
         },
         run: async (historyMessages) => {
             receivedHistory = historyMessages
-            return createAgenticTrace('remembered context')
+            return createSnapshotItem('remembered context')
         },
         logger: captured.logger
     })

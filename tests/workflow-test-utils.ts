@@ -1,11 +1,11 @@
 import type { JobRepository } from '../src/contracts/workflows'
 import type {
+    AgenticMemorySnapshotItem,
     LivingMemoryTranscriptMessage,
     MemoryEntryRecord,
     MemoryJobRecord,
     MemoryScope
 } from '../src/contracts/memory'
-import type { LivingMemoryAgenticRecallTrace } from '../src/service/workflows/recall/agentic_recall'
 import type { DreamRunResult } from '../src/service/workflows/dream/types'
 import { formatErrorDetails } from '../src/service/shared/utils'
 import { LivingMemoryLogger } from '../src/service/logging/logger'
@@ -148,37 +148,28 @@ export const createMemoryEntry = (
     }
 }
 
-export const createAgenticTrace = (
+export const createSnapshotItem = (
     finalText: string
-): LivingMemoryAgenticRecallTrace | null => {
-    if (finalText.length === 0) {
-        return null
-    }
+): AgenticMemorySnapshotItem => {
     return {
-        prompt: {
-            systemPrompt: 'agentic system prompt',
-            inputPrompt: 'agentic input prompt'
+        finalText,
+        toolCallSummary: {
+            searchTexts: ['记忆查询'],
+            searchKeywords: [],
+            maxCandidates: 3
         },
-        item: {
-            finalText,
-            toolCallSummary: {
-                searchTexts: ['记忆查询'],
-                searchKeywords: [],
-                maxCandidates: 3
-            },
-            matchedMemories: [
-                {
-                    type: 'fact',
-                    content: 'matched memory',
-                    keywords: ['memory'],
-                    summary: 'matched summary',
-                    sentiment: '平静',
-                    importance: 0.5,
-                    createdAt: new Date('2026-07-01T00:00:00.000Z'),
-                    updatedAt: new Date('2026-07-01T00:00:00.000Z')
-                }
-            ]
-        }
+        matchedMemories: [
+            {
+                type: 'fact',
+                content: 'matched memory',
+                keywords: ['memory'],
+                summary: 'matched summary',
+                sentiment: '平静',
+                importance: 0.5,
+                createdAt: new Date('2026-07-01T00:00:00.000Z'),
+                updatedAt: new Date('2026-07-01T00:00:00.000Z')
+            }
+        ]
     }
 }
 

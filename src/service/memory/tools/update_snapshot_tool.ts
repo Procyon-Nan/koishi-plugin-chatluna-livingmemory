@@ -58,12 +58,15 @@ export class LivingMemoryUpdateSnapshotTool extends StructuredTool {
                 `编辑后的快照共 ${finalLines.length} 行，上限为 ${this.maxLines} 行，请删减后重新提交。`
             )
         }
-        const oversizedLines = finalLines.flatMap((text, index) =>
-            text.length > snapshotMaxLineLength ? [index] : []
+        // 新提交的文本已由工具 schema 校验，这里检查原样保留的旧行。
+        const oversizedLines = this.lines.flatMap((text, index) =>
+            !changes.has(index) && text.length > snapshotMaxLineLength
+                ? [index]
+                : []
         )
         if (oversizedLines.length > 0) {
             throw new MemoryInputError(
-                `编辑后行号 ${oversizedLines.join('、')} 的内容超过 ${snapshotMaxLineLength} 个字符，请根据原快照行号缩短内容后重新提交。`
+                `旧快照行号 ${oversizedLines.join('、')} 的内容超过 ${snapshotMaxLineLength} 个字符，请缩短或删除这些行后重新提交。`
             )
         }
         const finalText = finalLines.join('\n')

@@ -16,7 +16,11 @@ import type {
     LivingMemorySearchResult,
     MemoryScope
 } from '../src/contracts/memory'
-import { memorySearchTool } from '../src/service/prompts/memory_tools'
+import {
+    memorySearchTool,
+    memoryUpdateSnapshotTool,
+    memoryPassTool
+} from '../src/service/prompts/memory_tools'
 import { LivingMemoryAgenticRecallExecutor } from '../src/service/workflows/recall/agentic_recall'
 import type { LivingMemorySearchEngine } from '../src/service/workflows/recall/memory_search_engine'
 import { currentMessage, scope } from './workflow-test-utils'
@@ -42,6 +46,7 @@ interface AgenticRecallHarnessOptions {
 const config = {
     enableConversationIsolation: false,
     subModel: 'test/model',
+    snapshotMaxLines: 5,
     embeddingModel: 'test-embedding',
     debug: false,
     memorySearchToolMaxResults: 30
@@ -75,6 +80,32 @@ const createSearchCall = (
         ]
     })
 }
+
+const createSnapshotUpdate = (text: string) =>
+    new AIMessage({
+        content: '',
+        tool_calls: [
+            {
+                name: memoryUpdateSnapshotTool.name,
+                args: { operations: [{ type: 'append', text }] },
+                id: 'update-snapshot',
+                type: 'tool_call'
+            }
+        ]
+    })
+
+const createPassCall = () =>
+    new AIMessage({
+        content: '',
+        tool_calls: [
+            {
+                name: memoryPassTool.name,
+                args: {},
+                id: 'pass',
+                type: 'tool_call'
+            }
+        ]
+    })
 
 const createMultipleSearchCalls = (
     calls: { id: string; input: z.infer<typeof memorySearchTool.schema> }[]
@@ -185,7 +216,8 @@ const createHarness = (options: AgenticRecallHarnessOptions) => {
         boundInvocations,
         debugMessages,
         searchInvocations,
-        run: () => executor.run(testScope, currentMessage, [])
+        run: () =>
+            executor.run(testScope, currentMessage, [], [], async () => {})
     }
 }
 
@@ -197,18 +229,18 @@ it('runs one search through AgentRunner and preserves preset-scoped trace data',
     const harness = createHarness({
         responses: [
             createSearchCall('search-1'),
-            new AIMessage('我记得一段可靠的往事。')
+            createSnapshotUpdate('我记得一段可靠的往事。')
         ],
         search: async () => [createSearchResult('memory-1')]
     })
 
-    const trace = await harness.run()
+    const snapshot = await harness.run()
 
-    assert.ok(trace)
-    assert.equal(trace.item.finalText, '我记得一段可靠的往事。')
-    assert.equal(trace.item.matchedMemories.length, 1)
-    assert.equal(trace.item.matchedMemories[0]?.content, 'content-memory-1')
-    assert.deepEqual(trace.item.toolCallSummary.searchTexts, ['记忆'])
+    assert.ok(snapshot)
+    assert.equal(snapshot.finalText, '我记得一段可靠的往事。')
+    assert.equal(snapshot.matchedMemories.length, 1)
+    assert.equal(snapshot.matchedMemories[0]?.content, 'content-memory-1')
+    assert.deepEqual(snapshot.toolCallSummary.searchTexts, ['记忆'])
     assert.equal(harness.searchInvocations[0]?.presetId, scope.presetId)
     assert.deepEqual(harness.searchInvocations[0]?.input.memoryTypes, ['all'])
     assert.equal(harness.boundInvocations.length, 2)
@@ -245,77 +277,63 @@ it('rejects stringified arrays and allows corrected search input', async () => {
                 searchTexts: '["记忆"]'
             }),
             createSearchCall('search-2'),
-            new AIMessage('我记得修正查询后找到的内容。')
+            createSnapshotUpdate('我记得修正查询后找到的内容。')
         ],
         search: async () => [createSearchResult('memory-2')]
     })
 
-    const trace = await harness.run()
+    const snapshot = await harness.run()
 
-    assert.ok(trace)
-    assert.equal(trace.item.matchedMemories.length, 1)
+    assert.ok(snapshot)
+    assert.equal(snapshot.matchedMemories.length, 1)
     assert.equal(harness.searchInvocations.length, 1)
 })
 
-it('returns no result for <NO_MEMORY> without running invalid searches', async () => {
+it('passes without updating after invalid search input', async () => {
     const harness = createHarness({
         responses: [
             createSearchCall('invalid-1', {
                 searchTexts: '["记忆"]'
             }),
-            new AIMessage('<NO_MEMORY>')
+            createPassCall()
         ]
     })
 
-    const trace = await harness.run()
+    const snapshot = await harness.run()
 
-    assert.equal(trace, null)
+    assert.equal(snapshot, null)
     assert.equal(harness.searchInvocations.length, 0)
 })
 
-it('handles every tool call in a multi-call model response', async () => {
-    let releaseFirstSearch!: () => void
-    const firstSearchCanComplete = new Promise<void>((resolve) => {
-        releaseFirstSearch = resolve
-    })
+it('rejects multiple tool calls and accepts corrected serial calls', async () => {
     const harness = createHarness({
         responses: [
             createMultipleSearchCalls([
                 { id: 'search-1', input: validSearchInput('记忆') },
                 { id: 'search-2', input: validSearchInput('计划') }
             ]),
-            new AIMessage('我记得两段相关内容。')
+            createSearchCall('search-3', validSearchInput('记忆')),
+            createSearchCall('search-4', validSearchInput('计划')),
+            createSnapshotUpdate('我记得两段相关内容。')
         ],
-        search: async (invocation) => {
-            if (invocation.input.searchTexts[0] === '记忆') {
-                await firstSearchCanComplete
-            } else {
-                releaseFirstSearch()
-            }
-            return [
-                createSearchResult(
-                    invocation.input.searchTexts[0] === '记忆'
-                        ? 'memory-1'
-                        : 'memory-2'
-                )
-            ]
-        }
+        search: async (invocation) => [
+            createSearchResult(invocation.input.searchTexts[0])
+        ]
     })
 
-    const trace = await harness.run()
-    const returnedToolMessages = toolMessages(harness.boundInvocations[1])
+    const snapshot = await harness.run()
 
-    assert.ok(trace)
+    assert.ok(snapshot)
+    assert.equal(harness.boundInvocations.length, 4)
     assert.equal(harness.searchInvocations.length, 2)
-    assert.equal(returnedToolMessages.length, 2)
-    assert.deepEqual(
-        returnedToolMessages.map((message) => message.tool_call_id),
-        ['search-1', 'search-2']
+    assert.match(
+        String(toolMessages(harness.boundInvocations[1])[0]?.content),
+        /每次只调用一个工具/u
     )
-    assert.equal(trace.item.matchedMemories.length, 2)
+    assert.equal(snapshot.matchedMemories.length, 2)
     assert.deepEqual(
-        trace.item.matchedMemories.map((memory) => memory.content),
-        ['content-memory-1', 'content-memory-2']
+        snapshot.matchedMemories.map((memory) => memory.content),
+        ['content-记忆', 'content-计划']
     )
 })
 
@@ -337,15 +355,15 @@ it('recovers from malformed raw tool arguments through parser observation', asyn
                 }
             }),
             createSearchCall('search-2'),
-            new AIMessage('我记得恢复后的搜索结果。')
+            createSnapshotUpdate('我记得恢复后的搜索结果。')
         ],
         search: async () => [createSearchResult('memory-3')]
     })
 
-    const trace = await harness.run()
+    const snapshot = await harness.run()
 
-    assert.ok(trace)
-    assert.equal(trace.item.matchedMemories.length, 1)
+    assert.ok(snapshot)
+    assert.equal(snapshot.matchedMemories.length, 1)
     assert.equal(harness.boundInvocations.length, 3)
     assert.equal(harness.searchInvocations.length, 1)
 })
@@ -365,15 +383,15 @@ it('allows the model to recover from an unavailable tool call', async () => {
                 ]
             }),
             createSearchCall('search-2'),
-            new AIMessage('我记得纠正工具名称后的结果。')
+            createSnapshotUpdate('我记得纠正工具名称后的结果。')
         ],
         search: async () => [createSearchResult('memory-4')]
     })
 
-    const trace = await harness.run()
+    const snapshot = await harness.run()
 
-    assert.ok(trace)
-    assert.equal(trace.item.matchedMemories.length, 1)
+    assert.ok(snapshot)
+    assert.equal(snapshot.matchedMemories.length, 1)
 })
 
 it('propagates hard search service failures to the coordinator boundary', async () => {
@@ -401,7 +419,7 @@ it('fails after six invalid tool calls without updating a recall result', async 
     assert.equal(harness.searchInvocations.length, 0)
 })
 
-it('accepts a normal final response on the sixth model call', async () => {
+it('accepts a snapshot update on the sixth model call', async () => {
     const harness = createHarness({
         responses: [
             ...['一', '二', '三', '四', '五'].map((text, index) =>
@@ -410,20 +428,20 @@ it('accepts a normal final response on the sixth model call', async () => {
                     validSearchInput(`查询${text}`)
                 )
             ),
-            new AIMessage('我记得在多次查询中确认的事实。')
+            createSnapshotUpdate('我记得在多次查询中确认的事实。')
         ],
         search: async (invocation) => [
             createSearchResult(`memory-${invocation.input.searchTexts[0]}`)
         ]
     })
 
-    const trace = await harness.run()
+    const snapshot = await harness.run()
 
-    assert.ok(trace)
-    assert.equal(trace.item.finalText, '我记得在多次查询中确认的事实。')
-    assert.equal(trace.item.matchedMemories.length, 5)
+    assert.ok(snapshot)
+    assert.equal(snapshot.finalText, '我记得在多次查询中确认的事实。')
+    assert.equal(snapshot.matchedMemories.length, 5)
     assert.equal(harness.boundInvocations.length, 6)
-    assert.deepEqual(trace.item.toolCallSummary.searchTexts, [
+    assert.deepEqual(snapshot.toolCallSummary.searchTexts, [
         '查询一',
         '查询二',
         '查询三',
@@ -432,18 +450,18 @@ it('accepts a normal final response on the sixth model call', async () => {
     ])
 })
 
-it('returns no result when the final text has no matched memories', async () => {
+it('passes after a search returns no memories', async () => {
     const harness = createHarness({
         responses: [
             createSearchCall('search-1'),
-            new AIMessage('没有搜索依据的记忆文本')
+            createPassCall()
         ],
         search: async () => []
     })
 
-    const trace = await harness.run()
+    const snapshot = await harness.run()
 
-    assert.equal(trace, null)
+    assert.equal(snapshot, null)
     assert.equal(
         String(toolMessages(harness.boundInvocations[1])[0]?.content),
         '没有找到相关记忆。'
@@ -455,15 +473,15 @@ it('deduplicates a memory returned by repeated searches', async () => {
         responses: [
             createSearchCall('search-1', validSearchInput('记忆')),
             createSearchCall('search-2', validSearchInput('计划')),
-            new AIMessage('我记得两次查询返回的同一事实。')
+            createSnapshotUpdate('我记得两次查询返回的同一事实。')
         ],
         search: async () => [createSearchResult('memory-1')]
     })
 
-    const trace = await harness.run()
+    const snapshot = await harness.run()
 
-    assert.ok(trace)
+    assert.ok(snapshot)
     assert.equal(harness.searchInvocations.length, 2)
-    assert.equal(trace.item.matchedMemories.length, 1)
-    assert.equal(trace.item.matchedMemories[0]?.content, 'content-memory-1')
+    assert.equal(snapshot.matchedMemories.length, 1)
+    assert.equal(snapshot.matchedMemories[0]?.content, 'content-memory-1')
 })

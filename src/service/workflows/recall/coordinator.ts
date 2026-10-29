@@ -25,7 +25,7 @@ type RecallMessageLog = Pick<MessageLogRegistry, 'tailSeq'>
 
 type RecallAgenticExecutor = Pick<LivingMemoryAgenticRecallExecutor, 'run'>
 export type RecallWorkflowRepository = Pick<JobRepository, 'createFailedJob'> &
-    Pick<SnapshotRepository, 'upsertSnapshot'>
+    Pick<SnapshotRepository, 'upsertSnapshot' | 'getLatestSnapshotByScope'>
 
 export class LivingMemoryRecallCoordinator {
     private readonly recallLockByConversation = new Set<string>()
@@ -135,13 +135,25 @@ export class LivingMemoryRecallCoordinator {
 
         try {
             const historyMessages = await loadHistoryMessages()
-            const trace = await this.agenticRecall.run(
+            const snapshot = await this.repository.getLatestSnapshotByScope(scope)
+            const snapshotText = renderSnapshotText(snapshot?.items ?? [])
+            const snapshotLines =
+                snapshotText === '' ? [] : snapshotText.split(/\r?\n/)
+            const updatedSnapshot = await this.agenticRecall.run(
                 scope,
                 currentMessage,
                 historyMessages,
+                snapshotLines,
+                async (item) => {
+                    await this.repository.upsertSnapshot(
+                        scope,
+                        JSON.stringify(item.toolCallSummary),
+                        [item]
+                    )
+                },
                 logger
             )
-            if (trace == null) {
+            if (updatedSnapshot == null) {
                 logger.summary(
                     '召回结束',
                     `${formatLogScope(scope)}; 结果：沿用当前快照`
@@ -149,17 +161,12 @@ export class LivingMemoryRecallCoordinator {
                 return
             }
 
-            await this.repository.upsertSnapshot(
-                scope,
-                JSON.stringify(trace.item.toolCallSummary),
-                [trace.item]
-            )
             logger.summary(
                 '召回快照已更新',
                 [
-                    `${formatLogScope(scope)}; 命中记忆：${trace.item.matchedMemories.length} 条`,
+                    `${formatLogScope(scope)}; 命中记忆：${updatedSnapshot.matchedMemories.length} 条`,
                     '========召回快照========',
-                    renderSnapshotText([trace.item])
+                    renderSnapshotText([updatedSnapshot])
                 ].join('\n')
             )
         } catch (error) {

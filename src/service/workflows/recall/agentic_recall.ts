@@ -1,3 +1,5 @@
+import { isDirectToolOutput } from '@langchain/core/messages/tool'
+import { OutputParserException } from '@langchain/core/output_parsers'
 import {
     ChatPromptTemplate,
     MessagesPlaceholder
@@ -28,11 +30,16 @@ import type {
 } from '../../../contracts/memory'
 import type { LivingMemoryConfig } from '../../../contracts/workflows'
 import { LivingMemoryMessageFormatter } from '../../transcript/message_formatter'
-import { buildAgenticRecallPrompts } from '../../prompts/agentic_recall'
+import { buildSnapshotRecallPrompts } from '../../prompts/agentic_recall'
 import type { PromptMessages } from '../../prompts/prompt_format'
 import { formatLogScope, type LivingMemoryLogger } from '../../logging/logger'
 import { createLoggedModel } from '../../logging/model_calls'
-import { memorySearchTool } from '../../prompts/memory_tools'
+import {
+    memorySearchTool,
+    memoryPassTool,
+    memoryUpdateSnapshotTool
+} from '../../prompts/memory_tools'
+import { MemoryInputError } from '../../memory/errors'
 import { createMemoryTool } from '../../memory/tools'
 import type { LivingMemorySearchTool } from '../../memory/tools/search_memory_tool'
 import { resolveScopeAssistantLabel } from '../../memory/helpers'
@@ -40,14 +47,13 @@ import type { LivingMemorySearchEngine } from './memory_search_engine'
 
 type LivingMemoryAgenticRecallConfig = Pick<
     LivingMemoryConfig,
+    | 'snapshotMaxLines'
     | 'subModel'
-    | 'debug'
     | 'memorySearchToolMaxResults'
     | 'enableConversationIsolation'
 >
 
 interface RecordedAgenticSearchCall {
-    inputKey: string
     input: z.infer<typeof memorySearchTool.schema>
     results: LivingMemorySearchResult[]
 }
@@ -68,45 +74,16 @@ const agenticRecallPromptTemplate = ChatPromptTemplate.fromMessages([
     new MessagesPlaceholder('agent_scratchpad')
 ])
 
-export interface LivingMemoryAgenticRecallTrace {
-    prompt: PromptMessages
-    item: AgenticMemorySnapshotItem
-}
-
-const uniqueTexts = (groups: (readonly string[])[]) => {
-    return [
-        ...new Set(
-            groups
-                .flat()
-                .map((text) => text.trim())
-                .filter((text) => text.length > 0)
-        )
-    ]
-}
-
-const normalizeToolCallSummary = (
-    input: z.infer<typeof memorySearchTool.schema>,
+const aggregateToolCallSummary = (
+    calls: RecordedAgenticSearchCall[],
     maxCandidates: number
 ): AgenticMemorySearchToolCallSummary => ({
-    searchTexts: input.searchTexts,
-    searchKeywords: input.searchKeywords ?? [],
+    searchTexts: [...new Set(calls.flatMap(({ input }) => input.searchTexts))],
+    searchKeywords: [
+        ...new Set(calls.flatMap(({ input }) => input.searchKeywords ?? []))
+    ],
     maxCandidates
 })
-
-const aggregateToolCallSummary = (
-    summaries: AgenticMemorySearchToolCallSummary[],
-    maxCandidates: number
-): AgenticMemorySearchToolCallSummary => {
-    return {
-        searchTexts: uniqueTexts(
-            summaries.map((summary) => summary.searchTexts)
-        ),
-        searchKeywords: uniqueTexts(
-            summaries.map((summary) => summary.searchKeywords)
-        ),
-        maxCandidates
-    }
-}
 
 const toSnapshotMemoryItem = (
     result: LivingMemorySearchResult
@@ -139,40 +116,6 @@ const uniqueSnapshotMemoryItems = (
     return items
 }
 
-const createSearchInputKey = (input: unknown) => {
-    const parsedInput = memorySearchTool.schema.safeParse(input)
-    return JSON.stringify(parsedInput.success ? parsedInput.data : input)
-}
-
-const orderRecordedSearchCalls = (
-    calls: RecordedAgenticSearchCall[],
-    steps: AgentStep[]
-) => {
-    const callsByInput = new Map<string, RecordedAgenticSearchCall[]>()
-    for (const call of calls) {
-        const group = callsByInput.get(call.inputKey) ?? []
-        group.push(call)
-        callsByInput.set(call.inputKey, group)
-    }
-
-    const ordered: RecordedAgenticSearchCall[] = []
-    for (const step of steps) {
-        if (step.action.tool !== memorySearchTool.name) {
-            continue
-        }
-
-        const group = callsByInput.get(
-            createSearchInputKey(step.action.toolInput)
-        )
-        const call = group?.shift()
-        if (call != null) {
-            ordered.push(call)
-        }
-    }
-
-    return ordered
-}
-
 class RecordingLivingMemorySearchTool extends StructuredTool {
     name = memorySearchTool.name
     description = memorySearchTool.description
@@ -181,7 +124,6 @@ class RecordingLivingMemorySearchTool extends StructuredTool {
     constructor(
         private readonly delegate: LivingMemorySearchTool,
         private readonly calls: RecordedAgenticSearchCall[],
-        private readonly agentContext: { requestId: string },
         private readonly logger: LivingMemoryLogger
     ) {
         super({ verboseParsingErrors: true })
@@ -192,24 +134,11 @@ class RecordingLivingMemorySearchTool extends StructuredTool {
         _runManager: unknown,
         runConfig?: ToolRunnableConfig
     ) {
-        // AgentRunner 会复制 RunnableConfig，显式复用本次 run 的 agentContext，
-        // 以保持工具参数重试计数的请求级作用域。
-        const delegateConfig = {
-            ...runConfig,
-            configurable: {
-                ...runConfig?.configurable,
-                agentContext: this.agentContext
-            }
-        } as ToolRunnableConfig
         const { results, output } = await this.delegate.runSearch(
             input,
-            delegateConfig
+            runConfig
         )
-        this.calls.push({
-            inputKey: createSearchInputKey(input),
-            input: { ...input },
-            results
-        })
+        this.calls.push({ input, results })
         this.logger.diagnosticSummary((fields) => ({
             event: '记忆搜索完成',
             detail: `${formatLogScope(fields)}; 结果：当前检索条件下匹配 ${results.length} 条记忆`,
@@ -236,14 +165,17 @@ export class LivingMemoryAgenticRecallExecutor {
         scope: MemoryScope,
         currentMessage: LivingMemoryTranscriptMessage,
         historyMessages: LivingMemoryTranscriptMessage[],
+        snapshotLines: readonly string[],
+        saveSnapshot: (item: AgenticMemorySnapshotItem) => Promise<void>,
         runLogger: LivingMemoryLogger = this.logger
-    ): Promise<LivingMemoryAgenticRecallTrace | null> {
+    ): Promise<AgenticMemorySnapshotItem | null> {
         const chatModel = await this.resolveChatModel()
 
         const prompt = this.buildRecallPrompt(
             scope,
             currentMessage,
-            historyMessages
+            historyMessages,
+            snapshotLines
         )
         const agentContext = {
             conversationId: scope.conversationId,
@@ -262,11 +194,32 @@ export class LivingMemoryAgenticRecallExecutor {
                 this.config.enableConversationIsolation
             ),
             recordedSearchCalls,
-            agentContext,
             runLogger
         )
-        const { runner, hasExhaustedModelCalls } =
-            this.createBoundedAgentRunner(chatModel, searchTool, runLogger)
+        let savedSnapshot: AgenticMemorySnapshotItem | null = null
+        const updateTool = createMemoryTool.updateSnapshot(
+            snapshotLines,
+            this.config.snapshotMaxLines,
+            async (finalText) => {
+                const item: AgenticMemorySnapshotItem = {
+                    finalText,
+                    toolCallSummary: aggregateToolCallSummary(
+                        recordedSearchCalls,
+                        this.config.memorySearchToolMaxResults
+                    ),
+                    matchedMemories: uniqueSnapshotMemoryItems(
+                        recordedSearchCalls.flatMap((call) => call.results)
+                    )
+                }
+                await saveSnapshot(item)
+                savedSnapshot = item
+            }
+        )
+        const runner = this.createBoundedAgentRunner(
+            chatModel,
+            [searchTool, updateTool, createMemoryTool.pass()],
+            runLogger
+        )
 
         const result = await runner.invoke(
             {
@@ -275,7 +228,7 @@ export class LivingMemoryAgenticRecallExecutor {
             },
             {
                 configurable: {
-                    model: chatModel,
+                    // 模型由 toolAgent 持有，避免宿主在结束工具后额外调用模型压缩历史。
                     preset: scope.presetId,
                     userId: scope.userId,
                     source: 'agentic-recall',
@@ -283,34 +236,11 @@ export class LivingMemoryAgenticRecallExecutor {
                 }
             }
         )
-        if (hasExhaustedModelCalls()) {
+        const steps = result.intermediateSteps!
+        if (!isDirectToolOutput(steps.at(-1)?.observation)) {
             throw new Error(agenticRecallExhaustedMessage)
         }
-        const { toolCallSummaries, matchedResults } = this.collectSearchResults(
-            recordedSearchCalls,
-            result.intermediateSteps!
-        )
-        const finalText = result.output.trim()
-        const uniqueMemories = uniqueSnapshotMemoryItems(matchedResults)
-        if (
-            finalText.length === 0 ||
-            finalText === '<NO_MEMORY>' ||
-            uniqueMemories.length === 0
-        ) {
-            return null
-        }
-
-        return {
-            prompt,
-            item: {
-                finalText,
-                toolCallSummary: aggregateToolCallSummary(
-                    toolCallSummaries,
-                    this.config.memorySearchToolMaxResults
-                ),
-                matchedMemories: uniqueMemories
-            }
-        }
+        return savedSnapshot
     }
 
     private async resolveChatModel(): Promise<ChatLunaChatModel> {
@@ -327,7 +257,8 @@ export class LivingMemoryAgenticRecallExecutor {
     private buildRecallPrompt(
         scope: MemoryScope,
         currentMessage: LivingMemoryTranscriptMessage,
-        historyMessages: LivingMemoryTranscriptMessage[]
+        historyMessages: LivingMemoryTranscriptMessage[],
+        snapshotLines: readonly string[]
     ): PromptMessages {
         const assistantLabel = resolveScopeAssistantLabel(scope)
         const lastMessage = this.formatter.toExtractionPayload([
@@ -335,20 +266,21 @@ export class LivingMemoryAgenticRecallExecutor {
         ]).input
         const chatHistory =
             this.formatter.toExtractionPayload(historyMessages).input
-        return buildAgenticRecallPrompts({
+        return buildSnapshotRecallPrompts({
             assistantLabel,
             lastMessage,
-            chatHistory
+            chatHistory,
+            snapshotLines,
+            snapshotMaxLines: this.config.snapshotMaxLines
         })
     }
 
     private createBoundedAgentRunner(
         chatModel: ChatLunaChatModel,
-        searchTool: RecordingLivingMemorySearchTool,
+        tools: StructuredTool[],
         runLogger: LivingMemoryLogger
     ) {
         let modelCallCount = 0
-        let exhaustedModelCalls = false
         const loggedModel = createLoggedModel(chatModel, {
             logger: runLogger,
             stage: 'agentic-decision',
@@ -358,7 +290,7 @@ export class LivingMemoryAgenticRecallExecutor {
         })
         const toolAgent = createOpenAIAgent({
             llm: loggedModel,
-            tools: [searchTool],
+            tools,
             prompt: agenticRecallPromptTemplate
         })
 
@@ -368,32 +300,27 @@ export class LivingMemoryAgenticRecallExecutor {
                 runConfig?: RunnableConfig
             ): Promise<AgenticRecallDecision> => {
                 modelCallCount += 1
-                const isLastAllowedCall =
-                    modelCallCount === agenticRecallMaxModelCalls
-                if (isLastAllowedCall) {
-                    exhaustedModelCalls = true
-                }
-
                 const decision = await toolAgent.invoke(
                     input as AgenticRecallToolAgentInput,
                     runConfig
                 )
-                if (
-                    isLastAllowedCall &&
-                    !Array.isArray(decision) &&
-                    'returnValues' in decision
-                ) {
-                    exhaustedModelCalls = false
+                if (!Array.isArray(decision) && 'returnValues' in decision) {
+                    throw new OutputParserException(
+                        `请调用 ${memoryUpdateSnapshotTool.name} 或 ${memoryPassTool.name} 完成本轮。`
+                    )
                 }
-                if (isLastAllowedCall && exhaustedModelCalls) {
-                    throw new Error(agenticRecallExhaustedMessage)
+                const actions = Array.isArray(decision) ? decision : [decision]
+                if (actions.length !== 1) {
+                    throw new OutputParserException(
+                        '每次只调用一个工具，根据工具返回结果决定下一步操作，请重新提交。'
+                    )
                 }
                 return decision
             }
         )
-        const runner = AgentRunner.fromAgentAndTools({
+        return AgentRunner.fromAgentAndTools({
             agent: boundedAgent,
-            tools: [searchTool],
+            tools,
             maxIterations: agenticRecallMaxModelCalls,
             returnIntermediateSteps: true,
             handleParsingErrors: (error) => {
@@ -403,37 +330,9 @@ export class LivingMemoryAgenticRecallExecutor {
                 ].join(' ')
             },
             handleToolRuntimeErrors: (error) => {
+                if (error instanceof MemoryInputError) return error.message
                 throw error
             }
         })
-        return {
-            runner,
-            hasExhaustedModelCalls: () => exhaustedModelCalls
-        }
-    }
-
-    private collectSearchResults(
-        recordedSearchCalls: RecordedAgenticSearchCall[],
-        intermediateSteps: AgentStep[]
-    ) {
-        const toolCallSummaries: AgenticMemorySearchToolCallSummary[] = []
-        const matchedResults: LivingMemorySearchResult[] = []
-        const orderedSearchCalls = orderRecordedSearchCalls(
-            recordedSearchCalls,
-            intermediateSteps
-        )
-
-        for (const call of orderedSearchCalls) {
-            toolCallSummaries.push(
-                normalizeToolCallSummary(
-                    call.input,
-                    this.config.memorySearchToolMaxResults
-                )
-            )
-
-            matchedResults.push(...call.results)
-        }
-
-        return { toolCallSummaries, matchedResults }
     }
 }
