@@ -93,6 +93,7 @@ export interface LivingMemoryConfig {
     userProfileMemoryLimit: number
     recallIntervalMessages: number
     recallHistoryMessages: number
+    snapshotMaxLines: number
     embeddingModel: string
     rerankModel: string
     extractionWindowMessages: number

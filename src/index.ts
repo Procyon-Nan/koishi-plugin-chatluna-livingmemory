@@ -136,7 +136,13 @@ export const Config: Schema<Config> = Schema.intersect([
             .max(200)
             .step(1)
             .description('每次召回取最近该条数的消息作为上下文。')
-            .default(20)
+            .default(20),
+        snapshotMaxLines: Schema.number()
+            .min(5)
+            .max(50)
+            .step(1)
+            .description('记忆快照的最大行数，每行最多 100 个字符。')
+            .default(5)
     }).description('记忆召回配置'),
     Schema.object({
         extractionWindowMessages: Schema.number()

@@ -14,6 +14,7 @@ const createConfig = (
     userProfileMemoryLimit: 20,
     recallIntervalMessages: 10,
     recallHistoryMessages: 20,
+    snapshotMaxLines: 5,
     embeddingModel: 'test/embedding',
     rerankModel: '',
     extractionWindowMessages: 30,

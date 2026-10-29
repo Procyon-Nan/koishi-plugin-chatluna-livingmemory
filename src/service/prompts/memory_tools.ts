@@ -3,13 +3,15 @@ import { generatedMemorySchema } from './schema'
 
 const memorySearchMaxTextCount = 3
 const memorySearchMaxKeywordCount = 3
+export const snapshotMaxLineLength = 100
 
 const snapshotLineText = z
     .string()
     .regex(/^[^\r\n]+$/, '快照内容应为单行文本')
     .trim()
     .min(1)
-    .describe('一条完整的记忆内容，使用单行文本。')
+    .max(snapshotMaxLineLength)
+    .describe(`一条完整的记忆内容，使用单行文本，最多 ${snapshotMaxLineLength} 个字符。`)
 
 export const memoryPassTool = {
     name: 'living_memory_pass',

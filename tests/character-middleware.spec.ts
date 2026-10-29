@@ -20,6 +20,7 @@ const testConfig: LivingMemoryConfig = {
     userProfileMemoryLimit: 5,
     recallIntervalMessages: 1,
     recallHistoryMessages: 5,
+    snapshotMaxLines: 5,
     embeddingModel: 'test-model',
     rerankModel: 'test-model',
     extractionWindowMessages: 30,

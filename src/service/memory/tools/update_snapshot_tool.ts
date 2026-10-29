@@ -1,18 +1,26 @@
 import { StructuredTool } from '@langchain/core/tools'
 import type { z } from 'zod'
-import { memoryUpdateSnapshotTool } from '../../prompts/memory_tools'
+import {
+    memoryUpdateSnapshotTool,
+    snapshotMaxLineLength
+} from '../../prompts/memory_tools'
 import { MemoryInputError } from '../errors'
 
 export class LivingMemoryUpdateSnapshotTool extends StructuredTool {
     name = memoryUpdateSnapshotTool.name
-    description = memoryUpdateSnapshotTool.description
+    description: string
     schema = memoryUpdateSnapshotTool.schema
 
     constructor(
         private readonly lines: readonly string[],
+        private readonly maxLines: number,
         private readonly saveSnapshot: (text: string) => Promise<void>
     ) {
         super({ verboseParsingErrors: true })
+        this.description = [
+            memoryUpdateSnapshotTool.description,
+            `编辑后的快照最多 ${maxLines} 行，每行最多 ${snapshotMaxLineLength} 个字符。`
+        ].join('\n')
     }
 
     async _call(input: z.infer<typeof memoryUpdateSnapshotTool.schema>) {
@@ -44,7 +52,21 @@ export class LivingMemoryUpdateSnapshotTool extends StructuredTool {
             const change = changes.get(index)
             return change === null ? [] : [change ?? text]
         })
-        const finalText = [...updatedLines, ...additions].join('\n')
+        const finalLines = [...updatedLines, ...additions]
+        if (finalLines.length > this.maxLines) {
+            throw new MemoryInputError(
+                `编辑后的快照共 ${finalLines.length} 行，上限为 ${this.maxLines} 行，请删减后重新提交。`
+            )
+        }
+        const oversizedLines = finalLines.flatMap((text, index) =>
+            text.length > snapshotMaxLineLength ? [index] : []
+        )
+        if (oversizedLines.length > 0) {
+            throw new MemoryInputError(
+                `编辑后行号 ${oversizedLines.join('、')} 的内容超过 ${snapshotMaxLineLength} 个字符，请根据原快照行号缩短内容后重新提交。`
+            )
+        }
+        const finalText = finalLines.join('\n')
         await this.saveSnapshot(finalText)
         return { lc_direct_tool_output: true as const, updated: true }
     }
