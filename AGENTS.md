@@ -50,6 +50,8 @@ chatluna-livingmemory/
 │       │   │   └── snapshot_text.ts     # 召回快照文本处理
 │       │   └── tools/
 │       │       ├── index.ts            # 共用工具创建入口
+│       │       ├── pass_tool.ts        # 保持召回快照并结束本轮
+│       │       ├── update_snapshot_tool.ts # 按行编辑与保存召回快照
 │       │       ├── tool_runtime.ts     # 工具调用作用域解析
 │       │       ├── search_memory_tool.ts # 记忆检索
 │       │       ├── get_messages_tool.ts # 来源消息查询

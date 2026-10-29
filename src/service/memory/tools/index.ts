@@ -6,8 +6,14 @@ import { LivingMemoryGetMessagesTool } from './get_messages_tool'
 import { LivingMemoryMergeMemoriesTool } from './merge_memories_tool'
 import { LivingMemorySplitMemoryTool } from './split_memory_tool'
 import { LivingMemoryUpdateMemoryTool } from './update_memory_tool'
+import { LivingMemoryPassTool } from './pass_tool'
+import { LivingMemoryUpdateSnapshotTool } from './update_snapshot_tool'
 
 export const createMemoryTool = {
+    pass: () => new LivingMemoryPassTool(),
+    updateSnapshot: (
+        ...args: ConstructorParameters<typeof LivingMemoryUpdateSnapshotTool>
+    ) => new LivingMemoryUpdateSnapshotTool(...args),
     search: (...args: ConstructorParameters<typeof LivingMemorySearchTool>) =>
         new LivingMemorySearchTool(...args),
     getMessages: (

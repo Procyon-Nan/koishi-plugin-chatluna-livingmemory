@@ -4,6 +4,59 @@ import { generatedMemorySchema } from './schema'
 const memorySearchMaxTextCount = 3
 const memorySearchMaxKeywordCount = 3
 
+const snapshotLineText = z
+    .string()
+    .regex(/^[^\r\n]+$/, '快照内容应为单行文本')
+    .trim()
+    .min(1)
+    .describe('一条完整的记忆内容，使用单行文本。')
+
+export const memoryPassTool = {
+    name: 'living_memory_pass',
+    description: '记忆快照更新跳过工具，当你认为旧快照已经足够应付当前的聊天上下文，不需要更新时，使用此工具。',
+    schema: z.object({})
+}
+
+export const memoryUpdateSnapshotTool = {
+    name: 'living_memory_update_snapshot',
+    description: [
+        '记忆快照更新工具，当你认为旧快照需要补充、修改或删减，以适应当前的聊天上下文时使用此工具。',
+        '你必须在一次工具调用中，完成所有对旧快照的按行编辑操作。'
+    ].join('\n'),
+    schema: z.object({
+        operations: z
+            .array(
+                z.discriminatedUnion('type', [
+                    z.object({
+                        type: z.literal('append').describe('在末尾追加一行'),
+                        text: snapshotLineText
+                    }),
+                    z.object({
+                        type: z.literal('replace').describe('替换指定行的内容'),
+                        line: z
+                            .number()
+                            .int()
+                            .min(0)
+                            .describe('旧快照中的行号，从 0 开始'),
+                        text: snapshotLineText
+                    }),
+                    z.object({
+                        type: z.literal('delete').describe('删除指定行'),
+                        line: z
+                            .number()
+                            .int()
+                            .min(0)
+                            .describe('旧快照中的行号，从 0 开始')
+                    })
+                ])
+            )
+            .min(1)
+            .describe(
+                '所有按行编辑操作，每行最多可操作一次；追加内容按提交顺序排列。'
+            )
+    })
+}
+
 export const memorySearchTool = {
     name: 'living_memory_search',
     description: [
