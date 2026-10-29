@@ -358,11 +358,11 @@ export class LivingMemoryUserProfileService {
                 toolName: userProfileResultTool.name,
                 toolDescription: userProfileResultTool.description,
                 schema: userProfileResultTool.schema,
-                validateResult: ({ decision }) => {
-                    if (
-                        decision.action === 'keep' &&
-                        group.existingProfile == null
-                    ) {
+                validateResult: ({ action, content }) => {
+                    if (action === 'update' && content === undefined) {
+                        return 'action 为 update 时必须提交 content，填写完整的新人物画像正文'
+                    }
+                    if (action === 'keep' && group.existingProfile == null) {
                         return '当前尚无人物画像，不能使用 keep，必须使用 update 生成画像'
                     }
                 },
@@ -400,7 +400,7 @@ export class LivingMemoryUserProfileService {
         }
 
         signal?.throwIfAborted()
-        const decision = structuredResult.value.decision
+        const decision = structuredResult.value
         const sourceMemoryIds = group.entries.map((entry) => entry.id)
         if (decision.action === 'keep') {
             // validateResult 已拒绝无画像时的 keep。记下本次输入，同一组记忆
@@ -419,7 +419,7 @@ export class LivingMemoryUserProfileService {
         await this.repository.replaceUserProfile(presetId, {
             speakerKey: group.speakerKey,
             speakerLabel: group.speakerLabel,
-            content: decision.content.replace(/\s+/gu, ' '),
+            content: decision.content!.replace(/\s+/gu, ' '),
             sourceMemoryIds
         })
         logger.diagnosticSummary((fields) => ({

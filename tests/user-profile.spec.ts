@@ -197,7 +197,7 @@ const profileContent = '我知道张三正在准备考试。'
 const createProfileCall = (content = profileContent, id = 'result-1') => {
     return createToolCallMessage(
         userProfileResultTool.name,
-        { decision: { action: 'update', content, reason: '记忆中有新的事实' } },
+        { action: 'update', content, reason: '记忆中有新的事实' },
         id
     )
 }
@@ -205,7 +205,7 @@ const createProfileCall = (content = profileContent, id = 'result-1') => {
 const createKeepCall = (id = 'result-1') => {
     return createToolCallMessage(
         userProfileResultTool.name,
-        { decision: { action: 'keep', reason: '旧画像已涵盖这些记忆' } },
+        { action: 'keep', reason: '旧画像已涵盖这些记忆' },
         id
     )
 }

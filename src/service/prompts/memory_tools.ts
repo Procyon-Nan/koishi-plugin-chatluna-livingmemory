@@ -196,25 +196,18 @@ export const userProfileResultTool = {
     description:
         '人物画像更新工具，当你需要提交人物画像的更新或保留结果时使用此工具。',
     schema: z.object({
-        decision: z.discriminatedUnion('action', [
-            z.object({
-                action: z.literal('update').describe('生成/更新人物画像'),
-                content: z
-                    .string()
-                    .trim()
-                    .min(1)
-                    .describe('完整的新人物画像正文，长度不超过 300 个字符'),
-                reason: z.string().trim().min(1).describe('更新人物画像的简短原因')
-            }),
-            z.object({
-                action: z.literal('keep').describe('保留现有人物画像'),
-                reason: z
-                    .string()
-                    .trim()
-                    .min(1)
-                    .describe('保留现有人物画像、无需更新的简短原因')
-            })
-        ])
+        action: z
+            .enum(['update', 'keep'])
+            .describe('update 表示生成或更新人物画像；keep 表示保留已有画像'),
+        content: z
+            .string()
+            .trim()
+            .min(1)
+            .optional()
+            .describe(
+                '完整的新人物画像正文，长度不超过 300 个字符；action 为 update 时必须填写'
+            ),
+        reason: z.string().trim().min(1).describe('更新或保留人物画像的简短原因')
     })
 }
 

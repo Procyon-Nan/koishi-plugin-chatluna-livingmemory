@@ -156,23 +156,22 @@ it('validates user profile decisions and renders memories without ids', () => {
     })
     assert.equal(
         userProfileResultTool.schema.safeParse({
-            decision: {
-                action: 'update',
-                content: '我知道张三正在准备考试。',
-                reason: '记忆中有新的事实'
-            }
+            action: 'update',
+            content: '我知道张三正在准备考试。',
+            reason: '记忆中有新的事实'
         }).success,
         true
     )
     assert.equal(
         userProfileResultTool.schema.safeParse({
-            decision: { action: 'keep', reason: '旧画像已涵盖这些记忆' }
+            action: 'keep',
+            reason: '旧画像已涵盖这些记忆'
         }).success,
         true
     )
     assert.equal(
         userProfileResultTool.schema.safeParse({
-            decision: { action: 'keep' }
+            action: 'keep'
         }).success,
         false
     )
