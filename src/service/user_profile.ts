@@ -12,10 +12,7 @@ import type {
     UserProfileRepository
 } from '../contracts/workflows'
 import { resolveAssistantLabel } from './memory/helpers'
-import {
-    userProfileResultSchema,
-    userProfileResultToolName
-} from './prompts/schema'
+import { userProfileResultTool } from './prompts/memory_tools'
 import { buildUserProfilePrompts } from './prompts/user_profile'
 import { invokeStructuredOutput } from './workflows/structured_output'
 import { formatLogScope, type LivingMemoryLogger } from './logging/logger'
@@ -358,10 +355,9 @@ export class LivingMemoryUserProfileService {
                 model,
                 signal,
                 prompt,
-                toolName: userProfileResultToolName,
-                toolDescription:
-                    '提交当前用户画像的处理结果：需要生成或更新时用 update 提交完整画像，已有画像无需变更时用 keep 保留；两者都须说明理由。',
-                schema: userProfileResultSchema,
+                toolName: userProfileResultTool.name,
+                toolDescription: userProfileResultTool.description,
+                schema: userProfileResultTool.schema,
                 validateResult: ({ decision }) => {
                     if (
                         decision.action === 'keep' &&

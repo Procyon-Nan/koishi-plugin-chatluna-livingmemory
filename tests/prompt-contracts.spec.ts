@@ -9,10 +9,8 @@ import {
     buildDreamSystemPrompt
 } from '../src/service/prompts/dream'
 import { buildExtractionPrompts } from '../src/service/prompts/extraction'
-import {
-    generatedMemorySchema,
-    userProfileResultSchema
-} from '../src/service/prompts/schema'
+import { generatedMemorySchema } from '../src/service/prompts/schema'
+import { userProfileResultTool } from '../src/service/prompts/memory_tools'
 import { buildUserProfilePrompts } from '../src/service/prompts/user_profile'
 
 const memoryEntry: MemoryEntryRecord = {
@@ -157,7 +155,7 @@ it('validates user profile decisions and renders memories without ids', () => {
         }
     })
     assert.equal(
-        userProfileResultSchema.safeParse({
+        userProfileResultTool.schema.safeParse({
             decision: {
                 action: 'update',
                 content: '我知道张三正在准备考试。',
@@ -167,19 +165,19 @@ it('validates user profile decisions and renders memories without ids', () => {
         true
     )
     assert.equal(
-        userProfileResultSchema.safeParse({
+        userProfileResultTool.schema.safeParse({
             decision: { action: 'keep', reason: '旧画像已涵盖这些记忆' }
         }).success,
         true
     )
     assert.equal(
-        userProfileResultSchema.safeParse({
+        userProfileResultTool.schema.safeParse({
             decision: { action: 'keep' }
         }).success,
         false
     )
     assert.equal(
-        userProfileResultSchema.safeParse({ content: null }).success,
+        userProfileResultTool.schema.safeParse({ content: null }).success,
         false
     )
     assert.match(prompt.inputPrompt, /张三告诉我他最近在准备考试。/u)

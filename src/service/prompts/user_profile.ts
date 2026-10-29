@@ -6,7 +6,7 @@ import {
     formatXmlBlock,
     type PromptMessages
 } from './prompt_format'
-import { userProfileResultToolName } from './schema'
+import { userProfileResultTool } from './memory_tools'
 
 export interface UserProfilePromptInput {
     assistantLabel: string
@@ -52,7 +52,7 @@ export const buildUserProfilePrompts = (
         '</update_rules>',
         '',
         '<output_contract>',
-        `你必须调用且只能调用 ${userProfileResultToolName} 工具提交对人物画像的处理结果。`,
+        `你必须调用且只能调用 ${userProfileResultTool.name} 工具提交对人物画像的处理结果。`,
         '需要生成或更新人物画像时使用 update，提交完整的新人物画像进行覆盖；旧的人物画像已经存在且无需变更时使用 keep 保留。',
         '尚无人物画像时必须使用 update。',
         '不要输出任何普通文本、Markdown 或代码块结果；判断理由写入 reason 字段。',

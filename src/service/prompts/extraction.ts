@@ -1,4 +1,4 @@
-import { extractionResultToolName } from './schema'
+import { extractionResultTool } from './memory_tools'
 import {
     escapeXmlText,
     formatXmlBlock,
@@ -77,8 +77,8 @@ export const buildExtractionPrompts = (
         '</time_rules>',
         '',
         '<output_contract>',
-        `你必须调用且只能调用 ${extractionResultToolName} 工具进行长期记忆的记录。必须遵循工具的调用规范与格式契约。`,
-        `如果你认为没有值得记录的内容，调用 ${extractionResultToolName} 工具并提交空 memories 数组即可。`,
+        `你必须调用且只能调用 ${extractionResultTool.name} 工具进行长期记忆的记录。必须遵循工具的调用规范与格式契约。`,
+        `如果你认为没有值得记录的内容，调用 ${extractionResultTool.name} 工具并提交空 memories 数组即可。`,
         '不要输出任何普通文本、Markdown 或代码块结果，不要进行解释说明。',
         '</output_contract>'
     ].join('\n')

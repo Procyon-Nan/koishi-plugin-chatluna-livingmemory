@@ -73,8 +73,8 @@ chatluna-livingmemory/
 │       │   ├── preset_personas.ts       # 人设卡片仓库
 │       │   └── speaker_reconciliation.ts # 预设用户身份核对
 │       ├── prompts/
-│       │   ├── schema.ts                # 模型结构化输出 schema
-│       │   ├── memory_tools.ts          # 记忆工具名称、描述与参数 schema
+│       │   ├── schema.ts                # 共用记忆字段 schema
+│       │   ├── memory_tools.ts          # 记忆操作与结果工具的名称、描述及参数 schema
 │       │   ├── memory_entries.ts        # 模型记忆字段清单与统一渲染
 │       │   ├── prompt_format.ts         # XML 转义与消息组合
 │       │   ├── extraction.ts            # 记忆提取提示词

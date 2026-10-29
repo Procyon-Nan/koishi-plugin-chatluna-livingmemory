@@ -9,10 +9,7 @@ import type {
     PresetPersonaSource
 } from '../../contracts/memory'
 import type { LivingMemoryConfig } from '../../contracts/workflows'
-import {
-    personaCardResultSchema,
-    personaCardResultToolName
-} from '../prompts/schema'
+import { personaCardResultTool } from '../prompts/memory_tools'
 import { buildPersonaCardPrompts } from '../prompts/persona_card'
 import { invokeStructuredOutput } from '../workflows/structured_output'
 import { formatLogScope, type LivingMemoryLogger } from '../logging/logger'
@@ -303,18 +300,16 @@ export class LivingMemoryPresetPersonaService implements PresetPersonaResolver {
             structuredResult = await invokeStructuredOutput({
                 model,
                 prompt: buildPersonaCardPrompts({ lines }),
-                toolName: personaCardResultToolName,
-                toolDescription:
-                    '提交应当从预设原文中删除的行号列表；' +
-                    '无需删除时提交空数组。',
-                schema: personaCardResultSchema,
+                toolName: personaCardResultTool.name,
+                toolDescription: personaCardResultTool.description,
+                schema: personaCardResultTool.schema,
                 validateResult: ({ deletedLineNumbers }) => {
                     const invalid = deletedLineNumbers.filter(
                         (lineNumber) =>
-                            lineNumber < 1 || lineNumber > lines.length
+                            lineNumber >= lines.length
                     )
                     if (invalid.length > 0) {
-                        return `超出范围的行号：${invalid.join('、')}；有效范围 1-${lines.length}`
+                        return `超出范围的行号：${invalid.join('、')}；有效范围 0-${lines.length - 1}`
                     }
                 },
                 context: {
@@ -362,7 +357,7 @@ export class LivingMemoryPresetPersonaService implements PresetPersonaResolver {
         logger: LivingMemoryLogger
     ): PersonaCardOutcome {
         const deleted = new Set(deletedLineNumbers)
-        const kept = lines.filter((_line, index) => !deleted.has(index + 1))
+        const kept = lines.filter((_line, index) => !deleted.has(index))
         const card = kept.join('\n')
         const deletedLines = lines.length - kept.length
 

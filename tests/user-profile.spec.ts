@@ -10,7 +10,7 @@ import type {
     UserProfileRepository
 } from '../src/contracts/workflows'
 import { characterPresetSuffix } from '../src/service/memory/helpers'
-import { userProfileResultToolName } from '../src/service/prompts/schema'
+import { userProfileResultTool } from '../src/service/prompts/memory_tools'
 import {
     LivingMemoryUserProfileService,
     normalizeManualUserProfileContent
@@ -196,7 +196,7 @@ const profileContent = '我知道张三正在准备考试。'
 
 const createProfileCall = (content = profileContent, id = 'result-1') => {
     return createToolCallMessage(
-        userProfileResultToolName,
+        userProfileResultTool.name,
         { decision: { action: 'update', content, reason: '记忆中有新的事实' } },
         id
     )
@@ -204,7 +204,7 @@ const createProfileCall = (content = profileContent, id = 'result-1') => {
 
 const createKeepCall = (id = 'result-1') => {
     return createToolCallMessage(
-        userProfileResultToolName,
+        userProfileResultTool.name,
         { decision: { action: 'keep', reason: '旧画像已涵盖这些记忆' } },
         id
     )

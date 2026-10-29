@@ -1,5 +1,5 @@
 import { escapeXmlText, type PromptMessages } from './prompt_format'
-import { personaCardResultToolName } from './schema'
+import { personaCardResultTool } from './memory_tools'
 
 export interface PersonaCardPromptInput {
     /** 预设原文，按行切分后的行数组（不含换行符）。 */
@@ -7,7 +7,7 @@ export interface PersonaCardPromptInput {
 }
 
 const renderNumberedLines = (lines: string[]) => {
-    return lines.map((line, index) => `[${index + 1}] ${line}`).join('\n')
+    return lines.map((line, index) => `[${index}] ${line}`).join('\n')
 }
 
 /**
@@ -26,8 +26,8 @@ export const buildPersonaCardPrompts = (
         '</role>',
         '',
         '<task>',
-        '下面 <preset_lines> 中的每一行都带有 [n] 形式的行号。',
-        `你要调用 ${personaCardResultToolName} 工具，提交应当被删除的行号列表；没有被列出的行会被原样保留。`,
+        '下面 <preset_lines> 中的每一行都带有 [n] 形式的行号，从 0 开始。',
+        `你要调用 ${personaCardResultTool.name} 工具，提交应当被删除的行号列表；没有被列出的行会被原样保留。`,
         '</task>',
         '',
         '<deletion_rules>',
@@ -58,7 +58,7 @@ export const buildPersonaCardPrompts = (
         '</input_policy>',
         '',
         '<output_contract>',
-        `你必须调用且只能调用 ${personaCardResultToolName} 工具来提交结果。`,
+        `你必须调用且只能调用 ${personaCardResultTool.name} 工具来提交结果。`,
         '只提交应当删除的行号；不确定或应当保留的行不要出现在列表中。',
         '不要输出任何普通文本、Markdown 或代码块结果。',
         '</output_contract>'

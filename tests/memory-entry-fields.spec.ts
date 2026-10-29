@@ -12,7 +12,7 @@ import {
 } from '../src/service/memory/entry_fields'
 import { LivingMemoryRepository } from '../src/service/persistence/repository'
 import { LivingMemoryExtractor } from '../src/service/workflows/extraction/extractor'
-import { extractionResultToolName } from '../src/service/prompts/schema'
+import { extractionResultTool } from '../src/service/prompts/memory_tools'
 import {
     createToolCallingModel,
     createToolCallMessage
@@ -59,7 +59,7 @@ it('normalizes optional importance consistently', () => {
 it('applies shared field rules to extracted memories', async () => {
     const extractionKeywords = ['  alpha  ', 'alpha', 'keyword-0']
     const model = createToolCallingModel([
-        createToolCallMessage(extractionResultToolName, {
+        createToolCallMessage(extractionResultTool.name, {
             reason: '聊天中包含值得长期记录的事实。',
             memories: [
                 {

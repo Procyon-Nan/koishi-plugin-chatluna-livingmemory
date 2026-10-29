@@ -13,14 +13,14 @@ const snapshotLineText = z
 
 export const memoryPassTool = {
     name: 'living_memory_pass',
-    description: '记忆快照更新跳过工具，当你认为旧快照已经足够应付当前的聊天上下文，不需要更新时，使用此工具。',
+    description: '记忆快照更新跳过工具，当你认为旧快照已经足够应付未来聊天话题，不需要更新时，使用此工具。',
     schema: z.object({})
 }
 
 export const memoryUpdateSnapshotTool = {
     name: 'living_memory_update_snapshot',
     description: [
-        '记忆快照更新工具，当你认为旧快照需要补充、修改或删减，以适应当前的聊天上下文时使用此工具。',
+        '记忆快照更新工具，当你认为旧快照需要补充、修改或删减，以适应未来聊天话题时使用此工具。',
         '你必须在一次工具调用中，完成所有对旧快照的按行编辑操作。'
     ].join('\n'),
     schema: z.object({
@@ -172,5 +172,59 @@ export const memoryCheckedTool = {
             .min(1)
             .describe('已检查且无需变更的记忆 ID, 允许批量输入'),
         reason: z.string().trim().min(1).describe('记忆无需变更的理由')
+    })
+}
+
+export const extractionResultTool = {
+    name: 'living_memory_extraction_result',
+    description:
+        '记忆提取结果提交工具，当你需要提交从聊天记录中提取到的长期记忆时使用此工具。',
+    schema: z.object({
+        memories: z
+            .array(generatedMemorySchema)
+            .describe('本次提取的长期记忆；提取数量为零时提交空数组。'),
+        reason: z
+            .string()
+            .trim()
+            .min(1)
+            .describe('提取这些记忆/不提取记忆的简短原因。')
+    })
+}
+
+export const userProfileResultTool = {
+    name: 'living_memory_user_profile_result',
+    description:
+        '人物画像更新工具，当你需要提交人物画像的更新或保留结果时使用此工具。',
+    schema: z.object({
+        decision: z.discriminatedUnion('action', [
+            z.object({
+                action: z.literal('update').describe('生成/更新人物画像'),
+                content: z
+                    .string()
+                    .trim()
+                    .min(1)
+                    .describe('完整的新人物画像正文，长度不超过 300 个字符'),
+                reason: z.string().trim().min(1).describe('更新人物画像的简短原因')
+            }),
+            z.object({
+                action: z.literal('keep').describe('保留现有人物画像'),
+                reason: z
+                    .string()
+                    .trim()
+                    .min(1)
+                    .describe('保留现有人物画像、无需更新的简短原因')
+            })
+        ])
+    })
+}
+
+export const personaCardResultTool = {
+    name: 'living_memory_persona_card_result',
+    description:
+        '人设卡片删减工具，当你需要按行删减预设原文内容时使用此工具。',
+    schema: z.object({
+        deletedLineNumbers: z
+            .array(z.number().int().min(0))
+            .describe('要删除的行号列表，编号从 0 开始；保留全部内容时提交空数组。')
     })
 }

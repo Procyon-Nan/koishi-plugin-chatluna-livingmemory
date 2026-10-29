@@ -3,15 +3,11 @@ import { memoryEntryTypes } from '../../contracts/memory'
 import { MAX_MEMORY_KEYWORDS } from '../memory/entry_fields'
 
 /**
- * 模型输出契约的单一真相源。
- *
- * Zod Schema 同时定义结果工具的参数形状、字段说明和运行时校验。
+ * 多个记忆工具共用的记忆字段结构、说明和运行时校验。
  */
 
 const requiredText = (description: string) =>
     z.string().trim().min(1).describe(description)
-
-export const extractionResultToolName = 'living_memory_extraction_result'
 
 export const generatedMemorySchema = z
     .object({
@@ -62,41 +58,3 @@ export const generatedMemorySchema = z
         '在记忆中描述某个用户时，必须使用当前输入材料中的具体用户昵称。避免用“用户”、“对方”等泛化词汇或用户 ID 替代，也不要把多个不同用户混成同一个人。' +
             '相对时间（如"今天"、"明天"、"上周"）必须结合对话上下文转换为具体日期；短期状态、身体状态、临时计划等可能在之后变化的内容，必须在 content 中写明具体日期。'
     )
-
-export const extractionResultSchema = z.object({
-    memories: z.array(generatedMemorySchema),
-    reason: requiredText('提取这些记忆或没有值得记录的内容的原因。')
-})
-export const userProfileResultToolName = 'living_memory_user_profile_result'
-
-export const userProfileResultSchema = z.object({
-    decision: z.discriminatedUnion('action', [
-        z.object({
-            action: z.literal('update'),
-            content: requiredText(
-                '完整的新人物画像正文，长度不超过 300 个字符'
-            ),
-            reason: requiredText('更新人物画像的简短原因')
-        }),
-        z.object({
-            action: z.literal('keep'),
-            reason: requiredText('保留旧人物画像、无需更新的简短原因')
-        })
-    ])
-})
-
-export const personaCardResultToolName = 'living_memory_persona_card_result'
-
-export const personaCardResultSchema = z.object({
-    deletedLineNumbers: z
-        .array(
-            z
-                .number()
-                .int()
-                .positive()
-                .describe('待删除的行号（输入中以 [n] 标注的编号）')
-        )
-        .describe(
-            '应当从预设原文中删除的行号列表：内容与人格、语气、称呼、关系、价值取向无关的行（工具调用指南、输出或格式规范、状态模板、安保约束等）。无需删除任何行时提交空数组。'
-        )
-})

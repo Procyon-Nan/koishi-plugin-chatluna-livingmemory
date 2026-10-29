@@ -12,7 +12,7 @@ import {
 import type { Context } from 'koishi'
 import type { PresetPersonaRecord } from '../src/contracts/memory'
 import type { PresetPersonaWriteInput } from '../src/service/persistence/preset_personas'
-import { personaCardResultToolName } from '../src/service/prompts/schema'
+import { personaCardResultTool } from '../src/service/prompts/memory_tools'
 import {
     LivingMemoryPresetPersonaService,
     hashPresetText
@@ -127,14 +127,14 @@ const createHarness = (
 }
 
 const deleteLines = (lineNumbers: number[]) =>
-    createToolCallMessage(personaCardResultToolName, {
+    createToolCallMessage(personaCardResultTool.name, {
         deletedLineNumbers: lineNumbers
     })
 
 const prunedCard = [presetLines[0], presetLines[1], presetLines[4]].join('\n')
 
 it('keeps original text and only deletes selected lines', async () => {
-    const harness = createHarness([deleteLines([3, 4])])
+    const harness = createHarness([deleteLines([2, 3])])
 
     const card = await harness.service.resolveOrGenerateCardText('preset-1')
 
@@ -152,7 +152,7 @@ it('keeps original text and only deletes selected lines', async () => {
 })
 
 it('keeps CRLF line endings byte for byte in a pruned card', async () => {
-    const harness = createHarness([deleteLines([3, 4])])
+    const harness = createHarness([deleteLines([2, 3])])
     harness.presetTexts.set('preset-1', presetLines.join('\r\n'))
 
     const card = await harness.service.resolveOrGenerateCardText('preset-1')
@@ -191,7 +191,7 @@ it('returns the preset text unchanged when nothing needs deletion', async () => 
 })
 
 it('falls back to the raw text when deletion exceeds the ratio guard', async () => {
-    const harness = createHarness([deleteLines([1, 2, 3, 4, 5])])
+    const harness = createHarness([deleteLines([0, 1, 2, 3, 4])])
 
     const card = await harness.service.resolveOrGenerateCardText('preset-1')
 
@@ -210,7 +210,7 @@ it('falls back to the raw text when deletion exceeds the ratio guard', async () 
 })
 
 it('retries with a correction when line numbers fall out of range', async () => {
-    const harness = createHarness([deleteLines([99]), deleteLines([3, 4])])
+    const harness = createHarness([deleteLines([99]), deleteLines([2, 3])])
 
     const card = await harness.service.resolveOrGenerateCardText('preset-1')
 
@@ -293,7 +293,7 @@ it('keeps serving a manual card after the preset text changes', async () => {
 })
 
 it('serves a saved manual card on the next resolve', async () => {
-    const harness = createHarness([deleteLines([3, 4])])
+    const harness = createHarness([deleteLines([2, 3])])
     await harness.service.resolveOrGenerateCardText('preset-1')
 
     await harness.service.saveManualCard('preset-1', 'manual card')
@@ -306,7 +306,7 @@ it('serves a saved manual card on the next resolve', async () => {
 })
 
 it('keeps cards of presets with identical text apart', async () => {
-    const harness = createHarness([deleteLines([3, 4])], {
+    const harness = createHarness([deleteLines([2, 3])], {
         stored: [storedCard({ card: 'manual card', source: 'manual' })]
     })
 
@@ -320,7 +320,7 @@ it('keeps cards of presets with identical text apart', async () => {
 
 it('does not overwrite a manual card saved while a card is being generated', async () => {
     const gate = createModelGate()
-    const harness = createHarness([deleteLines([3, 4])], { modelGate: gate })
+    const harness = createHarness([deleteLines([2, 3])], { modelGate: gate })
 
     const resolving = harness.service.resolveOrGenerateCardText('preset-1')
     await gate.reached
@@ -344,7 +344,7 @@ it('deletes manual cards when the preset data is cleared', async () => {
 
 it('does not write back a card generated across a preset clear', async () => {
     const gate = createModelGate()
-    const harness = createHarness([deleteLines([3, 4])], { modelGate: gate })
+    const harness = createHarness([deleteLines([2, 3])], { modelGate: gate })
 
     const resolving = harness.service.resolveOrGenerateCardText('preset-1')
     await gate.reached
@@ -451,7 +451,7 @@ it('rejects empty manual card input', async () => {
 })
 
 it('regenerates a card on reset and replaces the manual row', async () => {
-    const harness = createHarness([deleteLines([3, 4])], {
+    const harness = createHarness([deleteLines([2, 3])], {
         stored: [
             storedCard({
                 card: 'manual card',

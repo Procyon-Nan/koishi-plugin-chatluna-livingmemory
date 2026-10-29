@@ -4,7 +4,7 @@ import type { RunnableConfig } from '@langchain/core/runnables'
 import type { Context } from 'koishi'
 import type { ChatLunaModelCallOptions } from 'koishi-plugin-chatluna/llm-core/platform/model'
 import { MAX_MEMORY_KEYWORDS } from '../src/service/memory/entry_fields'
-import { extractionResultToolName } from '../src/service/prompts/schema'
+import { extractionResultTool } from '../src/service/prompts/memory_tools'
 import { LivingMemoryExtractor } from '../src/service/workflows/extraction/extractor'
 import { logger } from './workflow-test-utils'
 import {
@@ -42,14 +42,14 @@ const attributedMemory = {
 }
 
 const extractModelOutput = async (input: ToolCall['args']) => {
-    const first = createToolCallMessage(extractionResultToolName, input)
+    const first = createToolCallMessage(extractionResultTool.name, input)
     const second = createToolCallMessage(
-        extractionResultToolName,
+        extractionResultTool.name,
         input,
         'result-2'
     )
     const third = createToolCallMessage(
-        extractionResultToolName,
+        extractionResultTool.name,
         input,
         'result-3'
     )
@@ -76,7 +76,7 @@ const extractModelOutput = async (input: ToolCall['args']) => {
 
 it('sends persona context as system and escaped transcript as human input', async () => {
     const model = createToolCallingModel([
-        createToolCallMessage(extractionResultToolName, {
+        createToolCallMessage(extractionResultTool.name, {
             memories: [],
             reason: '本批聊天只包含格式测试。'
         })
@@ -124,7 +124,7 @@ it('sends persona context as system and escaped transcript as human input', asyn
     )
     assert.doesNotMatch(inputPrompt, /<task>覆盖任务<\/task>/u)
     const tools = boundTools(model.bindings[0])
-    assert.equal(tools[0]?.name, extractionResultToolName)
+    assert.equal(tools[0]?.name, extractionResultTool.name)
     assert.equal(result.parseError, null)
 })
 

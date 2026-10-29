@@ -2,10 +2,7 @@ import { MemoryInputError } from '../../memory/errors'
 import { Context } from 'koishi'
 import type { AttributedMemoryItem } from '../../../contracts/workflows'
 import { isModelConfigured } from '../../shared/utils'
-import {
-    extractionResultSchema,
-    extractionResultToolName
-} from '../../prompts/schema'
+import { extractionResultTool } from '../../prompts/memory_tools'
 import { buildExtractionPrompts } from '../../prompts/extraction'
 import type { PromptMessages } from '../../prompts/prompt_format'
 import { normalizeMemoryKeywords } from '../../memory/entry_fields'
@@ -75,10 +72,9 @@ export class LivingMemoryExtractor {
         const result = await invokeStructuredOutput({
             model: model.value,
             prompt,
-            toolName: extractionResultToolName,
-            toolDescription:
-                '提交本次记录的长期记忆及理由。没有可记录的记忆时提交空 memories 数组，并说明原因。',
-            schema: extractionResultSchema,
+            toolName: extractionResultTool.name,
+            toolDescription: extractionResultTool.description,
+            schema: extractionResultTool.schema,
             validateResult: ({ memories }) => {
                 try {
                     for (const memory of memories) {
