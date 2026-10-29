@@ -280,10 +280,9 @@ export class LivingMemoryExtractionCoordinator {
         }
 
         const runLogger = this.logger.with({
+            ...scope,
             workflow: 'extraction',
-            runId: randomUUID(),
-            conversationId: scope.conversationId,
-            presetId: scope.presetId
+            runId: randomUUID()
         })
         this.drain(key, state, scope, options, runLogger).catch((error) => {
             runLogger.summary(

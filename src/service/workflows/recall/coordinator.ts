@@ -90,10 +90,9 @@ export class LivingMemoryRecallCoordinator {
         this.recallLockByConversation.add(lockKey)
 
         const runLogger = this.logger.with({
+            ...scope,
             workflow: 'recall',
-            runId: randomUUID(),
-            conversationId: scope.conversationId,
-            presetId: scope.presetId
+            runId: randomUUID()
         })
         this.run(scope, currentMessage, loadHistoryMessages, runLogger)
             .catch((error) => {

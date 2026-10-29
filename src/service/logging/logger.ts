@@ -1,21 +1,32 @@
 import { Logger } from 'koishi'
+import type { MemoryScope } from '../../contracts/memory'
 
-export interface LivingMemoryLogFields extends Record<string, unknown> {
-    presetId?: string
-    conversationId?: string
+type LogScope = Partial<
+    Pick<
+        MemoryScope,
+        | 'presetId'
+        | 'conversationId'
+        | 'isDirect'
+        | 'userId'
+        | 'guildId'
+        | 'channelId'
+    >
+>
+
+export interface LivingMemoryLogFields extends Record<string, unknown>, LogScope {
     model?: string
     attempt?: number
     speaker?: string
     batch?: string
 }
 
-export const formatLogScope = (scope: {
-    presetId?: string
-    conversationId?: string
-}) => {
+export const formatLogScope = (scope: LogScope) => {
     const details: string[] = []
     if (scope.presetId != null) details.push(`预设：${scope.presetId}`)
-    if (scope.conversationId != null) {
+    const id = scope.isDirect ? scope.userId : scope.guildId ?? scope.channelId
+    if (scope.isDirect != null && id != null) {
+        details.push(`会话：${scope.isDirect ? '私聊' : '群聊'} ${id}`)
+    } else if (scope.conversationId != null) {
         const conversation = scope.conversationId
             .replace(/^group:/, '群聊 ')
             .replace(/^private:/, '私聊 ')

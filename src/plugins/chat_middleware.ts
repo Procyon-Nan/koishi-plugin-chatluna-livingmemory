@@ -153,7 +153,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
         if (presetId == null) {
             logger.diagnosticSummary(() => ({
                 event: '跳过对话记忆处理',
-                detail: `${formatLogScope({ conversationId })}; 原因：预设解析失败`
+                detail: `${formatLogScope(session)}; 原因：预设解析失败`
             }))
             return null
         }
