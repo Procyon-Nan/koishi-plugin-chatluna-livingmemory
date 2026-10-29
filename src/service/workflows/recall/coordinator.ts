@@ -135,7 +135,8 @@ export class LivingMemoryRecallCoordinator {
 
         try {
             const historyMessages = await loadHistoryMessages()
-            const snapshot = await this.repository.getLatestSnapshotByScope(scope)
+            const snapshot =
+                await this.repository.getLatestSnapshotByScope(scope)
             const snapshotText = renderSnapshotText(snapshot?.items ?? [])
             const snapshotLines =
                 snapshotText === '' ? [] : snapshotText.split(/\r?\n/)

@@ -11,11 +11,14 @@ const snapshotLineText = z
     .trim()
     .min(1)
     .max(snapshotMaxLineLength)
-    .describe(`一条完整的记忆内容，使用单行文本，最多 ${snapshotMaxLineLength} 个字符。`)
+    .describe(
+        `一条完整的记忆内容，使用单行文本，最多 ${snapshotMaxLineLength} 个字符。`
+    )
 
 export const memoryPassTool = {
     name: 'living_memory_pass',
-    description: '记忆快照更新跳过工具，当你认为旧快照已经足够应付未来聊天话题，不需要更新时，使用此工具。',
+    description:
+        '记忆快照更新跳过工具，当你认为旧快照已经足够应付未来聊天话题，不需要更新时，使用此工具。',
     schema: z.object({})
 }
 
@@ -209,17 +212,22 @@ export const userProfileResultTool = {
             .describe(
                 '完整的新人物画像正文，长度不超过 300 个字符；action 为 update 时必须填写'
             ),
-        reason: z.string().trim().min(1).describe('更新或保留人物画像的简短原因')
+        reason: z
+            .string()
+            .trim()
+            .min(1)
+            .describe('更新或保留人物画像的简短原因')
     })
 }
 
 export const personaCardResultTool = {
     name: 'living_memory_persona_card_result',
-    description:
-        '人设卡片删减工具，当你需要按行删减预设原文内容时使用此工具。',
+    description: '人设卡片删减工具，当你需要按行删减预设原文内容时使用此工具。',
     schema: z.object({
         deletedLineNumbers: z
             .array(z.number().int().min(0))
-            .describe('要删除的行号列表，编号从 0 开始；保留全部内容时提交空数组。')
+            .describe(
+                '要删除的行号列表，编号从 0 开始；保留全部内容时提交空数组。'
+            )
     })
 }

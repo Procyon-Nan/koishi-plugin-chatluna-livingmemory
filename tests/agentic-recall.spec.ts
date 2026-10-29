@@ -327,7 +327,9 @@ it('rejects multiple tool calls and accepts corrected serial calls', async () =>
     assert.equal(harness.boundInvocations.length, 4)
     assert.equal(harness.searchInvocations.length, 2)
     assert.match(
-        String(toolMessages(harness.boundInvocations[1])[0]?.content),
+        harness.boundInvocations[1].messages
+            .map((message) => message.content)
+            .join('\n'),
         /每次只调用一个工具/u
     )
     assert.equal(snapshot.matchedMemories.length, 2)
@@ -452,10 +454,7 @@ it('accepts a snapshot update on the sixth model call', async () => {
 
 it('passes after a search returns no memories', async () => {
     const harness = createHarness({
-        responses: [
-            createSearchCall('search-1'),
-            createPassCall()
-        ],
+        responses: [createSearchCall('search-1'), createPassCall()],
         search: async () => []
     })
 

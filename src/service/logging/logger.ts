@@ -13,7 +13,8 @@ type LogScope = Partial<
     >
 >
 
-export interface LivingMemoryLogFields extends Record<string, unknown>, LogScope {
+export interface LivingMemoryLogFields
+    extends Record<string, unknown>, LogScope {
     model?: string
     attempt?: number
     speaker?: string
@@ -23,7 +24,9 @@ export interface LivingMemoryLogFields extends Record<string, unknown>, LogScope
 export const formatLogScope = (scope: LogScope) => {
     const details: string[] = []
     if (scope.presetId != null) details.push(`预设：${scope.presetId}`)
-    const id = scope.isDirect ? scope.userId : scope.guildId ?? scope.channelId
+    const id = scope.isDirect
+        ? scope.userId
+        : (scope.guildId ?? scope.channelId)
     if (scope.isDirect != null && id != null) {
         details.push(`会话：${scope.isDirect ? '私聊' : '群聊'} ${id}`)
     } else if (scope.conversationId != null) {

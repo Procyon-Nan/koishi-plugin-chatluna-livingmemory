@@ -305,8 +305,7 @@ export class LivingMemoryPresetPersonaService implements PresetPersonaResolver {
                 schema: personaCardResultTool.schema,
                 validateResult: ({ deletedLineNumbers }) => {
                     const invalid = deletedLineNumbers.filter(
-                        (lineNumber) =>
-                            lineNumber >= lines.length
+                        (lineNumber) => lineNumber >= lines.length
                     )
                     if (invalid.length > 0) {
                         return `超出范围的行号：${invalid.join('、')}；有效范围 0-${lines.length - 1}`

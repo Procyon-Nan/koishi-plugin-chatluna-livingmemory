@@ -44,7 +44,10 @@ export class LivingMemoryUpdateSnapshotTool extends StructuredTool {
                     `第 ${line} 行存在重复操作，请为该行提交一个操作。`
                 )
             }
-            changes.set(line, operation.type === 'delete' ? null : operation.text)
+            changes.set(
+                line,
+                operation.type === 'delete' ? null : operation.text
+            )
         }
 
         // 所有行号指向同一份旧快照，删除操作保持其余原行的编号稳定。
