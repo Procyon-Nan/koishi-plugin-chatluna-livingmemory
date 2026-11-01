@@ -9,6 +9,7 @@ const createConfig = (
     enableSnapshotInjection: true,
     enableUserProfileInjection: false,
     enableUserProfileGeneration: true,
+    enableDreamUserProfileGeneration: true,
     enableAutoDream: true,
     mainModel: 'test-model',
     subModel: 'test/sub-model',

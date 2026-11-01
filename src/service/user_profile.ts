@@ -92,11 +92,6 @@ export class LivingMemoryUserProfileService {
         private readonly presetPersona: PresetPersonaResolver
     ) {}
 
-    /** 画像注入与手动 Dream 画像阶段共用原有开关。 */
-    get injectionEnabled() {
-        return this.config.enableUserProfileInjection
-    }
-
     async regenerate(
         presetId: string,
         speakerKeys: string[],
@@ -420,7 +415,7 @@ export class LivingMemoryUserProfileService {
     }
 
     async renderForSpeakers(presetId: string, speakerKeys: string[]) {
-        if (!this.injectionEnabled) {
+        if (!this.config.enableUserProfileInjection) {
             return ''
         }
 

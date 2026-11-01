@@ -49,7 +49,10 @@ export class LivingMemoryDreamService {
         private readonly ctx: Context,
         private readonly config: Pick<
             LivingMemoryConfig,
-            'mainModel' | 'enableAutoDream' | 'enableUserProfileGeneration'
+            | 'mainModel'
+            | 'enableAutoDream'
+            | 'enableUserProfileGeneration'
+            | 'enableDreamUserProfileGeneration'
         >,
         private readonly repository: DreamRepository,
         private readonly mutations: Pick<
@@ -86,7 +89,7 @@ export class LivingMemoryDreamService {
         const updateProfiles =
             input.mode === 'post-extraction'
                 ? this.config.enableUserProfileGeneration
-                : this.userProfiles.injectionEnabled
+                : this.config.enableDreamUserProfileGeneration
         try {
             if (input.mode === 'post-extraction') {
                 state = createDreamSessionState(

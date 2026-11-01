@@ -518,7 +518,7 @@ const fetchConfigStatus = async () => {
                 importedPresetAwaitingIndex.value
             )
         ) {
-            ElMessage.success('导入记忆的索引同步已完成，请执行手动 Dream')
+            ElMessage.success('导入记忆的索引同步已完成，请执行 Dream 流程')
             importedPresetAwaitingIndex.value = ''
         }
     } catch {
@@ -777,7 +777,7 @@ const onImportFileSelected = async (event: Event) => {
     }
 
     await ElMessageBox.alert(
-        `关系数据已导入，索引同步任务 ${result.indexJobId} 已创建。索引状态变为“就绪”后，请执行一次手动 Dream。`,
+        `关系数据已导入，索引同步任务 ${result.indexJobId} 已创建。索引状态变为“就绪”后，请执行一次 Dream 流程。`,
         '索引同步中',
         {
             type: 'info',

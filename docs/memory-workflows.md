@@ -77,7 +77,7 @@
 
 入口：`src/service/user_profile.ts`。
 
-- 自动提取后的画像更新由默认开启的 `enableUserProfileGeneration` 控制；手动 Dream 的画像更新与聊天注入沿用 `enableUserProfileInjection` 控制；用户身份登记独立运行。
+- 自动提取后的画像更新由默认开启的 `enableUserProfileGeneration` 控制；Dream 流程 的画像更新由默认开启的 `enableDreamUserProfileGeneration` 控制；`enableUserProfileInjection` 仅控制聊天画像注入；用户身份登记独立运行。
 - Character 画像选择与本轮召回共用同一份“历史消息＋当前消息”，按其中的用户身份读取已有画像并在本轮变量中注入。例如窗口包含 B、C 的历史发言和 A 的当前发言时，本轮同时注入三人已有的画像；窗口固定后到达的新消息参与后续轮次。
 - 结果工具使用顶层字段 `action`、`content`、`reason`。`action` 为 `update` 或 `keep`，均需填写理由；首次生成必须返回 `update`。`update` 必须提交完整画像正文 `content`，由业务校验检查，缺失时进入纠正重试。
 - `keep` 保留正文并记录本次输入；输入未变时，下次 Dream 跳过该用户。

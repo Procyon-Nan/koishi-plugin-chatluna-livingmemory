@@ -105,7 +105,10 @@ export const Config: Schema<Config> = Schema.intersect([
             .description('开启用户画像注入。')
             .default(false),
         enableUserProfileGeneration: Schema.boolean()
-            .description('自动提取保存新记忆后，生成、更新相关用户画像。')
+            .description('进行记忆提取后，生成、更新相关用户画像。')
+            .default(true),
+        enableDreamUserProfileGeneration: Schema.boolean()
+            .description('进行 Dream 记忆整理后，生成、更新相关用户画像。')
             .default(true),
         userProfileMinMemoryCount: Schema.number()
             .min(1)

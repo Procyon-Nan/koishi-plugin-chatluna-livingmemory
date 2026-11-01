@@ -88,6 +88,7 @@ export interface LivingMemoryConfig {
     enableSnapshotInjection: boolean
     enableUserProfileInjection: boolean
     enableUserProfileGeneration: boolean
+    enableDreamUserProfileGeneration: boolean
     enableAutoDream: boolean
     mainModel: string
     subModel: string

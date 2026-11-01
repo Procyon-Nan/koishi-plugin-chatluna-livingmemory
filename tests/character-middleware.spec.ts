@@ -15,6 +15,7 @@ const testConfig: LivingMemoryConfig = {
     enableSnapshotInjection: false,
     enableUserProfileInjection: false,
     enableUserProfileGeneration: true,
+    enableDreamUserProfileGeneration: true,
     enableAutoDream: true,
     mainModel: 'test-model',
     subModel: 'test-model',

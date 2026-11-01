@@ -99,7 +99,7 @@ const runService = async (
         const persona = { resolveOrGenerateCardText: async () => '测试人设' }
         const profiles = new LivingMemoryUserProfileService(
             {
-                enableUserProfileInjection: options.profileUsers !== undefined,
+                enableUserProfileInjection: false,
                 userProfileMinMemoryCount: 1,
                 userProfileMemoryLimit: 10
             },
@@ -120,7 +120,9 @@ const runService = async (
             {
                 mainModel: options.mainModel ?? 'test',
                 enableAutoDream: true,
-                enableUserProfileGeneration: options.profileUsers !== undefined
+                enableUserProfileGeneration: options.profileUsers !== undefined,
+                enableDreamUserProfileGeneration:
+                    options.profileUsers !== undefined
             },
             repository,
             mutations,
