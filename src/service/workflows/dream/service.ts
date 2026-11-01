@@ -16,9 +16,9 @@ import { DreamClusterer } from './clustering'
 import type { DreamWorkerRunner } from './worker/protocol'
 import type { LivingMemoryUserProfileService } from '../../user_profile'
 import {
-    buildIncrementalDreamBatches,
-    refreshIncrementalDreamBatch
-} from './incremental'
+    buildPostExtractionDreamBatches,
+    refreshPostExtractionDreamBatch
+} from './post_extraction'
 import type { LivingMemorySearchEngine } from '../recall/memory_search_engine'
 import type { DreamRunInput, DreamRunResult } from './types'
 import type { LivingMemoryLogger } from '../../logging/logger'
@@ -47,7 +47,10 @@ export class LivingMemoryDreamService {
 
     constructor(
         private readonly ctx: Context,
-        private readonly config: Pick<LivingMemoryConfig, 'mainModel'>,
+        private readonly config: Pick<
+            LivingMemoryConfig,
+            'mainModel' | 'enableAutoDream' | 'enableUserProfileGeneration'
+        >,
         private readonly repository: DreamRepository,
         private readonly mutations: Pick<
             LivingMemoryMutationService,
@@ -80,21 +83,42 @@ export class LivingMemoryDreamService {
         let state!: DreamSessionState
         let error: string | undefined
         let profileDetail = ''
+        const updateProfiles =
+            input.mode === 'post-extraction'
+                ? this.config.enableUserProfileGeneration
+                : this.userProfiles.injectionEnabled
         try {
-            if (input.mode === 'incremental') {
-                state = createDreamSessionState(input.memoryIds, 'incremental')
-                const plan = await buildIncrementalDreamBatches(
-                    presetId,
+            if (input.mode === 'post-extraction') {
+                state = createDreamSessionState(
                     input.memoryIds,
-                    this.repository,
-                    this.search,
-                    logger,
-                    signal
+                    'post-extraction'
                 )
-                if (this.userProfiles.enabled)
-                    state.profileSpeakerKeys = new Set(plan.speakerKeys)
-                state.batches = plan.batches
-                state.untouchedSeedIds = plan.untouchedSeedIds
+                const seeds = await this.repository.getEntriesByPresetAndIds(
+                    presetId,
+                    input.memoryIds
+                )
+                if (updateProfiles) {
+                    state.profileSpeakerKeys = new Set(
+                        seeds
+                            .filter((entry) => entry.status === 'active')
+                            .flatMap((entry) => entry.speakerKeys)
+                    )
+                }
+                if (this.config.enableAutoDream) {
+                    const plan = await buildPostExtractionDreamBatches(
+                        presetId,
+                        input.memoryIds,
+                        seeds,
+                        this.repository,
+                        this.search,
+                        logger,
+                        signal
+                    )
+                    state.batches = plan.batches
+                    state.untouchedSeedIds = plan.untouchedSeedIds
+                } else {
+                    state.untouchedSeedIds = input.memoryIds
+                }
             } else {
                 await this.planningQueue.run('dream-planning', async () => {
                     signal?.throwIfAborted()
@@ -113,7 +137,7 @@ export class LivingMemoryDreamService {
             }
             if (
                 state.batches.length > 0 ||
-                (this.userProfiles.enabled &&
+                (updateProfiles &&
                     (state.profileSpeakerKeys?.size ?? 0) > 0)
             ) {
                 if (!isModelConfigured(this.config.mainModel)) {
@@ -157,9 +181,9 @@ export class LivingMemoryDreamService {
                         logger,
                         signal,
                         loadBatch:
-                            input.mode === 'incremental'
+                            input.mode === 'post-extraction'
                                 ? (batch) =>
-                                      refreshIncrementalDreamBatch(
+                                      refreshPostExtractionDreamBatch(
                                           presetId,
                                           batch,
                                           this.repository
@@ -169,7 +193,7 @@ export class LivingMemoryDreamService {
                     signal?.throwIfAborted()
                 }
                 if (
-                    this.userProfiles.enabled &&
+                    updateProfiles &&
                     (state.profileSpeakerKeys === undefined ||
                         state.profileSpeakerKeys.size > 0)
                 ) {

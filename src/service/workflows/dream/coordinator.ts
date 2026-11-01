@@ -76,11 +76,11 @@ export class LivingMemoryDreamCoordinator {
         )
     }
 
-    queueIncremental(presetId: string, memoryIds: string[]) {
+    queueAfterExtraction(presetId: string, memoryIds: string[]) {
         if (this.controller.signal.aborted) return
         void this.enqueue(presetId, async () => {
             if (this.controller.signal.aborted) return
-            await this.runJob(presetId, { mode: 'incremental', memoryIds })
+            await this.runJob(presetId, { mode: 'post-extraction', memoryIds })
         })
     }
 
@@ -127,7 +127,7 @@ export class LivingMemoryDreamCoordinator {
             }))
         }
         signal.throwIfAborted()
-        const trigger = input.mode === 'full' ? 'manual' : 'incremental'
+        const trigger = input.mode === 'full' ? 'manual' : 'post-extraction'
         const scope: MemoryScope = {
             conversationId: `dream:${trigger}:${presetId}`,
             presetId

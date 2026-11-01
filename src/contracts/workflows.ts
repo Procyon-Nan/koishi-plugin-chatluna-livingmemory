@@ -87,6 +87,8 @@ export interface LivingMemoryConfig {
     enableConversationIsolation: boolean
     enableSnapshotInjection: boolean
     enableUserProfileInjection: boolean
+    enableUserProfileGeneration: boolean
+    enableAutoDream: boolean
     mainModel: string
     subModel: string
     userProfileMinMemoryCount: number

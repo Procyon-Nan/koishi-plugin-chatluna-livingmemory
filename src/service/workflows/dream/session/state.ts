@@ -9,7 +9,7 @@ interface DreamBatchCoverage {
 }
 
 export interface DreamSessionState {
-    mode: 'full' | 'incremental'
+    mode: 'full' | 'post-extraction'
     completedBatches: DreamBatchCoverage[]
     untouchedSeedIds: string[]
     profileSpeakerKeys?: Set<string>
@@ -49,7 +49,7 @@ export function createDreamSessionState(
 }
 
 export function advanceDreamBatch(state: DreamSessionState) {
-    if (state.mode === 'incremental' && state.currentBatch !== undefined) {
+    if (state.mode === 'post-extraction' && state.currentBatch !== undefined) {
         state.completedBatches.push(currentBatchCoverage(state))
     }
     state.currentBatch = undefined
@@ -61,7 +61,7 @@ export function advanceDreamBatch(state: DreamSessionState) {
                       (entry) => !state.processedMemoryIds.has(entry.id)
                   )
                 : batch.entries
-        if (state.mode === 'incremental') {
+        if (state.mode === 'post-extraction') {
             state.processedMemoryIds.clear()
             state.availableMemoryIds.clear()
         }
@@ -91,7 +91,7 @@ export function assertDreamMemoriesAvailable(
     const missing = ids.filter((id) => !state.availableMemoryIds.has(id))
     if (missing.length > 0) {
         throw new MemoryInputError(
-            `请使用${state.mode === 'incremental' ? '当前组' : '本次会话'}已提供的记忆 ID，以下 ID 需核对：${missing.join('、')}。`
+            `请使用${state.mode === 'post-extraction' ? '当前组' : '本次会话'}已提供的记忆 ID，以下 ID 需核对：${missing.join('、')}。`
         )
     }
 }
@@ -134,7 +134,7 @@ function currentBatchCoverage(state: DreamSessionState): DreamBatchCoverage {
 }
 
 export function getDreamCoverage(state: DreamSessionState) {
-    if (state.mode === 'incremental') {
+    if (state.mode === 'post-extraction') {
         const coverage = [...state.completedBatches]
         if (state.currentBatch !== undefined)
             coverage.push(currentBatchCoverage(state))

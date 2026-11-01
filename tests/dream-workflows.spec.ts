@@ -32,7 +32,7 @@ const runService = async (
     options: {
         mainModel?: string
         signal?: AbortSignal
-        incremental?: boolean
+        postExtraction?: boolean
         profileUsers?: string[]
     } = {}
 ) => {
@@ -118,7 +118,9 @@ const runService = async (
                 chatluna: { createChatModel: async () => ({ value: model }) }
             } as unknown as Context,
             {
-                mainModel: options.mainModel ?? 'test'
+                mainModel: options.mainModel ?? 'test',
+                enableAutoDream: true,
+                enableUserProfileGeneration: options.profileUsers !== undefined
             },
             repository,
             mutations,
@@ -160,8 +162,8 @@ const runService = async (
             'job-test',
             logger,
             options.signal,
-            options.incremental
-                ? { mode: 'incremental', memoryIds: [entries[0].id] }
+            options.postExtraction
+                ? { mode: 'post-extraction', memoryIds: [entries[0].id] }
                 : { mode: 'full' }
         )
         outcome = { result, rounds, profileCalls }
@@ -345,12 +347,12 @@ it('does not start below 30 active memories and releases the starting lock after
     await coordinator.stop()
 })
 
-it('skips the model session for a singleton incremental group', async () => {
+it('skips the model session for a singleton post-extraction group', async () => {
     const outcome = await runService(
         () => {
             throw new Error('singleton should not request a decision')
         },
-        { incremental: true }
+        { postExtraction: true }
     )
     assert.equal(outcome.rounds, 0)
     assert.equal(outcome.result.status, 'completed')
@@ -363,7 +365,7 @@ it('updates singleton seed profiles while skipping the Dream decision session', 
         () => {
             throw new Error('singleton should not request a decision')
         },
-        { incremental: true, profileUsers: ['seed-user'] }
+        { postExtraction: true, profileUsers: ['seed-user'] }
     )
     assert.equal(outcome.rounds, 0)
     assert.equal(outcome.result.status, 'completed')

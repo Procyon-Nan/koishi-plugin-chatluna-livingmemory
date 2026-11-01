@@ -212,8 +212,11 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             extractor,
             this.presetPersona,
             this.memoryLogger,
-            (presetId, memoryIds) =>
-                this.dreamCoordinator.queueIncremental(presetId, memoryIds)
+            (presetId, memoryIds) => {
+                if (!config.enableAutoDream && !config.enableUserProfileGeneration)
+                    return
+                this.dreamCoordinator.queueAfterExtraction(presetId, memoryIds)
+            }
         )
     }
 

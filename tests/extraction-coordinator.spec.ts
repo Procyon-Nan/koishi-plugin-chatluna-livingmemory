@@ -681,7 +681,7 @@ describe('LivingMemoryExtractionCoordinator', () => {
         expect(harness.appended[0].extracted).toHaveLength(1)
         await waitFor(
             () => harness.queued.length === 1,
-            'incremental task queued'
+            'post-extraction task queued'
         )
         expect(harness.queued).toEqual([['extracted-0']])
         expect(harness.jobStore.jobs).toHaveLength(0)

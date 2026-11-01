@@ -92,10 +92,8 @@ export class LivingMemoryUserProfileService {
         private readonly presetPersona: PresetPersonaResolver
     ) {}
 
-    /**
-     * 画像阶段是否会执行。调用方据此决定是否准备画像输入，避免各自解读配置项。
-     */
-    get enabled() {
+    /** 画像注入与手动 Dream 画像阶段共用原有开关。 */
+    get injectionEnabled() {
         return this.config.enableUserProfileInjection
     }
 
@@ -108,14 +106,6 @@ export class LivingMemoryUserProfileService {
     ): Promise<UserProfileGenerationResult> {
         signal?.throwIfAborted()
         const runLogger = logger.with({ workflow: 'dream', presetId })
-        if (!this.enabled) {
-            return {
-                generated: 0,
-                skippedReason: 'disabled',
-                detail: '人物画像功能已关闭'
-            }
-        }
-
         const memoryGroups = await this.loadEligibleMemoryGroups(
             presetId,
             normalizeSpeakerKeys(speakerKeys)
@@ -430,7 +420,7 @@ export class LivingMemoryUserProfileService {
     }
 
     async renderForSpeakers(presetId: string, speakerKeys: string[]) {
-        if (!this.enabled) {
+        if (!this.injectionEnabled) {
             return ''
         }
 

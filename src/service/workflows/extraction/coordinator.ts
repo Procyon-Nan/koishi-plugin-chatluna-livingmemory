@@ -214,7 +214,7 @@ export class LivingMemoryExtractionCoordinator {
         private readonly extractor: ExtractionModel,
         private readonly presetPersona: PresetPersonaResolver,
         private readonly logger: LivingMemoryLogger,
-        private readonly queueIncrementalDream: (
+        private readonly queuePostExtractionDream: (
             presetId: string,
             memoryIds: string[]
         ) => void
@@ -551,7 +551,7 @@ export class LivingMemoryExtractionCoordinator {
                     'warn'
                 )
             }
-            this.queueIncrementalDream(
+            this.queuePostExtractionDream(
                 scope.presetId,
                 saved.memories.map((entry) => entry.id)
             )

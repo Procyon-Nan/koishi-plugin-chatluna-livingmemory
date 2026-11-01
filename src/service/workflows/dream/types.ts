@@ -8,7 +8,7 @@ export interface DreamBatch {
 
 export type DreamRunInput =
     | { mode: 'full' }
-    | { mode: 'incremental'; memoryIds: string[] }
+    | { mode: 'post-extraction'; memoryIds: string[] }
 
 export interface DreamOperationStats {
     kept: number

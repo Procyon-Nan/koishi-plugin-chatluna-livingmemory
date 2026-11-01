@@ -14,7 +14,7 @@ import {
 } from '@langchain/core/tools'
 import { isRequestFailure } from 'koishi-plugin-chatluna/utils/error'
 import type { DreamBatch } from '../types'
-import type { refreshIncrementalDreamBatch } from '../incremental'
+import type { refreshPostExtractionDreamBatch } from '../post_extraction'
 import { MemoryInputError } from '../../../memory/errors'
 import { isOutputParserException } from '../../structured_output'
 import { createOpenAIAgent } from 'koishi-plugin-chatluna/llm-core/agent'
@@ -64,7 +64,7 @@ interface DreamSessionRunInput {
     signal?: AbortSignal
     loadBatch?: (
         batch: DreamBatch
-    ) => ReturnType<typeof refreshIncrementalDreamBatch>
+    ) => ReturnType<typeof refreshPostExtractionDreamBatch>
 }
 
 export function createDreamCallOptions(

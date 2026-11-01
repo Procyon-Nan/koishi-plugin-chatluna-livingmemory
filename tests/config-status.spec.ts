@@ -8,6 +8,8 @@ const createConfig = (
     enableConversationIsolation: false,
     enableSnapshotInjection: true,
     enableUserProfileInjection: false,
+    enableUserProfileGeneration: true,
+    enableAutoDream: true,
     mainModel: 'test-model',
     subModel: 'test/sub-model',
     userProfileMinMemoryCount: 3,

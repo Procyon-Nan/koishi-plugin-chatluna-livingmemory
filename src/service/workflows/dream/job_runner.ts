@@ -31,7 +31,7 @@ export class LivingMemoryDreamJobRunner {
             await this.jobTracker.markRunning(jobId)
             logger.summary(
                 'Dream 开始',
-                `预设：${scope.presetId}; 模式：${input.mode === 'full' ? '全量' : '增量'}`
+                `预设：${scope.presetId}; 模式：${input.mode === 'full' ? '手动全量' : '提取后整理'}`
             )
             const result = await this.dream.run(
                 scope.presetId,

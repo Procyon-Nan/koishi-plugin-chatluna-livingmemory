@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import {
-    buildIncrementalDreamBatches,
-    refreshIncrementalDreamBatch
-} from '../src/service/workflows/dream/incremental'
+    buildPostExtractionDreamBatches,
+    refreshPostExtractionDreamBatch
+} from '../src/service/workflows/dream/post_extraction'
 import {
     advanceDreamBatch,
     assertDreamMemoriesAvailable,
@@ -21,10 +21,10 @@ import {
 
 it('excludes the whole extraction and skips a seed with no neighbors', async () => {
     const entries = ['x', 'y', 'a'].map((id) => createMemoryEntry(id))
-    entries[1].speakerKeys = ['single-user']
-    const plan = await buildIncrementalDreamBatches(
+    const plan = await buildPostExtractionDreamBatches(
         scope.presetId,
         ['x', 'y'],
+        entries.slice(0, 2),
         {
             getEntriesByPresetAndIds: async (_preset, ids) =>
                 entries.filter((entry) => ids.includes(entry.id))
@@ -59,7 +59,6 @@ it('excludes the whole extraction and skips a seed with no neighbors', async () 
         [['x', 'a']]
     )
     assert.deepEqual(plan.untouchedSeedIds, ['y'])
-    assert.deepEqual(plan.speakerKeys, ['single-user'])
 })
 
 it('refreshes original members and drops archived sources without substituting replacements', async () => {
@@ -79,7 +78,7 @@ it('refreshes original members and drops archived sources without substituting r
             records.filter((entry) => ids.includes(entry.id)),
         listPresetSpeakers: async () => []
     }
-    const loaded = await refreshIncrementalDreamBatch(
+    const loaded = await refreshPostExtractionDreamBatch(
         scope.presetId,
         batch,
         repository
@@ -91,13 +90,13 @@ it('refreshes original members and drops archived sources without substituting r
     assert.equal(loaded!.entries[1].content, 'new content')
     records[1].status = 'archived'
     assert.equal(
-        await refreshIncrementalDreamBatch(scope.presetId, batch, repository),
+        await refreshPostExtractionDreamBatch(scope.presetId, batch, repository),
         undefined
     )
 })
 
 it('resets group permissions and keeps an earlier group omission after later success', () => {
-    const state = createDreamSessionState(['x', 'y'], 'incremental')
+    const state = createDreamSessionState(['x', 'y'], 'post-extraction')
     state.batches = [
         ['x', 'a'],
         ['y', 'a']
@@ -133,8 +132,8 @@ it('queues extraction tasks FIFO and creates jobs only when they run', async () 
     const coordinator = new LivingMemoryDreamCoordinator(
         {
             run: async (_scope, _id, _signal, input) => {
-                assert.equal(input!.mode, 'incremental')
-                if (input!.mode !== 'incremental') return
+                assert.equal(input!.mode, 'post-extraction')
+                if (input!.mode !== 'post-extraction') return
                 started.push(input!.memoryIds)
                 if (started.length === 1) await first
             }
@@ -142,19 +141,19 @@ it('queues extraction tasks FIFO and creates jobs only when they run', async () 
         { ...store, countActiveEntries: async () => 1 },
         logger
     )
-    coordinator.queueIncremental(scope.presetId, ['x'])
-    coordinator.queueIncremental(scope.presetId, ['y'])
-    await waitFor(() => started.length === 1, 'first incremental task')
+    coordinator.queueAfterExtraction(scope.presetId, ['x'])
+    coordinator.queueAfterExtraction(scope.presetId, ['y'])
+    await waitFor(() => started.length === 1, 'first post-extraction task')
     assert.equal(store.jobs.length, 1)
     assert.equal(
         (await coordinator.start(scope.presetId)).reason,
         'preset-locked'
     )
     release()
-    await waitFor(() => started.length === 2, 'second incremental task')
+    await waitFor(() => started.length === 2, 'second post-extraction task')
     await coordinator.stop()
     assert.deepEqual(started, [['x'], ['y']])
     assert.equal(store.jobs.length, 2)
-    coordinator.queueIncremental(scope.presetId, ['z'])
+    coordinator.queueAfterExtraction(scope.presetId, ['z'])
     assert.equal(store.jobs.length, 2)
 })

@@ -104,6 +104,9 @@ export const Config: Schema<Config> = Schema.intersect([
         enableUserProfileInjection: Schema.boolean()
             .description('开启用户画像注入。')
             .default(false),
+        enableUserProfileGeneration: Schema.boolean()
+            .description('自动提取保存新记忆后，生成、更新相关用户画像。')
+            .default(true),
         userProfileMinMemoryCount: Schema.number()
             .min(1)
             .max(30)
@@ -153,6 +156,9 @@ export const Config: Schema<Config> = Schema.intersect([
                 '未提取的消息累计达到该条数时自动提取一次记忆。设为 0 时关闭自动提取。'
             )
             .default(30),
+        enableAutoDream: Schema.boolean()
+            .description('自动提取保存新记忆后，检索近邻并通过 Dream 整理。')
+            .default(true),
         extractionIncludeOverheard: Schema.boolean()
             .description(
                 'Character 开启时，从首条普通消息开始累计，达到阈值即提取；关闭时，在 bot 回复后围绕完整交流提取。'

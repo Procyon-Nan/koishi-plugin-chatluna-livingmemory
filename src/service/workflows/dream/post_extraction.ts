@@ -2,16 +2,17 @@ import type { LivingMemoryRepository } from '../../persistence/repository'
 import type { LivingMemorySearchEngine } from '../recall/memory_search_engine'
 import type { LivingMemoryLogger } from '../../logging/logger'
 import type { DreamBatch } from './types'
+import type { MemoryEntryRecord } from '../../../contracts/memory'
 
-export async function buildIncrementalDreamBatches(
+export async function buildPostExtractionDreamBatches(
     presetId: string,
     memoryIds: string[],
+    seeds: MemoryEntryRecord[],
     repository: Pick<LivingMemoryRepository, 'getEntriesByPresetAndIds'>,
     search: Pick<LivingMemorySearchEngine, 'searchMemoriesDetailed'>,
     logger: LivingMemoryLogger,
     signal?: AbortSignal
 ) {
-    const seeds = await repository.getEntriesByPresetAndIds(presetId, memoryIds)
     const seedById = new Map(seeds.map((entry) => [entry.id, entry]))
     const groups: { seedMemoryId: string; memoryIds: string[] }[] = []
     const untouchedSeedIds: string[] = []
@@ -35,7 +36,7 @@ export async function buildIncrementalDreamBatches(
         )
         signal?.throwIfAborted()
         logger.diagnosticSummary(() => ({
-            event: '增量 Dream 近邻检索完成',
+            event: '提取后 Dream 近邻检索完成',
             detail: `预设：${presetId}; 新记忆：${id}; 近邻：${hits.length} 条`,
             blocks: [
                 {
@@ -77,21 +78,18 @@ export async function buildIncrementalDreamBatches(
             continue
         }
         batches.push({
-            id: `incremental:${group.seedMemoryId}`,
+            id: `post-extraction:${group.seedMemoryId}`,
             seedMemoryId: group.seedMemoryId,
             entries: members
         })
     }
     return {
         batches,
-        untouchedSeedIds,
-        speakerKeys: seeds
-            .filter((entry) => entry.status === 'active')
-            .flatMap((entry) => entry.speakerKeys)
+        untouchedSeedIds
     }
 }
 
-export async function refreshIncrementalDreamBatch(
+export async function refreshPostExtractionDreamBatch(
     presetId: string,
     batch: DreamBatch,
     repository: Pick<

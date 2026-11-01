@@ -77,7 +77,7 @@
 
 入口：`src/service/user_profile.ts`。
 
-- 用户画像在 Dream 内生成，生成与注入受 `enableUserProfileInjection` 控制；用户身份登记独立运行。
+- 自动提取后的画像更新由默认开启的 `enableUserProfileGeneration` 控制；手动 Dream 的画像更新与聊天注入沿用 `enableUserProfileInjection` 控制；用户身份登记独立运行。
 - Character 画像选择与本轮召回共用同一份“历史消息＋当前消息”，按其中的用户身份读取已有画像并在本轮变量中注入。例如窗口包含 B、C 的历史发言和 A 的当前发言时，本轮同时注入三人已有的画像；窗口固定后到达的新消息参与后续轮次。
 - 结果工具使用顶层字段 `action`、`content`、`reason`。`action` 为 `update` 或 `keep`，均需填写理由；首次生成必须返回 `update`。`update` 必须提交完整画像正文 `content`，由业务校验检查，缺失时进入纠正重试。
 - `keep` 保留正文并记录本次输入；输入未变时，下次 Dream 跳过该用户。
@@ -133,4 +133,4 @@ Character 只需注入已有快照时，直接读取快照；召回或人物画�
 
 ### 提取后的自动整理
 
-自动提取成功保存后，把本次新记忆 ID 交给同预设的增量 Dream 队列。索引同步失败返回已保存记录及警告，消息游标正常推进，索引继续走后台对账。每个提取块独立提交任务；整理结果详见 [Dream 流程](dream.md)。
+自动提取成功保存后，若自动整理或画像生成开启，把本次新记忆 ID 交给同预设的 Dream 队列。`enableAutoDream` 默认开启，控制近邻检索和整理会话；`enableUserProfileGeneration` 默认开启，独立控制提取后的画像更新。仅开启画像生成时直接处理新记忆关联用户。索引同步失败返回已保存记录及警告，消息游标正常推进，索引继续走后台对账。每个提取块独立提交任务；整理结果详见 [Dream 流程](dream.md)。
