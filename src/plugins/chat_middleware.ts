@@ -273,7 +273,9 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 logger.diagnosticSummary(() => {
                     const details = [formatLogScope(scope)]
                     if (enableSnapshotInjection) {
-                        details.push(`记忆快照：${sections.snapshot.length} 字符`)
+                        details.push(
+                            `记忆快照：${sections.snapshot.length} 字符`
+                        )
                     }
                     if (enableUserProfileInjection) {
                         details.push(
@@ -353,7 +355,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
         }
     )
 
-    ctx.on('chatluna/after-chat-error', (_error, conversationId) => {
+    ctx.on('chatluna/after-chat-error', async (_error, conversationId) => {
         activeInjections.delete(conversationId)
     })
 

@@ -145,7 +145,9 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             this.presetPersona,
             async () => {
                 const model = (
-                    await this.ctx.chatluna.createChatModel(this.config.mainModel)
+                    await this.ctx.chatluna.createChatModel(
+                        this.config.mainModel
+                    )
                 ).value
                 if (model === undefined) throw new Error('主模型不可用。')
                 return model

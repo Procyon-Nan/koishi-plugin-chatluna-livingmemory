@@ -139,9 +139,7 @@ export class LivingMemoryDreamService {
                     await this.presetPersona.resolveOrGenerateCardText(presetId)
                 signal?.throwIfAborted()
                 const speakers =
-                    await this.mutations.ensurePresetSpeakersCoverage(
-                        presetId
-                    )
+                    await this.mutations.ensurePresetSpeakersCoverage(presetId)
                 signal?.throwIfAborted()
                 const tools = createDreamSessionTools({
                     presetId,

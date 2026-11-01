@@ -12,6 +12,7 @@ const createService = (options: {
     dreamStart: () => Promise<void>
     dreamStop: () => Promise<void>
     stopDreamTasks?: () => Promise<void>
+    stopUserProfiles?: () => Promise<void>
 }) => {
     const service = Object.create(
         ChatLunaLivingMemoryService.prototype
@@ -47,6 +48,9 @@ const createService = (options: {
         dreamCoordinator: {
             value: { stop: options.stopDreamTasks ?? (async () => {}) }
         },
+        userProfiles: {
+            value: { stop: options.stopUserProfiles ?? (async () => {}) }
+        },
         dreamWorker: {
             value: { start: options.dreamStart, stop: options.dreamStop }
         }
@@ -57,6 +61,9 @@ const createService = (options: {
 it('starts and stops the Dream worker in service lifecycle order', async () => {
     const events: string[] = []
     const service = createService({
+        stopUserProfiles: async () => {
+            events.push('user-profiles-stop')
+        },
         stopDreamTasks: async () => {
             events.push('dream-tasks-stop')
         },
@@ -81,6 +88,7 @@ it('starts and stops the Dream worker in service lifecycle order', async () => {
         'vector-start',
         'dream-start',
         'dream-tasks-stop',
+        'user-profiles-stop',
         'dream-stop',
         'vector-stop'
     ])

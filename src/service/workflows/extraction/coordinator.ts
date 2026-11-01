@@ -555,7 +555,11 @@ export class LivingMemoryExtractionCoordinator {
             this.onExtracted(
                 scope.presetId,
                 saved.memories.map((entry) => entry.id),
-                [...new Set(saved.memories.flatMap((entry) => entry.speakerKeys))]
+                [
+                    ...new Set(
+                        saved.memories.flatMap((entry) => entry.speakerKeys)
+                    )
+                ]
             )
         }
 

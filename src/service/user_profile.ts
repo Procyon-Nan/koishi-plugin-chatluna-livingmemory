@@ -142,7 +142,10 @@ export class LivingMemoryUserProfileService {
         signal: AbortSignal,
         force: boolean
     ): Promise<UserProfileGenerationResult> {
-        const runLogger = this.logger.with({ workflow: 'user-profile', presetId })
+        const runLogger = this.logger.with({
+            workflow: 'user-profile',
+            presetId
+        })
         const speakers = await this.repository.listPresetSpeakers(presetId)
         const memoryGroups = await this.loadEligibleMemoryGroups(
             presetId,

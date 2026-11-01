@@ -88,25 +88,25 @@ export const Config: Schema<Config> = Schema.intersect([
             .default(0),
         enabledMemoryTools: Schema.array(
             Schema.union([
-                Schema.const('living_memory_search').description(
+                Schema.const<string>('living_memory_search').description(
                     '记忆查询工具：通过语义检索查询记忆'
                 ),
-                Schema.const('living_memory_get_messages').description(
+                Schema.const<string>('living_memory_get_messages').description(
                     '来源查看工具：查看记忆来源的聊天消息'
                 ),
-                Schema.const('living_memory_create_memory').description(
+                Schema.const<string>('living_memory_create_memory').description(
                     '记忆创建工具：创建新的记忆'
                 ),
-                Schema.const('living_memory_update_memory').description(
+                Schema.const<string>('living_memory_update_memory').description(
                     '记忆更新工具：更新已有记忆'
                 ),
-                Schema.const('living_memory_merge_memories').description(
-                    '记忆合并工具：将多条记忆合并为一条'
-                ),
-                Schema.const('living_memory_split_memory').description(
+                Schema.const<string>(
+                    'living_memory_merge_memories'
+                ).description('记忆合并工具：将多条记忆合并为一条'),
+                Schema.const<string>('living_memory_split_memory').description(
                     '记忆拆分工具：将一条记忆拆分为多条'
                 ),
-                Schema.const('living_memory_delete_memory').description(
+                Schema.const<string>('living_memory_delete_memory').description(
                     '记忆删除工具：归档删除记忆'
                 )
             ])

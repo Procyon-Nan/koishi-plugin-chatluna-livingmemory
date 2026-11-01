@@ -27,27 +27,30 @@ export function apply(ctx: Context, config: LivingMemoryConfig) {
         ) => {
             if (!config.enabledMemoryTools.includes(definition.name)) return
 
-            const dispose = ctx.chatluna.platform.registerTool(definition.name, {
-                description: definition.description,
-                selector: () => true,
-                meta: {
-                    source: 'extension',
-                    group: 'living-memory',
-                    tags: ['living-memory', ...tags],
-                    defaultAvailability: {
-                        enabled: true,
-                        main: true,
-                        subAgent: false,
-                        chatluna: true,
-                        characterScope: 'all'
-                    }
-                },
-                // 工作区可能解析到多份 LangChain，类型转换只保留在注册边界。
-                createTool: () =>
-                    createTool() as unknown as ReturnType<
-                        ChatLunaTool['createTool']
-                    >
-            })
+            const dispose = ctx.chatluna.platform.registerTool(
+                definition.name,
+                {
+                    description: definition.description,
+                    selector: () => true,
+                    meta: {
+                        source: 'extension',
+                        group: 'living-memory',
+                        tags: ['living-memory', ...tags],
+                        defaultAvailability: {
+                            enabled: true,
+                            main: true,
+                            subAgent: false,
+                            chatluna: true,
+                            characterScope: 'all'
+                        }
+                    },
+                    // 工作区可能解析到多份 LangChain，类型转换只保留在注册边界。
+                    createTool: () =>
+                        createTool() as unknown as ReturnType<
+                            ChatLunaTool['createTool']
+                        >
+                }
+            )
             disposers.push(dispose)
         }
 
