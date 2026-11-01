@@ -137,8 +137,7 @@ export class LivingMemoryDreamService {
             }
             if (
                 state.batches.length > 0 ||
-                (updateProfiles &&
-                    (state.profileSpeakerKeys?.size ?? 0) > 0)
+                (updateProfiles && (state.profileSpeakerKeys?.size ?? 0) > 0)
             ) {
                 if (!isModelConfigured(this.config.mainModel)) {
                     throw new Error('Dream mainModel 未配置。')

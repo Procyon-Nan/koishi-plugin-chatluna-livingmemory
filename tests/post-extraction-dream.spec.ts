@@ -90,7 +90,11 @@ it('refreshes original members and drops archived sources without substituting r
     assert.equal(loaded!.entries[1].content, 'new content')
     records[1].status = 'archived'
     assert.equal(
-        await refreshPostExtractionDreamBatch(scope.presetId, batch, repository),
+        await refreshPostExtractionDreamBatch(
+            scope.presetId,
+            batch,
+            repository
+        ),
         undefined
     )
 })
