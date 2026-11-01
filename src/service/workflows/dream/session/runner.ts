@@ -40,7 +40,7 @@ import {
     advanceDreamBatch,
     pendingDreamMemoryIds,
     recordSkippedDreamBatch,
-    recordDreamProfileSpeakers,
+    recordDreamSpeakers,
     type DreamSessionState
 } from './state'
 
@@ -156,7 +156,7 @@ export async function runDreamSession(input: DreamSessionRunInput) {
             speakers = refreshed.speakers
         }
         const batch = state.currentBatch!
-        recordDreamProfileSpeakers(
+        recordDreamSpeakers(
             state,
             batch.entries.flatMap((entry) => entry.speakerKeys)
         )

@@ -12,7 +12,7 @@ export interface DreamSessionState {
     mode: 'full' | 'post-extraction'
     completedBatches: DreamBatchCoverage[]
     untouchedSeedIds: string[]
-    profileSpeakerKeys?: Set<string>
+    involvedSpeakerKeys?: Set<string>
     batches: readonly DreamBatch[]
     nextBatchIndex: number
     currentBatch: DreamBatch | undefined
@@ -172,10 +172,10 @@ export function getDreamCoverage(state: DreamSessionState) {
     }
 }
 
-export function recordDreamProfileSpeakers(
+export function recordDreamSpeakers(
     state: DreamSessionState,
     speakerKeys: readonly string[]
 ) {
-    if (state.profileSpeakerKeys === undefined) return
-    for (const key of speakerKeys) state.profileSpeakerKeys.add(key)
+    if (state.involvedSpeakerKeys === undefined) return
+    for (const key of speakerKeys) state.involvedSpeakerKeys.add(key)
 }

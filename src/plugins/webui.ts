@@ -169,6 +169,12 @@ export function apply(ctx: Context, _config?: LivingMemoryConfig) {
     )
 
     ctx.console.addListener(
+        'living-memory/regenerateUserProfile',
+        async (presetId: string, speakerKey: string) =>
+            await service(ctx).regenerateUserProfile(presetId, speakerKey)
+    )
+
+    ctx.console.addListener(
         'living-memory/deleteUserProfile',
         ok(async (profileId: string) => {
             await service(ctx).deleteUserProfile(profileId)

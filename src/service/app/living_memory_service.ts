@@ -142,7 +142,14 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             config,
             this.repository,
             this.memoryLogger,
-            this.presetPersona
+            this.presetPersona,
+            async () => {
+                const model = (
+                    await this.ctx.chatluna.createChatModel(this.config.mainModel)
+                ).value
+                if (model === undefined) throw new Error('主模型不可用。')
+                return model
+            }
         )
 
         this.recallCoordinator = this.createRecallCoordinator(config)
@@ -181,7 +188,15 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             this.mutations,
             this.vectorIndex,
             this.dreamWorker,
-            this.userProfiles,
+            (presetId, mode, speakerKeys) => {
+                const enabled =
+                    mode === 'post-extraction'
+                        ? config.enableUserProfileGeneration
+                        : config.enableDreamUserProfileGeneration
+                if (enabled) {
+                    this.userProfiles.queueGeneration(presetId, speakerKeys)
+                }
+            },
             this.presetPersona,
             this.searchEngine
         )
@@ -212,13 +227,15 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             extractor,
             this.presetPersona,
             this.memoryLogger,
-            (presetId, memoryIds) => {
-                if (
-                    !config.enableAutoDream &&
-                    !config.enableUserProfileGeneration
-                )
-                    return
-                this.dreamCoordinator.queueAfterExtraction(presetId, memoryIds)
+            (presetId, memoryIds, speakerKeys) => {
+                if (config.enableAutoDream) {
+                    this.dreamCoordinator.queueAfterExtraction(
+                        presetId,
+                        memoryIds
+                    )
+                } else if (config.enableUserProfileGeneration) {
+                    this.userProfiles.queueGeneration(presetId, speakerKeys)
+                }
             }
         )
     }
@@ -315,7 +332,10 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
     }
 
     protected async stop() {
-        await this.dreamCoordinator.stop()
+        await Promise.all([
+            this.dreamCoordinator.stop(),
+            this.userProfiles.stop()
+        ])
         await this.archivedMemoryCleanup
         this.vectorIndex.beginStop()
         try {
@@ -663,6 +683,12 @@ export class ChatLunaLivingMemoryService extends Service<LivingMemoryConfig> {
             profileId,
             normalizeManualUserProfileContent(content)
         )
+    }
+
+    async regenerateUserProfile(presetId: string, speakerKey: string) {
+        return this.userProfiles.regenerate(presetId, [speakerKey], {
+            force: true
+        })
     }
 
     async runDream(presetId: string): Promise<DreamTriggerResult> {

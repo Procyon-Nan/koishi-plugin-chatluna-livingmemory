@@ -43,6 +43,16 @@
                             <el-button
                                 size="small"
                                 plain
+                                :loading="regeneratingProfileId === profile.id"
+                                :disabled="regeneratingProfileId !== null"
+                                @click="regenerateUserProfile(profile)"
+                            >
+                                重新生成
+                            </el-button>
+                            <el-button
+                                size="small"
+                                plain
+                                :disabled="regeneratingProfileId === profile.id"
                                 @click="editUserProfile(profile)"
                             >
                                 编辑
@@ -52,6 +62,7 @@
                                 type="danger"
                                 plain
                                 :loading="deletingProfileId === profile.id"
+                                :disabled="regeneratingProfileId === profile.id"
                                 @click="removeUserProfile(profile)"
                             >
                                 删除
@@ -102,6 +113,7 @@ const emit = defineEmits<{
 }>()
 
 const deletingProfileId = ref<string | null>(null)
+const regeneratingProfileId = ref<string | null>(null)
 const profileDialogVisible = ref(false)
 const editingProfile = ref<UserProfileRecord | null>(null)
 const {
@@ -188,6 +200,27 @@ const removeUserProfile = async (profile: UserProfileRecord) => {
         ElMessage.error(`删除失败：${message}`)
     } finally {
         deletingProfileId.value = null
+    }
+}
+
+const regenerateUserProfile = async (profile: UserProfileRecord) => {
+    regeneratingProfileId.value = profile.id
+    try {
+        const result = await api.regenerateUserProfile(
+            profile.presetId,
+            profile.speakerKey
+        )
+        if (result.generated > 0) {
+            ElMessage.success('用户画像已重新生成')
+        } else {
+            ElMessage.warning(result.detail)
+        }
+        await refresh()
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        ElMessage.error(`重新生成失败：${message}`)
+    } finally {
+        regeneratingProfileId.value = null
     }
 }
 

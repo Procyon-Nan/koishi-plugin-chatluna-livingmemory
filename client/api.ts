@@ -164,6 +164,17 @@ export async function updateUserProfile(
     )
 }
 
+export async function regenerateUserProfile(
+    presetId: string,
+    speakerKey: string
+): Promise<{ generated: number; detail: string }> {
+    return await sendLivingMemory(
+        'living-memory/regenerateUserProfile',
+        presetId,
+        speakerKey
+    )
+}
+
 export async function runDream(presetId: string): Promise<DreamTriggerResult> {
     return await sendLivingMemory('living-memory/runDream', presetId)
 }

@@ -13,7 +13,6 @@ import { LivingMemoryDreamService } from '../src/service/workflows/dream/service
 import { LivingMemoryDreamCoordinator } from '../src/service/workflows/dream/coordinator'
 import { LivingMemoryDreamJobRunner } from '../src/service/workflows/dream/job_runner'
 import { LivingMemoryJobTracker } from '../src/service/workflows/job_tracker'
-import { LivingMemoryUserProfileService } from '../src/service/user_profile'
 import { LivingMemoryMutationService } from '../src/service/app/memory_mutation_service'
 import { bisectDreamMemories } from '../src/service/workflows/dream/semantic/bisect'
 import { createMemoryContentHash } from '../src/service/vector_index/hashes'
@@ -97,32 +96,12 @@ const runService = async (
             logger
         )
         const persona = { resolveOrGenerateCardText: async () => '测试人设' }
-        const profiles = new LivingMemoryUserProfileService(
-            {
-                enableUserProfileInjection: false,
-                userProfileMinMemoryCount: 1,
-                userProfileMemoryLimit: 10
-            },
-            repository,
-            logger,
-            persona
-        )
-        if (options.profileUsers) {
-            profiles.regenerate = async (_preset, keys) => {
-                profileCalls.push(keys)
-                return { generated: keys.length, detail: '人物画像检查完成' }
-            }
-        }
         const service = new LivingMemoryDreamService(
             {
                 chatluna: { createChatModel: async () => ({ value: model }) }
             } as unknown as Context,
             {
-                mainModel: options.mainModel ?? 'test',
-                enableAutoDream: true,
-                enableUserProfileGeneration: options.profileUsers !== undefined,
-                enableDreamUserProfileGeneration:
-                    options.profileUsers !== undefined
+                mainModel: options.mainModel ?? 'test'
             },
             repository,
             mutations,
@@ -155,7 +134,9 @@ const runService = async (
                 },
                 bisect: async (input) => bisectDreamMemories(input)
             },
-            profiles,
+            (_presetId, _mode, keys) => {
+                if (options.profileUsers) profileCalls.push(keys!)
+            },
             persona,
             { searchMemoriesDetailed: async () => [] }
         )
@@ -362,7 +343,7 @@ it('skips the model session for a singleton post-extraction group', async () => 
     assert.equal(outcome.result.untouchedSeedIds.length, 1)
 })
 
-it('updates singleton seed profiles while skipping the Dream decision session', async () => {
+it('triggers singleton seed profiles after skipping the Dream decision session', async () => {
     const outcome = await runService(
         () => {
             throw new Error('singleton should not request a decision')

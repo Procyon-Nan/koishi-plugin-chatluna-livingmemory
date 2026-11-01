@@ -128,6 +128,10 @@ export interface LivingMemoryConsoleEvents {
         profileId: string,
         content: string
     ) => Promise<{ success: true }>
+    'living-memory/regenerateUserProfile': (
+        presetId: string,
+        speakerKey: string
+    ) => Promise<{ generated: number; detail: string }>
     'living-memory/deleteUserProfile': (
         profileId: string
     ) => Promise<{ success: true }>

@@ -17,6 +17,7 @@ import { buildUserProfilePrompts } from './prompts/user_profile'
 import { invokeStructuredOutput } from './workflows/structured_output'
 import { formatLogScope, type LivingMemoryLogger } from './logging/logger'
 import { normalizeSpeakerKeys } from './memory/speaker_identity'
+import { SerialTaskQueue } from './shared/serial_task_queue'
 
 export const normalizeManualUserProfileContent = (content: string) => {
     const normalized = content.trim()
@@ -36,7 +37,6 @@ type LivingMemoryUserProfileConfig = Pick<
 export interface UserProfileGenerationResult {
     generated: number
     detail: string
-    skippedReason?: string
 }
 
 interface UserProfileGroup {
@@ -63,62 +63,97 @@ const compareEntriesByProfilePriority = (
 export const collectUserProfileSpeakerKeys = (
     messages: LivingMemoryTranscriptMessage[]
 ) => {
-    const keys: string[] = []
-    const seen = new Set<string>()
-
-    for (const message of messages) {
-        if (message.role !== 'user') {
-            continue
-        }
-
-        const key = message.speakerKey?.trim()
-        if (key == null || key.length === 0 || seen.has(key)) {
-            continue
-        }
-
-        seen.add(key)
-        keys.push(key)
-    }
-
-    return keys
+    return [
+        ...new Set(
+            messages
+                .filter((message) => message.role === 'user')
+                .map((message) => message.speakerKey?.trim())
+                .filter((key): key is string => Boolean(key))
+        )
+    ]
 }
 
 export class LivingMemoryUserProfileService {
+    private readonly queue = new SerialTaskQueue()
+    private readonly controller = new AbortController()
+    private readonly tasks = new Set<Promise<UserProfileGenerationResult>>()
+
     constructor(
         private readonly config: LivingMemoryUserProfileConfig,
         private readonly repository: UserProfileRepository &
             UserProfileMemoryRepository,
         private readonly logger: LivingMemoryLogger,
-        private readonly presetPersona: PresetPersonaResolver
+        private readonly presetPersona: PresetPersonaResolver,
+        private readonly createModel: () => Promise<ChatLunaChatModel>
     ) {}
 
     async regenerate(
         presetId: string,
-        speakerKeys: string[],
-        model: ChatLunaChatModel,
-        logger: LivingMemoryLogger = this.logger,
-        signal?: AbortSignal
+        speakerKeys?: string[],
+        options: { force?: boolean } = {}
     ): Promise<UserProfileGenerationResult> {
-        signal?.throwIfAborted()
-        const runLogger = logger.with({ workflow: 'dream', presetId })
+        this.controller.signal.throwIfAborted()
+        const task = this.queue.run(presetId, async () => {
+            const signal = this.controller.signal
+            signal.throwIfAborted()
+            this.logger.diagnosticSummary(() => ({
+                event: '人物画像生成开始',
+                detail: `预设：${presetId}`
+            }))
+            const result = await this.generate(
+                presetId,
+                speakerKeys,
+                signal,
+                options.force === true
+            )
+            this.logger.diagnosticSummary(() => ({
+                event: '人物画像生成结束',
+                detail: `预设：${presetId}; ${result.detail}`
+            }))
+            return result
+        })
+        this.tasks.add(task)
+        try {
+            return await task
+        } finally {
+            this.tasks.delete(task)
+        }
+    }
+
+    queueGeneration(presetId: string, speakerKeys?: string[]) {
+        void this.regenerate(presetId, speakerKeys).catch((error) => {
+            this.logger.summary(
+                '人物画像生成失败',
+                `预设：${presetId}`,
+                'error',
+                error
+            )
+        })
+    }
+
+    async stop() {
+        this.controller.abort(new Error('人物画像服务正在停止。'))
+        await Promise.allSettled([...this.tasks])
+    }
+
+    private async generate(
+        presetId: string,
+        speakerKeys: string[] | undefined,
+        signal: AbortSignal,
+        force: boolean
+    ): Promise<UserProfileGenerationResult> {
+        const runLogger = this.logger.with({ workflow: 'user-profile', presetId })
+        const speakers = await this.repository.listPresetSpeakers(presetId)
         const memoryGroups = await this.loadEligibleMemoryGroups(
             presetId,
-            normalizeSpeakerKeys(speakerKeys)
+            normalizeSpeakerKeys(
+                speakerKeys ?? speakers.map((speaker) => speaker.speakerKey)
+            )
         )
         if (memoryGroups.length === 0) {
             return {
                 generated: 0,
-                skippedReason: 'insufficient-related-memories',
                 detail: `关联记忆尚未达到门槛：每人 ${this.config.userProfileMinMemoryCount} 条`
-            }
-        }
-
-        const speakers = await this.repository.listPresetSpeakers(presetId)
-        if (speakers.length === 0) {
-            return {
-                generated: 0,
-                skippedReason: 'no-user-speakers',
-                detail: '符合条件的用户：0 人'
             }
         }
 
@@ -143,7 +178,6 @@ export class LivingMemoryUserProfileService {
         if (profileGroups.length === 0) {
             return {
                 generated: 0,
-                skippedReason: 'no-user-speakers',
                 detail: '符合条件的用户：0 人'
             }
         }
@@ -153,30 +187,28 @@ export class LivingMemoryUserProfileService {
                 presetId,
                 profileGroups.map((group) => group.speakerKey)
             )
-        // 仓储按规范行顺序返回，重复行下首个即 replaceUserProfile 的写入目标，
-        // 因此这里取首次出现者，保证读到的画像与写入的是同一行。
-        const existingProfileByKey = new Map<string, UserProfileRecord>()
-        for (const profile of existingProfiles) {
-            if (!existingProfileByKey.has(profile.speakerKey)) {
-                existingProfileByKey.set(profile.speakerKey, profile)
-            }
-        }
+        // 逆序写入 Map，使仓储返回的首行与 replaceUserProfile 的写入目标一致。
+        const existingProfileByKey = new Map(
+            existingProfiles
+                .reverse()
+                .map((profile) => [profile.speakerKey, profile])
+        )
         for (const group of profileGroups) {
             group.existingProfile = existingProfileByKey.get(group.speakerKey)
         }
         const pendingGroups = profileGroups.filter(
-            (group) => !this.isProfileUpToDate(group)
+            (group) => force || !this.isProfileUpToDate(group)
         )
         if (pendingGroups.length === 0) {
             return {
                 generated: 0,
-                skippedReason: 'unchanged',
                 detail: `画像已是最新：${profileGroups.length} 人`
             }
         }
 
         const assistantLabel = resolveAssistantLabel(presetId)
-        signal?.throwIfAborted()
+        const model = await this.createModel()
+        signal.throwIfAborted()
         const presetPrompt =
             await this.presetPersona.resolveOrGenerateCardText(presetId)
         const matchedEntryCount = profileGroups.reduce(
@@ -187,12 +219,10 @@ export class LivingMemoryUserProfileService {
             (sum, group) => sum + group.entries.length,
             0
         )
-        let generated = 0
-        let kept = 0
-        let failed = 0
+        const counts = { generated: 0, kept: 0, failed: 0 }
 
         for (const group of pendingGroups) {
-            signal?.throwIfAborted()
+            signal.throwIfAborted()
             const outcome = await this.generateProfileForGroup(
                 presetId,
                 group,
@@ -205,28 +235,21 @@ export class LivingMemoryUserProfileService {
                 }),
                 signal
             )
-            if (outcome === 'generated') {
-                generated++
-            } else if (outcome === 'kept') {
-                kept++
-            } else {
-                failed++
-            }
+            counts[outcome]++
         }
 
         return {
-            generated,
-            skippedReason: generated === 0 ? 'no-valid-profiles' : undefined,
+            generated: counts.generated,
             detail: [
-                `更新画像：${generated} 人`,
+                `更新画像：${counts.generated} 人`,
                 `预设用户：${speakers.length} 人`,
                 `符合条件：${profileGroups.length} 人`,
                 `关联记忆：${matchedEntryCount} 条`,
                 `选用记忆：${selectedEntryCount} 条`,
                 `每人最低记忆数：${this.config.userProfileMinMemoryCount} 条`,
                 `已是最新：${profileGroups.length - pendingGroups.length} 人`,
-                `保持原样：${kept} 人`,
-                `失败：${failed} 人`
+                `保持原样：${counts.kept} 人`,
+                `失败：${counts.failed} 人`
             ].join(' ')
         }
     }
@@ -292,15 +315,7 @@ export class LivingMemoryUserProfileService {
         return Math.max(...entries.map((entry) => +entry.updatedAt))
     }
 
-    /**
-     * 画像输入是否与上次审阅时相同（改写或 keep 都会记下本次输入）。判据为
-     * 选中记忆集合未变，且画像审阅时刻严格晚于组内全部记忆的更新时刻；同刻按
-     * 已变化处理。相同输入的模型调用是确定的空操作，跳过它不改变结果。
-     *
-     * 判据不覆盖 prompt 侧变化：模型输入还包含 assistantLabel 与 presetPrompt，
-     * 改预设人设或升级画像模板都不会被判为需要重算。这类重算由既有的删除画像
-     * 通道兜底——画像删除后 existingProfile 为空，下一次 Dream 必然重建。
-     */
+    /** 按上次审阅的记忆集合与更新时间跳过相同输入；WebUI 重新生成直接略过此判断。 */
     private isProfileUpToDate(group: UserProfileGroup) {
         const existingProfile = group.existingProfile
         if (existingProfile == null) {
@@ -327,7 +342,7 @@ export class LivingMemoryUserProfileService {
         assistantLabel: string,
         presetPrompt: string,
         logger: LivingMemoryLogger,
-        signal?: AbortSignal
+        signal: AbortSignal
     ): Promise<'generated' | 'kept' | 'failed'> {
         const prompt = buildUserProfilePrompts({
             assistantLabel,
@@ -362,7 +377,7 @@ export class LivingMemoryUserProfileService {
                 logging: { logger, stage: 'user-profile' }
             })
         } catch (error) {
-            signal?.throwIfAborted()
+            signal.throwIfAborted()
             if (!isRequestFailure(error)) throw error
             logger.summary(
                 '人物画像处理失败',
@@ -384,7 +399,7 @@ export class LivingMemoryUserProfileService {
             return 'failed'
         }
 
-        signal?.throwIfAborted()
+        signal.throwIfAborted()
         const decision = structuredResult.value
         const sourceMemoryIds = group.entries.map((entry) => entry.id)
         if (decision.action === 'keep') {
@@ -419,7 +434,9 @@ export class LivingMemoryUserProfileService {
             return ''
         }
 
-        const orderedKeys = this.toOrderedSpeakerKeys(speakerKeys)
+        const orderedKeys = [
+            ...new Set(speakerKeys.map((key) => key.trim()).filter(Boolean))
+        ]
         if (orderedKeys.length === 0) {
             return ''
         }
@@ -442,22 +459,5 @@ export class LivingMemoryUserProfileService {
                     `${profile.speakerLabel}的人物画像：\n${profile.content}`
             )
             .join('\n\n')
-    }
-
-    private toOrderedSpeakerKeys(speakerKeys: string[]) {
-        const keys: string[] = []
-        const seen = new Set<string>()
-
-        for (const speakerKey of speakerKeys) {
-            const key = speakerKey.trim()
-            if (key.length === 0 || seen.has(key)) {
-                continue
-            }
-
-            seen.add(key)
-            keys.push(key)
-        }
-
-        return keys
     }
 }

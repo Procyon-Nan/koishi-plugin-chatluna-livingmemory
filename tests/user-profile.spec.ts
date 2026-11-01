@@ -96,6 +96,7 @@ const createHarness = (
         },
         deleteUserProfile: async () => {}
     }
+    let currentModel: ReturnType<typeof createToolCallingModel>['model']
     const service = new LivingMemoryUserProfileService(
         {
             enableUserProfileInjection: true,
@@ -111,7 +112,8 @@ const createHarness = (
             } as never,
             () => options.debug ?? true
         ),
-        { resolveOrGenerateCardText: async () => '你是测试角色。' }
+        { resolveOrGenerateCardText: async () => '你是测试角色。' },
+        async () => currentModel
     )
 
     return {
@@ -122,10 +124,10 @@ const createHarness = (
             responses: Parameters<typeof createToolCallingModel>[0]
         ) => {
             const model = createToolCallingModel(responses)
+            currentModel = model.model
             const result = await service.regenerate(
                 options.presetId ?? 'preset-1',
-                [memory.speakerKeys[0]],
-                model.model
+                [memory.speakerKeys[0]]
             )
             return { model, result }
         }
@@ -161,7 +163,6 @@ it('skips profile generation below the active memory threshold', async () => {
     ])
 
     assert.equal(result.generated, 0)
-    assert.equal(result.skippedReason, 'insufficient-related-memories')
     assert.equal(model.invocations.length, 0)
 })
 
@@ -175,7 +176,6 @@ it('skips regeneration when the profile input is unchanged', async () => {
     ])
 
     assert.equal(result.generated, 0)
-    assert.equal(result.skippedReason, 'unchanged')
     assert.equal(model.invocations.length, 0)
     assert.equal(harness.savedProfiles.length, 0)
 })

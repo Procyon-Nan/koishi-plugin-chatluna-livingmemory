@@ -7,7 +7,7 @@ import { LivingMemoryFactsCommittedError } from '../../../vector_index/errors'
 import {
     assertDreamMemoriesAvailable,
     recordDreamOperation,
-    recordDreamProfileSpeakers,
+    recordDreamSpeakers,
     type DreamSessionState
 } from './state'
 
@@ -47,7 +47,7 @@ export function createDreamSessionTools({
                 )
                 recordDreamOperation(state, [sourceMemoryId], 'split')
                 for (const memory of result.memories) {
-                    recordDreamProfileSpeakers(state, memory.speakerKeys)
+                    recordDreamSpeakers(state, memory.speakerKeys)
                     state.availableMemoryIds.add(memory.id)
                 }
                 return result
@@ -65,13 +65,13 @@ export function createDreamSessionTools({
                     )
                     if (record !== null) {
                         recordDreamOperation(state, [memoryId], 'updated')
-                        recordDreamProfileSpeakers(state, record.speakerKeys)
+                        recordDreamSpeakers(state, record.speakerKeys)
                     }
                     return record
                 } catch (error) {
                     if (error instanceof LivingMemoryFactsCommittedError) {
                         recordDreamOperation(state, [memoryId], 'updated')
-                        recordDreamProfileSpeakers(state, patch.speakerKeys!)
+                        recordDreamSpeakers(state, patch.speakerKeys!)
                     }
                     throw error
                 }
@@ -87,7 +87,7 @@ export function createDreamSessionTools({
                     memory
                 )
                 recordDreamOperation(state, sourceMemoryIds, 'merged')
-                recordDreamProfileSpeakers(state, result.memory.speakerKeys)
+                recordDreamSpeakers(state, result.memory.speakerKeys)
                 state.availableMemoryIds.add(result.memory.id)
                 return result
             }

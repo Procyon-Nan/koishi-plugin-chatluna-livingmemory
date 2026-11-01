@@ -125,7 +125,7 @@ chatluna-livingmemory/
 │       │   └── dream/
 │       │       ├── coordinator.ts       # Dream 触发、排队与取消
 │       │       ├── job_runner.ts        # 任务记录与完成统计
-│       │       ├── service.ts           # 全量准备、聚类、会话与画像衔接
+│       │       ├── service.ts           # 全量准备、聚类、会话与完成通知
 │       │       ├── post_extraction.ts   # 提取种子近邻分组与逐组刷新
 │       │       ├── clustering.ts        # 向量快照、分组规划与批次组装
 │       │       ├── semantic/
@@ -142,7 +142,7 @@ chatluna-livingmemory/
 │       │           ├── history.ts       # 会话历史与上下文压缩
 │       │           ├── state.ts         # 批次、处理集合与操作统计
 │       │           └── tools.ts         # Dream 工具装配与处理进度衔接
-│       └── user_profile.ts              # 用户画像分组、生成与渲染
+│       └── user_profile.ts              # 用户画像队列、生成、生命周期与渲染
 ├── client/
 │   ├── index.ts                         # Console 页面与图标注册
 │   ├── dashboard.vue                    # 管理页面入口

@@ -1,6 +1,5 @@
 import type { LivingMemoryRepository } from '../../persistence/repository'
 import { Context } from 'koishi'
-import type { ChatLunaChatModel } from 'koishi-plugin-chatluna/llm-core/platform/model'
 import type { DreamVectorProvider } from '../../../contracts/vector_index'
 import type {
     DreamMemoryEntryRecord,
@@ -14,7 +13,6 @@ import { SerialTaskQueue } from '../../shared/serial_task_queue'
 import { resolveAssistantLabel } from '../../memory/helpers'
 import { DreamClusterer } from './clustering'
 import type { DreamWorkerRunner } from './worker/protocol'
-import type { LivingMemoryUserProfileService } from '../../user_profile'
 import {
     buildPostExtractionDreamBatches,
     refreshPostExtractionDreamBatch
@@ -37,7 +35,6 @@ export interface DreamRepository extends Pick<
     listDreamEntriesByPreset(
         presetId: string
     ): Promise<DreamMemoryEntryRecord[]>
-    listActiveMemorySpeakerKeys(presetId: string): Promise<string[]>
     getEntriesByPresetAndIds: LivingMemoryRepository['getEntriesByPresetAndIds']
 }
 
@@ -47,13 +44,7 @@ export class LivingMemoryDreamService {
 
     constructor(
         private readonly ctx: Context,
-        private readonly config: Pick<
-            LivingMemoryConfig,
-            | 'mainModel'
-            | 'enableAutoDream'
-            | 'enableUserProfileGeneration'
-            | 'enableDreamUserProfileGeneration'
-        >,
+        private readonly config: Pick<LivingMemoryConfig, 'mainModel'>,
         private readonly repository: DreamRepository,
         private readonly mutations: Pick<
             LivingMemoryMutationService,
@@ -65,7 +56,11 @@ export class LivingMemoryDreamService {
         >,
         vectors: DreamVectorProvider,
         worker: DreamWorkerRunner,
-        private readonly userProfiles: LivingMemoryUserProfileService,
+        private readonly onOrganized: (
+            presetId: string,
+            mode: DreamRunInput['mode'],
+            speakerKeys?: string[]
+        ) => void,
         private readonly presetPersona: PresetPersonaResolver,
         private readonly search: Pick<
             LivingMemorySearchEngine,
@@ -85,11 +80,6 @@ export class LivingMemoryDreamService {
         signal?.throwIfAborted()
         let state!: DreamSessionState
         let error: string | undefined
-        let profileDetail = ''
-        const updateProfiles =
-            input.mode === 'post-extraction'
-                ? this.config.enableUserProfileGeneration
-                : this.config.enableDreamUserProfileGeneration
         try {
             if (input.mode === 'post-extraction') {
                 state = createDreamSessionState(
@@ -100,28 +90,22 @@ export class LivingMemoryDreamService {
                     presetId,
                     input.memoryIds
                 )
-                if (updateProfiles) {
-                    state.profileSpeakerKeys = new Set(
-                        seeds
-                            .filter((entry) => entry.status === 'active')
-                            .flatMap((entry) => entry.speakerKeys)
-                    )
-                }
-                if (this.config.enableAutoDream) {
-                    const plan = await buildPostExtractionDreamBatches(
-                        presetId,
-                        input.memoryIds,
-                        seeds,
-                        this.repository,
-                        this.search,
-                        logger,
-                        signal
-                    )
-                    state.batches = plan.batches
-                    state.untouchedSeedIds = plan.untouchedSeedIds
-                } else {
-                    state.untouchedSeedIds = input.memoryIds
-                }
+                state.involvedSpeakerKeys = new Set(
+                    seeds
+                        .filter((entry) => entry.status === 'active')
+                        .flatMap((entry) => entry.speakerKeys)
+                )
+                const plan = await buildPostExtractionDreamBatches(
+                    presetId,
+                    input.memoryIds,
+                    seeds,
+                    this.repository,
+                    this.search,
+                    logger,
+                    signal
+                )
+                state.batches = plan.batches
+                state.untouchedSeedIds = plan.untouchedSeedIds
             } else {
                 await this.planningQueue.run('dream-planning', async () => {
                     signal?.throwIfAborted()
@@ -138,10 +122,7 @@ export class LivingMemoryDreamService {
                     )
                 })
             }
-            if (
-                state.batches.length > 0 ||
-                (updateProfiles && (state.profileSpeakerKeys?.size ?? 0) > 0)
-            ) {
+            if (state.batches.length > 0) {
                 if (!isModelConfigured(this.config.mainModel)) {
                     throw new Error('Dream mainModel 未配置。')
                 }
@@ -152,63 +133,43 @@ export class LivingMemoryDreamService {
                 ).value
                 if (model === undefined)
                     throw new Error('Dream mainModel 不可用。')
-                if (state.batches.length > 0) {
-                    const callOptions = createDreamCallOptions(model, sessionId)
-                    signal?.throwIfAborted()
-                    const presetPrompt =
-                        await this.presetPersona.resolveOrGenerateCardText(
-                            presetId
-                        )
-                    signal?.throwIfAborted()
-                    const speakers =
-                        await this.mutations.ensurePresetSpeakersCoverage(
-                            presetId
-                        )
-                    signal?.throwIfAborted()
-                    const tools = createDreamSessionTools({
-                        presetId,
-                        state,
-                        repository: this.repository,
-                        mutations: this.mutations
-                    })
-                    await runDreamSession({
-                        presetId,
-                        callOptions,
-                        assistantLabel: resolveAssistantLabel(presetId),
-                        presetPrompt,
-                        speakers,
-                        state,
-                        tools,
-                        model,
-                        logger,
-                        signal,
-                        loadBatch:
-                            input.mode === 'post-extraction'
-                                ? (batch) =>
-                                      refreshPostExtractionDreamBatch(
-                                          presetId,
-                                          batch,
-                                          this.repository
-                                      )
-                                : undefined
-                    })
-                    signal?.throwIfAborted()
-                }
-                if (
-                    updateProfiles &&
-                    (state.profileSpeakerKeys === undefined ||
-                        state.profileSpeakerKeys.size > 0)
-                ) {
-                    profileDetail = await this.regenerateUserProfilesAfterDream(
-                        presetId,
-                        model,
-                        logger,
-                        signal,
-                        state.profileSpeakerKeys === undefined
-                            ? undefined
-                            : [...state.profileSpeakerKeys]
+                const callOptions = createDreamCallOptions(model, sessionId)
+                signal?.throwIfAborted()
+                const presetPrompt =
+                    await this.presetPersona.resolveOrGenerateCardText(presetId)
+                signal?.throwIfAborted()
+                const speakers =
+                    await this.mutations.ensurePresetSpeakersCoverage(
+                        presetId
                     )
-                }
+                signal?.throwIfAborted()
+                const tools = createDreamSessionTools({
+                    presetId,
+                    state,
+                    repository: this.repository,
+                    mutations: this.mutations
+                })
+                await runDreamSession({
+                    presetId,
+                    callOptions,
+                    assistantLabel: resolveAssistantLabel(presetId),
+                    presetPrompt,
+                    speakers,
+                    state,
+                    tools,
+                    model,
+                    logger,
+                    signal,
+                    loadBatch:
+                        input.mode === 'post-extraction'
+                            ? (batch) =>
+                                  refreshPostExtractionDreamBatch(
+                                      presetId,
+                                      batch,
+                                      this.repository
+                                  )
+                            : undefined
+                })
             }
             signal?.throwIfAborted()
         } catch (cause) {
@@ -240,11 +201,19 @@ export class LivingMemoryDreamService {
             ),
             `untouched seeds: ${state.untouchedSeedIds.join(', ') || 'none'}`,
             `unprocessed: ${coverage.unprocessedMemoryIds.join(', ') || 'none'}`,
-            error === undefined ? '' : `error: ${error}`,
-            profileDetail
+            error === undefined ? '' : `error: ${error}`
         ]
             .filter(Boolean)
             .join('\n')
+        if (error === undefined) {
+            this.onOrganized(
+                presetId,
+                input.mode,
+                state.involvedSpeakerKeys === undefined
+                    ? undefined
+                    : [...state.involvedSpeakerKeys]
+            )
+        }
         return {
             untouchedSeedIds: state.untouchedSeedIds,
             status,
@@ -258,34 +227,5 @@ export class LivingMemoryDreamService {
             error,
             detail
         }
-    }
-
-    private async regenerateUserProfilesAfterDream(
-        presetId: string,
-        model: ChatLunaChatModel,
-        logger: LivingMemoryLogger,
-        signal?: AbortSignal,
-        involvedSpeakerKeys?: string[]
-    ) {
-        const startedAt = performance.now()
-        logger.diagnosticSummary(() => ({
-            event: 'Dream 人物画像处理开始',
-            detail: `预设：${presetId}`
-        }))
-        const speakerKeys =
-            involvedSpeakerKeys ??
-            (await this.repository.listActiveMemorySpeakerKeys(presetId))
-        const result = await this.userProfiles.regenerate(
-            presetId,
-            speakerKeys,
-            model,
-            logger,
-            signal
-        )
-        logger.diagnosticSummary(() => ({
-            event: 'Dream 人物画像处理结束',
-            detail: `预设：${presetId}; ${result.detail}; 耗时：${((performance.now() - startedAt) / 1000).toFixed(3)} 秒`
-        }))
-        return result.detail
     }
 }

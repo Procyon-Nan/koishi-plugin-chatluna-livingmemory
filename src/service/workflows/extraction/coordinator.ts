@@ -214,9 +214,10 @@ export class LivingMemoryExtractionCoordinator {
         private readonly extractor: ExtractionModel,
         private readonly presetPersona: PresetPersonaResolver,
         private readonly logger: LivingMemoryLogger,
-        private readonly queuePostExtractionDream: (
+        private readonly onExtracted: (
             presetId: string,
-            memoryIds: string[]
+            memoryIds: string[],
+            speakerKeys: string[]
         ) => void
     ) {}
 
@@ -551,9 +552,10 @@ export class LivingMemoryExtractionCoordinator {
                     'warn'
                 )
             }
-            this.queuePostExtractionDream(
+            this.onExtracted(
                 scope.presetId,
-                saved.memories.map((entry) => entry.id)
+                saved.memories.map((entry) => entry.id),
+                [...new Set(saved.memories.flatMap((entry) => entry.speakerKeys))]
             )
         }
 
