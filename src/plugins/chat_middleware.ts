@@ -1,10 +1,7 @@
+import { formatLivingMemoryInjection } from '../service/app/prompt_hydration'
 import { formatLogScope } from '../service/logging/logger'
 import { Context, type Session } from 'koishi'
-import {
-    AIMessage,
-    type HumanMessage,
-    SystemMessage
-} from '@langchain/core/messages'
+import { AIMessage, type HumanMessage } from '@langchain/core/messages'
 import type { LivingMemoryConfig } from '../contracts/workflows'
 import type {
     LivingMemoryTranscriptMessage,
@@ -106,27 +103,16 @@ const writeRawUserContent = (
     setLivingMemoryRawContent(message, rawContent)
 }
 
-const formatUserProfileInjection = (userProfiles: string) => {
-    const text = userProfiles.trim()
-    return text.length > 0 ? `【用户画像】\n${text}` : null
-}
-
-const formatSnapshotInjection = (snapshot: string) => {
-    const text = snapshot.trim()
-    return text.length > 0 ? `【我的记忆】\n${text}` : null
-}
-
 interface ChatPresetSource {
     preset: { value?: { triggerKeyword?: string[] } | null }
 }
 
 export async function apply(ctx: Context, config: LivingMemoryConfig) {
-    const logger = ctx.chatluna_living_memory.memoryLogger.with({
+    const livingMemory = ctx.chatluna_living_memory
+    const logger = livingMemory.memoryLogger.with({
         workflow: 'chat'
     })
-    const livingMemory = ctx.chatluna_living_memory
-    const activeUserProfileInjections = new Map<string, string>()
-    const activeSnapshotInjections = new Map<string, string>()
+    const activeInjections = new Map<string, string>()
     // 说话人解析跨轮复用：昵称变更需重启插件后生效，换取不在每轮重复
     // 调用平台 getUser。
     const speakerCache: UserSpeakerCache = new Map()
@@ -134,10 +120,6 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
     ctx.on('dispose', () => {
         livingMemory.clearRecallState()
     })
-    const clearActiveInjections = (conversationId: string) => {
-        activeUserProfileInjections.delete(conversationId)
-        activeSnapshotInjections.delete(conversationId)
-    }
 
     const resolveChatScope = (
         conversationId: string,
@@ -146,10 +128,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
         session: Session
     ): MemoryScope | null => {
         const fallbackPresetId = chatInterface.preset.value?.triggerKeyword?.[0]
-        const presetId = ctx.chatluna_living_memory.resolvePresetId(
-            message,
-            fallbackPresetId
-        )
+        const presetId = livingMemory.resolvePresetId(message, fallbackPresetId)
         if (presetId == null) {
             logger.diagnosticSummary(() => ({
                 event: '跳过对话记忆处理',
@@ -157,7 +136,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
             }))
             return null
         }
-        return ctx.chatluna_living_memory.createScope(
+        return livingMemory.createScope(
             conversationId,
             presetId,
             session.userId,
@@ -171,50 +150,27 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
         )
     }
 
-    const registerInjectionPipeline = (
-        stage: 'after_system_prompts' | 'injections',
-        injections: Map<string, string>,
-        createMessage: (content: string) => SystemMessage | AIMessage,
-        tokenRole: 'system' | 'assistant',
-        priority: number
-    ) => {
-        ctx.effect(() =>
-            ctx.chatluna.contextManager.pipeline(
-                stage,
-                async (runtime, next) => {
-                    const conversationId = resolveMainRunConversationId(
-                        runtime.configurable?.agentContext
-                    )
-                    if (conversationId != null) {
-                        const injection = injections.get(conversationId)
-                        if (injection != null) {
-                            runtime.result.push(createMessage(injection))
-                            runtime.usedTokens +=
-                                (await runtime.tokenCounter(injection)) +
-                                (await runtime.tokenCounter(tokenRole))
-                        }
+    ctx.effect(() =>
+        ctx.chatluna.contextManager.pipeline(
+            'injections',
+            async (runtime, next) => {
+                const conversationId = resolveMainRunConversationId(
+                    runtime.configurable?.agentContext
+                )
+                if (conversationId != null) {
+                    const injection = activeInjections.get(conversationId)
+                    if (injection != null) {
+                        runtime.result.push(new AIMessage(injection))
+                        runtime.usedTokens +=
+                            (await runtime.tokenCounter(injection)) +
+                            (await runtime.tokenCounter('assistant'))
                     }
+                }
 
-                    await next()
-                },
-                priority
-            )
+                await next()
+            },
+            -10
         )
-    }
-
-    registerInjectionPipeline(
-        'after_system_prompts',
-        activeUserProfileInjections,
-        (content) => new SystemMessage(content),
-        'system',
-        0
-    )
-    registerInjectionPipeline(
-        'injections',
-        activeSnapshotInjections,
-        (content) => new AIMessage(content),
-        'assistant',
-        -10
     )
 
     ctx.on(
@@ -226,7 +182,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
             chatInterface,
             session
         ) => {
-            clearActiveInjections(conversationId)
+            activeInjections.delete(conversationId)
 
             const scope = resolveChatScope(
                 conversationId,
@@ -264,7 +220,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                     }))
                     return
                 }
-                await ctx.chatluna_living_memory.recordPresetSpeaker(
+                await livingMemory.recordPresetSpeaker(
                     scope,
                     currentMessage.speakerLabel
                 )
@@ -303,43 +259,25 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                           currentMessage!
                       ])
                     : []
-                const sections =
-                    await ctx.chatluna_living_memory.hydratePromptSections(
-                        scope,
-                        {
-                            includeSnapshot: enableSnapshotInjection,
-                            speakerKeys
-                        }
-                    )
-                const userProfileInjection = formatUserProfileInjection(
-                    sections.userProfiles
+                const sections = await livingMemory.hydratePromptSections(
+                    scope,
+                    {
+                        includeSnapshot: enableSnapshotInjection,
+                        speakerKeys
+                    }
                 )
-                if (userProfileInjection != null) {
-                    activeUserProfileInjections.set(
-                        conversationId,
-                        userProfileInjection
-                    )
-                }
-
-                const snapshotInjection = formatSnapshotInjection(
-                    sections.snapshot
-                )
-                if (snapshotInjection != null) {
-                    activeSnapshotInjections.set(
-                        conversationId,
-                        snapshotInjection
-                    )
+                const injection = formatLivingMemoryInjection(sections)
+                if (injection.length > 0) {
+                    activeInjections.set(conversationId, injection)
                 }
                 logger.diagnosticSummary(() => {
                     const details = [formatLogScope(scope)]
                     if (enableSnapshotInjection) {
-                        details.push(
-                            `记忆快照：${sections.snapshot.trim().length} 字符`
-                        )
+                        details.push(`记忆快照：${sections.snapshot.length} 字符`)
                     }
                     if (enableUserProfileInjection) {
                         details.push(
-                            `人物画像：${sections.userProfiles.trim().length} 字符`
+                            `人物画像：${sections.userProfiles.length} 字符`
                         )
                     }
                     return { event: '记忆注入', detail: details.join('; ') }
@@ -347,7 +285,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
             }
 
             if (config.recallIntervalMessages > 0) {
-                await ctx.chatluna_living_memory.queueRecall(
+                await livingMemory.queueRecall(
                     scope,
                     currentMessage!,
                     loadHistoryMessages
@@ -366,7 +304,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
             chatInterface,
             session
         ) => {
-            clearActiveInjections(conversationId)
+            activeInjections.delete(conversationId)
 
             const scope = resolveChatScope(
                 conversationId,
@@ -393,7 +331,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                 session.userId ??
                 ''
 
-            await ctx.chatluna_living_memory.queueExtraction(scope, {
+            await livingMemory.queueExtraction(scope, {
                 includeOverheard: false,
                 resolveTranscriptOrigin: async () => {
                     if (session.isDirect) {
@@ -415,12 +353,12 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
         }
     )
 
-    ctx.on('chatluna/after-chat-error', async (_error, conversationId) => {
-        clearActiveInjections(conversationId)
+    ctx.on('chatluna/after-chat-error', (_error, conversationId) => {
+        activeInjections.delete(conversationId)
     })
 
     ctx.on('chatluna/clear-chat-history', async (conversationId) => {
-        clearActiveInjections(conversationId)
-        await ctx.chatluna_living_memory.cleanupConversation(conversationId)
+        activeInjections.delete(conversationId)
+        await livingMemory.cleanupConversation(conversationId)
     })
 }

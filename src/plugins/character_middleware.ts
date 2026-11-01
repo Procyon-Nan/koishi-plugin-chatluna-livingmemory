@@ -1,3 +1,4 @@
+import { formatLivingMemoryInjection } from '../service/app/prompt_hydration'
 import { formatLogScope } from '../service/logging/logger'
 import { Context, type Session } from 'koishi'
 import type {
@@ -45,11 +46,6 @@ interface CharacterReceptionService {
     ctx: Context
     _config: CharacterReceptionConfig
     preset: { getPresetForCache(name: string): { name: string } }
-}
-
-type PromptSections = {
-    snapshot: string
-    userProfiles: string
 }
 
 interface CharacterRound {
@@ -151,20 +147,6 @@ const resolveCharacterPromptContext = (
     }
 
     return { session, sessionKey: conversationId, presetName }
-}
-
-const formatPromptVariable = (sections: PromptSections) => {
-    const { snapshot, userProfiles } = sections
-    const parts: string[] = []
-
-    if (userProfiles.length > 0) {
-        parts.push(`【用户画像】\n${userProfiles}`)
-    }
-    if (snapshot.length > 0) {
-        parts.push(`【你的记忆】\n''${snapshot}''`)
-    }
-
-    return parts.join('\n\n')
 }
 
 const registerConversationLog = (
@@ -451,9 +433,7 @@ export async function apply(ctx: Context, config: LivingMemoryConfig) {
                                 speakerKeys
                             }
                         )
-                    sections.snapshot = sections.snapshot.trim()
-                    sections.userProfiles = sections.userProfiles.trim()
-                    const rendered = formatPromptVariable(sections)
+                    const rendered = formatLivingMemoryInjection(sections)
 
                     logger.diagnosticSummary(() => {
                         const details = [

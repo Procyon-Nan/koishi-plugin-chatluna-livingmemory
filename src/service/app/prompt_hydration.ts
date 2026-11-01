@@ -38,7 +38,21 @@ export const hydrateLivingMemoryPromptSections = async (
     ])
 
     return {
-        snapshot,
-        userProfiles
+        snapshot: snapshot.trim(),
+        userProfiles: userProfiles.trim()
     }
+}
+
+export const formatLivingMemoryInjection = (sections: {
+    snapshot: string
+    userProfiles: string
+}) => {
+    const parts: string[] = []
+    if (sections.userProfiles.length > 0) {
+        parts.push(`## 用户画像\n${sections.userProfiles}`)
+    }
+    if (sections.snapshot.length > 0) {
+        parts.push(`## 短期记忆\n${sections.snapshot}`)
+    }
+    return parts.join('\n\n')
 }
