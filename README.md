@@ -104,7 +104,9 @@ input: |
 
 ## 记忆工具
 
-开启 `enableMemoryTools` 后，ChatLuna 主 agent 可使用以下七个工具。默认关闭。
+通过 `enabledMemoryTools` 多选框选择向 ChatLuna 注册的记忆工具，默认选中查询记忆、查看记忆来源和创建记忆。可选工具如下。
+
+原 `enableMemoryTools` 总开关已替换为工具列表，升级后请按需重新勾选。
 
 ### `living_memory_search`
 

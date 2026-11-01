@@ -32,7 +32,7 @@ const testConfig: LivingMemoryConfig = {
     extractionWhitelist: [],
     memorySearchToolMaxResults: 1,
     memorySearchMinSimilarity: 0,
-    enableMemoryTools: false,
+    enabledMemoryTools: [],
     memoryCreateToolMaxMemories: 1,
     debug: false
 }

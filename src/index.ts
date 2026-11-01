@@ -86,11 +86,38 @@ export const Config: Schema<Config> = Schema.intersect([
                 '记忆检索的最低余弦相似度，召回与 living_memory_search 共用。关键词命中的记忆不受限制；设为 0 表示不限制。'
             )
             .default(0),
-        enableMemoryTools: Schema.boolean()
-            .description(
-                '向 ChatLuna 注册本插件的记忆工具，包括查询、查看来源、创建、更新、合并、拆分和删除工具。'
-            )
-            .default(false),
+        enabledMemoryTools: Schema.array(
+            Schema.union([
+                Schema.const('living_memory_search').description(
+                    '记忆查询工具：通过语义检索查询记忆'
+                ),
+                Schema.const('living_memory_get_messages').description(
+                    '来源查看工具：查看记忆来源的聊天消息'
+                ),
+                Schema.const('living_memory_create_memory').description(
+                    '记忆创建工具：创建新的记忆'
+                ),
+                Schema.const('living_memory_update_memory').description(
+                    '记忆更新工具：更新已有记忆'
+                ),
+                Schema.const('living_memory_merge_memories').description(
+                    '记忆合并工具：将多条记忆合并为一条'
+                ),
+                Schema.const('living_memory_split_memory').description(
+                    '记忆拆分工具：将一条记忆拆分为多条'
+                ),
+                Schema.const('living_memory_delete_memory').description(
+                    '记忆删除工具：归档删除记忆'
+                )
+            ])
+        )
+            .role('checkbox')
+            .description('选择向 ChatLuna 注册的记忆工具。')
+            .default([
+                'living_memory_search',
+                'living_memory_get_messages',
+                'living_memory_create_memory'
+            ]),
         memoryCreateToolMaxMemories: Schema.number()
             .min(1)
             .max(60)
