@@ -67,7 +67,7 @@ yarn workspace koishi-plugin-chatluna-livingmemory build
 
 ```text
 input: |
-    # 你的记忆
+    # 记忆内容
     {living_memory}
 ```
 
